@@ -1,15 +1,18 @@
 extern crate nom;
 use nom::{
   IResult,
+  branch::alt,
   bytes::complete::{
     tag,
     take_while,
     take_while1,
-    take_till
+    take_till, take
   },
-  character::{is_alphanumeric, is_space, complete::char},
-  sequence::{preceded, delimited, tuple, separated_pair}, multi::many0
+  character::{is_alphanumeric, is_space, complete::char, is_newline},
+  sequence::{preceded, delimited, tuple, separated_pair},
+  multi::many0
 };
+use std::str;
 
 #[derive(PartialEq, Debug)]
 pub struct StartingTag<'a> {
@@ -18,12 +21,19 @@ pub struct StartingTag<'a> {
 
 #[derive(Debug)]
 enum HtmlAttribute <'a> {
-  Vanilla(&'a str, &'a str),
-  Dynamic(&'a str, &'a str)
+  Regular(&'a str, &'a str),
+  VDirective(VDirective<'a>, &'a str)
 }
 
-fn alpha(s: &[u8]) -> IResult<&[u8], &[u8]> {
-  take_while1(is_alphanumeric)(s)
+struct RegularAttribute <'a> {
+  name: &'a str
+}
+
+#[derive(Debug)]
+struct VDirective <'a> {
+  name: &'a str,
+  argument: &'a str,
+  modifiers: Vec<&'a str>
 }
 
 fn parse_html_name(input: &[u8]) -> IResult<&[u8], &[u8]> {
@@ -34,33 +44,127 @@ fn parse_html_name(input: &[u8]) -> IResult<&[u8], &[u8]> {
   take_while(|x| is_alphanumeric(x) || x == b'-')(input)
 }
 
-fn parse_directive_name(input: &[u8]) -> IResult<&[u8], &[u8]> {
-  preceded(
-    tag("v-"),
-    parse_html_name
+fn parse_attr_value(input: &[u8]) -> IResult<&[u8], &[u8]> {
+  delimited(
+    char('"'),
+    take_till(|c| c == b'"'),
+    char('"')
   )(input)
 }
 
-fn parse_dynamic_attr(input: &[u8]) -> IResult<&[u8], HtmlAttribute> {
-  let (input, ((directive_name, attr_name), attr_value)) = separated_pair(
-    // todo implement v-bind directive shortcut `:smth`
-    separated_pair(parse_directive_name, char(':'), parse_html_name),
-    char('='),
-    delimited(
-      char('"'),
-      take_till(|c| c == b'"'),
-      char('"')
-    )
-  )(input)?;
+/**
+ Parses a directive in form of `v-directive-name:directive-attribute.modifier1.modifier2`
 
-  println!("Dynamic attr: directive = {:?}, name = {:?}, value = {:?}", directive_name, attr_name, attr_value);
+ Allows for shortcuts like `@` (same as `v-on`), `:` (`v-bind`) and `#` (`v-slot`)
+ */
+fn parse_directive(input: &[u8]) -> IResult<&[u8], VDirective> {
+  let (input, prefix) = alt((tag("v-"), tag("@"), tag("#"), tag(":")))(input)?;
 
-  Ok((input, HtmlAttribute::Dynamic(std::str::from_utf8(attr_name).unwrap(), std::str::from_utf8(attr_value).unwrap())))
+  /* Determine directive name */
+  let mut has_argument = false;
+  let (input, directive_name) = match prefix {
+    b"v-" => {
+      let (input, name) = parse_html_name(input)?;
+
+      // next char is colon, shift input and set flag
+      if let Some(b':') = input.get(0) {
+        has_argument = true;
+        (&input[1..], name)
+      } else {
+        (input, name)
+      }
+    }
+
+    b"@" => {
+      has_argument = true;
+      (input, b"on" as &[u8])
+    }
+
+    b":" => {
+      has_argument = true;
+      (input, b"bind" as &[u8])
+    }
+
+    b"#" => {
+      has_argument = true;
+      (input, b"slot" as &[u8])
+    }
+
+    _ => {
+      return Err(nom::Err::Error(nom::error::Error {
+        code: nom::error::ErrorKind::Tag,
+        input
+      }))
+    }
+  };
+
+  /* Read argument part if we spotted `:` earlier */
+  let (input, argument) = if has_argument {
+    parse_html_name(input)?
+  } else {
+    (input, b"" as &[u8])
+  };
+  println!();
+  println!("Parsed directive {:?}", str::from_utf8(directive_name).unwrap());
+  println!("Has argument: {}, argument: {:?}", has_argument, str::from_utf8(argument).unwrap());
+
+  /* Read modifiers */
+  let (input, modifiers) = many0(preceded(
+    char('.'),
+    parse_html_name
+  ))(input).unwrap_or((input, vec![]));
+
+  Ok((input, VDirective {
+    name: str::from_utf8(directive_name).unwrap_or("error"), // can it fail?
+    argument: str::from_utf8(argument).unwrap(), // can this fail???
+    modifiers: modifiers.iter().map(|&x| str::from_utf8(x).unwrap()).collect() // can this fail???
+  }))
 }
 
-// fn parse_vanilla_attr(input: &[u8]) -> IResult<&[u8], HtmlAttribute> {
+fn parse_dynamic_attr(input: &[u8]) -> IResult<&[u8], HtmlAttribute> {
+  let (input, directive) = parse_directive(input)?;
+  println!("Dynamic attr: directive = {:?}", directive);
 
-// }
+  /* Try taking a `=` char, early return if it's not there */
+  let eq: Result<(&[u8], char), nom::Err<nom::error::Error<_>>> = char('=')(input);
+  match eq {
+    Err(_) => Ok((input, HtmlAttribute::VDirective(directive, ""))),
+
+    Ok((input, _)) => {
+      let (input, attr_value) = parse_attr_value(input)?;
+  
+      println!("Dynamic attr: value = {:?}", str::from_utf8(attr_value).unwrap());
+  
+      Ok((input, HtmlAttribute::VDirective(
+        directive,
+        str::from_utf8(attr_value).unwrap()
+      )))
+    }
+  }
+}
+
+fn parse_vanilla_attr(input: &[u8]) -> IResult<&[u8], HtmlAttribute> {
+  let (input, attr_name) = parse_html_name(input)?;
+  let attr_name = str::from_utf8(attr_name).unwrap();
+
+  /* Support omitting a `=` char */
+  let eq: Result<(&[u8], char), nom::Err<nom::error::Error<_>>> = char('=')(input);
+  match eq {
+    // consider omitted attribute as attribute name itself (as current Vue compiler does)
+    Err(_) => Ok((input, HtmlAttribute::Regular(attr_name, &attr_name))),
+
+    Ok((input, _)) => {
+      let (input, attr_value) = parse_attr_value(input)?;
+  
+      println!("Dynamic attr: value = {:?}", str::from_utf8(attr_value).unwrap());
+  
+      Ok((input, HtmlAttribute::Regular(
+        attr_name,
+        str::from_utf8(attr_value).unwrap()
+      )))
+    }
+  }
+}
 
 fn parse_attr(input: &[u8]) -> IResult<&[u8], HtmlAttribute> {
   // let t2 = consumed(
@@ -74,19 +178,20 @@ fn parse_attr(input: &[u8]) -> IResult<&[u8], HtmlAttribute> {
   //   )
   // )(input)?;
 
-  // println!("Attribute: {:?}", std::str::from_utf8(t2.1.0).unwrap_or(""));
+  // println!("Attribute: {:?}", str::from_utf8(t2.1.0).unwrap_or(""));
 
-  let dynamic = parse_dynamic_attr(input)?;
-  println!("Attribute: {:?}", dynamic.1);
-  println!("Remaining input: {:?}", std::str::from_utf8(dynamic.0).unwrap());
+  let (input, attr) = alt((parse_dynamic_attr, parse_vanilla_attr))(input)?;
 
-  Ok((dynamic.0, dynamic.1))
+  println!("Attribute: {:?}", attr);
+  println!("Remaining input: {:?}", str::from_utf8(input).unwrap());
+
+  Ok((input, attr))
 
   /* Try parsing dynamic attrs which start with `v-` or `:` */
   // let prefix = alt((tag("v-"), tag(":")))(input);
   // let (input, prefix) = prefix.map_or(
   //   (input, ""),
-  //   |x| (x.0, std::str::from_utf8(x.1).unwrap_or(""))
+  //   |x| (x.0, str::from_utf8(x.1).unwrap_or(""))
   // );
 
   // let (input, attr_name) = parse_html_name(input)?;
@@ -96,27 +201,36 @@ fn parse_attr(input: &[u8]) -> IResult<&[u8], HtmlAttribute> {
 
 fn parse_attributes(input: &[u8]) -> IResult<&[u8], Vec<HtmlAttribute>> {
   many0(preceded(
-    take_while1(is_space),
+    whitespace1,
     parse_attr
   ))(input)
 }
 
 pub fn parse_starting_tag(input: &[u8]) -> IResult<&[u8], StartingTag> {
-  let (input, (_, tag_name, attrs, _)) = tuple((
+  let (input, (_, tag_name, attrs, _, _)) = tuple((
     tag("<"),
     parse_html_name,
     /* Attr: start */
     parse_attributes,
     /* Attr: end */
+    whitespace0,
     tag(">")
   ))(input)?;
 
   println!("Tag name: {:?}", tag_name);
-  println!("Attr name: {:?}", attrs);
+  println!("Attributes: {:?}", attrs);
 
   Ok((input, StartingTag {
-    tag_name: std::str::from_utf8(tag_name).unwrap()
+    tag_name: str::from_utf8(tag_name).unwrap()
   }))
+}
+
+fn whitespace1(input: &[u8]) -> IResult<&[u8], &[u8]> {
+  take_while1(|x| is_space(x) || is_newline(x))(input)
+}
+
+fn whitespace0(input: &[u8]) -> IResult<&[u8], &[u8]> {
+  take_while(|x| is_space(x) || is_newline(x))(input)
 }
 
 #[test]
