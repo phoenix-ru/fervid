@@ -8,3 +8,15 @@
   @click.prevent
   @hello="world"
 >
+  The text of the node
+
+  {{ dynamicValue }}
+
+  <another-element />
+
+  yet another text
+
+  <template v-slot:test-slot="{ value }">
+    test
+  </template>
+</abc-def>
