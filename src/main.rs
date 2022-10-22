@@ -1,8 +1,8 @@
 mod parser;
 
 fn main() {
-    let test = include_bytes!("./test/input.vue");
-    let res = parser::parse_starting_tag(test).unwrap();
+    let test = include_str!("./test/input.vue");
+    let res = parser::parse_node(test, true).unwrap();
     println!("Result: {:?}", res.1);
-    println!("Remaining: {:?}", std::str::from_utf8(res.0).unwrap());
+    println!("Remaining: {:?}", res.0);
 }
