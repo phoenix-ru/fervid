@@ -1,9 +1,34 @@
-use nom::{bytes::complete::{take_while1, take_while}, IResult};
+use nom::{bytes::complete::{take_while1, take_while}, IResult, Compare};
 
+// According to https://www.w3.org/TR/2011/WD-html5-20110525/syntax.html#elements-0
 const VOID_TAGS: [&str; 16] = ["area", "base", "br", "col", "command", "embed", "hr", "img", "input", "keygen", "link", "meta", "param", "source", "track", "wbr"];
+const RAW_TEXT_ELEMENTS: [&str; 2] = ["script", "style"];
+const RCDATA_ELEMENTS: [&str; 2] = ["textarea", "title"];
+const FOREIGN_ELEMENTS: [&str; 1] = ["svg"]; // todo
 
-pub fn is_void_element(tag_name: &str) -> bool {
-  VOID_TAGS.contains(&tag_name)
+#[derive(Debug)]
+pub enum ElementKind {
+  Void,
+  RawText,
+  RCData,
+  Foreign,
+  Normal
+}
+
+pub fn classify_element_kind(tag_name: &str) -> ElementKind {
+  let tag_lowercase = &tag_name.to_lowercase();
+  let tag_lowercase = tag_lowercase.as_str();
+  if RCDATA_ELEMENTS.contains(&tag_lowercase) {
+    ElementKind::RCData
+  } else if FOREIGN_ELEMENTS.contains(&tag_lowercase) {
+    ElementKind::Foreign
+  } else if RAW_TEXT_ELEMENTS.contains(&tag_lowercase) {
+    ElementKind::RawText
+  } else if VOID_TAGS.contains(&tag_lowercase) {
+    ElementKind::Void
+  } else {
+    ElementKind::Normal
+  }
 }
 
 /**
@@ -20,8 +45,8 @@ pub fn is_valid_name_char(x: char) -> bool {
 }
 
 pub fn html_name(input: &str) -> IResult<&str, &str> {
-  // todo control dashes??
-  take_while(|x: char| is_valid_name_char(x) || x == '-')(input)
+  // todo control dashes?? allow unicode??
+  take_while1(|x: char| is_valid_name_char(x) || x == '-')(input)
 }
 
 pub fn space1(input: &str) -> IResult<&str, &str> {

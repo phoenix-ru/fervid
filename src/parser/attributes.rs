@@ -125,7 +125,6 @@ fn parse_dynamic_attr(input: &str) -> IResult<&str, HtmlAttribute> {
 
 fn parse_vanilla_attr(input: &str) -> IResult<&str, HtmlAttribute> {
   let (input, attr_name) = html_name(input)?;
-  let attr_name = attr_name;
 
   /* Support omitting a `=` char */
   let eq: Result<(&str, char), nom::Err<nom::error::Error<_>>> = char('=')(input);
