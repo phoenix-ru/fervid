@@ -1,4 +1,4 @@
-use nom::{bytes::complete::{take_while1, take_while}, IResult, Compare};
+use nom::{bytes::complete::{take_while1, take_while}, IResult};
 
 // According to https://www.w3.org/TR/2011/WD-html5-20110525/syntax.html#elements-0
 const VOID_TAGS: [&str; 16] = ["area", "base", "br", "col", "command", "embed", "hr", "img", "input", "keygen", "link", "meta", "param", "source", "track", "wbr"];
