@@ -1,6 +1,6 @@
 extern crate nom;
 use nom::branch::alt;
-use nom::bytes::complete::take_until1;
+use nom::bytes::complete::{take_until1, take_until};
 use nom::combinator::fail;
 use nom::multi::many0;
 use nom::sequence::{preceded, delimited};
@@ -129,13 +129,14 @@ fn parse_text_node(input: &str) -> IResult<&str, Node> {
   let mut bytes_taken = 0;
 
   while let Some(ch) = iter.next() {
-      if ch == '<' {
-          break;
-      };
-      if let ('{', Some('{')) = (ch, iter.peek()) {
-          break;
-      };
-      bytes_taken += ch.len_utf8();
+    if ch == '<' {
+      break;
+    };
+    // todo support other delimiters
+    if let ('{', Some('{')) = (ch, iter.peek()) {
+      break;
+    };
+    bytes_taken += ch.len_utf8();
   }
 
   /* Return error if input length is too short */
@@ -149,6 +150,58 @@ fn parse_text_node(input: &str) -> IResult<&str, Node> {
     input,
     Node::TextNode(text)
   ))
+}
+
+// Parses RAWTEXT elements (<style> and <script>)
+fn parse_rawtext(input: &str) -> IResult<&str, &str> {
+  // todo smarter than that??
+  take_until("</")(input)
+}
+
+pub fn parse_root_block(input: &str) -> IResult<&str, Node> {
+  // Remove leading space
+  let input = input.trim_start();
+
+  let (input, starting_tag) = parse_element_starting_tag(input)?;
+
+  // Process rawtext nodes
+  // TODO move this to parse element node definition???
+  // TODO optimize not recalculating starting tag??
+  if let ElementKind::RawText = classify_element_kind(starting_tag.tag_name) {
+    let (input, rawtext) = parse_rawtext(input)?;
+    let (input, end_tag) = parse_element_end_tag(input)?; 
+
+    // todo dedupe this check
+    // todo pass a stack of elements instead of a single tag
+    // todo handle the error? soft/hard error -> either return Err or proceed and warn
+    if end_tag != starting_tag.tag_name {
+      println!("End tag does not match start tag: <{}> </{}>", &starting_tag.tag_name, &end_tag);
+    }
+
+    return Ok((
+      input,
+      Node::TextNode(rawtext)
+    ));
+  };
+
+  let (input, children) = parse_node_children(input)?;
+
+  let (input, end_tag) = parse_element_end_tag(input)?;
+
+  // todo pass a stack of elements instead of a single tag
+  // todo handle the error? soft/hard error -> either return Err or proceed and warn
+  if end_tag != starting_tag.tag_name {
+    println!("End tag does not match start tag: <{}> </{}>", &starting_tag.tag_name, &end_tag);
+  }
+
+  Ok((
+    input,
+    Node::ElementNode(ElementNode { starting_tag, children })
+  ))
+}
+
+pub fn parse_sfc(input: &str) -> IResult<&str, Vec<Node>> {
+  many0(parse_root_block)(input)
 }
 
 fn parse_node_children(input: &str) -> IResult<&str, Vec<Node>> {

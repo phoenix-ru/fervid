@@ -1,27 +1,27 @@
 use nom::{
   IResult,
-  bytes::complete::{take_while, take_till, tag},
+  bytes::complete::{take_till, tag},
   character::complete::char,
-  sequence::{delimited, preceded}, branch::alt, multi::many0
+  sequence::{delimited, preceded},
+  branch::alt,
+  multi::many0
 };
 
-use super::html_utils::{html_name, space1};
+use crate::parser::html_utils::{html_name, space1};
 
 #[derive(Debug)]
 pub enum HtmlAttribute <'a> {
-  Regular(&'a str, &'a str),
-  VDirective(VDirective<'a>, &'a str)
-}
-
-pub struct RegularAttribute <'a> {
-  name: &'a str
-}
-
-#[derive(Debug)]
-pub struct VDirective <'a> {
-  name: &'a str,
-  argument: &'a str,
-  modifiers: Vec<&'a str>
+  Regular {
+    name: &'a str,
+    value: &'a str
+  },
+  VDirective {
+    name: &'a str,
+    argument: &'a str,
+    modifiers: Vec<&'a str>,
+    value: Option<&'a str>,
+    is_dynamic_slot: bool
+  }
 }
 
 fn parse_attr_value(input: &str) -> IResult<&str, &str> {
@@ -37,7 +37,7 @@ fn parse_attr_value(input: &str) -> IResult<&str, &str> {
 
  Allows for shortcuts like `@` (same as `v-on`), `:` (`v-bind`) and `#` (`v-slot`)
  */
-fn parse_directive(input: &str) -> IResult<&str, VDirective> {
+fn parse_directive(input: &str) -> IResult<&str, HtmlAttribute> {
   let (input, prefix) = alt((tag("v-"), tag("@"), tag("#"), tag(":")))(input)?;
 
   /* Determine directive name */
@@ -79,11 +79,20 @@ fn parse_directive(input: &str) -> IResult<&str, VDirective> {
   };
 
   /* Read argument part if we spotted `:` earlier */
+  let mut is_dynamic_slot = false;
   let (input, argument) = if has_argument {
-    html_name(input)?
+    // Support v-slot:[slotname]
+    if directive_name == "slot" && input.starts_with("[") {
+      is_dynamic_slot = true;
+
+      delimited(char('['), html_name, char(']'))(input)?
+    } else {
+      html_name(input)?
+    }
   } else {
     (input, "")
   };
+
   println!();
   println!("Parsed directive {:?}", directive_name);
   println!("Has argument: {}, argument: {:?}", has_argument, argument);
@@ -94,10 +103,12 @@ fn parse_directive(input: &str) -> IResult<&str, VDirective> {
     html_name
   ))(input).unwrap_or((input, vec![]));
 
-  Ok((input, VDirective {
+  Ok((input, HtmlAttribute::VDirective {
     name: directive_name,
     argument,
-    modifiers
+    modifiers,
+    value: None,
+    is_dynamic_slot
   }))
 }
 
@@ -106,20 +117,28 @@ fn parse_dynamic_attr(input: &str) -> IResult<&str, HtmlAttribute> {
   println!("Dynamic attr: directive = {:?}", directive);
 
   /* Try taking a `=` char, early return if it's not there */
-  let eq: Result<(&str, char), nom::Err<nom::error::Error<_>>> = char('=')(input);
-  match eq {
-    Err(_) => Ok((input, HtmlAttribute::VDirective(directive, ""))),
+  if !input.starts_with('=') {
+    return Ok((input, directive));
+  }
 
-    Ok((input, _)) => {
-      let (input, attr_value) = parse_attr_value(input)?;
-  
-      println!("Dynamic attr: value = {:?}", attr_value);
-  
-      Ok((input, HtmlAttribute::VDirective(
-        directive,
-        attr_value
-      )))
-    }
+  let (input, attr_value) = parse_attr_value(&input[1..])?;
+
+  println!("Dynamic attr: value = {:?}", attr_value);
+
+  match directive {
+    HtmlAttribute::VDirective { name, argument, modifiers, is_dynamic_slot, .. } => Ok((input, HtmlAttribute::VDirective {
+      name,
+      argument,
+      modifiers,
+      value: Some(attr_value),
+      is_dynamic_slot
+    })),
+
+    /* Not possible, because parse_directive returns a directive indeed */
+    _ => Err(nom::Err::Error(nom::error::Error {
+      code: nom::error::ErrorKind::Fail,
+      input
+    }))
   }
 }
 
@@ -130,17 +149,20 @@ fn parse_vanilla_attr(input: &str) -> IResult<&str, HtmlAttribute> {
   let eq: Result<(&str, char), nom::Err<nom::error::Error<_>>> = char('=')(input);
   match eq {
     // consider omitted attribute as attribute name itself (as current Vue compiler does)
-    Err(_) => Ok((input, HtmlAttribute::Regular(attr_name, &attr_name))),
+    Err(_) => Ok((input, HtmlAttribute::Regular {
+      name: attr_name,
+      value: &attr_name
+    })),
 
     Ok((input, _)) => {
       let (input, attr_value) = parse_attr_value(input)?;
   
       println!("Dynamic attr: value = {:?}", attr_value);
   
-      Ok((input, HtmlAttribute::Regular(
-        attr_name,
-        attr_value
-      )))
+      Ok((input, HtmlAttribute::Regular {
+        name: attr_name,
+        value: attr_value
+      }))
     }
   }
 }
