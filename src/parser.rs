@@ -16,26 +16,24 @@ use crate::parser::html_utils::classify_element_kind;
 use self::attributes::{parse_attributes, HtmlAttribute};
 use self::html_utils::{html_name, space0, ElementKind};
 
-mod html_utils;
+pub mod html_utils;
 mod attributes;
 
 #[derive(Debug)]
 pub struct StartingTag<'a> {
-  tag_name: &'a str,
-  attributes: Vec<HtmlAttribute<'a>>,
-  is_self_closing: bool,
-  kind: ElementKind
-}
-
-#[derive(Debug)]
-struct ElementNode<'a> {
-  starting_tag: StartingTag<'a>,
-  children: Vec<Node<'a>>
+  pub tag_name: &'a str,
+  pub attributes: Vec<HtmlAttribute<'a>>,
+  pub is_self_closing: bool,
+  pub kind: ElementKind
 }
 
 #[derive(Debug)]
 pub enum Node<'a> {
-  ElementNode(ElementNode<'a>),
+  ElementNode {
+    starting_tag: StartingTag<'a>,
+    children: Vec<Node<'a>>
+  },
+
   TextNode(&'a str),
   DynamicExpression(&'a str)
 }
@@ -97,10 +95,10 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
   if early_return {
     return Ok((
       input,
-      Node::ElementNode(ElementNode {
+      Node::ElementNode {
         starting_tag,
         children: vec![]
-      })
+      }
     ));
   }
 
@@ -117,10 +115,10 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
 
   Ok((
     input,
-    Node::ElementNode(ElementNode {
+    Node::ElementNode {
       starting_tag,
       children
-    })
+    }
   ))
 }
 
@@ -196,7 +194,7 @@ pub fn parse_root_block(input: &str) -> IResult<&str, Node> {
 
   Ok((
     input,
-    Node::ElementNode(ElementNode { starting_tag, children })
+    Node::ElementNode { starting_tag, children }
   ))
 }
 
