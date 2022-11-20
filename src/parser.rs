@@ -17,7 +17,7 @@ use self::attributes::{parse_attributes, HtmlAttribute};
 use self::html_utils::{html_name, space0, ElementKind};
 
 pub mod html_utils;
-mod attributes;
+pub mod attributes;
 
 #[derive(Debug)]
 pub struct StartingTag<'a> {

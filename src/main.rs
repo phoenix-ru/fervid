@@ -1,5 +1,5 @@
 use crate::compiler::codegen::compile_template;
-use crate::parser::{Node, StartingTag, html_utils::ElementKind};
+use crate::parser::{Node, StartingTag, html_utils::ElementKind, attributes::HtmlAttribute};
 
 mod parser;
 mod compiler;
@@ -18,10 +18,10 @@ fn main() {
         "{}",
         compile_template(Node::ElementNode {
             starting_tag: StartingTag {
-            tag_name: "span",
-            attributes: vec![],
-            is_self_closing: false,
-            kind: ElementKind::Normal
+                tag_name: "span",
+                attributes: vec![HtmlAttribute::Regular { name: "class", value: "yes" }],
+                is_self_closing: false,
+                kind: ElementKind::Normal
             },
             children: vec![Node::TextNode("Hello world")]
         })
