@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::parser::{Node, self, attributes::HtmlAttribute, StartingTag};
+use crate::parser::{Node, attributes::HtmlAttribute, StartingTag};
 
 #[derive(Default)]
 struct CodegenContext <'a> {
@@ -68,54 +68,99 @@ impl <'a> CodegenContext <'a> {
       attributes_str.push('}');
     }
 
-    /* All nodes inside element are text or dynamic expressions `{{ }}` */
-    let is_text_only = children.iter().all(|it| {
-      match it {
-        Node::TextNode(_) => true,
-        Node::DynamicExpression(_) => true,
-        Node::ElementNode { .. } => false
-      }
-    });
-
     /*
-      sep_str is separator between children. Text nodes are concatted, otherwise an array is used.
-      had_dynamic_expression is for `toDisplayString` import without doing HashSet::insert() for every DynamicExpression
+      In the block below, "text node" means Node::TextNode or Node::DynamicExpression, as both could be concatenated
+
+      had_to_display_string is for `toDisplayString` import without doing HashSet::insert() for every DynamicExpression
+      had_text_vnode is the same for `createTextVNode` import
+      is_previous_node_text marks whether we could continue concatenating text nodes 
+      current_text_start marks the start of current text nodes region, will be used if we suddenly encounter non-text node 
      */
-    let sep_str = if is_text_only { " + " } else { ", " };
-    let mut had_dynamic_expression = false;
+
+    /* Prepare ranges of text nodes, i.e. vector of (start, end) indices for text nodes */
+    let mut text_node_ranges: Vec<(usize, usize)> = vec![];
+    {
+      let mut start_of_range: Option<usize> = None;
+      let mut end_of_range: Option<usize> = None;
+      for (index, child) in children.iter().enumerate() {
+        match child {
+          Node::DynamicExpression(_) | Node::TextNode(_) => {
+            if let None = start_of_range  {
+              start_of_range = Some(index);
+            }
+
+            end_of_range = Some(index);
+          },
+
+          _ => {
+            /* Close previous range */
+            if let (Some(start), Some(end)) = (start_of_range, end_of_range) {
+              text_node_ranges.push((start, end));
+            }
+
+            start_of_range = None;
+            end_of_range = None;
+          }
+        }
+      }
+
+      if let (Some(start), Some(end)) = (start_of_range, end_of_range) {
+        text_node_ranges.push((start, end))
+      }
+    };
+
+    // println!("Text node ranges: {:?}", text_node_ranges);
+
+    /* All nodes inside element are text or dynamic expressions `{{ }}` */
+    let is_text_only = if let Some((start, end)) = text_node_ranges.get(0) {
+      *start == 0 && *end == children.len() - 1
+    } else { false };
 
     /* Create an expression for children */
     let mut children_str = String::new();
-    for child in children {
-      if !children_str.is_empty() { children_str.push_str(sep_str) };
+    let mut children_iter = children.iter().enumerate();
+    let mut text_node_ranges_iter = text_node_ranges.iter();
+    let mut text_node_ranges_current = text_node_ranges_iter.next();
 
-      if is_text_only {
-        /* Concat text */
-        match child {
-            Node::TextNode(v) => {
-              // todo trim extra whitespace
-              let escaped_text = v.replace('"', "\\\"");
-              children_str.push('"');
-              children_str.push_str(escaped_text.as_str());
-              children_str.push('"');
-            },
+    while let Some((index, child)) = children_iter.next() {
+      /* Close previous text node if any, add separator */
+      if !children_str.is_empty() {
+        children_str.push_str(", ");
+      }
 
-            Node::DynamicExpression(v) => {
-              had_dynamic_expression = true;
-              // todo add ctx reference
-              children_str.push_str("_toDisplayString(");
-              children_str.push_str(v);
-              children_str.push(')');
-            },
+      /* If we are at the start of multiple text nodes, i.e. (TextNode | DynamicExpression)+, pass control to another func */
+      if let Some((start, end)) = text_node_ranges_current {
+        if *start == index {
+          let text_nodes = &children[*start..=*end];
 
-            _ => {}
+          let text_nodes_result = self.create_text_concatenation_from_nodes(text_nodes, !is_text_only);
+
+          children_str.push_str(&text_nodes_result);
+
+          /* Advance iterators forward */
+          text_node_ranges_current = text_node_ranges_iter.next();
+          for _ in 0..(*end - *start) {
+            children_iter.next();
+          }
+
+          continue;
         }
-      } else {
-        /* Create node */
+      }
+
+      match child {
+        Node::ElementNode { starting_tag, children } => {
+          // todo use real differentiation for node VS component
+          let child_result = self.create_element_vnode(starting_tag, children);
+          children_str.push_str(child_result.as_str());
+        },
+
+        _ => {
+          panic!("TextNode or DynamicExpression handled outside text_node_ranges");
+        }
       }
     }
 
-    /* Make an array from children, default to `null` */
+    /* Make an array from children (if not text nodes only), default to `null` */
     if children_str.is_empty() {
       children_str.push_str("null");
     } else if !is_text_only {
@@ -129,37 +174,83 @@ impl <'a> CodegenContext <'a> {
 
     /* Add imports */
     self.add_to_imports("_createElementVNode");
-    if had_dynamic_expression {
-      self.add_to_imports("_toDisplayString");
-    }
 
     format!("_createElementVNode(\"{}\", {}, {}, {})", tag_name, attributes_str, children_str, mode)
   }
 
-  pub fn create_element_vnode2(self: &mut Self, node: &Node) -> Option<String> {
-    match node {
-      Node::ElementNode { starting_tag, children } => {
-        // todo handle this case
-        if children.len() != 1 {
-          return None;
-        }
+  fn create_text_concatenation_from_nodes(self: &mut Self, nodes: &[Node], surround_with_create_text_vnode: bool) -> String {
+    let mut result = String::new();
 
-        // Element node with only text inside
-        if let Some(Node::TextNode(contents)) = children.get(0) {
-          self.add_to_imports("_createElementVNode");
-
-          return Some(String::from(
-            format!("_createElementVNode('{}', null, '{}', -1 /* HOISTED */)", starting_tag.tag_name, contents)
-          ));
-        };
-
-        // todo
-
-        None
-      },
-
-      _ => None
+    /* Add function call if asked */
+    if surround_with_create_text_vnode {
+      result.push_str("_createTextVNode(");
+      self.add_to_imports("_createTextVNode");
     }
+
+    /* Adding to imports */
+    let mut had_to_display_string = false;
+
+    /* Just in case this function is called with wrong Node slice */
+    let mut had_first_el = false;
+
+    for node in nodes {
+      if had_first_el {
+        result.push_str(" + ");
+      }
+
+      match node {
+        /*
+         * Transforms raw text content into a JavaScript string
+         * All the start and end whitespace would be trimmed and replaced by a single regular space ` `
+         * All double quotes in the string are escaped with `\"`
+         */
+        Node::TextNode(v) => {
+          let escaped_text = v.replace('"', "\\\"");
+          let has_start_whitespace = escaped_text.starts_with(char::is_whitespace);
+          let has_end_whitespace = escaped_text.ends_with(char::is_whitespace);
+
+          result.push('"');
+          if has_start_whitespace {
+            result.push(' ');
+          }
+          result.push_str(escaped_text.trim());
+          if has_end_whitespace {
+            result.push(' ');
+          }
+          result.push('"');
+
+          had_first_el = true;
+        },
+
+        /*
+         * Transforms a dynamic expression into a `toDisplayString` call
+         * Adds context to the variables from component scope
+         */
+        Node::DynamicExpression(v) => {
+          // todo add ctx reference depending on analysis
+          result.push_str("_toDisplayString(");
+          result.push_str(v);
+          result.push(')');
+
+          had_first_el = true;
+          had_to_display_string = true;
+        },
+
+        Node::ElementNode { .. } => {
+          // ????
+        }
+      }
+    }
+
+    if surround_with_create_text_vnode {
+      result.push_str(", 1 /* TEXT */)");
+    }
+
+    if had_to_display_string {
+      self.add_to_imports("_toDisplayString");
+    }
+
+    result
   }
 
   fn add_to_imports(self: &mut Self, import: &'a str) {
@@ -198,49 +289,35 @@ impl <'a> CodegenContext <'a> {
    */
   fn can_be_hoisted (node: &Node) -> bool {
     match node {
-        Node::ElementNode { starting_tag, children } => { 
-          /* Check starting tag */
-          if !Self::is_native_element(node) {
-            return false;
-          }
-
-          let has_any_dynamic_attr = starting_tag.attributes.iter().any(|it| {
-            match it {
-              HtmlAttribute::Regular { .. } => false,
-              HtmlAttribute::VDirective { .. } => true
-            }
-          });
-
-          if has_any_dynamic_attr {
-            return false;
-          }
-
-          let cannot_be_hoisted = children.iter().any(|it| !Self::can_be_hoisted(&it));
-
-          return !cannot_be_hoisted;
-        },
-
-        Node::TextNode(_) => {
-          return true
-        },
-
-        Node::DynamicExpression(_) => {
-          return false
+      Node::ElementNode { starting_tag, children } => { 
+        /* Check starting tag */
+        if !Self::is_native_element(node) {
+          return false;
         }
+
+        let has_any_dynamic_attr = starting_tag.attributes.iter().any(|it| {
+          match it {
+            HtmlAttribute::Regular { .. } => false,
+            HtmlAttribute::VDirective { .. } => true
+          }
+        });
+
+        if has_any_dynamic_attr {
+          return false;
+        }
+
+        let cannot_be_hoisted = children.iter().any(|it| !Self::can_be_hoisted(&it));
+
+        return !cannot_be_hoisted;
+      },
+
+      Node::TextNode(_) => {
+        return true
+      },
+
+      Node::DynamicExpression(_) => {
+        return false
+      }
     };
-
-    // if let Node::ElementNode { starting_tag, children } = node {
-    //   let first_child = children.get(0);
-
-    //   if let None = first_child {
-    //     return true
-    //   } else if let Some(Node::TextNode(_)) = first_child {
-    //     return true
-    //   }
-
-      
-    // }
-
-    // false
   }
 }
