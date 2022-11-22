@@ -24,7 +24,21 @@ fn main() {
                 is_self_closing: false,
                 kind: ElementKind::Normal
             },
-            children: vec![Node::TextNode("Hello world")]
+            children: vec![
+                Node::TextNode("Hello world"),
+                Node::DynamicExpression("testRef"),
+                Node::TextNode("yes yes"),
+                Node::ElementNode {
+                    starting_tag: StartingTag {
+                        tag_name: "i",
+                        attributes: vec![],
+                        is_self_closing: false,
+                        kind: ElementKind::Normal
+                    },
+                    children: vec![Node::TextNode("italics, mm")]
+                },
+                Node::TextNode("end of span node")
+            ]
         })
     );
 
