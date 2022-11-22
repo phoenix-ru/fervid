@@ -7,6 +7,10 @@ Currently in early development, and the closest goal is to reach feature-parity 
 Parser
 - [x] Template parsing
 - [ ] W3 Spec compliance
+
+Analyzer
+- [ ] Template scope construction
+- [ ] Error reporting
 - [ ] JS/TS imports analysis (powered by swc_ecma_parser)
 - [ ] `setup`/`data`/`props` analysis
 
