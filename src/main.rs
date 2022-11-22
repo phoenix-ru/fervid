@@ -2,6 +2,7 @@ use crate::compiler::codegen::compile_template;
 use crate::parser::{Node, StartingTag, html_utils::ElementKind, attributes::HtmlAttribute};
 
 mod parser;
+mod analyzer;
 mod compiler;
 
 fn main() {
