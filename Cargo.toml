@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 nom = "7"
+regex = "1"
+phf = { version = "0.11", features = ["macros"] }
