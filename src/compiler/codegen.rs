@@ -1,24 +1,57 @@
-use std::collections::HashSet;
+extern crate regex;
+
+use std::collections::{HashSet, HashMap};
+use regex::Regex;
 
 use crate::parser::{Node, attributes::HtmlAttribute, StartingTag};
+use super::all_html_tags::is_html_tag;
 
 #[derive(Default)]
-struct CodegenContext <'a> {
+pub struct CodegenContext <'a> {
+  components: HashMap<&'a str, String>,
   used_imports: HashSet<&'a str>,
-  hoists: Vec<String>
+  hoists: Vec<String>,
+  is_custom_element: IsCustomElementParam<'a>
 }
 
-pub fn compile_template(template: Node) -> String {
-  let result = String::new();
+enum IsCustomElementParamRaw <'a> {
+  String(&'a str),
+  Regex(&'a str),
+  None
+}
 
+enum IsCustomElementParam <'a> {
+  String(&'a str),
+  Regex(Regex),
+  None
+}
+
+impl Default for IsCustomElementParam<'_> {
+  fn default() -> Self {
+    Self::None
+  }
+}
+
+/**
+ * Main entry point for the code generation
+ */
+pub fn compile_template(template: Node) -> Result<String, i32> {
+  // Todo from options
+  let is_custom_element_param = IsCustomElementParamRaw::Regex("custom-");
+  let is_custom_element_re = match is_custom_element_param {
+    IsCustomElementParamRaw::Regex(re) => IsCustomElementParam::Regex(Regex::new(re).expect("Invalid isCustomElement regex")),
+    IsCustomElementParamRaw::String(string) => IsCustomElementParam::String(string),
+    IsCustomElementParamRaw::None => IsCustomElementParam::None
+  };
+
+  /* Create the context */
   let mut ctx: CodegenContext = Default::default();
+  ctx.is_custom_element = is_custom_element_re;
 
   let test_res = ctx.compile_node(&template);
 
-  match test_res {
-    Some(res) => res,
-    None => result
-  }
+  // Zero really means nothing. It's just that error handling is not yet implemented
+  test_res.ok_or(0)
 }
 
 impl <'a> CodegenContext <'a> {
@@ -30,230 +63,68 @@ impl <'a> CodegenContext <'a> {
   }
 
   pub fn compile_node_children(self: &mut Self, children: &Vec<Node>) {
-
+    todo!()
   }
 
   pub fn create_element_vnode(self: &mut Self, starting_tag: &StartingTag, children: &Vec<Node>) -> String {
-    let tag_name = starting_tag.tag_name;
-    let attributes = &starting_tag.attributes;
+    /* Result buffer */
+    let mut buf = String::from("_createElementVNode(");
 
-    /* Create an expression for attributes */
-    let mut attributes_str = String::new();
-    for attribute in attributes {
-      match attribute {
-        HtmlAttribute::Regular { name, value } => {
-          if !attributes_str.is_empty() { attributes_str.push(','); };
+    // Tag name
+    buf.push('"');
+    buf.push_str(starting_tag.tag_name);
+    buf.push('"');
 
-          let needs_quotes = name.contains('-');
-          let normalized_value = if needs_quotes {
-            format!("\"{}\": \"{}\"", name, value)
-          } else {
-            format!("{}: \"{}\"", name, value)
-          };
-
-          // todo special case for `style` attribute
-          attributes_str.push_str(normalized_value.as_str());
-        },
-
-        // todo what should be done to that??
-        HtmlAttribute::VDirective { .. } => {}
-      };
+    // Attributes
+    buf.push_str(", ");
+    let has_generated_attributes = self.generate_attributes(&mut buf, &starting_tag.attributes);
+    if !has_generated_attributes {
+      buf.push_str("null");
     }
 
-    /* Make an object out of attrs expression, otherwise default to `null` */
-    if attributes_str.is_empty() {
-      attributes_str.push_str("null");
-    } else {
-      attributes_str.insert(0, '{');
-      attributes_str.push('}');
+    // Children
+    buf.push_str(", ");
+    let has_generated_children = self.generate_element_children(&mut buf, children, true);
+    if !has_generated_children {
+      buf.push_str("null");
     }
 
-    /*
-      In the block below, "text node" means Node::TextNode or Node::DynamicExpression, as both could be concatenated
-
-      had_to_display_string is for `toDisplayString` import without doing HashSet::insert() for every DynamicExpression
-      had_text_vnode is the same for `createTextVNode` import
-      is_previous_node_text marks whether we could continue concatenating text nodes 
-      current_text_start marks the start of current text nodes region, will be used if we suddenly encounter non-text node 
-     */
-
-    /* Prepare ranges of text nodes, i.e. vector of (start, end) indices for text nodes */
-    let mut text_node_ranges: Vec<(usize, usize)> = vec![];
-    {
-      let mut start_of_range: Option<usize> = None;
-      let mut end_of_range: Option<usize> = None;
-      for (index, child) in children.iter().enumerate() {
-        match child {
-          Node::DynamicExpression(_) | Node::TextNode(_) => {
-            if let None = start_of_range  {
-              start_of_range = Some(index);
-            }
-
-            end_of_range = Some(index);
-          },
-
-          _ => {
-            /* Close previous range */
-            if let (Some(start), Some(end)) = (start_of_range, end_of_range) {
-              text_node_ranges.push((start, end));
-            }
-
-            start_of_range = None;
-            end_of_range = None;
-          }
-        }
-      }
-
-      if let (Some(start), Some(end)) = (start_of_range, end_of_range) {
-        text_node_ranges.push((start, end))
-      }
-    };
-
-    // println!("Text node ranges: {:?}", text_node_ranges);
-
-    /* All nodes inside element are text or dynamic expressions `{{ }}` */
-    let is_text_only = if let Some((start, end)) = text_node_ranges.get(0) {
-      *start == 0 && *end == children.len() - 1
-    } else { false };
-
-    /* Create an expression for children */
-    let mut children_str = String::new();
-    let mut children_iter = children.iter().enumerate();
-    let mut text_node_ranges_iter = text_node_ranges.iter();
-    let mut text_node_ranges_current = text_node_ranges_iter.next();
-
-    while let Some((index, child)) = children_iter.next() {
-      /* Close previous text node if any, add separator */
-      if !children_str.is_empty() {
-        children_str.push_str(", ");
-      }
-
-      /* If we are at the start of multiple text nodes, i.e. (TextNode | DynamicExpression)+, pass control to another func */
-      if let Some((start, end)) = text_node_ranges_current {
-        if *start == index {
-          let text_nodes = &children[*start..=*end];
-
-          let text_nodes_result = self.create_text_concatenation_from_nodes(text_nodes, !is_text_only);
-
-          children_str.push_str(&text_nodes_result);
-
-          /* Advance iterators forward */
-          text_node_ranges_current = text_node_ranges_iter.next();
-          for _ in 0..(*end - *start) {
-            children_iter.next();
-          }
-
-          continue;
-        }
-      }
-
-      match child {
-        Node::ElementNode { starting_tag, children } => {
-          // todo use real differentiation for node VS component
-          let child_result = self.create_element_vnode(starting_tag, children);
-          children_str.push_str(child_result.as_str());
-        },
-
-        _ => {
-          panic!("TextNode or DynamicExpression handled outside text_node_ranges");
-        }
-      }
-    }
-
-    /* Make an array from children (if not text nodes only), default to `null` */
-    if children_str.is_empty() {
-      children_str.push_str("null");
-    } else if !is_text_only {
-      children_str.insert(0, '[');
-      children_str.push(']');
-    }
-
-    // todo implement
+    // todo implement MODE
     // todo add /*#__PURE__*/ annotations
-    let mode = "-1 /* HOISTED */";
+    buf.push_str(", ");
+    buf.push_str("-1 /* HOISTED */");
+
+    // Ending paren
+    buf.push(')');
 
     /* Add imports */
     self.add_to_imports("_createElementVNode");
 
-    format!("_createElementVNode(\"{}\", {}, {}, {})", tag_name, attributes_str, children_str, mode)
+    buf
   }
 
-  fn create_text_concatenation_from_nodes(self: &mut Self, nodes: &[Node], surround_with_create_text_vnode: bool) -> String {
-    let mut result = String::new();
-
-    /* Add function call if asked */
-    if surround_with_create_text_vnode {
-      result.push_str("_createTextVNode(");
-      self.add_to_imports("_createTextVNode");
-    }
-
-    /* Adding to imports */
-    let mut had_to_display_string = false;
-
-    /* Just in case this function is called with wrong Node slice */
-    let mut had_first_el = false;
-
-    for node in nodes {
-      if had_first_el {
-        result.push_str(" + ");
-      }
-
-      match node {
-        /*
-         * Transforms raw text content into a JavaScript string
-         * All the start and end whitespace would be trimmed and replaced by a single regular space ` `
-         * All double quotes in the string are escaped with `\"`
-         */
-        Node::TextNode(v) => {
-          let escaped_text = v.replace('"', "\\\"");
-          let has_start_whitespace = escaped_text.starts_with(char::is_whitespace);
-          let has_end_whitespace = escaped_text.ends_with(char::is_whitespace);
-
-          result.push('"');
-          if has_start_whitespace {
-            result.push(' ');
-          }
-          result.push_str(escaped_text.trim());
-          if has_end_whitespace {
-            result.push(' ');
-          }
-          result.push('"');
-
-          had_first_el = true;
-        },
-
-        /*
-         * Transforms a dynamic expression into a `toDisplayString` call
-         * Adds context to the variables from component scope
-         */
-        Node::DynamicExpression(v) => {
-          // todo add ctx reference depending on analysis
-          result.push_str("_toDisplayString(");
-          result.push_str(v);
-          result.push(')');
-
-          had_first_el = true;
-          had_to_display_string = true;
-        },
-
-        Node::ElementNode { .. } => {
-          // ????
-        }
-      }
-    }
-
-    if surround_with_create_text_vnode {
-      result.push_str(", 1 /* TEXT */)");
-    }
-
-    if had_to_display_string {
-      self.add_to_imports("_toDisplayString");
-    }
-
-    result
+  pub fn create_component_vnode(self: &mut Self, starting_tag: &StartingTag, children: &Vec<Node>) -> String {
+    todo!()
   }
 
-  fn add_to_imports(self: &mut Self, import: &'a str) {
+  fn add_to_components(self: &mut Self, tag_name: &'a str) -> String {
+    /* Check component existence and early exit */
+    let existing_component_name = self.components.get(tag_name);
+    if let Some(component_name) = existing_component_name {
+      return component_name.clone();
+    }
+
+    /* _component_ prefix plus tag name */
+    let mut component_name = tag_name.replace('-', "_");
+    component_name.insert_str(0, "_component_");
+
+    /* Add to map */
+    self.components.insert(tag_name, component_name.clone());
+
+    component_name
+  }
+
+  pub fn add_to_imports(self: &mut Self, import: &'a str) {
     self.used_imports.insert(import);
   }
 
@@ -261,24 +132,32 @@ impl <'a> CodegenContext <'a> {
     let hoist_index = self.hoists.len() + 1;
     let hoist_identifier = format!("_hoisted_{}", hoist_index);
 
+    // todo add pure in consumer instead or provide a boolean flag to generate it
     let hoist_expr = format!("const {} = /*#__PURE__*/ {}", hoist_identifier, expression);
     self.hoists.push(hoist_expr);
 
     hoist_identifier
   }
 
-  fn is_native_element(node: &Node) -> bool {
-    match node {
-        Node::ElementNode { starting_tag, .. } => {
-          // todo check for component nodes (may be tricky, because names do not always follow rules...)
-          // todo use analyzed components (fields of `components: {}`)
-          // todo check with isCustomElement
+  pub fn is_component(self: &Self, starting_tag: &StartingTag) -> bool {
+    // todo use analyzed components? (fields of `components: {}`)
 
-          !starting_tag.tag_name.contains('-')
-        },
+    let tag_name = starting_tag.tag_name;
 
-        _ => false
+    let is_html_tag = is_html_tag(tag_name);
+    if is_html_tag {
+      return false;
     }
+
+    /* Check with isCustomElement */
+    let is_custom_element = match &self.is_custom_element {
+      IsCustomElementParam::String(string) => tag_name == *string,
+      IsCustomElementParam::Regex(re) => re.is_match(tag_name),
+      IsCustomElementParam::None => false
+    };
+
+    // todo remove checking for dash
+    !is_custom_element && tag_name.contains('-')
   }
 
   /**
@@ -287,11 +166,11 @@ impl <'a> CodegenContext <'a> {
    * <button :disabled="isDisabled">text</button> => false
    * <span>{{ text }}</span> => false
    */
-  fn can_be_hoisted (node: &Node) -> bool {
+  fn can_be_hoisted (self: &Self, node: &Node) -> bool {
     match node {
       Node::ElementNode { starting_tag, children } => { 
         /* Check starting tag */
-        if !Self::is_native_element(node) {
+        if self.is_component(starting_tag) {
           return false;
         }
 
@@ -306,7 +185,7 @@ impl <'a> CodegenContext <'a> {
           return false;
         }
 
-        let cannot_be_hoisted = children.iter().any(|it| !Self::can_be_hoisted(&it));
+        let cannot_be_hoisted = children.iter().any(|it| !self.can_be_hoisted(&it));
 
         return !cannot_be_hoisted;
       },

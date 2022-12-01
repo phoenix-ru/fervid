@@ -35,11 +35,11 @@ fn main() {
                         is_self_closing: false,
                         kind: ElementKind::Normal
                     },
-                    children: vec![Node::TextNode("italics, mm")]
+                    children: vec![Node::TextNode("italics, mm"), Node::DynamicExpression("hey")]
                 },
                 Node::TextNode("end of span node")
             ]
-        })
+        }).unwrap()
     );
 
     // println!();
