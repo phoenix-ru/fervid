@@ -1,5 +1,6 @@
 use crate::parser::Node;
 use super::codegen::CodegenContext;
+use super::imports::VueImports;
 
 impl CodegenContext <'_> {
   pub fn generate_element_children (self: &mut Self, buf: &mut String, children: &Vec<Node>, allow_inlining: bool) -> bool {
@@ -121,12 +122,9 @@ impl CodegenContext <'_> {
   pub fn create_text_concatenation_from_nodes(self: &mut Self, buf: &mut String, nodes: &[Node], surround_with_create_text_vnode: bool) -> bool {
     /* Add function call if asked */
     if surround_with_create_text_vnode {
-      buf.push_str("_createTextVNode(");
-      self.add_to_imports("_createTextVNode");
+      buf.push_str(self.get_and_add_import_str(VueImports::CreateTextVNode));
+      buf.push('(');
     }
-
-    /* Adding to imports */
-    let mut had_to_display_string = false;
 
     /* Just in case this function is called with wrong Node slice */
     let mut had_first_el = false;
@@ -166,12 +164,12 @@ impl CodegenContext <'_> {
          */
         Node::DynamicExpression(v) => {
           // todo add ctx reference depending on analysis
-          buf.push_str("_toDisplayString(");
+          buf.push_str(self.get_and_add_import_str(VueImports::ToDisplayString));
+          buf.push('(');
           buf.push_str(v);
           buf.push(')');
 
           had_first_el = true;
-          had_to_display_string = true;
         },
 
         Node::ElementNode { .. } => {
@@ -182,10 +180,6 @@ impl CodegenContext <'_> {
 
     if surround_with_create_text_vnode {
       buf.push_str(", 1 /* TEXT */)");
-    }
-
-    if had_to_display_string {
-      self.add_to_imports("_toDisplayString");
     }
 
     true

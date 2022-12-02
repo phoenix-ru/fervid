@@ -4,12 +4,12 @@ use std::collections::{HashSet, HashMap};
 use regex::Regex;
 
 use crate::parser::{Node, attributes::HtmlAttribute, StartingTag};
-use super::all_html_tags::is_html_tag;
+use super::{all_html_tags::is_html_tag, imports::VueImports};
 
 #[derive(Default)]
 pub struct CodegenContext <'a> {
   components: HashMap<&'a str, String>,
-  used_imports: HashSet<&'a str>,
+  pub used_imports: u64,
   hoists: Vec<String>,
   is_custom_element: IsCustomElementParam<'a>
 }
@@ -50,6 +50,10 @@ pub fn compile_template(template: Node) -> Result<String, i32> {
 
   let test_res = ctx.compile_node(&template);
 
+  // Debug info: show used imports
+  println!("Used imports: {}", ctx.generate_imports_string());
+  println!();
+
   // Zero really means nothing. It's just that error handling is not yet implemented
   test_res.ok_or(0)
 }
@@ -68,7 +72,8 @@ impl <'a> CodegenContext <'a> {
 
   pub fn create_element_vnode(self: &mut Self, starting_tag: &StartingTag, children: &Vec<Node>) -> String {
     /* Result buffer */
-    let mut buf = String::from("_createElementVNode(");
+    let mut buf = String::from(self.get_and_add_import_str(VueImports::CreateElementVNode));
+    buf.push('(');
 
     // Tag name
     buf.push('"');
@@ -97,9 +102,6 @@ impl <'a> CodegenContext <'a> {
     // Ending paren
     buf.push(')');
 
-    /* Add imports */
-    self.add_to_imports("_createElementVNode");
-
     buf
   }
 
@@ -122,10 +124,6 @@ impl <'a> CodegenContext <'a> {
     self.components.insert(tag_name, component_name.clone());
 
     component_name
-  }
-
-  pub fn add_to_imports(self: &mut Self, import: &'a str) {
-    self.used_imports.insert(import);
   }
 
   fn add_to_hoists(self: &mut Self, expression: String) -> String {

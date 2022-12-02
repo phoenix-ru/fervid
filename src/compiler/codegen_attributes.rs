@@ -1,5 +1,6 @@
 use crate::parser::attributes::HtmlAttribute;
 use super::codegen::CodegenContext;
+use super::imports::VueImports;
 
 impl CodegenContext <'_> {
   pub fn generate_attributes(self: &mut Self, buf: &mut String, attributes: &Vec<HtmlAttribute>) -> bool {
@@ -73,7 +74,7 @@ impl CodegenContext <'_> {
 
     /* Add imports */
     if has_used_modifiers_import {
-      self.add_to_imports("_withModifiers")
+      self.add_to_imports(VueImports::WithModifiers);
     }
 
     true
@@ -131,7 +132,8 @@ fn generate_v_on_attr(buf: &mut String, argument: &str, modifiers: &Vec<&str>, v
 
   /* Modifiers present: add function call */
   if modifiers.len() > 0 {
-    buf.push_str("_withModifiers(");
+    buf.push_str(CodegenContext::get_import_str(VueImports::WithModifiers));
+    buf.push('(');
   }
 
   /* Value may be absent, e.g. `@click.stop` */
