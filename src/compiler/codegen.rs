@@ -1,14 +1,14 @@
 extern crate regex;
 
-use std::collections::{HashSet, HashMap};
+use std::collections::HashMap;
 use regex::Regex;
 
 use crate::parser::{Node, attributes::HtmlAttribute, StartingTag};
-use super::{all_html_tags::is_html_tag, imports::VueImports};
+use super::all_html_tags::is_html_tag;
 
 #[derive(Default)]
 pub struct CodegenContext <'a> {
-  components: HashMap<&'a str, String>,
+  pub components: HashMap<&'a str, String>,
   pub used_imports: u64,
   hoists: Vec<String>,
   is_custom_element: IsCustomElementParam<'a>
@@ -54,76 +54,28 @@ pub fn compile_template(template: Node) -> Result<String, i32> {
   println!("Used imports: {}", ctx.generate_imports_string());
   println!();
 
+  // Debug info: show used imports
+  println!("Used components: {:?}", ctx.components);
+  println!();
+
   // Zero really means nothing. It's just that error handling is not yet implemented
   test_res.ok_or(0)
 }
 
 impl <'a> CodegenContext <'a> {
-  pub fn compile_node(self: &mut Self, node: &Node) -> Option<String> {
+  pub fn compile_node(self: &mut Self, node: &'a Node) -> Option<String> {
     match node {
-        Node::ElementNode { starting_tag, children } => Some(self.create_element_vnode(starting_tag, children)),
-        _ => None
+      Node::ElementNode { starting_tag, children } => {
+        let mut buf = String::new();
+        self.create_element_vnode(&mut buf, starting_tag, children);
+        Some(buf)
+      },
+      _ => None
     }
   }
 
   pub fn compile_node_children(self: &mut Self, children: &Vec<Node>) {
     todo!()
-  }
-
-  pub fn create_element_vnode(self: &mut Self, starting_tag: &StartingTag, children: &Vec<Node>) -> String {
-    /* Result buffer */
-    let mut buf = String::from(self.get_and_add_import_str(VueImports::CreateElementVNode));
-    buf.push('(');
-
-    // Tag name
-    buf.push('"');
-    buf.push_str(starting_tag.tag_name);
-    buf.push('"');
-
-    // Attributes
-    buf.push_str(", ");
-    let has_generated_attributes = self.generate_attributes(&mut buf, &starting_tag.attributes);
-    if !has_generated_attributes {
-      buf.push_str("null");
-    }
-
-    // Children
-    buf.push_str(", ");
-    let has_generated_children = self.generate_element_children(&mut buf, children, true);
-    if !has_generated_children {
-      buf.push_str("null");
-    }
-
-    // todo implement MODE
-    // todo add /*#__PURE__*/ annotations
-    buf.push_str(", ");
-    buf.push_str("-1 /* HOISTED */");
-
-    // Ending paren
-    buf.push(')');
-
-    buf
-  }
-
-  pub fn create_component_vnode(self: &mut Self, starting_tag: &StartingTag, children: &Vec<Node>) -> String {
-    todo!()
-  }
-
-  fn add_to_components(self: &mut Self, tag_name: &'a str) -> String {
-    /* Check component existence and early exit */
-    let existing_component_name = self.components.get(tag_name);
-    if let Some(component_name) = existing_component_name {
-      return component_name.clone();
-    }
-
-    /* _component_ prefix plus tag name */
-    let mut component_name = tag_name.replace('-', "_");
-    component_name.insert_str(0, "_component_");
-
-    /* Add to map */
-    self.components.insert(tag_name, component_name.clone());
-
-    component_name
   }
 
   fn add_to_hoists(self: &mut Self, expression: String) -> String {
@@ -154,8 +106,7 @@ impl <'a> CodegenContext <'a> {
       IsCustomElementParam::None => false
     };
 
-    // todo remove checking for dash
-    !is_custom_element && tag_name.contains('-')
+    !is_custom_element
   }
 
   /**

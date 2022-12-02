@@ -5,13 +5,7 @@ use super::imports::VueImports;
 impl CodegenContext <'_> {
   pub fn generate_attributes(self: &mut Self, buf: &mut String, attributes: &Vec<HtmlAttribute>) -> bool {
     /* Work is not needed if we don't have any Regular attributes, v-on/v-bind directives */
-    if !attributes.iter().any(|it| match it {
-      HtmlAttribute::Regular { .. } => true,
-      HtmlAttribute::VDirective { name, .. } => match *name {
-        "on" | "bind" => true,
-        _ => false
-      }
-    }) {
+    if !has_attributes_work(attributes) {
       return false;
     }
 
@@ -79,6 +73,17 @@ impl CodegenContext <'_> {
 
     true
   }
+}
+
+pub fn has_attributes_work(attributes: &Vec<HtmlAttribute>) -> bool {
+  /* Work is not needed if we don't have any Regular attributes, v-on/v-bind directives */
+  attributes.iter().any(|it| match it {
+    HtmlAttribute::Regular { .. } => true,
+    HtmlAttribute::VDirective { name, .. } => match *name {
+      "on" | "bind" => true,
+      _ => false
+    }
+  })
 }
 
 fn generate_v_bind_attr(buf: &mut String, argument: &str, value: Option<&str>) {

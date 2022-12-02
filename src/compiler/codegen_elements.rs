@@ -1,9 +1,42 @@
-use crate::parser::Node;
+use crate::parser::{Node, StartingTag};
 use super::codegen::CodegenContext;
+use super::helper::CodeHelper;
 use super::imports::VueImports;
 
-impl CodegenContext <'_> {
-  pub fn generate_element_children (self: &mut Self, buf: &mut String, children: &Vec<Node>, allow_inlining: bool) -> bool {
+impl <'a> CodegenContext <'a> {
+  pub fn create_element_vnode(self: &mut Self, buf: &mut String, starting_tag: &StartingTag, children: &'a [Node]) {
+    buf.push_str(self.get_and_add_import_str(VueImports::CreateElementVNode));
+    CodeHelper::open_paren(buf);
+
+    // Tag name
+    buf.push('"');
+    buf.push_str(starting_tag.tag_name);
+    buf.push('"');
+
+    // Attributes
+    CodeHelper::comma(buf);
+    let has_generated_attributes = self.generate_attributes(buf, &starting_tag.attributes);
+    if !has_generated_attributes {
+      buf.push_str("null");
+    }
+
+    // Children
+    CodeHelper::comma(buf);
+    let has_generated_children = self.generate_element_children(buf, children, true);
+    if !has_generated_children {
+      buf.push_str("null");
+    }
+
+    // todo implement MODE
+    // todo add /*#__PURE__*/ annotations
+    CodeHelper::comma(buf);
+    buf.push_str("-1 /* HOISTED */");
+
+    // Ending paren
+    CodeHelper::close_paren(buf)
+  }
+
+  pub fn generate_element_children(self: &mut Self, buf: &mut String, children: &'a [Node], allow_inlining: bool) -> bool {
     // Do no work if children vec is empty
     if children.len() == 0 {
       return false;
@@ -96,13 +129,11 @@ impl CodegenContext <'_> {
 
       match child {
         Node::ElementNode { starting_tag, children } => {
-          let child_result = if self.is_component(starting_tag) {
-            self.create_component_vnode(starting_tag, children)
+          if self.is_component(starting_tag) {
+            self.create_component_vnode(buf, starting_tag, children)
           } else {
-            self.create_element_vnode(starting_tag, children)
-          };
-
-          buf.push_str(child_result.as_str());
+            self.create_element_vnode(buf, starting_tag, children)
+          }
         },
 
         _ => {
