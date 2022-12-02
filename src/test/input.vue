@@ -1,8 +1,8 @@
 <template>
   <abc-def
     v-model.lazy="modelValue"
-    v-test-directive:test-argument.foo.bar="foo-bar"
-    :test-bound="bar-baz"
+    v-test-directive:test-argument.foo.bar="foo - bar"
+    :test-bound="bar + baz"
     #custom-slot="{ prop }"
     disabled
     class=""
