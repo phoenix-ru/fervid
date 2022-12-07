@@ -3,6 +3,12 @@ pub struct CodeHelper <'a> {
   indent_str: &'a str
 }
 
+impl <'a> Default for CodeHelper<'a> {
+  fn default() -> Self {
+    CodeHelper { indent_level: 0, indent_str: "  " }
+  }
+}
+
 impl <'a> CodeHelper <'a> {
   pub fn indent(self: &mut Self) {
     self.indent_level += 1
@@ -21,12 +27,22 @@ impl <'a> CodeHelper <'a> {
     }
   }
 
-  pub fn null(buf: &mut String) {
-    buf.push_str("null")
+  pub fn newline_n(self: &Self, buf: &mut String, n: u8) {
+    for _ in 0..n {
+      self.newline(buf);
+    }
+  }
+
+  pub fn colon(buf: &mut String) {
+    buf.push_str(": ")
   }
 
   pub fn comma(buf: &mut String) {
     buf.push_str(", ")
+  }
+
+  pub fn null(buf: &mut String) {
+    buf.push_str("null")
   }
 
   pub fn open_paren(buf: &mut String) {
@@ -35,5 +51,23 @@ impl <'a> CodeHelper <'a> {
 
   pub fn close_paren(buf: &mut String) {
     buf.push(')')
+  }
+
+  pub fn parens_option(buf: &mut String, v: Option<&str>) {
+    Self::open_paren(buf);
+    if let Some(value) = v {
+      buf.push_str(value);
+    }
+    Self::close_paren(buf)
+  }
+
+  pub fn quote(buf: &mut String) {
+    buf.push('"')
+  }
+
+  pub fn quoted(buf: &mut String, v: &str) {
+    Self::quote(buf);
+    buf.push_str(v);
+    Self::quote(buf)
   }
 }
