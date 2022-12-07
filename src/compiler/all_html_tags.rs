@@ -153,7 +153,7 @@ static TAGS: phf::Set<&'static str> = phf_set! {
   "table",
   "tbody",
   "td",
-  "template",
+  // "template",
   "text",
   "textarea",
   "tfoot",
