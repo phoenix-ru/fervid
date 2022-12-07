@@ -50,9 +50,7 @@ impl <'a> CodegenContext <'a> {
     // Children (default to null)
     CodeHelper::comma(buf);
     if has_children_work {
-
-      todo!("produce slots code...")
-
+      self.generate_slots(buf, children);
     } else if needs_props_hint {
       CodeHelper::null(buf);
     }
@@ -86,5 +84,110 @@ impl <'a> CodegenContext <'a> {
 
     /* Add to map */
     self.components.insert(tag_name, component_name);
+  }
+
+  /// Double-pass slots code generation
+  /// First pass generates named slots, while the second is for default slot
+  fn generate_slots(self: &mut Self, buf: &mut String, children: &'a [Node]) {
+    // A child is not from default slot if it is a `<template>` element,
+    // which has `v-slot` with attribute which name is other than `default`.
+    // Example: regular elements, text, `<template>` and `<template v-slot>` are from the default slot.
+    // `<template v-slot:some-slot>` is not a default slot
+    let is_from_default_slot = |node: &&Node| match node {
+      Node::ElementNode { starting_tag, .. } => {
+        starting_tag.tag_name != "template" || !starting_tag.attributes.iter().any(|attr| match attr {
+          HtmlAttribute::VDirective { name, argument, .. } => {
+            *name == "slot" && *argument != "" && *argument != "default"
+          },
+          HtmlAttribute::Regular { .. } => false
+        })
+      },
+
+      // explicit just in case I decide to change node types and forget about this place
+      Node::DynamicExpression(_) | Node::TextNode(_) => true
+    };
+
+    buf.push('{');
+
+    // For commas and default slot generation
+    let mut needs_slot_comma = false;
+    // let mut processed_named_slots = 0;
+
+    // First pass: named slots. Those are `<template>` elements with a defined slot name
+    for template in children.iter().filter(|it| !is_from_default_slot(it)) {
+      if needs_slot_comma {
+        CodeHelper::comma(buf);
+      }
+
+      if let Node::ElementNode { starting_tag, children } = template {
+        // Find needed attribute and generate the header (slot name + ctx)
+        for attr in starting_tag.attributes.iter() {
+          if let HtmlAttribute::VDirective { name, argument, value, is_dynamic_slot, .. } = attr {
+            if *name != "slot" {
+              continue;
+            }
+
+            // For dynamic slots, generate a dynamic slot name `[_ctx.slotName]
+            // todo support Scope (what if the slot name comes from the template scope??)
+            if *is_dynamic_slot {
+              buf.push_str("[_ctx.");
+              buf.push_str(argument);
+              buf.push(']');
+            } else {
+              CodeHelper::quoted(buf, argument);
+            }
+
+            // Context. Generates `: _withCtx(() =>` or `: _withCtx((ctx) =>`
+            CodeHelper::colon(buf);
+            buf.push_str(self.get_and_add_import_str(VueImports::WithCtx));
+            CodeHelper::open_paren(buf);
+            CodeHelper::parens_option(buf, *value);
+            buf.push_str(" => ");
+
+            break
+          }
+        }
+
+        // Children
+        let had_children_work = self.generate_element_children(buf, children, false);
+        if !had_children_work {
+          buf.push_str("[]");
+        }
+
+        // todo mode hint, e.g. `_: 2 /* Dynamic */`
+
+        CodeHelper::close_paren(buf)
+      } else {
+        panic!("This should be impossible")
+      }
+
+      needs_slot_comma = true;
+      // processed_named_slots += 1;
+    }
+
+    // Second pass: default slot
+    // TODO I really don't like the idea of allocating a Vec just to call a function,
+    // but I also don't understand how to pass iterators to functions
+    let default_slot_children: Vec<&Node> = children.iter().filter(is_from_default_slot).collect();
+
+    // TODO support `<template v-slot>` and `<template v-slot:default>` by processing them in the named slots??
+    // Current SFC compiler panicks or tries to discard children not in `<template>` if it's present alongside normal elements
+    // That means that you can't simply put children inside if you want to have `<template v-slot:default>`,
+    // but you have to put everything inside of it.
+    // I think the biggest issue here is `<template v-slot:default="props">`, this needs to be checked and analyzed
+
+    if default_slot_children.len() > 0 {
+      if needs_slot_comma {
+        CodeHelper::comma(buf);
+      }
+
+      // TODO support ctx
+      // TODO withCtx import
+      buf.push_str("default: _withCtx(() => ");
+      self.generate_element_children(buf, children, false);
+      CodeHelper::close_paren(buf);
+    }
+
+    buf.push('}')
   }
 }
