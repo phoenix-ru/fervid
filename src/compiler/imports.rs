@@ -3,7 +3,9 @@ use super::codegen::CodegenContext;
 static CREATE_ELEMENT_VNODE: &str = "_createElementVNode";
 static CREATE_TEXT_VNODE: &str = "_createTextVNode";
 static CREATE_VNODE: &str = "_createVNode";
+static RESOLVE_COMPONENT: &str = "_resolveComponent";
 static TO_DISPLAY_STRING: &str = "_toDisplayString";
+static WITH_CTX: &str = "_withCtx";
 static WITH_MODIFIERS: &str = "_withModifiers";
 
 #[derive(Clone, Copy)]
@@ -11,15 +13,19 @@ pub enum VueImports {
   CreateElementVNode,
   CreateTextVNode,
   CreateVNode,
+  ResolveComponent,
   ToDisplayString,
+  WithCtx,
   WithModifiers
 }
 
-static ALL_IMPORTS: [VueImports; 5] = [
+static ALL_IMPORTS: [VueImports; 7] = [
   VueImports::CreateElementVNode,
   VueImports::CreateTextVNode,
   VueImports::CreateVNode,
+  VueImports::ResolveComponent,
   VueImports::ToDisplayString,
+  VueImports::WithCtx,
   VueImports::WithModifiers
 ];
 
@@ -33,7 +39,9 @@ impl <'a> CodegenContext <'a> {
       VueImports::CreateElementVNode => CREATE_ELEMENT_VNODE,
       VueImports::CreateTextVNode => CREATE_TEXT_VNODE,
       VueImports::CreateVNode => CREATE_VNODE,
+      VueImports::ResolveComponent => RESOLVE_COMPONENT,
       VueImports::ToDisplayString => TO_DISPLAY_STRING,
+      VueImports::WithCtx => WITH_CTX,
       VueImports::WithModifiers => WITH_MODIFIERS
     }
   }
@@ -76,8 +84,10 @@ impl <'a> CodegenContext <'a> {
       VueImports::CreateElementVNode => 1<<0,
       VueImports::CreateTextVNode =>    1<<1,
       VueImports::CreateVNode =>        1<<2,
-      VueImports::ToDisplayString =>    1<<5,
-      VueImports::WithModifiers =>      1<<10
+      VueImports::ResolveComponent =>   1<<10,
+      VueImports::ToDisplayString =>    1<<11,
+      VueImports::WithCtx =>            1<<20,
+      VueImports::WithModifiers =>      1<<21
     }
   }
 }

@@ -1,4 +1,5 @@
-use crate::parser::{StartingTag, Node};
+use std::fmt::Write;
+use crate::parser::{StartingTag, Node, attributes::HtmlAttribute};
 
 use super::{codegen::CodegenContext, imports::VueImports, codegen_attributes, helper::CodeHelper};
 
@@ -61,6 +62,21 @@ impl <'a> CodegenContext <'a> {
     }
 
     CodeHelper::close_paren(buf)
+  }
+
+  pub fn generate_components_string(self: &mut Self, buf: &mut String) {
+    if self.components.len() == 0 {
+      return;
+    }
+
+    let resolve_fn_str = self.get_and_add_import_str(VueImports::ResolveComponent);
+
+    // Key is a component as used in template, value is the assigned Js identifier
+    for (component_name, identifier) in self.components.iter() {
+      write!(buf, "const {} = {}(\"{}\")", identifier, resolve_fn_str, component_name)
+        .expect("Could not construct components");
+      self.code_helper.newline(buf);
+    }
   }
 
   /// Tries to write a component variable name to the buffer.
