@@ -136,6 +136,8 @@ impl <'a> CodegenContext <'a> {
           }
         },
 
+        Node::CommentNode(_) => {},
+
         _ => {
           panic!("TextNode or DynamicExpression handled outside text_node_ranges");
         }
