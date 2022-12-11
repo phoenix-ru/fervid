@@ -23,9 +23,9 @@ Code generator
       - [ ] `style` merging
       - [ ] `class` merging
     - [x] Children
-  - [ ] Components
-    - [ ] `createVNode`
-    - [ ] Slots
+  - [x] Components
+    - [x] `createVNode`
+    - [x] Slots
   - [ ] Context-awareness (`_ctx`, `$data`, `$setup`)
   - [ ] Directives
     - [x] v-on
