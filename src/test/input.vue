@@ -3,7 +3,6 @@
     v-model.lazy="modelValue"
     v-test-directive:test-argument.foo.bar="foo - bar"
     :test-bound="bar + baz"
-    #custom-slot="{ prop }"
     disabled
     class=""
     @click.prevent
@@ -20,6 +19,12 @@
 
     <template v-slot:test-slot="{ value }">
       test
+    </template>
+
+    <template #custom-slot="{ prop }">
+      <span class="span-class">
+        Span text
+      </span>
     </template>
   </abc-def>
 </template>
