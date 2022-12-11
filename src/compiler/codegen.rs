@@ -4,11 +4,7 @@ use std::collections::HashMap;
 use regex::Regex;
 
 use crate::parser::{Node, attributes::HtmlAttribute, StartingTag};
-use super::{all_html_tags::is_html_tag, helper::CodeHelper};
-
-const EXPORT_DEFAULT: &str = "export default ";
-const CONST_SFC: &str = "const __sfc__ = ";
-const CONST_SFC_EMPTY: &str = "const __sfc__ = {}"; // to optimize insertion
+use super::{all_html_tags::is_html_tag, helper::CodeHelper, codegen_script::ScriptAndLang};
 
 #[derive(Default)]
 pub struct CodegenContext <'a> {
@@ -37,67 +33,76 @@ impl Default for IsCustomElementParam<'_> {
   }
 }
 
+/**
+ * Main entry point for the code generation
+ */
 pub fn compile_sfc(blocks: &[Node]) -> Result<String, i32> {
-  let mut result = String::new();
-  let mut had_script = false;
-  let mut had_template = false;
-
-  // Todo optimize blocks processing order to not do any `insert`s
+  let mut template: Option<&Node> = None;
+  // let mut template_lang: Option<&str> = None;
+  let mut legacy_script: Option<ScriptAndLang> = None;
+  let mut setup_script: Option<ScriptAndLang> = None;
 
   for block in blocks.iter() {
     match block {
       Node::ElementNode { starting_tag, children } => {
-        // Template is supported if it doesn't have a `lang` attr or has `lang="html"`
-        let is_supported_template = starting_tag.tag_name == "template" &&
-          !starting_tag.attributes.iter().any(|attr| match attr {
-            HtmlAttribute::Regular { name, value } => {
-              *name == "lang" && *value != "html"
-            },
-            _ => false
-          });
+        // Extract lang attr, as this is used later
+        let lang_attr = starting_tag.attributes.iter().find_map(|attr| match attr {
+          HtmlAttribute::Regular { name, value } => {
+            if *name == "lang" {
+              Some(*value)
+            } else {
+              None
+            }
+          },
+          _ => None
+        });
 
-        // Compile if we support it
+        // Template is supported if it doesn't have a `lang` attr or has `lang="html"`
         // todo check if we have double templates (do this in analyzer)
-        if is_supported_template {
-          let compiled_template = compile_template(&block)?;
-          result.push_str(&compiled_template);
-          had_template = true;
-          continue;
+        if starting_tag.tag_name == "template" {
+          // todo what should the code do?? the unsupported template compilation should be done outside (e.g. Pug)
+          match lang_attr {
+            None | Some("html") => {},
+            _ => return Err(-2)
+          }
+
+          // Save the found template
+          template = Some(block);
+          // template_lang = lang_attr.or(Some("html"));
         }
 
         // Script is supported if it has empty `lang`, `lang="js"` or `lang="ts"`
-        let is_supported_script = starting_tag.tag_name == "script" &&
-          children.len() > 0 &&
-          !starting_tag.attributes.iter().any(|attr| match attr {
-            HtmlAttribute::Regular { name, value } => {
-              *name == "lang" && (*value != "js" || *value != "ts")
+        if starting_tag.tag_name == "script" && children.len() > 0 {
+          // todo what should the code do?? maybe return ScriptAndLang in a SFC descriptor
+          match lang_attr {
+            None | Some("js") | Some("ts") => {},
+            _ => return Err(-2)
+          }
+
+          // We already did the check for children.len() before
+          let script_content = match children[0] {
+            Node::TextNode(v) => Ok(v),
+            _ => Err(-3) // todo more meaningful error?
+          }?;
+
+          // Construct the struct that we can pass around
+          let script = Some(ScriptAndLang {
+            content: script_content,
+            lang: lang_attr.unwrap_or("js")
+          });
+
+          let is_setup = starting_tag.attributes.iter().any(|attr| match attr {
+            HtmlAttribute::Regular { name, .. } => {
+              *name == "setup"
             },
             _ => false
           });
 
-        // Naive approach to use script: just replace `export default ` with `const __sfc__ = `
-        // Todo use real parser in the future (e.g. swc_ecma_parser)
-        // Todo support at max 2 script elements (do so in analyzer)
-        if is_supported_script {
-          // We checked children earlier, so this should return the text of TextNode inside
-          let script_content = children.get(0).map_or(
-            Err(-2),
-            |first_child| match first_child {
-              Node::TextNode(v) => Ok(*v),
-              _ => Err(-3)
-            }
-          )?;
-
-          // Naive approach: replace
-          // I don't know how to do this with an initial buffer without using `insert_str` three times
-          let has_default_export = script_content.contains(EXPORT_DEFAULT);
-
-          if has_default_export {
-            result.insert_str(0, &script_content.replace(EXPORT_DEFAULT, CONST_SFC));
+          if is_setup {
+            setup_script = script
+          } else {
+            legacy_script = script
           }
-
-          had_script = true;
-          continue;
         }
       },
 
@@ -107,31 +112,15 @@ pub fn compile_sfc(blocks: &[Node]) -> Result<String, i32> {
     }
   }
 
-  if result.is_empty() {
-    return Err(-1000)
+  // Check that there is some work to do
+  if !(template.is_some() || legacy_script.is_some() || setup_script.is_some()) {
+    return Err(-1000); // todo error enums
   }
 
-  if !had_script {
-    result.insert_str(0, CONST_SFC_EMPTY);
-  }
+  // Resulting buffer
+  let mut result = String::new();
 
-  if had_template {
-    result.push('\n');
-    result.push_str("__sfc__.render = render");
-  }
-
-  result.push('\n');
-  result.push_str("export default __sfc__");
-
-  Ok(result)
-}
-
-/**
- * Main entry point for the code generation
- */
-pub fn compile_template(template: &Node) -> Result<String, i32> {
   // Todo from options
-  // Todo get context from the caller (compile_sfc)
   let is_custom_element_param = IsCustomElementParamRaw::Regex("custom-");
   let is_custom_element_re = match is_custom_element_param {
     IsCustomElementParamRaw::Regex(re) => IsCustomElementParam::Regex(Regex::new(re).expect("Invalid isCustomElement regex")),
@@ -143,53 +132,68 @@ pub fn compile_template(template: &Node) -> Result<String, i32> {
   let mut ctx: CodegenContext = Default::default();
   ctx.is_custom_element = is_custom_element_re;
 
-  // Try compiling the template. Indent because this will end up in a body of a function.
-  // We first need to compile template before knowing imports, components and hoists
-  ctx.code_helper.indent();
-  let compiled_template = ctx.compile_node(&template);
-  ctx.code_helper.unindent();
+  // Todo generate imports and hoists first in PROD mode (but this requires a smarter order of compilation)
 
-  if let Some(render_fn_return) = compiled_template {
-    let mut result = ctx.generate_imports_string();
-    ctx.code_helper.newline_n(&mut result, 2);
+  // Generate scripts
+  ctx.compile_scripts(&mut result, &legacy_script, &setup_script);
 
-    // Function header
-    result.push_str("function render(_ctx, _cache, $props, $setup, $data, $options) {");
-    ctx.code_helper.indent();
-
-    // Write components
+  // Generate template
+  if let Some(template_node) = template {
+    // todo do not allocate extra strings in functions?
+    // yet, we still need to hold the results of template render fn to append it later
+    let compiled_template = ctx.compile_template(template_node)?;
+    result.push_str(&compiled_template);
     ctx.code_helper.newline(&mut result);
-    ctx.generate_components_string(&mut result);
-
-    // Write return statement
-    ctx.code_helper.newline_n(&mut result, 2);
-    result.push_str("return ");
-    result.push_str(&render_fn_return);
-
-    // Closing bracket
-    ctx.code_helper.unindent();
-    ctx.code_helper.newline(&mut result);
-    result.push('}');
-
-    Ok(result)
-  } else {
-    Err(-1)
+    result.push_str("__sfc__.render = render");
   }
 
-  // // Debug info: show used imports
-  // println!("Used imports: {}", ctx.generate_imports_string());
-  // println!();
+  result.push('\n');
+  result.push_str("export default __sfc__");
 
-  // // Debug info: show used imports
-  // println!("Used components: {:?}", ctx.components);
-  // println!();
-
-  // // Zero really means nothing. It's just that error handling is not yet implemented
-  // test_res.ok_or(0)
+  Ok(result)
 }
 
 impl <'a> CodegenContext <'a> {
+  pub fn compile_template(self: &mut Self, template: &'a Node) -> Result<String, i32> {
+    // Try compiling the template. Indent because this will end up in a body of a function.
+    // We first need to compile template before knowing imports, components and hoists
+    self.code_helper.indent();
+    let compiled_template = self.compile_node(&template);
+    self.code_helper.unindent();
+  
+    // todo do not generate this inside compile_template, as PROD mode puts it to the top
+    if let Some(render_fn_return) = compiled_template {
+      let mut result = self.generate_imports_string();
+      self.code_helper.newline_n(&mut result, 2);
+
+      // Function header
+      result.push_str("function render(_ctx, _cache, $props, $setup, $data, $options) {");
+      self.code_helper.indent();
+  
+      // Write components
+      self.code_helper.newline(&mut result);
+      self.generate_components_string(&mut result);
+  
+      // Write return statement
+      self.code_helper.newline_n(&mut result, 2);
+      result.push_str("return ");
+      result.push_str(&render_fn_return);
+  
+      // Closing bracket
+      self.code_helper.unindent();
+      self.code_helper.newline(&mut result);
+      result.push('}');
+  
+      Ok(result)
+    } else {
+      Err(-1)
+    }
+  }
+
   pub fn compile_node(self: &mut Self, node: &'a Node) -> Option<String> {
+    // TODO do not use this function
+    // instead rename it and generate the code responsible for `openBlock`, `createElementBlock` (+ handle Fragments)
+    // TODO using create_element_vnode is generating wrong code, because a component may be a top-level element
     match node {
       Node::ElementNode { starting_tag, children } => {
         let mut buf = String::new();
@@ -198,10 +202,6 @@ impl <'a> CodegenContext <'a> {
       },
       _ => None
     }
-  }
-
-  pub fn compile_node_children(self: &mut Self, children: &Vec<Node>) {
-    todo!()
   }
 
   fn add_to_hoists(self: &mut Self, expression: String) -> String {
