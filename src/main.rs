@@ -14,6 +14,12 @@ fn main() {
     println!();
     println!("SFC blocks length: {}", res.1.len());
 
+    // Real codegen
+    println!(
+        "{}",
+        compile_sfc(&res.1).unwrap()
+    );
+
     // Codegen testing
     let template = Node::ElementNode {
         starting_tag: StartingTag {
@@ -67,7 +73,7 @@ fn main() {
             kind: ElementKind::RawText
         },
         children: vec![
-            Node::TextNode("export default {{\n  name: 'TestComponent'\n}}")
+            Node::TextNode("export default {\n  name: 'TestComponent'\n}")
         ]
     };
     println!(
