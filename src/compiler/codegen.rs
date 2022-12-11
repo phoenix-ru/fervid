@@ -271,6 +271,10 @@ impl <'a> CodegenContext <'a> {
 
       Node::DynamicExpression(_) => {
         return false
+      },
+
+      Node::CommentNode(_) => {
+        return false;
       }
     };
   }

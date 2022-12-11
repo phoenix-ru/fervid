@@ -203,7 +203,7 @@ impl <'a> CodegenContext <'a> {
           had_first_el = true;
         },
 
-        Node::ElementNode { .. } => {
+        Node::ElementNode { .. } | Node::CommentNode(_) => {
           // ????
         }
       }

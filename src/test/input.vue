@@ -13,6 +13,7 @@
 
     {{ dynamicValue }}
 
+    <!-- Comment -->
     <another-element />
 
     yet another text

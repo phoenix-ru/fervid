@@ -120,7 +120,7 @@ impl <'a> CodegenContext <'a> {
       },
 
       // explicit just in case I decide to change node types and forget about this place
-      Node::DynamicExpression(_) | Node::TextNode(_) => true
+      Node::DynamicExpression(_) | Node::TextNode(_) | Node::CommentNode(_) => true
     };
 
     buf.push('{');

@@ -35,7 +35,8 @@ pub enum Node<'a> {
   },
 
   TextNode(&'a str),
-  DynamicExpression(&'a str)
+  DynamicExpression(&'a str),
+  CommentNode(&'a str)
 }
 
 pub fn parse_element_starting_tag(input: &str) -> IResult<&str, StartingTag> {
@@ -156,6 +157,16 @@ fn parse_rawtext(input: &str) -> IResult<&str, &str> {
   take_until("</")(input)
 }
 
+fn parse_comment_node(input: &str) -> IResult<&str, Node> {
+  let (input, comment) = delimited(
+    tag("<!--"),
+    take_until("-->"),
+    tag("-->")
+  )(input)?;
+
+  Ok((input, Node::CommentNode(comment)))
+}
+
 pub fn parse_root_block(input: &str) -> IResult<&str, Node> {
   // Remove leading space
   let input = input.trim_start();
@@ -205,6 +216,7 @@ pub fn parse_sfc(input: &str) -> IResult<&str, Vec<Node>> {
 fn parse_node_children(input: &str) -> IResult<&str, Vec<Node>> {
   many0(alt((
     parse_dynamic_expression_node,
+    parse_comment_node,
     parse_element_node,
     parse_text_node
   )))(input)
