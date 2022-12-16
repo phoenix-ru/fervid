@@ -9,3 +9,7 @@ edition = "2021"
 nom = "7"
 regex = "1"
 phf = { version = "0.11", features = ["macros"] }
+swc_common = "0.29.17"
+swc_ecma_codegen = "0.128.*"
+swc_ecma_parser = "0.123.2"
+swc_core = { version = "0.44.*", features = ["plugin_transform"] }
