@@ -16,15 +16,18 @@ use crate::compiler::codegen::compile_sfc;
 use crate::parser::structs::{StartingTag, Node, ElementNode};
 use crate::parser::{html_utils::ElementKind, attributes::HtmlAttribute};
 use crate::swc_ecma_codegen::Node as CodegenNode;
+use crate::templates::ast_optimizer;
 
 mod parser;
 mod analyzer;
 mod compiler;
+mod templates;
 
 fn main() {
     let test = include_str!("./test/input.vue");
-    let res = parser::parse_sfc(test).unwrap();
-    println!("Result: {:?}", res.1);
+    let mut res = parser::parse_sfc(test).unwrap();
+    let optimized_ast = ast_optimizer::optimize_ast(&mut res.1);
+    println!("Result: {:#?}", optimized_ast);
     println!("Remaining: {:?}", res.0);
 
     println!();
