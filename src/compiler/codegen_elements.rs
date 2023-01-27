@@ -1,4 +1,5 @@
-use crate::parser::{Node, StartingTag};
+use crate::parser::structs::{StartingTag, Node, ElementNode};
+
 use super::codegen::CodegenContext;
 use super::helper::CodeHelper;
 use super::imports::VueImports;
@@ -128,7 +129,7 @@ impl <'a> CodegenContext <'a> {
       }
 
       match child {
-        Node::ElementNode { starting_tag, children } => {
+        Node::ElementNode(ElementNode { starting_tag, children }) => {
           if self.is_component(starting_tag) {
             self.create_component_vnode(buf, starting_tag, children)
           } else {

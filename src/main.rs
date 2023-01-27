@@ -2,11 +2,9 @@ extern crate swc_ecma_parser;
 extern crate swc_common;
 extern crate swc_core;
 extern crate swc_ecma_codegen;
-use std::io::Write;
 use std::rc::Rc;
 
-use swc_common::Span;
-use swc_core::ecma::ast::{Ident, MemberExpr, Program, Module, ModuleItem, ExprStmt};
+use swc_core::ecma::ast::{Ident, MemberExpr};
 use swc_core::ecma::atoms::JsWord;
 use swc_common::{BytePos, SourceMap, sync::Lrc};
 use swc_ecma_parser::Parser;
@@ -15,7 +13,8 @@ use swc_core::ecma::visit::{VisitMut, VisitMutWith};
 use swc_ecma_codegen::{Emitter, text_writer::JsWriter};
 
 use crate::compiler::codegen::compile_sfc;
-use crate::parser::{Node, StartingTag, html_utils::ElementKind, attributes::HtmlAttribute};
+use crate::parser::structs::{StartingTag, Node, ElementNode};
+use crate::parser::{html_utils::ElementKind, attributes::HtmlAttribute};
 use crate::swc_ecma_codegen::Node as CodegenNode;
 
 mod parser;
@@ -32,13 +31,14 @@ fn main() {
     println!("SFC blocks length: {}", res.1.len());
 
     // Real codegen
+    println!("\n[Real File Compile Result]\n");
     println!(
         "{}",
         compile_sfc(&res.1).unwrap()
     );
 
     // Codegen testing
-    let template = Node::ElementNode {
+    let template = Node::ElementNode(ElementNode {
         starting_tag: StartingTag {
             tag_name: "template",
             attributes: vec![],
@@ -46,7 +46,7 @@ fn main() {
             kind: ElementKind::Normal
         },
         children: vec![
-            Node::ElementNode {
+            Node::ElementNode(ElementNode {
                 starting_tag: StartingTag {
                     tag_name: "span",
                     attributes: vec![HtmlAttribute::Regular { name: "class", value: "yes" }],
@@ -58,7 +58,7 @@ fn main() {
                     Node::DynamicExpression("testRef"),
                     Node::TextNode("yes yes"),
                     // Just element
-                    Node::ElementNode {
+                    Node::ElementNode(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "i",
                             attributes: vec![],
@@ -66,9 +66,9 @@ fn main() {
                             kind: ElementKind::Normal
                         },
                         children: vec![Node::TextNode("italics, mm"), Node::DynamicExpression("hey")]
-                    },
+                    }),
                     // Component
-                    Node::ElementNode {
+                    Node::ElementNode(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "CustomComponent",
                             attributes: vec![],
@@ -76,13 +76,13 @@ fn main() {
                             kind: ElementKind::Normal // is this needed?
                         },
                         children: vec![Node::TextNode("italics, mm"), Node::DynamicExpression("hey")]
-                    },
+                    }),
                     Node::TextNode("end of span node")
                 ]
-            }
+            })
         ]
-    };
-    let script = Node::ElementNode {
+    });
+    let script = Node::ElementNode(ElementNode {
         starting_tag: StartingTag {
             tag_name: "script",
             attributes: vec![HtmlAttribute::Regular { name: "lang", value: "js" }],
@@ -92,7 +92,9 @@ fn main() {
         children: vec![
             Node::TextNode("export default {\n  name: 'TestComponent'\n}")
         ]
-    };
+    });
+
+    println!("\n[Synthetic Compile Result]\n");
     println!(
         "{}",
         compile_sfc(&[template, script]).unwrap()

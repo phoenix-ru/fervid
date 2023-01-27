@@ -13,31 +13,13 @@ use std::str;
 
 use crate::parser::html_utils::classify_element_kind;
 
-use self::attributes::{parse_attributes, HtmlAttribute};
+use self::attributes::parse_attributes;
 use self::html_utils::{html_name, space0, ElementKind};
+use self::structs::{ElementNode, StartingTag, Node};
 
-pub mod html_utils;
 pub mod attributes;
-
-#[derive(Debug)]
-pub struct StartingTag<'a> {
-  pub tag_name: &'a str,
-  pub attributes: Vec<HtmlAttribute<'a>>,
-  pub is_self_closing: bool,
-  pub kind: ElementKind
-}
-
-#[derive(Debug)]
-pub enum Node<'a> {
-  ElementNode {
-    starting_tag: StartingTag<'a>,
-    children: Vec<Node<'a>>
-  },
-
-  TextNode(&'a str),
-  DynamicExpression(&'a str),
-  CommentNode(&'a str)
-}
+pub mod html_utils;
+pub mod structs;
 
 pub fn parse_element_starting_tag(input: &str) -> IResult<&str, StartingTag> {
   let (input, (_, tag_name, attributes, _, ending_bracket)) = tuple((
@@ -96,10 +78,10 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
   if early_return {
     return Ok((
       input,
-      Node::ElementNode {
+      Node::ElementNode(ElementNode {
         starting_tag,
         children: vec![]
-      }
+      })
     ));
   }
 
@@ -116,10 +98,10 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
 
   Ok((
     input,
-    Node::ElementNode {
+    Node::ElementNode(ElementNode {
       starting_tag,
       children
-    }
+    })
   ))
 }
 
@@ -205,7 +187,7 @@ pub fn parse_root_block(input: &str) -> IResult<&str, Node> {
 
   Ok((
     input,
-    Node::ElementNode { starting_tag, children }
+    Node::ElementNode(ElementNode { starting_tag, children })
   ))
 }
 

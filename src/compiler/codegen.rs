@@ -3,7 +3,7 @@ extern crate regex;
 use std::collections::HashMap;
 use regex::Regex;
 
-use crate::parser::{Node, attributes::HtmlAttribute, StartingTag};
+use crate::parser::{attributes::HtmlAttribute, structs::{Node, ElementNode, StartingTag}};
 use super::{all_html_tags::is_html_tag, helper::CodeHelper, codegen_script::ScriptAndLang};
 
 #[derive(Default)]
@@ -15,6 +15,7 @@ pub struct CodegenContext <'a> {
   is_custom_element: IsCustomElementParam<'a>
 }
 
+#[allow(dead_code)]
 enum IsCustomElementParamRaw <'a> {
   String(&'a str),
   Regex(&'a str),
@@ -44,7 +45,7 @@ pub fn compile_sfc(blocks: &[Node]) -> Result<String, i32> {
 
   for block in blocks.iter() {
     match block {
-      Node::ElementNode { starting_tag, children } => {
+      Node::ElementNode(ElementNode { starting_tag, children }) => {
         // Extract lang attr, as this is used later
         let lang_attr = starting_tag.attributes.iter().find_map(|attr| match attr {
           HtmlAttribute::Regular { name, value } => {
@@ -195,7 +196,7 @@ impl <'a> CodegenContext <'a> {
     // instead rename it and generate the code responsible for `openBlock`, `createElementBlock` (+ handle Fragments)
     // TODO using create_element_vnode is generating wrong code, because a component may be a top-level element
     match node {
-      Node::ElementNode { starting_tag, children } => {
+      Node::ElementNode(ElementNode { starting_tag, children }) => {
         let mut buf = String::new();
         self.create_element_vnode(&mut buf, starting_tag, children);
         Some(buf)
@@ -243,7 +244,7 @@ impl <'a> CodegenContext <'a> {
    */
   fn can_be_hoisted (self: &Self, node: &Node) -> bool {
     match node {
-      Node::ElementNode { starting_tag, children } => { 
+      Node::ElementNode(ElementNode { starting_tag, children }) => { 
         /* Check starting tag */
         if self.is_component(starting_tag) {
           return false;

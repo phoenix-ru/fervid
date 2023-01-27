@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use crate::parser::{StartingTag, Node, attributes::HtmlAttribute};
+use crate::parser::{attributes::HtmlAttribute, structs::{StartingTag, Node, ElementNode}};
 
 use super::{codegen::CodegenContext, imports::VueImports, codegen_attributes, helper::CodeHelper};
 
@@ -110,7 +110,7 @@ impl <'a> CodegenContext <'a> {
     // Example: regular elements, text, `<template>` and `<template v-slot>` are from the default slot.
     // `<template v-slot:some-slot>` is not a default slot
     let is_from_default_slot = |node: &&Node| match node {
-      Node::ElementNode { starting_tag, .. } => {
+      Node::ElementNode(ElementNode { starting_tag, .. }) => {
         starting_tag.tag_name != "template" || !starting_tag.attributes.iter().any(|attr| match attr {
           HtmlAttribute::VDirective { name, argument, .. } => {
             *name == "slot" && *argument != "" && *argument != "default"
@@ -135,7 +135,7 @@ impl <'a> CodegenContext <'a> {
         CodeHelper::comma(buf);
       }
 
-      if let Node::ElementNode { starting_tag, children } = template {
+      if let Node::ElementNode(ElementNode { starting_tag, children }) = template {
         // Find needed attribute and generate the header (slot name + ctx)
         for attr in starting_tag.attributes.iter() {
           if let HtmlAttribute::VDirective { name, argument, value, is_dynamic_slot, .. } = attr {
