@@ -174,7 +174,7 @@ impl <'a> CodegenContext <'a> {
 
         CodeHelper::close_paren(buf)
       } else {
-        panic!("This should be impossible")
+        unreachable!("This should be impossible")
       }
 
       needs_slot_comma = true;
@@ -200,6 +200,7 @@ impl <'a> CodegenContext <'a> {
       // TODO support ctx
       // TODO withCtx import
       buf.push_str("default: _withCtx(() => ");
+      // TODO is passing `children` instead of `default_slot_children` a bug?
       self.generate_element_children(buf, children, false);
       CodeHelper::close_paren(buf);
     }
