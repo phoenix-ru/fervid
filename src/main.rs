@@ -3,6 +3,7 @@ extern crate swc_common;
 extern crate swc_core;
 extern crate swc_ecma_codegen;
 use std::rc::Rc;
+use std::time::Instant;
 
 use swc_core::ecma::ast::{Ident, MemberExpr};
 use swc_core::ecma::atoms::JsWord;
@@ -24,6 +25,25 @@ mod compiler;
 mod templates;
 
 fn main() {
+    let n = Instant::now();
+    test_real_compilation();
+    println!("Time took: {:?}", n.elapsed());
+
+    // println!("", swc_ecma_parser::parse_file_as_expr(fm, syntax, target, comments, recovered_errors));
+
+    // println!();
+    // let test = "<self-closing-example />";
+    // let res = parser::parse_element_node(test).unwrap();
+    // println!("Result: {:?}", res.1);
+
+    // println!();
+    // let test = "<div><template v-slot:[dynamicSlot]>hello</template></div>";
+    // let res = parser::parse_element_node(test).unwrap();
+    // println!("Result: {:?}", res.1);
+}
+
+#[allow(dead_code)]
+fn test_real_compilation() {
     let test = include_str!("./test/input.vue");
     let mut res = parser::parse_sfc(test).unwrap();
     let optimized_ast = ast_optimizer::optimize_ast(&mut res.1);
@@ -31,15 +51,18 @@ fn main() {
     println!("Remaining: {:?}", res.0);
 
     println!();
-    println!("SFC blocks length: {}", res.1.len());
+    println!("SFC blocks length: {}", optimized_ast.len());
 
     // Real codegen
     println!("\n[Real File Compile Result]\n");
     println!(
         "{}",
-        compile_sfc(&res.1).unwrap()
+        compile_sfc(optimized_ast).unwrap()
     );
+}
 
+#[allow(dead_code)]
+fn test_synthetic_compilation() {
     // Codegen testing
     let template = Node::ElementNode(ElementNode {
         starting_tag: StartingTag {
@@ -102,18 +125,6 @@ fn main() {
         "{}",
         compile_sfc(&[template, script]).unwrap()
     );
-
-    // println!("", swc_ecma_parser::parse_file_as_expr(fm, syntax, target, comments, recovered_errors));
-
-    // println!();
-    // let test = "<self-closing-example />";
-    // let res = parser::parse_element_node(test).unwrap();
-    // println!("Result: {:?}", res.1);
-
-    // println!();
-    // let test = "<div><template v-slot:[dynamicSlot]>hello</template></div>";
-    // let res = parser::parse_element_node(test).unwrap();
-    // println!("Result: {:?}", res.1);
 }
 
 #[allow(dead_code)]
