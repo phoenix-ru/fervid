@@ -103,6 +103,21 @@ fn main() {
         compile_sfc(&[template, script]).unwrap()
     );
 
+    // println!("", swc_ecma_parser::parse_file_as_expr(fm, syntax, target, comments, recovered_errors));
+
+    // println!();
+    // let test = "<self-closing-example />";
+    // let res = parser::parse_element_node(test).unwrap();
+    // println!("Result: {:?}", res.1);
+
+    // println!();
+    // let test = "<div><template v-slot:[dynamicSlot]>hello</template></div>";
+    // let res = parser::parse_element_node(test).unwrap();
+    // println!("Result: {:?}", res.1);
+}
+
+#[allow(dead_code)]
+fn test_swc_transform() {
     let lexer = Lexer::new(
         // We want to parse ecmascript
         Syntax::Es(Default::default()),
@@ -142,18 +157,6 @@ fn main() {
             eprintln!("{:?}", e)
         }
     }
-
-    // println!("", swc_ecma_parser::parse_file_as_expr(fm, syntax, target, comments, recovered_errors));
-
-    // println!();
-    // let test = "<self-closing-example />";
-    // let res = parser::parse_element_node(test).unwrap();
-    // println!("Result: {:?}", res.1);
-
-    // println!();
-    // let test = "<div><template v-slot:[dynamicSlot]>hello</template></div>";
-    // let res = parser::parse_element_node(test).unwrap();
-    // println!("Result: {:?}", res.1);
 }
 
 #[derive(Default)]
