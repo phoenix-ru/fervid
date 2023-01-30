@@ -3,6 +3,26 @@
 Vue SFC compiler written in Rust.
 Currently in early development, and the closest goal is to reach feature-parity with the current ![Vue SFC compiler](https://sfc.vuejs.org).
 
+## Is it fast?
+Yes, it is incredibly fast. In fact, below are the parsing/compilation times benchmarked for a [test component](src/test/input.vue).
+
+| Action          | Average time |
+|-----------------|--------------|
+| Parsing         | 11.753µs     |
+| Code generation | 80.733µs     |
+
+> Note: results are for AMD Ryzen 9 5900HX running on Fedora 37 with kernel version 6.1.6
+
+Nevertheless, at this point there is no proper benchmarking implemented and the data above comes from running the same simple snippet multiple times and averaging the results:
+```rust
+let n = Instant::now();
+test_real_compilation();
+println!("Time took: {:?}", n.elapsed());
+```
+
+Actual benchmarking is a TODO and has much lower priority compared to feature-completeness and usability in real-world scenarios, so **Pull Requests are welcome**.
+
+
 ## Roadmap
 Parser
 - [x] Template parsing
