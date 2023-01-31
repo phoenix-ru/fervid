@@ -10,6 +10,7 @@ use super::{all_html_tags::is_html_tag, helper::CodeHelper, codegen_script::Scri
 pub struct CodegenContext <'a> {
   pub code_helper: CodeHelper<'a>,
   pub components: HashMap<&'a str, String>,
+  pub directives: HashMap<&'a str, String>,
   pub used_imports: u64,
   hoists: Vec<String>,
   is_custom_element: IsCustomElementParam<'a>
@@ -59,7 +60,7 @@ pub fn compile_sfc(blocks: &[Node]) -> Result<String, i32> {
         });
 
         // Template is supported if it doesn't have a `lang` attr or has `lang="html"`
-        // todo check if we have double templates (do this in analyzer)
+        // todo check if we have two templates in an SFC (do this in analyzer)
         if starting_tag.tag_name == "template" {
           // todo what should the code do?? the unsupported template compilation should be done outside (e.g. Pug)
           match lang_attr {
@@ -142,13 +143,31 @@ pub fn compile_sfc(blocks: &[Node]) -> Result<String, i32> {
   if let Some(template_node) = template {
     // todo do not allocate extra strings in functions?
     // yet, we still need to hold the results of template render fn to append it later
+
+    // Get newline size hint for later
+    let newline_byte_size = ctx.code_helper.newline_size_hint();
+
+    // First, compile the template to its own String. This will also determine all the imports
     let compiled_template = ctx.compile_template(template_node)?;
+
+    // Second, generate the imports String...
+    let imports = ctx.generate_imports_string();
+    // ... extend the capacity with a generous size hint...
+    result.reserve(imports.len() + compiled_template.len() + 4 * newline_byte_size + 23 + 22);
+    // ... and append to SFC codegen result
+    result.push_str(&imports);
+    ctx.code_helper.newline_n(&mut result, 2);
+
+    // Third, push the compiled template
     result.push_str(&compiled_template);
+
+    // And finally, assign the render fn to __sfc__
+    // todo this is only for DEV
     ctx.code_helper.newline(&mut result);
     result.push_str("__sfc__.render = render");
   }
 
-  result.push('\n');
+  ctx.code_helper.newline(&mut result);
   result.push_str("export default __sfc__");
 
   Ok(result)
@@ -161,20 +180,27 @@ impl <'a> CodegenContext <'a> {
     self.code_helper.indent();
     let compiled_template = self.compile_node(&template);
     self.code_helper.unindent();
-  
+
     // todo do not generate this inside compile_template, as PROD mode puts it to the top
     if let Some(render_fn_return) = compiled_template {
-      let mut result = self.generate_imports_string();
-      self.code_helper.newline_n(&mut result, 2);
+      let mut result = String::new();
 
       // Function header
       result.push_str("function render(_ctx, _cache, $props, $setup, $data, $options) {");
       self.code_helper.indent();
-  
+
       // Write components
-      self.code_helper.newline(&mut result);
-      self.generate_components_string(&mut result);
-  
+      if self.components.len() > 0 {
+        self.code_helper.newline(&mut result);
+        self.generate_components_string(&mut result);
+      }
+
+      // Write directives
+      if self.directives.len() > 0 {
+        self.code_helper.newline(&mut result);
+        self.generate_directive_resolves(&mut result);
+      }
+
       // Write return statement
       self.code_helper.newline_n(&mut result, 2);
       result.push_str("return ");

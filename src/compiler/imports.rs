@@ -4,8 +4,14 @@ static CREATE_ELEMENT_VNODE: &str = "_createElementVNode";
 static CREATE_TEXT_VNODE: &str = "_createTextVNode";
 static CREATE_VNODE: &str = "_createVNode";
 static RESOLVE_COMPONENT: &str = "_resolveComponent";
+static RESOLVE_DIRECTIVE: &str = "_resolveDirective";
 static TO_DISPLAY_STRING: &str = "_toDisplayString";
+static VMODEL_CHECKBOX: &str = "_vModelCheckbox";
+static VMODEL_RADIO: &str = "_vModelRadio";
+static VMODEL_SELECT: &str = "_vModelSelect";
+static VMODEL_TEXT: &str = "_vModelText";
 static WITH_CTX: &str = "_withCtx";
+static WITH_DIRECTIVES: &str = "_withDirectives";
 static WITH_MODIFIERS: &str = "_withModifiers";
 
 #[derive(Clone, Copy)]
@@ -14,18 +20,30 @@ pub enum VueImports {
   CreateTextVNode,
   CreateVNode,
   ResolveComponent,
+  ResolveDirective,
   ToDisplayString,
+  VModelCheckbox,
+  VModelRadio,
+  VModelSelect,
+  VModelText,
   WithCtx,
+  WithDirectives,
   WithModifiers
 }
 
-static ALL_IMPORTS: [VueImports; 7] = [
+static ALL_IMPORTS: [VueImports; 13] = [
   VueImports::CreateElementVNode,
   VueImports::CreateTextVNode,
   VueImports::CreateVNode,
   VueImports::ResolveComponent,
+  VueImports::ResolveDirective,
   VueImports::ToDisplayString,
+  VueImports::VModelCheckbox,
+  VueImports::VModelRadio,
+  VueImports::VModelSelect,
+  VueImports::VModelText,
   VueImports::WithCtx,
+  VueImports::WithDirectives,
   VueImports::WithModifiers
 ];
 
@@ -40,8 +58,14 @@ impl <'a> CodegenContext <'a> {
       VueImports::CreateTextVNode => CREATE_TEXT_VNODE,
       VueImports::CreateVNode => CREATE_VNODE,
       VueImports::ResolveComponent => RESOLVE_COMPONENT,
+      VueImports::ResolveDirective => RESOLVE_DIRECTIVE,
       VueImports::ToDisplayString => TO_DISPLAY_STRING,
+      VueImports::VModelCheckbox => VMODEL_CHECKBOX,
+      VueImports::VModelRadio => VMODEL_RADIO,
+      VueImports::VModelSelect => VMODEL_SELECT,
+      VueImports::VModelText => VMODEL_TEXT,
       VueImports::WithCtx => WITH_CTX,
+      VueImports::WithDirectives => WITH_DIRECTIVES,
       VueImports::WithModifiers => WITH_MODIFIERS
     }
   }
@@ -85,9 +109,15 @@ impl <'a> CodegenContext <'a> {
       VueImports::CreateTextVNode =>    1<<1,
       VueImports::CreateVNode =>        1<<2,
       VueImports::ResolveComponent =>   1<<10,
-      VueImports::ToDisplayString =>    1<<11,
-      VueImports::WithCtx =>            1<<20,
-      VueImports::WithModifiers =>      1<<21
+      VueImports::ResolveDirective =>   1<<11,
+      VueImports::ToDisplayString =>    1<<12,
+      VueImports::VModelCheckbox =>     1<<35,
+      VueImports::VModelRadio =>        1<<36,
+      VueImports::VModelSelect =>       1<<37,
+      VueImports::VModelText =>         1<<38,
+      VueImports::WithCtx =>            1<<40,
+      VueImports::WithDirectives =>     1<<41,
+      VueImports::WithModifiers =>      1<<42
     }
   }
 }

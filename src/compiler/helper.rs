@@ -50,6 +50,11 @@ impl <'a> CodeHelper <'a> {
     buf.push_str(", ")
   }
 
+  pub fn comma_newline(&self, buf: &mut String) {
+    buf.push(',');
+    self.newline(buf)
+  }
+
   pub fn null(buf: &mut String) {
     buf.push_str("null")
   }

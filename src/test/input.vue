@@ -26,15 +26,19 @@
         Span text
       </span>
     </template>
+
+    <input v-model="inputModel" v-directive:foo.bar.buzz="baz">
   </abc-def>
 </template>
 
 <script>
-import { defineComponent } from 'vue'
+import { defineComponent, ref } from 'vue'
 
 export default defineComponent({
   setup() {
-    
+    return {
+      inputModel: ref('')
+    }
   },
 })
 </script>

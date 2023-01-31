@@ -5,7 +5,14 @@ use super::helper::CodeHelper;
 use super::imports::VueImports;
 
 impl <'a> CodegenContext <'a> {
-  pub fn create_element_vnode(self: &mut Self, buf: &mut String, starting_tag: &StartingTag, children: &'a [Node]) {
+  pub fn create_element_vnode(self: &mut Self, buf: &mut String, starting_tag: &'a StartingTag, children: &'a [Node]) {
+    // Special generation: `_withDirectives` prefix
+    let needs_directive = Self::needs_directive_wrapper(starting_tag, false);
+    if needs_directive {
+      buf.push_str(self.get_and_add_import_str(VueImports::WithDirectives));
+      CodeHelper::open_paren(buf);
+    }
+
     buf.push_str(self.get_and_add_import_str(VueImports::CreateElementVNode));
     CodeHelper::open_paren(buf);
 
@@ -34,7 +41,14 @@ impl <'a> CodegenContext <'a> {
     buf.push_str("-1 /* HOISTED */");
 
     // Ending paren
-    CodeHelper::close_paren(buf)
+    CodeHelper::close_paren(buf);
+
+    // Generate directives array if needed
+    if needs_directive {
+      CodeHelper::comma(buf);
+      self.generate_directives(buf, starting_tag, false);
+      CodeHelper::close_paren(buf);
+    }
   }
 
   pub fn generate_element_children(self: &mut Self, buf: &mut String, children: &'a [Node], allow_inlining: bool) -> bool {
