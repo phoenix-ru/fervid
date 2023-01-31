@@ -35,7 +35,8 @@ impl<'a> CodegenContext<'a> {
         }
 
         // Write <directive_ident>. This is either from Vue (vModel*) or the identifier of custom directive
-        if *name == "model" {
+        // TODO better handle `is_component`
+        if *name == "model" && !is_component {
           let vmodel_directive = self.get_vmodel_directive_name(starting_tag);
           buf.push_str(vmodel_directive);
         } else {

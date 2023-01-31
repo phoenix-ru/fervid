@@ -178,7 +178,13 @@ impl <'a> CodegenContext <'a> {
     // Try compiling the template. Indent because this will end up in a body of a function.
     // We first need to compile template before knowing imports, components and hoists
     self.code_helper.indent();
-    let compiled_template = self.compile_node(&template);
+    let compiled_template;
+    if let Node::ElementNode(ElementNode { children, .. }) = template {
+      // todo better handling of multiple root children (use Fragment)
+      compiled_template = self.compile_node(&children[0]);
+    } else {
+      unreachable!()
+    }
     self.code_helper.unindent();
 
     // todo do not generate this inside compile_template, as PROD mode puts it to the top
@@ -224,7 +230,11 @@ impl <'a> CodegenContext <'a> {
     match node {
       Node::ElementNode(ElementNode { starting_tag, children }) => {
         let mut buf = String::new();
-        self.create_element_vnode(&mut buf, starting_tag, children);
+        if self.is_component(starting_tag) {
+          self.create_component_vnode(&mut buf, starting_tag, children);
+        } else {
+          self.create_element_vnode(&mut buf, starting_tag, children);
+        }
         Some(buf)
       },
       _ => None
