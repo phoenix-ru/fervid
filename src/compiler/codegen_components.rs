@@ -72,10 +72,13 @@ impl <'a> CodegenContext <'a> {
     let resolve_fn_str = self.get_and_add_import_str(VueImports::ResolveComponent);
 
     // Key is a component as used in template, value is the assigned Js identifier
-    for (component_name, identifier) in self.components.iter() {
+    for (index, (component_name, identifier)) in self.components.iter().enumerate() {
+      if index > 0 {
+        self.code_helper.newline(buf);
+      }
+
       write!(buf, "const {} = {}(\"{}\")", identifier, resolve_fn_str, component_name)
         .expect("Could not construct components");
-      self.code_helper.newline(buf);
     }
   }
 

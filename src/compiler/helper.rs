@@ -27,8 +27,17 @@ impl <'a> CodeHelper <'a> {
     }
   }
 
+  pub fn newline_size_hint(&self) -> usize {
+    self.indent_level * self.indent_str.len()
+  }
+
   pub fn newline_n(self: &Self, buf: &mut String, n: u8) {
-    for _ in 0..n {
+    for _ in 0..n-1 {
+      // empty lines should not be indented
+      buf.push('\n');
+    }
+
+    if n > 1 {
       self.newline(buf);
     }
   }
@@ -59,6 +68,14 @@ impl <'a> CodeHelper <'a> {
       buf.push_str(value);
     }
     Self::close_paren(buf)
+  }
+
+  pub fn open_sq_bracket(buf: &mut String) {
+    buf.push('[')
+  }
+
+  pub fn close_sq_bracket(buf: &mut String) {
+    buf.push(']')
   }
 
   pub fn quote(buf: &mut String) {
