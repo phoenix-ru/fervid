@@ -1,5 +1,6 @@
 use super::codegen::CodegenContext;
 
+static CREATE_COMMENT_VNODE: &str = "_createCommentVNode";
 static CREATE_ELEMENT_VNODE: &str = "_createElementVNode";
 static CREATE_TEXT_VNODE: &str = "_createTextVNode";
 static CREATE_VNODE: &str = "_createVNode";
@@ -16,6 +17,7 @@ static WITH_MODIFIERS: &str = "_withModifiers";
 
 #[derive(Clone, Copy)]
 pub enum VueImports {
+  CreateCommentVNode,
   CreateElementVNode,
   CreateTextVNode,
   CreateVNode,
@@ -31,7 +33,8 @@ pub enum VueImports {
   WithModifiers
 }
 
-static ALL_IMPORTS: [VueImports; 13] = [
+static ALL_IMPORTS: [VueImports; 14] = [
+  VueImports::CreateCommentVNode,
   VueImports::CreateElementVNode,
   VueImports::CreateTextVNode,
   VueImports::CreateVNode,
@@ -54,6 +57,7 @@ impl <'a> CodegenContext <'a> {
 
   pub fn get_import_str(vue_import: VueImports) -> &'static str {
     match vue_import {
+      VueImports::CreateCommentVNode => CREATE_COMMENT_VNODE,
       VueImports::CreateElementVNode => CREATE_ELEMENT_VNODE,
       VueImports::CreateTextVNode => CREATE_TEXT_VNODE,
       VueImports::CreateVNode => CREATE_VNODE,
@@ -105,9 +109,10 @@ impl <'a> CodegenContext <'a> {
 
   fn get_import_mask_bit(vue_import: VueImports) -> u64 {
     match vue_import {
-      VueImports::CreateElementVNode => 1<<0,
-      VueImports::CreateTextVNode =>    1<<1,
-      VueImports::CreateVNode =>        1<<2,
+      VueImports::CreateCommentVNode => 1<<0,
+      VueImports::CreateElementVNode => 1<<1,
+      VueImports::CreateTextVNode =>    1<<2,
+      VueImports::CreateVNode =>        1<<3,
       VueImports::ResolveComponent =>   1<<10,
       VueImports::ResolveDirective =>   1<<11,
       VueImports::ToDisplayString =>    1<<12,

@@ -1,4 +1,4 @@
-use crate::parser::structs::{StartingTag, Node, ElementNode};
+use crate::parser::structs::{StartingTag, Node};
 
 use super::codegen::CodegenContext;
 use super::helper::CodeHelper;
@@ -153,21 +153,13 @@ impl <'a> CodegenContext <'a> {
         }
       }
 
-      match child {
-        Node::ElementNode(ElementNode { starting_tag, children }) => {
-          if self.is_component(starting_tag) {
-            self.create_component_vnode(buf, starting_tag, children)
-          } else {
-            self.create_element_vnode(buf, starting_tag, children)
-          }
-        },
-
-        Node::CommentNode(_) => {},
-
-        _ => {
-          panic!("TextNode or DynamicExpression handled outside text_node_ranges");
-        }
+      // This must never be the case!
+      if let Node::TextNode(_) | Node::DynamicExpression(_) = child {
+        unreachable!("TextNode or DynamicExpression handled outside text_node_ranges");
       }
+
+      // Make a call to handle a child
+      self.compile_node(buf, child)
     }
 
     // Close Js array

@@ -178,66 +178,63 @@ impl <'a> CodegenContext <'a> {
     // Try compiling the template. Indent because this will end up in a body of a function.
     // We first need to compile template before knowing imports, components and hoists
     self.code_helper.indent();
-    let compiled_template;
+    let mut compiled_template = String::new();
     if let Node::ElementNode(ElementNode { children, .. }) = template {
       // todo better handling of multiple root children (use Fragment)
-      compiled_template = self.compile_node(&children[0]);
+      self.compile_node(&mut compiled_template, &children[0]);
     } else {
       unreachable!()
     }
     self.code_helper.unindent();
 
     // todo do not generate this inside compile_template, as PROD mode puts it to the top
-    if let Some(render_fn_return) = compiled_template {
-      let mut result = String::new();
+    let mut result = String::new();
 
-      // Function header
-      result.push_str("function render(_ctx, _cache, $props, $setup, $data, $options) {");
-      self.code_helper.indent();
+    // Function header
+    result.push_str("function render(_ctx, _cache, $props, $setup, $data, $options) {");
+    self.code_helper.indent();
 
-      // Write components
-      if self.components.len() > 0 {
-        self.code_helper.newline(&mut result);
-        self.generate_components_string(&mut result);
-      }
-
-      // Write directives
-      if self.directives.len() > 0 {
-        self.code_helper.newline(&mut result);
-        self.generate_directive_resolves(&mut result);
-      }
-
-      // Write return statement
-      self.code_helper.newline_n(&mut result, 2);
-      result.push_str("return ");
-      result.push_str(&render_fn_return);
-  
-      // Closing bracket
-      self.code_helper.unindent();
+    // Write components
+    if self.components.len() > 0 {
       self.code_helper.newline(&mut result);
-      result.push('}');
-  
-      Ok(result)
-    } else {
-      Err(-1)
+      self.generate_components_string(&mut result);
     }
+
+    // Write directives
+    if self.directives.len() > 0 {
+      self.code_helper.newline(&mut result);
+      self.generate_directive_resolves(&mut result);
+    }
+
+    // Write return statement
+    self.code_helper.newline_n(&mut result, 2);
+    result.push_str("return ");
+    result.push_str(&compiled_template);
+
+    // Closing bracket
+    self.code_helper.unindent();
+    self.code_helper.newline(&mut result);
+    result.push('}');
+
+    Ok(result)
   }
 
-  pub fn compile_node(self: &mut Self, node: &'a Node) -> Option<String> {
-    // TODO do not use this function
-    // instead rename it and generate the code responsible for `openBlock`, `createElementBlock` (+ handle Fragments)
-    // TODO using create_element_vnode is generating wrong code, because a component may be a top-level element
+  pub fn compile_node(&mut self, buf: &mut String, node: &Node) {
+    // todo add the code for `openBlock`, `createElementBlock` and Fragments when needed
     match node {
       Node::ElementNode(ElementNode { starting_tag, children }) => {
-        let mut buf = String::new();
         if self.is_component(starting_tag) {
-          self.create_component_vnode(&mut buf, starting_tag, children);
+          self.create_component_vnode(buf, starting_tag, children);
         } else {
-          self.create_element_vnode(&mut buf, starting_tag, children);
+          self.create_element_vnode(buf, starting_tag, children);
         }
-        Some(buf)
       },
-      _ => None
+
+      Node::CommentNode(comment) => {
+        self.create_comment_vnode(buf, &comment)
+      },
+
+      _ => {}
     }
   }
 
