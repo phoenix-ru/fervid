@@ -10,9 +10,7 @@ impl<'a> CodegenContext<'a> {
 
     for attr in &starting_tag.attributes {
       if let HtmlAttribute::VDirective { name, argument, modifiers, value, is_dynamic_slot } = attr {
-        // Do not process "bind", "on" and "slot"
-        // Do not process "model" for `is_component`
-        if *name == "bind" || *name == "on" || *name == "slot" || (is_component && *name == "model") {
+        if !supports_with_directive(*name, is_component) {
           continue;
         }
 
@@ -73,7 +71,13 @@ impl<'a> CodegenContext<'a> {
         // <directive_modifiers>?
         if has_modifiers {
           self.code_helper.comma_newline(buf);
-          self.generate_modifiers_obj(buf, modifiers);
+
+          // Generates a Js object, where keys are modifier names and values are `true`
+          // For example, `v-directive:prop.foo.bar` would have `{ foo: true, bar: true }`
+          self.code_helper.obj_from_entries_iter(
+            buf,
+            modifiers.iter().map(|modifier| (*modifier, "true"))
+          );
         }
 
         if has_arg_or_modifiers {
@@ -98,28 +102,15 @@ impl<'a> CodegenContext<'a> {
   /// 2. `is_component = false` and has any directive except for 'on', 'bind' and 'slot'.
 
   pub fn needs_directive_wrapper(starting_tag: &StartingTag, is_component: bool) -> bool {
-    let mut needs_vmodel = false;
-    let mut needs_custom_directive = false;
-
-    for attr in &starting_tag.attributes {
+    starting_tag.attributes.iter().any(|attr| {
       match attr {
         HtmlAttribute::VDirective { name, .. } => {
-          if *name == "model" {
-            needs_vmodel = true;
-          } else if *name != "bind" && *name != "on" && *name != "slot" {
-            needs_custom_directive = true;
-          }
+          supports_with_directive(*name, is_component)
         },
 
-        _ => {}
+        _ => false
       }
-    }
-
-    if is_component {
-      needs_custom_directive
-    } else {
-      needs_vmodel || needs_custom_directive
-    }
+    })
   }
 
   pub fn generate_directive_resolves(&mut self, buf: &mut String) {
@@ -192,48 +183,15 @@ impl<'a> CodegenContext<'a> {
       _ => unreachable!("Adding v-model on native elements is only supported for <input>, <select> and <textarea>")
     }
   }
+}
 
-  /// Generates a Js object, where keys are modifier names and values are `true`
-  /// For example, `v-directive:prop.foo.bar` would have `{ foo: true, bar: true }`
-  fn generate_modifiers_obj(&mut self, buf: &mut String, modifiers: &[&str]) {
-    buf.push('{');
-
-    let is_multiline = modifiers.len() > 1;
-    if is_multiline {
-      self.code_helper.indent();
-      self.code_helper.newline(buf);
-    }
-
-    for (index, modifier) in modifiers.iter().enumerate() {
-      if index > 0 && is_multiline {
-        self.code_helper.comma_newline(buf);
-      } else if index > 0 {
-        CodeHelper::comma(buf);
-      }
-
-      let needs_escape = modifier
-        .chars()
-        .enumerate()
-        .any(|(c_index, c)| {
-          // Unescaped Js idents must not start with a number and must be ascii alphanumeric
-          (c_index == 0 && !c.is_ascii_alphabetic()) || (c_index > 0 && !c.is_ascii_alphanumeric())
-        });
-
-      if needs_escape {
-        CodeHelper::quoted(buf, modifier)
-      } else {
-        buf.push_str(modifier)
-      }
-
-      CodeHelper::colon(buf);
-      buf.push_str("true");
-    }
-
-    if is_multiline {
-      self.code_helper.unindent();
-      self.code_helper.newline(buf);
-    }
-
-    buf.push('}')
+/// Checks if `withDirective` can be generated for a given directive name
+/// "bind", "on" and "slot" are generated separately
+/// "model" for `is_component` also has a separate logic
+fn supports_with_directive(directive_name: &str, is_component: bool) -> bool {
+  match directive_name {
+    "bind" | "on" | "slot" => false,
+    "model" if is_component => false,
+    _ => true
   }
 }

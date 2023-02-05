@@ -83,6 +83,57 @@ impl <'a> CodeHelper <'a> {
     buf.push(']')
   }
 
+  /// Generates a Js object from an iterator of (key, object)
+  /// This will split an object across multiple lines if there are more than two properties.
+  ///
+  /// # Example
+  /// Calling this function with `[("foo", "true"), ("1bar", "false")].iter()` would generate
+  /// `{
+  ///   foo: true,
+  ///   "1bar": false
+  /// }`.
+  pub fn obj_from_entries_iter<'c>(&mut self, buf: &mut String, iter: impl Iterator<Item = (&'c str, &'c str)>) {
+    buf.push('{');
+
+    let is_multiline = iter.size_hint().0 > 1;
+    if is_multiline {
+      self.indent();
+      self.newline(buf);
+    }
+
+    for (index, (key, value)) in iter.enumerate() {
+      if index > 0 && is_multiline {
+        self.comma_newline(buf);
+      } else if index > 0 {
+        CodeHelper::comma(buf);
+      }
+
+      let needs_escape = key
+        .chars()
+        .enumerate()
+        .any(|(c_index, c)| {
+          // Unescaped Js idents must not start with a number and must be ascii alphanumeric
+          (c_index == 0 && !c.is_ascii_alphabetic()) || (c_index > 0 && !c.is_ascii_alphanumeric())
+        });
+
+      if needs_escape {
+        CodeHelper::quoted(buf, key)
+      } else {
+        buf.push_str(key)
+      }
+
+      CodeHelper::colon(buf);
+      buf.push_str(value);
+    }
+
+    if is_multiline {
+      self.unindent();
+      self.newline(buf);
+    }
+
+    buf.push('}')
+  }
+
   pub fn quote(buf: &mut String) {
     buf.push('"')
   }
