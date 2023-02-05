@@ -101,13 +101,18 @@ impl <'a> CodegenContext <'a> {
       }
     };
 
-    let should_inline = allow_inlining && {
-      if let Some((start, end)) = text_node_ranges.get(0) {
-        *start == 0 && *end == children.len() - 1
-      } else {
-        false
-      }
+    // We can potentially inline if all the nodes are text nodes...
+    let is_inlinable = if let Some((start, end)) = text_node_ranges.get(0) {
+      *start == 0 && *end == children.len() - 1
+    } else {
+      false
     };
+
+    // ... but only if explicitly allowed
+    let should_inline = allow_inlining && is_inlinable;
+
+    // Check if we need to spread the results over multiple lines
+    let is_multiline = !is_inlinable && children.len() > 1;
 
     let mut children_iter = children.iter().enumerate();
     let mut text_node_ranges_iter = text_node_ranges.iter();
@@ -117,12 +122,18 @@ impl <'a> CodegenContext <'a> {
     if !should_inline {
       buf.push('[');
     }
+    if is_multiline {
+      self.code_helper.indent();
+      self.code_helper.newline(buf);
+    }
 
     /* Create an expression for children */
     while let Some((index, child)) = children_iter.next() {
       /* Close previous text node if any, add separator */
-      if index > 0 {
-        buf.push_str(", ");
+      if index > 0 && is_multiline {
+        self.code_helper.comma_newline(buf)
+      } else if index > 0 {
+        CodeHelper::comma(buf)
       }
 
       /* If we are at the start of multiple text nodes, i.e. (TextNode | DynamicExpression)+, pass control to another func */
@@ -160,6 +171,10 @@ impl <'a> CodegenContext <'a> {
     }
 
     // Close Js array
+    if is_multiline {
+      self.code_helper.unindent();
+      self.code_helper.newline(buf);
+    }
     if !should_inline {
       buf.push(']');
     }

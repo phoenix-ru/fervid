@@ -18,14 +18,15 @@ impl <'a> CodegenContext <'a> {
     // also, `@custom-ev="$emit()"` and `@custom-ev="ev => $emit(testRef)"` don't need this,
     // but `@custom-ev="$emit"` does. I need to understand why
     let needs_props_hint = false;
-    let has_children_work = children.len() > 0 || {
-      // todo this optimization needs to be done in separate run
-      if let (1, Some(Node::TextNode(_))) = (children.len(), children.get(0)) {
-        false
-      } else {
-        true
-      }
-    };
+    let has_children_work = children.len() > 0;
+    //  || {
+    //   // todo this optimization needs to be done in separate run
+    //   if let (1, Some(Node::TextNode(_))) = (children.len(), children.get(0)) {
+    //     false
+    //   } else {
+    //     true
+    //   }
+    // };
     let has_attributes_work = codegen_attributes::has_attributes_work(&starting_tag.attributes);
 
     // Early exit: close function call
@@ -139,6 +140,8 @@ impl <'a> CodegenContext <'a> {
     };
 
     buf.push('{');
+    self.code_helper.indent();
+    self.code_helper.newline(buf);
 
     // For commas and default slot generation
     let mut needs_slot_comma = false;
@@ -147,7 +150,7 @@ impl <'a> CodegenContext <'a> {
     // First pass: named slots. Those are `<template>` elements with a defined slot name
     for template in children.iter().filter(|it| !is_from_default_slot(it)) {
       if needs_slot_comma {
-        CodeHelper::comma(buf);
+        self.code_helper.comma_newline(buf);
       }
 
       if let Node::ElementNode(ElementNode { starting_tag, children }) = template {
@@ -209,7 +212,7 @@ impl <'a> CodegenContext <'a> {
 
     if default_slot_children.len() > 0 {
       if needs_slot_comma {
-        CodeHelper::comma(buf);
+        self.code_helper.comma_newline(buf);
       }
 
       // TODO support ctx
@@ -219,6 +222,8 @@ impl <'a> CodegenContext <'a> {
       CodeHelper::close_paren(buf);
     }
 
+    self.code_helper.unindent();
+    self.code_helper.newline(buf);
     buf.push('}')
   }
 }
