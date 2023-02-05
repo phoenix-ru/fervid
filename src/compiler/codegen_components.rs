@@ -4,7 +4,7 @@ use crate::parser::{attributes::HtmlAttribute, structs::{StartingTag, Node, Elem
 use super::{codegen::CodegenContext, imports::VueImports, codegen_attributes, helper::CodeHelper};
 
 impl <'a> CodegenContext <'a> {
-  pub fn create_component_vnode(self: &mut Self, buf: &mut String, starting_tag: &'a StartingTag, children: &'a [Node]) {
+  pub fn create_component_vnode(self: &mut Self, buf: &mut String, starting_tag: &StartingTag, children: &[Node]) {
     buf.push_str(self.get_and_add_import_str(VueImports::CreateVNode));
     buf.push('(');
 
@@ -86,7 +86,7 @@ impl <'a> CodegenContext <'a> {
   /// First, it checks if we already have the component registered in the HashMap.
   /// If so, it will write the &str to buf and exit.
   /// Otherwise, it allocates a new String, writes to buf and moves ownership to HashMap.
-  fn add_to_components_and_write(self: &mut Self, buf: &mut String, tag_name: &'a str) {
+  fn add_to_components_and_write(self: &mut Self, buf: &mut String, tag_name: &str) {
     /* Check component existence and early exit */
     let existing_component_name = self.components.get(tag_name);
     if let Some(component_name) = existing_component_name {
@@ -102,24 +102,36 @@ impl <'a> CodegenContext <'a> {
     buf.push_str(&component_name);
 
     /* Add to map */
-    self.components.insert(tag_name, component_name);
+    self.components.insert(tag_name.to_owned(), component_name);
   }
 
   /// Double-pass slots code generation
   /// First pass generates named slots, while the second is for default slot
-  fn generate_slots(self: &mut Self, buf: &mut String, children: &'a [Node]) {
+  fn generate_slots(self: &mut Self, buf: &mut String, children: &[Node]) {
     // A child is not from default slot if it is a `<template>` element,
     // which has `v-slot` with attribute which name is other than `default`.
     // Example: regular elements, text, `<template>` and `<template v-slot>` are from the default slot.
     // `<template v-slot:some-slot>` is not a default slot
     let is_from_default_slot = |node: &&Node| match node {
       Node::ElementNode(ElementNode { starting_tag, .. }) => {
-        starting_tag.tag_name != "template" || !starting_tag.attributes.iter().any(|attr| match attr {
-          HtmlAttribute::VDirective { name, argument, .. } => {
-            *name == "slot" && *argument != "" && *argument != "default"
-          },
-          HtmlAttribute::Regular { .. } => false
-        })
+        if starting_tag.tag_name != "template" {
+          return true;
+        }
+
+        // Slot is not default if its `v-slot` has an argument which is not "" or "default"
+        // `v-slot` is default
+        // `v-slot:default` is default
+        // `v-slot:custom` is not default
+        !starting_tag
+          .attributes
+          .iter()
+          .any(|attr| match attr {
+            HtmlAttribute::VDirective { name, argument, .. } => {
+              *name == "slot" && *argument != "" && *argument != "default"
+            },
+
+            HtmlAttribute::Regular { .. } => false
+          })
       },
 
       // explicit just in case I decide to change node types and forget about this place
@@ -185,9 +197,9 @@ impl <'a> CodegenContext <'a> {
     }
 
     // Second pass: default slot
-    // TODO I really don't like the idea of allocating a Vec just to call a function,
-    // but I also don't understand how to pass iterators to functions
-    let default_slot_children: Vec<&Node> = children.iter().filter(is_from_default_slot).collect();
+    // TODO I really don't like the idea of allocating a Vec and cloning just to call a function,
+    // but I also don't understand how to properly pass iterators to functions
+    let default_slot_children: Vec<_> = children.iter().filter(is_from_default_slot).cloned().collect();
 
     // TODO support `<template v-slot>` and `<template v-slot:default>` by processing them in the named slots??
     // Current SFC compiler panicks or tries to discard children not in `<template>` if it's present alongside normal elements
@@ -203,8 +215,7 @@ impl <'a> CodegenContext <'a> {
       // TODO support ctx
       // TODO withCtx import
       buf.push_str("default: _withCtx(() => ");
-      // TODO is passing `children` instead of `default_slot_children` a bug?
-      self.generate_element_children(buf, children, false);
+      self.generate_element_children(buf, &default_slot_children, false);
       CodeHelper::close_paren(buf);
     }
 

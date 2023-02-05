@@ -1,6 +1,6 @@
 extern crate regex;
 
-use std::collections::HashMap;
+use std::{collections::HashMap};
 use regex::Regex;
 
 use crate::parser::{attributes::HtmlAttribute, structs::{Node, ElementNode, StartingTag}};
@@ -9,8 +9,8 @@ use super::{all_html_tags::is_html_tag, helper::CodeHelper, codegen_script::Scri
 #[derive(Default)]
 pub struct CodegenContext <'a> {
   pub code_helper: CodeHelper<'a>,
-  pub components: HashMap<&'a str, String>,
-  pub directives: HashMap<&'a str, String>,
+  pub components: HashMap<String, String>,
+  pub directives: HashMap<String, String>,
   pub used_imports: u64,
   hoists: Vec<String>,
   is_custom_element: IsCustomElementParam<'a>

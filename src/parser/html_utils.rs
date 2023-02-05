@@ -6,7 +6,7 @@ const RAW_TEXT_ELEMENTS: [&str; 2] = ["script", "style"];
 const RCDATA_ELEMENTS: [&str; 2] = ["textarea", "title"];
 const FOREIGN_ELEMENTS: [&str; 1] = ["svg"]; // todo
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ElementKind {
   Void,
   RawText,

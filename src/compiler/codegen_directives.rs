@@ -4,7 +4,7 @@ use crate::parser::{structs::StartingTag, attributes::HtmlAttribute};
 use super::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports};
 
 impl<'a> CodegenContext<'a> {
-  pub fn generate_directives(&mut self, buf: &mut String, starting_tag: &'a StartingTag, is_component: bool) {
+  pub fn generate_directives(&mut self, buf: &mut String, starting_tag: &StartingTag, is_component: bool) {
     // Open Js array
     CodeHelper::open_sq_bracket(buf);
 
@@ -131,7 +131,7 @@ impl<'a> CodegenContext<'a> {
     }
   }
 
-  fn add_to_directives_and_write(&mut self, buf: &mut String, directive_name: &'a str) {
+  fn add_to_directives_and_write(&mut self, buf: &mut String, directive_name: &str) {
     // Check directive existence and early exit
     let existing_directive_name = self.directives.get(directive_name);
     if let Some(directive_name) = existing_directive_name {
@@ -147,10 +147,10 @@ impl<'a> CodegenContext<'a> {
     buf.push_str(&directive_ident);
 
     // Add to map
-    self.directives.insert(directive_name, directive_ident);
+    self.directives.insert(directive_name.to_owned(), directive_ident);
   }
 
-  fn get_vmodel_directive_name(&mut self, starting_tag: &'a StartingTag) -> &'a str {
+  fn get_vmodel_directive_name(&mut self, starting_tag: &StartingTag) -> &'a str {
     // These cases need special handling of v-model
     // input type=* -> vModelText
     // input type="radio" -> vModelRadio

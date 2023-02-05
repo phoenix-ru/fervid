@@ -9,7 +9,7 @@ use nom::{
 
 use crate::parser::html_utils::{html_name, space1};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum HtmlAttribute <'a> {
   Regular {
     name: &'a str,

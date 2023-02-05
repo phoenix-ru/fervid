@@ -5,7 +5,7 @@ use super::helper::CodeHelper;
 use super::imports::VueImports;
 
 impl <'a> CodegenContext <'a> {
-  pub fn create_element_vnode(self: &mut Self, buf: &mut String, starting_tag: &'a StartingTag, children: &'a [Node]) {
+  pub fn create_element_vnode(self: &mut Self, buf: &mut String, starting_tag: &StartingTag, children: &[Node]) {
     // Special generation: `_withDirectives` prefix
     let needs_directive = Self::needs_directive_wrapper(starting_tag, false);
     if needs_directive {
@@ -51,7 +51,7 @@ impl <'a> CodegenContext <'a> {
     }
   }
 
-  pub fn generate_element_children(self: &mut Self, buf: &mut String, children: &'a [Node], allow_inlining: bool) -> bool {
+  pub fn generate_element_children(self: &mut Self, buf: &mut String, children: &[Node], allow_inlining: bool) -> bool {
     // Do no work if children vec is empty
     if children.len() == 0 {
       return false;
