@@ -66,14 +66,7 @@ pub fn parse_dynamic_expression_node(input: &str) -> IResult<&str, Node> {
 pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
   let (input, starting_tag) = parse_element_starting_tag(input)?;
 
-  // OR construction with pattern matching. not convenient, but I don't know of any simpler way
-  let early_return = if let ElementKind::Void = starting_tag.kind {
-    true
-  } else if starting_tag.is_self_closing {
-    true
-  } else {
-    false
-  };
+  let early_return = matches!(starting_tag.kind, ElementKind::Void) || starting_tag.is_self_closing;
 
   if early_return {
     return Ok((
