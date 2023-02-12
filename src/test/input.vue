@@ -18,13 +18,14 @@
     yet another text
 
     <template v-slot:test-slot="{ value }">
-      test
+      test {{ value }}
     </template>
 
     <template #custom-slot="{ prop }">
       <span class="span-class">
         Span text
       </span>
+      {{ prop }}
     </template>
 
     <input v-model="inputModel" v-directive:foo.bar.buzz="baz">
@@ -42,3 +43,9 @@ export default defineComponent({
   },
 })
 </script>
+
+<style scoped>
+.span-class {
+  background: yellow;
+}
+</style>
