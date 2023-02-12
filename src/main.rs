@@ -29,6 +29,14 @@ fn main() {
     test_real_compilation();
     println!("Time took: {:?}", n.elapsed());
 
+    let n = Instant::now();
+    test_synthetic_compilation();
+    println!("Time took: {:?}", n.elapsed());
+
+    // let n = Instant::now();
+    // test_swc_transform();
+    // println!("Time took for transform: {:?}", n.elapsed());
+
     // println!("", swc_ecma_parser::parse_file_as_expr(fm, syntax, target, comments, recovered_errors));
 
     // println!();
@@ -47,14 +55,18 @@ fn test_real_compilation() {
     let test = include_str!("./test/input.vue");
     let mut res = parser::parse_sfc(test).unwrap();
     let optimized_ast = ast_optimizer::optimize_ast(&mut res.1);
-    println!("Result: {:#?}", optimized_ast);
-    println!("Remaining: {:?}", res.0);
 
-    println!();
-    println!("SFC blocks length: {}", optimized_ast.len());
+    #[cfg(dbg_print)]
+    {
+        println!("Result: {:#?}", optimized_ast);
+        println!("Remaining: {:?}", res.0);
+    
+        println!();
+        println!("SFC blocks length: {}", optimized_ast.len());
+    }
 
     // Real codegen
-    println!("\n[Real File Compile Result]\n");
+    println!("\n[Real File Compile Result]");
     println!(
         "{}",
         compile_sfc(optimized_ast).unwrap()

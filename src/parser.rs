@@ -30,8 +30,11 @@ pub fn parse_element_starting_tag(input: &str) -> IResult<&str, StartingTag> {
     alt((tag(">"), tag("/>")))
   ))(input)?;
 
-  println!("Tag name: {:?}", tag_name);
-  println!("Attributes: {:?}", attributes);
+  #[cfg(dbg_print)]
+  {
+    println!("Tag name: {:?}", tag_name);
+    println!("Attributes: {:?}", attributes);
+  }
 
   Ok((input, StartingTag {
     tag_name,
