@@ -9,19 +9,20 @@ impl CodegenContext <'_> {
       return false;
     }
 
-    /* Start a Js object notation */
+    // Start a Js object notation
     buf.push('{');
+    self.code_helper.indent();
+    self.code_helper.newline(buf);
 
     /* For adding a comma `,` */
     let mut has_first_element = false;
 
     /* For `withModifiers` import */
-    // todo maybe save in the context as an Enum instead???? or just flags??? or combined???
     let mut has_used_modifiers_import = false;
 
     for attribute in attributes {
       if has_first_element {
-        buf.push_str(", ");
+        self.code_helper.comma_newline(buf);
       }
 
       match attribute {
@@ -63,7 +64,9 @@ impl CodegenContext <'_> {
       }
     }
 
-    /* Close a Js object notation */
+    // Close a Js object notation
+    self.code_helper.unindent();
+    self.code_helper.newline(buf);
     buf.push('}');
 
     /* Add imports */

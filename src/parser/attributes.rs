@@ -93,9 +93,12 @@ fn parse_directive(input: &str) -> IResult<&str, HtmlAttribute> {
     (input, "")
   };
 
-  println!();
-  println!("Parsed directive {:?}", directive_name);
-  println!("Has argument: {}, argument: {:?}", has_argument, argument);
+  #[cfg(dbg_print)]
+  {
+    println!();
+    println!("Parsed directive {:?}", directive_name);
+    println!("Has argument: {}, argument: {:?}", has_argument, argument);
+  }
 
   /* Read modifiers */
   let (input, modifiers): (&str, Vec<&str>) = many0(preceded(
@@ -114,6 +117,8 @@ fn parse_directive(input: &str) -> IResult<&str, HtmlAttribute> {
 
 fn parse_dynamic_attr(input: &str) -> IResult<&str, HtmlAttribute> {
   let (input, directive) = parse_directive(input)?;
+
+  #[cfg(dbg_print)]
   println!("Dynamic attr: directive = {:?}", directive);
 
   /* Try taking a `=` char, early return if it's not there */
@@ -123,6 +128,7 @@ fn parse_dynamic_attr(input: &str) -> IResult<&str, HtmlAttribute> {
 
   let (input, attr_value) = parse_attr_value(&input[1..])?;
 
+  #[cfg(dbg_print)]
   println!("Dynamic attr: value = {:?}", attr_value);
 
   match directive {
@@ -157,6 +163,7 @@ fn parse_vanilla_attr(input: &str) -> IResult<&str, HtmlAttribute> {
     Ok((input, _)) => {
       let (input, attr_value) = parse_attr_value(input)?;
   
+      #[cfg(dbg_print)]
       println!("Dynamic attr: value = {:?}", attr_value);
   
       Ok((input, HtmlAttribute::Regular {
@@ -170,8 +177,11 @@ fn parse_vanilla_attr(input: &str) -> IResult<&str, HtmlAttribute> {
 fn parse_attr(input: &str) -> IResult<&str, HtmlAttribute> {
   let (input, attr) = alt((parse_dynamic_attr, parse_vanilla_attr))(input)?;
 
-  println!("Attribute: {:?}", attr);
-  println!("Remaining input: {:?}", input);
+  #[cfg(dbg_print)]
+  {
+    println!("Attribute: {:?}", attr);
+    println!("Remaining input: {:?}", input);
+  }
 
   Ok((input, attr))
 }
