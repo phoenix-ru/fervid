@@ -18,6 +18,15 @@ impl <'a> CodeHelper <'a> {
     self.indent_level -= 1
   }
 
+  pub fn needs_escape(ident: &str) -> bool {
+    ident.chars()
+      .enumerate()
+      .any(|(c_index, c)| {
+        // Unescaped Js idents must not start with a number and must be ascii alphanumeric
+        (c_index == 0 && !c.is_ascii_alphabetic()) || (c_index > 0 && !c.is_ascii_alphanumeric())
+      })
+  }
+
   pub fn newline(self: &Self, buf: &mut String) {
     buf.push('\n');
 
@@ -42,6 +51,7 @@ impl <'a> CodeHelper <'a> {
     }
   }
 
+  /// Writes a `: ` sequence
   pub fn colon(buf: &mut String) {
     buf.push_str(": ")
   }
@@ -93,13 +103,9 @@ impl <'a> CodeHelper <'a> {
   ///   "1bar": false
   /// }`.
   pub fn obj_from_entries_iter<'c>(&mut self, buf: &mut String, iter: impl Iterator<Item = (&'c str, &'c str)>) {
-    buf.push('{');
-
     let is_multiline = iter.size_hint().0 > 1;
-    if is_multiline {
-      self.indent();
-      self.newline(buf);
-    }
+
+    self.obj_open_paren(buf, is_multiline);
 
     for (index, (key, value)) in iter.enumerate() {
       if index > 0 && is_multiline {
@@ -108,15 +114,7 @@ impl <'a> CodeHelper <'a> {
         CodeHelper::comma(buf);
       }
 
-      let needs_escape = key
-        .chars()
-        .enumerate()
-        .any(|(c_index, c)| {
-          // Unescaped Js idents must not start with a number and must be ascii alphanumeric
-          (c_index == 0 && !c.is_ascii_alphabetic()) || (c_index > 0 && !c.is_ascii_alphanumeric())
-        });
-
-      if needs_escape {
+      if Self::needs_escape(key) {
         CodeHelper::quoted(buf, key)
       } else {
         buf.push_str(key)
@@ -126,12 +124,28 @@ impl <'a> CodeHelper <'a> {
       buf.push_str(value);
     }
 
+    self.obj_close_paren(buf, is_multiline);
+  }
+
+  /// Opens the Js object paren `{`.\
+  /// Will indent and start a new line if `is_multiline` set to `true`
+  pub fn obj_open_paren(&mut self, buf: &mut String, is_multiline: bool) {
+    buf.push('{');
+    if is_multiline {
+      self.indent();
+      self.newline(buf);
+    }
+  }
+
+  /// Closes the Js object paren `}`.\
+  /// Will unindent and add a new line if `is_multiline` set to `true`
+  pub fn obj_close_paren(&mut self, buf: &mut String, is_multiline: bool) {
     if is_multiline {
       self.unindent();
       self.newline(buf);
     }
 
-    buf.push('}')
+    buf.push('}');
   }
 
   pub fn quote(buf: &mut String) {
@@ -142,5 +156,23 @@ impl <'a> CodeHelper <'a> {
     Self::quote(buf);
     buf.push_str(v);
     Self::quote(buf)
+  }
+
+  /// Transforms a kebab-case identifier to camelCase
+  pub fn to_camelcase(buf: &mut String, ident: &str) {
+    buf.reserve(ident.len());
+
+    for (index, word) in ident.split('-').enumerate() {
+      if index == 0 {
+        buf.push_str(word);
+        continue;
+      }
+
+      let first_char = word.chars().next();
+      if let Some(c) = first_char {
+        buf.extend(c.to_uppercase());
+        buf.push_str(&word[c.len_utf8()..]);
+      }
+    }
   }
 }
