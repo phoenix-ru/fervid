@@ -6,7 +6,8 @@ import { defineComponent, ref } from 'vue'
 const __sfc__ = defineComponent({
   setup() {
     return {
-      inputModel: ref('')
+      inputModel: ref(''),
+      modelValue: ref('')
     }
   },
 })
@@ -19,6 +20,12 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
   const _directive_directive = _resolveDirective("directive")
 
   return _createVNode(_component_abc_def, {
+    modelValue: _ctx.modelValue,
+    "onUpdate:modelValue": $event => ((_ctx.modelValue) = $event),
+    modelModifiers: {lazy: true},
+    "another-model-value": _ctx.modelValue,
+    "onUpdate:anotherModelValue": $event => ((_ctx.modelValue) = $event),
+    "another-model-valueModifiers": {trim: true},
     "test-bound": bar + baz,
     disabled: "disabled",
     class: "",
@@ -55,7 +62,7 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
 }
 __sfc__.render = render
 export default __sfc__
-Time took: 142.68µs
+Time took: 107.813µs
 
 [Synthetic Compile Result]
 
@@ -80,4 +87,4 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
 }
 __sfc__.render = render
 export default __sfc__
-Time took: 27.121µs
+Time took: 27.432µs

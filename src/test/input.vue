@@ -1,6 +1,7 @@
 <template>
   <abc-def
     v-model.lazy="modelValue"
+    v-model:another-model-value.trim="modelValue"
     v-test-directive:test-argument.foo.bar="foo - bar"
     :test-bound="bar + baz"
     disabled
@@ -38,7 +39,8 @@ import { defineComponent, ref } from 'vue'
 export default defineComponent({
   setup() {
     return {
-      inputModel: ref('')
+      inputModel: ref(''),
+      modelValue: ref('')
     }
   },
 })
