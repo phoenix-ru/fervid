@@ -54,7 +54,7 @@ Code generator
     - [ ] v-for
     - [ ] v-show
     - [ ] v-slot
-    - [ ] v-model
+    - [x] v-model
     - [ ] Other directives (less priority)
   - [ ] Hoisting
 

@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use crate::parser::{attributes::HtmlAttribute, structs::{StartingTag, Node, ElementNode}};
+use crate::parser::{attributes::{HtmlAttribute, VDirective}, structs::{StartingTag, Node, ElementNode}};
 
 use super::{codegen::CodegenContext, imports::VueImports, codegen_attributes, helper::CodeHelper};
 
@@ -27,18 +27,42 @@ impl <'a> CodegenContext <'a> {
     //     true
     //   }
     // };
+
+    // `v-model`s are processed before attributes but they result in the same Js object
+    let mut vmodels = get_vmodels(starting_tag).peekable();
+    let has_vmodels_work = vmodels.peek().is_some();
+
+    // Attributes work is regular attributes plus `v-on` and `v-bind` directives
     let has_attributes_work = codegen_attributes::has_attributes_work(&starting_tag.attributes);
 
     // Early exit: close function call
-    if !has_attributes_work && !has_children_work && !needs_props_hint {
+    if !has_attributes_work && !has_children_work && !needs_props_hint && !has_vmodels_work {
       CodeHelper::close_paren(buf);
       return;
     }
 
     // Attributes (default to null)
     CodeHelper::comma(buf);
-    if has_attributes_work {
-      self.generate_attributes(buf, &starting_tag.attributes);
+    if has_attributes_work || has_vmodels_work {
+      // Open Js object
+      self.code_helper.obj_open_paren(buf, true);
+
+      // Generate `v-model`s code first
+      if has_vmodels_work {
+        self.generate_vmodels(buf, vmodels);
+      }
+
+      if has_attributes_work {
+        // Divide from previously generated v-model code
+        if has_vmodels_work {
+          self.code_helper.comma_newline(buf);
+        }
+
+        self.generate_attributes(buf, &starting_tag.attributes, false);
+      }
+
+      // Close Js object
+      self.code_helper.obj_close_paren(buf, true);
     } else if has_children_work || needs_props_hint {
       CodeHelper::null(buf);
     }
@@ -127,7 +151,7 @@ impl <'a> CodegenContext <'a> {
           .attributes
           .iter()
           .any(|attr| match attr {
-            HtmlAttribute::VDirective { name, argument, .. } => {
+            HtmlAttribute::VDirective (VDirective { name, argument, .. }) => {
               *name == "slot" && *argument != "" && *argument != "default"
             },
 
@@ -139,9 +163,8 @@ impl <'a> CodegenContext <'a> {
       Node::DynamicExpression(_) | Node::TextNode(_) | Node::CommentNode(_) => true
     };
 
-    buf.push('{');
-    self.code_helper.indent();
-    self.code_helper.newline(buf);
+    // Start a Js object
+    self.code_helper.obj_open_paren(buf, true);
 
     // For commas and default slot generation
     let mut needs_slot_comma = false;
@@ -156,7 +179,7 @@ impl <'a> CodegenContext <'a> {
       if let Node::ElementNode(ElementNode { starting_tag, children }) = template {
         // Find needed attribute and generate the header (slot name + ctx)
         for attr in starting_tag.attributes.iter() {
-          if let HtmlAttribute::VDirective { name, argument, value, is_dynamic_slot, .. } = attr {
+          if let HtmlAttribute::VDirective (VDirective { name, argument, value, is_dynamic_slot, .. }) = attr {
             if *name != "slot" {
               continue;
             }
@@ -172,7 +195,7 @@ impl <'a> CodegenContext <'a> {
             }
 
             // Context. Generates `: _withCtx(() =>` or `: _withCtx((ctx) =>`
-            CodeHelper::colon(buf);
+            buf.push_str(": ");
             buf.push_str(self.get_and_add_import_str(VueImports::WithCtx));
             CodeHelper::open_paren(buf);
             CodeHelper::parens_option(buf, *value);
@@ -222,8 +245,85 @@ impl <'a> CodegenContext <'a> {
       CodeHelper::close_paren(buf);
     }
 
-    self.code_helper.unindent();
-    self.code_helper.newline(buf);
-    buf.push('}')
+    // End a Js object
+    self.code_helper.obj_close_paren(buf, true);
   }
+
+  fn generate_vmodels<'d>(&mut self, buf: &mut String, directives: impl Iterator<Item = &'d VDirective<'d>>) {
+    for (index, directive) in directives.enumerate() {
+      // todo throw away garbage values in v-model during analyzer pass (e.g. v-model="foo - bar" or v-model="")
+      // yes, it will break commas when there are 2 v-models and the first is discarded
+      let directive_value = directive.value.unwrap_or("");
+      if directive_value == "" {
+        continue;
+      }
+
+      if index != 0 {
+        self.code_helper.comma_newline(buf)
+      }
+
+      // Prep: check if the directive arg needs quoting. If yes, it will be quoted everywhere
+      let argument = if directive.argument.len() > 0 { directive.argument } else { "modelValue" };
+      let needs_quoting = CodeHelper::needs_escape(argument);
+
+      // First, generate the bound prop
+      if needs_quoting {
+        CodeHelper::quoted(buf, argument)
+      } else {
+        buf.push_str(argument)
+      }
+      CodeHelper::colon(buf);
+      // todo context-aware codegen (scope checking)
+      buf.push_str("_ctx.");
+      buf.push_str(directive_value);
+      self.code_helper.comma_newline(buf);
+
+      // Second, generate "onUpdate:modelValue" or "onUpdate:usersArgument"
+      CodeHelper::quote(buf);
+      buf.push_str("onUpdate:");
+      CodeHelper::to_camelcase(buf, argument);
+      CodeHelper::quote(buf);
+      buf.push_str(": ");
+
+      // Third, generate a handler for onUpdate
+      // For example, `$event => ((_ctx.modelValue) = $event)`
+      // todo generate cache around it
+      // todo context
+      write!(buf, "$event => ((_ctx.{}) = $event)", directive_value).expect("writing to buf failed");
+
+      // Optionally generate modifiers. Early exit if no work is needed
+      if directive.modifiers.len() == 0 { continue; }
+
+      // This is weird, but that's how the official compiler is implemented
+      // modelValue => modelModifiers
+      // users-argument => "users-argumentModifiers"
+      self.code_helper.comma_newline(buf);
+      if argument == "modelValue" {
+        buf.push_str("model");
+      } else {
+        if needs_quoting {
+          CodeHelper::quote(buf)
+        }
+        buf.push_str(argument)
+      }
+      buf.push_str("Modifiers");
+      if needs_quoting {
+        CodeHelper::quote(buf)
+      }
+      CodeHelper::colon(buf);
+
+      let modifiers_iter = directive.modifiers.iter().map(|modifier| (*modifier, "true"));
+      self.code_helper.obj_from_entries_iter(buf, modifiers_iter);
+    }
+  }
+}
+
+/// Gets all the v-model's of a tag
+fn get_vmodels<'a>(starting_tag: &'a StartingTag) -> impl Iterator<Item = &'a VDirective<'a>> {
+  starting_tag.attributes
+    .iter()
+    .filter_map(|attr| match attr {
+        HtmlAttribute::VDirective(directive) if directive.name == "model" => Some(directive),
+        _ => None
+    })
 }

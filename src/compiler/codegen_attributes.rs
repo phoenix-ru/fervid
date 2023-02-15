@@ -1,18 +1,30 @@
-use crate::parser::attributes::HtmlAttribute;
+use crate::parser::attributes::{HtmlAttribute, VDirective};
 use super::codegen::CodegenContext;
+use super::helper::CodeHelper;
 use super::imports::VueImports;
 
 impl CodegenContext <'_> {
-  pub fn generate_attributes(self: &mut Self, buf: &mut String, attributes: &Vec<HtmlAttribute>) -> bool {
+  /// Generates attributes as a Js object,
+  /// where keys are attribute names and values are attribute values.
+  ///
+  /// - `generate_obj_shell` is for surrounding the resulting object in the Js {} object notation
+  pub fn generate_attributes(
+    &mut self,
+    buf: &mut String,
+    attributes: &Vec<HtmlAttribute>,
+    generate_obj_shell: bool
+  ) -> bool {
     /* Work is not needed if we don't have any Regular attributes, v-on/v-bind directives */
     if !has_attributes_work(attributes) {
       return false;
     }
 
     // Start a Js object notation
-    buf.push('{');
-    self.code_helper.indent();
-    self.code_helper.newline(buf);
+    if generate_obj_shell {
+      buf.push('{');
+      self.code_helper.indent();
+      self.code_helper.newline(buf);
+    }
 
     /* For adding a comma `,` */
     let mut has_first_element = false;
@@ -28,7 +40,7 @@ impl CodegenContext <'_> {
       match attribute {
         HtmlAttribute::Regular { name, value } => {
           /* For obvious reasons, attributes containing a dash need to be escaped */
-          let needs_quotes = name.contains('-');
+          let needs_quotes = CodeHelper::needs_escape(name);
 
           /* "attr-name": "attr value" */
           if needs_quotes { buf.push('"'); }
@@ -45,7 +57,7 @@ impl CodegenContext <'_> {
         },
 
         // todo generate attributes bound with v-bind, v-on
-        HtmlAttribute::VDirective { name, argument, modifiers, value, .. } => {
+        HtmlAttribute::VDirective (VDirective { name, argument, modifiers, value, .. }) => {
           /* v-on directive, shortcut `@`, e.g. `@custom-event.modifier="value"` */
           if *name == "on" {
             generate_v_on_attr(buf, argument, modifiers, *value);
@@ -65,9 +77,11 @@ impl CodegenContext <'_> {
     }
 
     // Close a Js object notation
-    self.code_helper.unindent();
-    self.code_helper.newline(buf);
-    buf.push('}');
+    if generate_obj_shell {
+      self.code_helper.unindent();
+      self.code_helper.newline(buf);
+      buf.push('}');
+    }
 
     /* Add imports */
     if has_used_modifiers_import {
@@ -82,7 +96,7 @@ pub fn has_attributes_work(attributes: &Vec<HtmlAttribute>) -> bool {
   /* Work is not needed if we don't have any Regular attributes, v-on/v-bind directives */
   attributes.iter().any(|it| match it {
     HtmlAttribute::Regular { .. } => true,
-    HtmlAttribute::VDirective { name, .. } => match *name {
+    HtmlAttribute::VDirective (VDirective { name, .. }) => match *name {
       "on" | "bind" => true,
       _ => false
     }
@@ -179,14 +193,14 @@ fn test_attributes_generation() {
   let mut ctx: CodegenContext = Default::default();
 
   let attributes = vec![
-    HtmlAttribute::VDirective { name: "test", argument: "", modifiers: vec![], value: None, is_dynamic_slot: false },
+    HtmlAttribute::VDirective (VDirective { name: "test", ..Default::default() }),
     HtmlAttribute::Regular { name: "class", value: "test" },
     HtmlAttribute::Regular { name: "readonly", value: "" },
     HtmlAttribute::Regular { name: "style", value: "background: red" },
     HtmlAttribute::Regular { name: "dashed-attr-name", value: "spaced attr value" }
   ];
 
-  ctx.generate_attributes(&mut buf, &attributes);
+  ctx.generate_attributes(&mut buf, &attributes, true);
   assert_eq!(
     &buf,
     &format!(r#"{initial_buf}{{class: "test", readonly: "", style: "background: red", "dashed-attr-name": "spaced attr value"}}"#)

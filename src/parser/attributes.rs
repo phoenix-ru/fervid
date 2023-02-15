@@ -9,19 +9,22 @@ use nom::{
 
 use crate::parser::html_utils::{html_name, space1};
 
+#[derive(Debug, Default, Clone)]
+pub struct VDirective<'a> {
+  pub name: &'a str,
+  pub argument: &'a str,
+  pub modifiers: Vec<&'a str>,
+  pub value: Option<&'a str>,
+  pub is_dynamic_slot: bool
+}
+
 #[derive(Debug, Clone)]
 pub enum HtmlAttribute <'a> {
   Regular {
     name: &'a str,
     value: &'a str
   },
-  VDirective {
-    name: &'a str,
-    argument: &'a str,
-    modifiers: Vec<&'a str>,
-    value: Option<&'a str>,
-    is_dynamic_slot: bool
-  }
+  VDirective(VDirective<'a>)
 }
 
 fn parse_attr_value(input: &str) -> IResult<&str, &str> {
@@ -106,13 +109,13 @@ fn parse_directive(input: &str) -> IResult<&str, HtmlAttribute> {
     html_name
   ))(input).unwrap_or((input, vec![]));
 
-  Ok((input, HtmlAttribute::VDirective {
+  Ok((input, HtmlAttribute::VDirective(VDirective {
     name: directive_name,
     argument,
     modifiers,
     value: None,
     is_dynamic_slot
-  }))
+  })))
 }
 
 fn parse_dynamic_attr(input: &str) -> IResult<&str, HtmlAttribute> {
@@ -132,13 +135,10 @@ fn parse_dynamic_attr(input: &str) -> IResult<&str, HtmlAttribute> {
   println!("Dynamic attr: value = {:?}", attr_value);
 
   match directive {
-    HtmlAttribute::VDirective { name, argument, modifiers, is_dynamic_slot, .. } => Ok((input, HtmlAttribute::VDirective {
-      name,
-      argument,
-      modifiers,
+    HtmlAttribute::VDirective (directive) => Ok((input, HtmlAttribute::VDirective (VDirective {
       value: Some(attr_value),
-      is_dynamic_slot
-    })),
+      ..directive
+    }))),
 
     /* Not possible, because parse_directive returns a directive indeed */
     _ => Err(nom::Err::Error(nom::error::Error {

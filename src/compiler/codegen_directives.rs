@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use crate::parser::{structs::StartingTag, attributes::HtmlAttribute};
+use crate::parser::{structs::StartingTag, attributes::{HtmlAttribute, VDirective}};
 
 use super::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports};
 
@@ -9,7 +9,7 @@ impl<'a> CodegenContext<'a> {
     CodeHelper::open_sq_bracket(buf);
 
     for attr in &starting_tag.attributes {
-      if let HtmlAttribute::VDirective { name, argument, modifiers, value, is_dynamic_slot } = attr {
+      if let HtmlAttribute::VDirective (VDirective { name, argument, modifiers, value, is_dynamic_slot }) = attr {
         if !supports_with_directive(*name, is_component) {
           continue;
         }
@@ -104,7 +104,7 @@ impl<'a> CodegenContext<'a> {
   pub fn needs_directive_wrapper(starting_tag: &StartingTag, is_component: bool) -> bool {
     starting_tag.attributes.iter().any(|attr| {
       match attr {
-        HtmlAttribute::VDirective { name, .. } => {
+        HtmlAttribute::VDirective (VDirective { name, .. }) => {
           supports_with_directive(*name, is_component)
         },
 

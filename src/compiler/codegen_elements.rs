@@ -23,7 +23,7 @@ impl <'a> CodegenContext <'a> {
 
     // Attributes
     CodeHelper::comma(buf);
-    let has_generated_attributes = self.generate_attributes(buf, &starting_tag.attributes);
+    let has_generated_attributes = self.generate_attributes(buf, &starting_tag.attributes, true);
     if !has_generated_attributes {
       buf.push_str("null");
     }
