@@ -181,7 +181,7 @@ impl <'a> CodegenContext <'a> {
     let mut compiled_template = String::new();
     if let Node::ElementNode(ElementNode { children, .. }) = template {
       // todo better handling of multiple root children (use Fragment)
-      self.compile_node(&mut compiled_template, &children[0]);
+      self.compile_node(&mut compiled_template, &children[0], true);
     } else {
       unreachable!()
     }
@@ -219,14 +219,14 @@ impl <'a> CodegenContext <'a> {
     Ok(result)
   }
 
-  pub fn compile_node(&mut self, buf: &mut String, node: &Node) {
+  pub fn compile_node(&mut self, buf: &mut String, node: &Node, wrap_in_block: bool) {
     // todo add the code for `openBlock`, `createElementBlock` and Fragments when needed
     match node {
       Node::ElementNode(ElementNode { starting_tag, children }) => {
         if self.is_component(starting_tag) {
-          self.create_component_vnode(buf, starting_tag, children);
+          self.create_component_vnode(buf, starting_tag, children, wrap_in_block);
         } else {
-          self.create_element_vnode(buf, starting_tag, children);
+          self.create_element_vnode(buf, starting_tag, children, wrap_in_block);
         }
       },
 

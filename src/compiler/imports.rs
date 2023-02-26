@@ -1,9 +1,14 @@
 use super::codegen::CodegenContext;
 
+// Todo refactor to a macro
+
+static CREATE_BLOCK: &str = "_createBlock";
 static CREATE_COMMENT_VNODE: &str = "_createCommentVNode";
+static CREATE_ELEMENT_BLOCK: &str = "_createElementBlock";
 static CREATE_ELEMENT_VNODE: &str = "_createElementVNode";
 static CREATE_TEXT_VNODE: &str = "_createTextVNode";
 static CREATE_VNODE: &str = "_createVNode";
+static OPEN_BLOCK: &str = "_openBlock";
 static RESOLVE_COMPONENT: &str = "_resolveComponent";
 static RESOLVE_DIRECTIVE: &str = "_resolveDirective";
 static TO_DISPLAY_STRING: &str = "_toDisplayString";
@@ -17,10 +22,13 @@ static WITH_MODIFIERS: &str = "_withModifiers";
 
 #[derive(Clone, Copy)]
 pub enum VueImports {
+  CreateBlock,
   CreateCommentVNode,
+  CreateElementBlock,
   CreateElementVNode,
   CreateTextVNode,
   CreateVNode,
+  OpenBlock,
   ResolveComponent,
   ResolveDirective,
   ToDisplayString,
@@ -33,11 +41,14 @@ pub enum VueImports {
   WithModifiers
 }
 
-static ALL_IMPORTS: [VueImports; 14] = [
+static ALL_IMPORTS: [VueImports; 17] = [
+  VueImports::CreateBlock,
   VueImports::CreateCommentVNode,
+  VueImports::CreateElementBlock,
   VueImports::CreateElementVNode,
   VueImports::CreateTextVNode,
   VueImports::CreateVNode,
+  VueImports::OpenBlock,
   VueImports::ResolveComponent,
   VueImports::ResolveDirective,
   VueImports::ToDisplayString,
@@ -57,10 +68,13 @@ impl <'a> CodegenContext <'a> {
 
   pub fn get_import_str(vue_import: VueImports) -> &'static str {
     match vue_import {
+      VueImports::CreateBlock => CREATE_BLOCK,
       VueImports::CreateCommentVNode => CREATE_COMMENT_VNODE,
+      VueImports::CreateElementBlock => CREATE_ELEMENT_BLOCK,
       VueImports::CreateElementVNode => CREATE_ELEMENT_VNODE,
       VueImports::CreateTextVNode => CREATE_TEXT_VNODE,
       VueImports::CreateVNode => CREATE_VNODE,
+      VueImports::OpenBlock => OPEN_BLOCK,
       VueImports::ResolveComponent => RESOLVE_COMPONENT,
       VueImports::ResolveDirective => RESOLVE_DIRECTIVE,
       VueImports::ToDisplayString => TO_DISPLAY_STRING,
@@ -109,10 +123,13 @@ impl <'a> CodegenContext <'a> {
 
   fn get_import_mask_bit(vue_import: VueImports) -> u64 {
     match vue_import {
-      VueImports::CreateCommentVNode => 1<<0,
-      VueImports::CreateElementVNode => 1<<1,
-      VueImports::CreateTextVNode =>    1<<2,
-      VueImports::CreateVNode =>        1<<3,
+      VueImports::CreateBlock        => 1<<0,
+      VueImports::CreateCommentVNode => 1<<1,
+      VueImports::CreateElementBlock => 1<<2,
+      VueImports::CreateElementVNode => 1<<3,
+      VueImports::CreateTextVNode =>    1<<4,
+      VueImports::CreateVNode =>        1<<5,
+      VueImports::OpenBlock =>          1<<9,
       VueImports::ResolveComponent =>   1<<10,
       VueImports::ResolveDirective =>   1<<11,
       VueImports::ToDisplayString =>    1<<12,

@@ -4,9 +4,19 @@ use crate::parser::{attributes::{HtmlAttribute, VDirective}, structs::{StartingT
 use super::{codegen::CodegenContext, imports::VueImports, codegen_attributes, helper::CodeHelper};
 
 impl <'a> CodegenContext <'a> {
-  pub fn create_component_vnode(self: &mut Self, buf: &mut String, starting_tag: &StartingTag, children: &[Node]) {
-    buf.push_str(self.get_and_add_import_str(VueImports::CreateVNode));
-    buf.push('(');
+  pub fn create_component_vnode(
+    &mut self,
+    buf: &mut String,
+    starting_tag: &StartingTag,
+    children: &[Node],
+    wrap_in_block: bool
+  ) {
+    if wrap_in_block {
+      self.generate_create_block(buf);
+    } else {
+      buf.push_str(self.get_and_add_import_str(VueImports::CreateVNode));
+      CodeHelper::open_paren(buf);
+    }
 
     self.add_to_components_and_write(buf, starting_tag.tag_name);
 
@@ -35,10 +45,20 @@ impl <'a> CodegenContext <'a> {
     // Attributes work is regular attributes plus `v-on` and `v-bind` directives
     let has_attributes_work = codegen_attributes::has_attributes_work(&starting_tag.attributes);
 
+    // Early exit helper macro
+    macro_rules! early_exit {
+      () => {
+        if wrap_in_block {
+          CodeHelper::close_paren(buf);
+        }
+        CodeHelper::close_paren(buf);
+        return
+      };
+    }
+
     // Early exit: close function call
     if !has_attributes_work && !has_children_work && !needs_props_hint && !has_vmodels_work {
-      CodeHelper::close_paren(buf);
-      return;
+      early_exit!();
     }
 
     // Attributes (default to null)
@@ -69,8 +89,7 @@ impl <'a> CodegenContext <'a> {
 
     // Try to exit again
     if !has_children_work && !needs_props_hint {
-      CodeHelper::close_paren(buf);
-      return;
+      early_exit!();
     }
 
     // Children (default to null)
@@ -86,7 +105,8 @@ impl <'a> CodegenContext <'a> {
       todo!()
     }
 
-    CodeHelper::close_paren(buf)
+    // Yes, this is not "early", but the cleanup code is handy
+    early_exit!();
   }
 
   pub fn generate_components_string(self: &mut Self, buf: &mut String) {
@@ -128,6 +148,18 @@ impl <'a> CodegenContext <'a> {
 
     /* Add to map */
     self.components.insert(tag_name.to_owned(), component_name);
+  }
+
+  /// Generates `(openBlock(), createBlock(`
+  #[inline]
+  fn generate_create_block(&mut self, buf: &mut String) {
+    CodeHelper::open_paren(buf);
+    buf.push_str(self.get_and_add_import_str(VueImports::OpenBlock));
+    CodeHelper::open_paren(buf);
+    CodeHelper::close_paren(buf);
+    CodeHelper::comma(buf);
+    buf.push_str(self.get_and_add_import_str(VueImports::CreateBlock));
+    CodeHelper::open_paren(buf);
   }
 
   /// Double-pass slots code generation

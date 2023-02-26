@@ -5,7 +5,13 @@ use super::helper::CodeHelper;
 use super::imports::VueImports;
 
 impl <'a> CodegenContext <'a> {
-  pub fn create_element_vnode(self: &mut Self, buf: &mut String, starting_tag: &StartingTag, children: &[Node]) {
+  pub fn create_element_vnode(
+    &mut self,
+    buf: &mut String,
+    starting_tag: &StartingTag,
+    children: &[Node],
+    wrap_in_block: bool // for doing (openBlock(), createElementBlock(...))
+  ) {
     // Special generation: `_withDirectives` prefix
     let needs_directive = Self::needs_directive_wrapper(starting_tag, false);
     if needs_directive {
@@ -13,13 +19,15 @@ impl <'a> CodegenContext <'a> {
       CodeHelper::open_paren(buf);
     }
 
-    buf.push_str(self.get_and_add_import_str(VueImports::CreateElementVNode));
-    CodeHelper::open_paren(buf);
+    if wrap_in_block {
+      self.generate_create_element_block(buf);
+    } else {
+      buf.push_str(self.get_and_add_import_str(VueImports::CreateElementVNode));
+      CodeHelper::open_paren(buf);
+    }
 
     // Tag name
-    buf.push('"');
-    buf.push_str(starting_tag.tag_name);
-    buf.push('"');
+    CodeHelper::quoted(buf, starting_tag.tag_name);
 
     // Attributes
     CodeHelper::comma(buf);
@@ -39,6 +47,11 @@ impl <'a> CodegenContext <'a> {
     // todo add /*#__PURE__*/ annotations
     CodeHelper::comma(buf);
     buf.push_str("-1 /* HOISTED */");
+
+    // When the block was opened, we need to close the extra parenthesis
+    if wrap_in_block {
+      CodeHelper::close_paren(buf)
+    }
 
     // Ending paren
     CodeHelper::close_paren(buf);
@@ -159,7 +172,7 @@ impl <'a> CodegenContext <'a> {
       }
 
       // Make a call to handle a child
-      self.compile_node(buf, child)
+      self.compile_node(buf, child, false)
     }
 
     // Close Js array
@@ -174,7 +187,7 @@ impl <'a> CodegenContext <'a> {
     true
   }
 
-  pub fn create_text_concatenation_from_nodes(self: &mut Self, buf: &mut String, nodes: &[Node], surround_with_create_text_vnode: bool) -> bool {
+  fn create_text_concatenation_from_nodes(&mut self, buf: &mut String, nodes: &[Node], surround_with_create_text_vnode: bool) -> bool {
     /* Add function call if asked */
     if surround_with_create_text_vnode {
       buf.push_str(self.get_and_add_import_str(VueImports::CreateTextVNode));
@@ -238,5 +251,17 @@ impl <'a> CodegenContext <'a> {
     }
 
     true
+  }
+
+  /// Generates `(openBlock(), createElementBlock(`
+  #[inline]
+  fn generate_create_element_block(&mut self, buf: &mut String) {
+    CodeHelper::open_paren(buf);
+    buf.push_str(self.get_and_add_import_str(VueImports::OpenBlock));
+    CodeHelper::open_paren(buf);
+    CodeHelper::close_paren(buf);
+    CodeHelper::comma(buf);
+    buf.push_str(self.get_and_add_import_str(VueImports::CreateElementBlock));
+    CodeHelper::open_paren(buf);
   }
 }
