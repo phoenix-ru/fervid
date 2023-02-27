@@ -12,14 +12,15 @@ const __sfc__ = defineComponent({
   },
 })
 
-import { createCommentVNode as _createCommentVNode, createElementVNode as _createElementVNode, createTextVNode as _createTextVNode, createVNode as _createVNode, resolveComponent as _resolveComponent, resolveDirective as _resolveDirective, toDisplayString as _toDisplayString, vModelText as _vModelText, withCtx as _withCtx, withDirectives as _withDirectives, withModifiers as _withModifiers } from "vue"
+import { createBlock as _createBlock, createCommentVNode as _createCommentVNode, createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createTextVNode as _createTextVNode, createVNode as _createVNode, openBlock as _openBlock, resolveComponent as _resolveComponent, resolveDirective as _resolveDirective, toDisplayString as _toDisplayString, vModelText as _vModelText, withCtx as _withCtx, withDirectives as _withDirectives, withModifiers as _withModifiers } from "vue"
 
 function render(_ctx, _cache, $props, $setup, $data, $options) {
-  const _component_abc_def = _resolveComponent("abc-def")
   const _component_another_element = _resolveComponent("another-element")
+  const _component_abc_def = _resolveComponent("abc-def")
   const _directive_directive = _resolveDirective("directive")
+  const _directive_for = _resolveDirective("for")
 
-  return _createVNode(_component_abc_def, {
+  return (_openBlock(), _createBlock(_component_abc_def, {
     modelValue: _ctx.modelValue,
     "onUpdate:modelValue": $event => ((_ctx.modelValue) = $event),
     modelModifiers: {lazy: true},
@@ -56,25 +57,39 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
             buzz: true
           }
         ]
+      ]),
+      _createTextVNode("  ", 1 /* TEXT */),
+      _createCommentVNode(" Todo remove space between these elements, otherwise it breaks the invariant in conditional codegen "),
+      _createTextVNode("  ", 1 /* TEXT */),
+      true
+        ? (_openBlock(), _createElementBlock("div", null, "if div", -1 /* HOISTED */))
+        : false
+          ? (_openBlock(), _createElementBlock("span", null, "else-if span", -1 /* HOISTED */))
+          : _createCommentVNode("v-if", true),
+      _withDirectives(_createElementVNode("template", null, [
+        _createTextVNode(" hey ", 1 /* TEXT */),
+        _createElementVNode("span", null, _toDisplayString( i ), -1 /* HOISTED */)
+      ], -1 /* HOISTED */), [
+        [_directive_for, _ctx.i in list]
       ])
     ])
-  })
+  }))
 }
 __sfc__.render = render
 export default __sfc__
-Time took: 107.813µs
+Time took: 142.108µs
 
 [Synthetic Compile Result]
 
 const __sfc__ = {
   name: 'TestComponent'
 }
-import { createElementVNode as _createElementVNode, createTextVNode as _createTextVNode, createVNode as _createVNode, resolveComponent as _resolveComponent, toDisplayString as _toDisplayString } from "vue"
+import { createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createTextVNode as _createTextVNode, createVNode as _createVNode, openBlock as _openBlock, resolveComponent as _resolveComponent, toDisplayString as _toDisplayString } from "vue"
 
 function render(_ctx, _cache, $props, $setup, $data, $options) {
   const _component_CustomComponent = _resolveComponent("CustomComponent")
 
-  return _createElementVNode("span", {
+  return (_openBlock(), _createElementBlock("span", {
     class: "yes"
   }, [
     _createTextVNode("Hello world" + _toDisplayString(testRef) + "yes yes", 1 /* TEXT */),
@@ -83,8 +98,8 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
       default: _withCtx(() => [_createTextVNode("italics, mm" + _toDisplayString(hey), 1 /* TEXT */)])
     }),
     _createTextVNode("end of span node", 1 /* TEXT */)
-  ], -1 /* HOISTED */)
+  ], -1 /* HOISTED */))
 }
 __sfc__.render = render
 export default __sfc__
-Time took: 27.432µs
+Time took: 31.961µs

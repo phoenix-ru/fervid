@@ -190,7 +190,7 @@ impl<'a> CodegenContext<'a> {
 /// "model" for `is_component` also has a separate logic
 fn supports_with_directive(directive_name: &str, is_component: bool) -> bool {
   match directive_name {
-    "bind" | "on" | "slot" => false,
+    "bind" | "on" | "slot" | "if" | "else-if" | "else" => false,
     "model" if is_component => false,
     _ => true
   }

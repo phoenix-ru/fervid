@@ -6,5 +6,6 @@ pub mod codegen_elements;
 pub mod codegen_comments;
 pub mod codegen_components;
 pub mod codegen_script;
+pub mod directives;
 pub mod helper;
 mod imports;

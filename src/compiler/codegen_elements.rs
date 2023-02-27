@@ -1,6 +1,7 @@
 use crate::parser::structs::{StartingTag, Node};
 
 use super::codegen::CodegenContext;
+use super::directives::conditional::filter_nodes_with_conditional_directives;
 use super::helper::CodeHelper;
 use super::imports::VueImports;
 
@@ -131,6 +132,12 @@ impl <'a> CodegenContext <'a> {
     let mut text_node_ranges_iter = text_node_ranges.iter();
     let mut text_node_ranges_current = text_node_ranges_iter.next();
 
+    // v-else nodes are generated only in pair with the previous v-if nodes
+    // TODO optimize CommentNode + Node[v-else] -> <template v-else>CommentNode + Node</template>
+    let mut conditional_nodes = filter_nodes_with_conditional_directives(children).peekable();
+    let mut curr_conditional_node = conditional_nodes.peek();
+    let mut curr_conditional_node_idx = curr_conditional_node.map_or(usize::MAX, |(idx, _)| *idx);
+
     // Start Js array
     if !should_inline {
       buf.push('[');
@@ -140,13 +147,29 @@ impl <'a> CodegenContext <'a> {
       self.code_helper.newline(buf);
     }
 
-    /* Create an expression for children */
+    // Create an expression for children
     while let Some((index, child)) = children_iter.next() {
-      /* Close previous text node if any, add separator */
+      // Close previous node if any, add separator
       if index > 0 && is_multiline {
         self.code_helper.comma_newline(buf)
       } else if index > 0 {
         CodeHelper::comma(buf)
+      }
+
+      // Check if this is a conditional nodes sequence, process it separately
+      if curr_conditional_node_idx == index {
+        let nodes_processed = self.generate_consecutive_conditional_nodes(buf, &mut conditional_nodes);
+        curr_conditional_node = conditional_nodes.peek();
+        curr_conditional_node_idx = curr_conditional_node.map_or(usize::MAX, |(idx, _)| *idx);
+
+        // Advance iterator
+        for _ in 0..nodes_processed {
+          children_iter.next();
+        }
+
+        if nodes_processed > 0 {
+          continue;
+        }
       }
 
       /* If we are at the start of multiple text nodes, i.e. (TextNode | DynamicExpression)+, pass control to another func */

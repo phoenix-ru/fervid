@@ -50,7 +50,7 @@ Code generator
   - [ ] Directives
     - [x] v-on
     - [x] v-bind
-    - [ ] v-if
+    - [x] v-if / v-else-if / v-else
     - [ ] v-for
     - [ ] v-show
     - [ ] v-slot
