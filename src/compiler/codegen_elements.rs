@@ -163,7 +163,7 @@ impl <'a> CodegenContext <'a> {
         curr_conditional_node_idx = curr_conditional_node.map_or(usize::MAX, |(idx, _)| *idx);
 
         // Advance iterator
-        for _ in 0..nodes_processed {
+        for _ in 0..nodes_processed-1 {
           children_iter.next();
         }
 
