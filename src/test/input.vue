@@ -32,11 +32,12 @@
     <input v-model="inputModel" v-directive:foo.bar.buzz="baz">
 
     <!-- Todo remove space between these elements, otherwise it breaks the invariant in conditional codegen -->
-    <div v-if="true">if div</div><span v-else-if="false">else-if span</span>
+    <div v-if="true">if div</div>
+    <span v-else-if="false">else-if span</span>
 
     <template v-for="i in list">
       hey
-      <span>{{ i }}</span>
+      <span :key="i">{{ i }}</span>
     </template>
   </abc-def>
 </template>

@@ -19,31 +19,43 @@ trait VisitMutWith {
 
 impl <'a> VisitMutWith for AstOptimizer {
   fn visit_element_node(&mut self, element_node: &mut ElementNode) {
-    // Because indices are `usize`, we can't use -1, therefore actual indices would start at 1
-    // and end at `children_len`. Kind of okay for this scenario to avoid using i32.
-    let mut index = 0;
     let children_len = element_node.children.len();
 
-    // Filter out whitespace text nodes at the beginning and end of ElementNode;
-    element_node.children.retain(|child| {
-      index += 1;
+    // Discard children mask, limited to 128 children. 0 means to preserve the node, 1 to discard
+    let mut discard_mask: u128 = 0;
 
-      match child {
-        // First and last children are whitespace text nodes, we don't need them
-        Node::TextNode(v)
-        if (index == 1 || index == children_len) && (v.trim().len() == 0) => {
-          false
-        },
-
-        _ => true
+    // Filter out whitespace text nodes at the beginning and end of ElementNode
+    match element_node.children.first() {
+      Some(Node::TextNode(v)) if v.trim().len() == 0 => {
+        discard_mask |= 1<<0;
       }
-    });
+      _ => {}
+    }
+    match element_node.children.last() {
+      Some(Node::TextNode(v)) if v.trim().len() == 0 => {
+        discard_mask |= 1<<(children_len-1);
+      }
+      _ => {}
+    }
 
-    if let Some(Node::TextNode(text_node)) = element_node.children.last() {
-      if text_node.trim().len() == 0 {
-        element_node.children.pop();
+    // For removing the middle whitespace text nodes, we need sliding windows of three nodes
+    for (index, window) in element_node.children.windows(3).enumerate() {
+      match window {
+        [Node::ElementNode(_) | Node::CommentNode(_), Node::TextNode(middle), Node::ElementNode(_) | Node::CommentNode(_)]
+        if middle.trim().len() == 0 => {
+          discard_mask |= 1<<(index + 1); 
+        },
+        _ => {}
       }
     }
+
+    // Retain based on discard_mask. If a discard bit at `index` is set to 1, the node will be dropped
+    let mut index = 0;
+    element_node.children.retain(|_| {
+      let should_retain = discard_mask & (1<<index) == 0;
+      index += 1;
+      should_retain
+    });
 
     element_node.visit_mut_children_with(self);
   }
