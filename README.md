@@ -53,9 +53,9 @@ Code generator
     - [x] v-if / v-else-if / v-else
     - [ ] v-for
     - [ ] v-show
-    - [ ] v-slot
+    - [x] v-slot
     - [x] v-model
-    - [ ] Other directives (less priority)
+    - [x] Other directives (less priority)
   - [ ] Hoisting
 
 - [ ] Processing `<style scoped>`
