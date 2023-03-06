@@ -37,6 +37,9 @@ impl<'a> CodegenContext<'a> {
         if *name == "model" && !is_component {
           let vmodel_directive = self.get_vmodel_directive_name(starting_tag);
           buf.push_str(vmodel_directive);
+        } else if *name == "show" {
+          // v-show comes from "vue" import
+          buf.push_str(self.get_and_add_import_str(VueImports::VShow));
         } else {
           self.add_to_directives_and_write(buf, name);
         }
@@ -190,7 +193,7 @@ impl<'a> CodegenContext<'a> {
 /// "model" for `is_component` also has a separate logic
 fn supports_with_directive(directive_name: &str, is_component: bool) -> bool {
   match directive_name {
-    "bind" | "on" | "slot" | "if" | "else-if" | "else" => false,
+    "bind" | "on" | "slot" | "if" | "else-if" | "else" | "for" => false,
     "model" if is_component => false,
     _ => true
   }

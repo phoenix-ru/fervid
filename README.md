@@ -52,7 +52,7 @@ Code generator
     - [x] v-bind
     - [x] v-if / v-else-if / v-else
     - [ ] v-for
-    - [ ] v-show
+    - [x] v-show
     - [x] v-slot
     - [x] v-model
     - [x] Other directives (less priority)
