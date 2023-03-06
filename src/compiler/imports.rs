@@ -16,6 +16,7 @@ static VMODEL_CHECKBOX: &str = "_vModelCheckbox";
 static VMODEL_RADIO: &str = "_vModelRadio";
 static VMODEL_SELECT: &str = "_vModelSelect";
 static VMODEL_TEXT: &str = "_vModelText";
+static VSHOW: &str = "_vShow";
 static WITH_CTX: &str = "_withCtx";
 static WITH_DIRECTIVES: &str = "_withDirectives";
 static WITH_MODIFIERS: &str = "_withModifiers";
@@ -36,12 +37,13 @@ pub enum VueImports {
   VModelRadio,
   VModelSelect,
   VModelText,
+  VShow,
   WithCtx,
   WithDirectives,
   WithModifiers
 }
 
-static ALL_IMPORTS: [VueImports; 17] = [
+static ALL_IMPORTS: [VueImports; 18] = [
   VueImports::CreateBlock,
   VueImports::CreateCommentVNode,
   VueImports::CreateElementBlock,
@@ -56,6 +58,7 @@ static ALL_IMPORTS: [VueImports; 17] = [
   VueImports::VModelRadio,
   VueImports::VModelSelect,
   VueImports::VModelText,
+  VueImports::VShow,
   VueImports::WithCtx,
   VueImports::WithDirectives,
   VueImports::WithModifiers
@@ -82,6 +85,7 @@ impl <'a> CodegenContext <'a> {
       VueImports::VModelRadio => VMODEL_RADIO,
       VueImports::VModelSelect => VMODEL_SELECT,
       VueImports::VModelText => VMODEL_TEXT,
+      VueImports::VShow => VSHOW,
       VueImports::WithCtx => WITH_CTX,
       VueImports::WithDirectives => WITH_DIRECTIVES,
       VueImports::WithModifiers => WITH_MODIFIERS
@@ -137,6 +141,7 @@ impl <'a> CodegenContext <'a> {
       VueImports::VModelRadio =>        1<<36,
       VueImports::VModelSelect =>       1<<37,
       VueImports::VModelText =>         1<<38,
+      VueImports::VShow =>              1<<39,
       VueImports::WithCtx =>            1<<40,
       VueImports::WithDirectives =>     1<<41,
       VueImports::WithModifiers =>      1<<42
