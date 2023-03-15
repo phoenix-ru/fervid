@@ -13,6 +13,9 @@ impl <'a> CodegenContext <'a> {
     children: &[Node],
     wrap_in_block: bool // for doing (openBlock(), createElementBlock(...))
   ) {
+    // Todo also add same logic to components
+    let had_v_for = self.generate_vfor_prefix(buf, starting_tag);
+
     // Special generation: `_withDirectives` prefix
     let needs_directive = Self::needs_directive_wrapper(starting_tag, false);
     if needs_directive {
@@ -20,7 +23,9 @@ impl <'a> CodegenContext <'a> {
       CodeHelper::open_paren(buf);
     }
 
-    if wrap_in_block {
+    // Special generation: (openBlock(), createElementBlock(
+    let should_wrap_in_block = wrap_in_block || had_v_for;
+    if should_wrap_in_block {
       self.generate_create_element_block(buf);
     } else {
       buf.push_str(self.get_and_add_import_str(VueImports::CreateElementVNode));
@@ -50,7 +55,7 @@ impl <'a> CodegenContext <'a> {
     buf.push_str("-1 /* HOISTED */");
 
     // When the block was opened, we need to close the extra parenthesis
-    if wrap_in_block {
+    if should_wrap_in_block {
       CodeHelper::close_paren(buf)
     }
 
@@ -62,6 +67,11 @@ impl <'a> CodegenContext <'a> {
       CodeHelper::comma(buf);
       self.generate_directives(buf, starting_tag, false);
       CodeHelper::close_paren(buf);
+    }
+
+    // Close v-for if it was there
+    if had_v_for {
+      self.generate_vfor_suffix(buf, starting_tag);
     }
   }
 

@@ -8,7 +8,9 @@ static CREATE_ELEMENT_BLOCK: &str = "_createElementBlock";
 static CREATE_ELEMENT_VNODE: &str = "_createElementVNode";
 static CREATE_TEXT_VNODE: &str = "_createTextVNode";
 static CREATE_VNODE: &str = "_createVNode";
+static FRAGMENT: &str = "_Fragment";
 static OPEN_BLOCK: &str = "_openBlock";
+static RENDER_LIST: &str = "_renderList";
 static RESOLVE_COMPONENT: &str = "_resolveComponent";
 static RESOLVE_DIRECTIVE: &str = "_resolveDirective";
 static TO_DISPLAY_STRING: &str = "_toDisplayString";
@@ -29,7 +31,9 @@ pub enum VueImports {
   CreateElementVNode,
   CreateTextVNode,
   CreateVNode,
+  Fragment,
   OpenBlock,
+  RenderList,
   ResolveComponent,
   ResolveDirective,
   ToDisplayString,
@@ -43,14 +47,16 @@ pub enum VueImports {
   WithModifiers
 }
 
-static ALL_IMPORTS: [VueImports; 18] = [
+static ALL_IMPORTS: [VueImports; 20] = [
   VueImports::CreateBlock,
   VueImports::CreateCommentVNode,
   VueImports::CreateElementBlock,
   VueImports::CreateElementVNode,
   VueImports::CreateTextVNode,
   VueImports::CreateVNode,
+  VueImports::Fragment,
   VueImports::OpenBlock,
+  VueImports::RenderList,
   VueImports::ResolveComponent,
   VueImports::ResolveDirective,
   VueImports::ToDisplayString,
@@ -77,7 +83,9 @@ impl <'a> CodegenContext <'a> {
       VueImports::CreateElementVNode => CREATE_ELEMENT_VNODE,
       VueImports::CreateTextVNode => CREATE_TEXT_VNODE,
       VueImports::CreateVNode => CREATE_VNODE,
+      VueImports::Fragment => FRAGMENT,
       VueImports::OpenBlock => OPEN_BLOCK,
+      VueImports::RenderList => RENDER_LIST,
       VueImports::ResolveComponent => RESOLVE_COMPONENT,
       VueImports::ResolveDirective => RESOLVE_DIRECTIVE,
       VueImports::ToDisplayString => TO_DISPLAY_STRING,
@@ -133,7 +141,9 @@ impl <'a> CodegenContext <'a> {
       VueImports::CreateElementVNode => 1<<3,
       VueImports::CreateTextVNode =>    1<<4,
       VueImports::CreateVNode =>        1<<5,
-      VueImports::OpenBlock =>          1<<9,
+      VueImports::Fragment =>           1<<7,
+      VueImports::OpenBlock =>          1<<8,
+      VueImports::RenderList =>         1<<9,
       VueImports::ResolveComponent =>   1<<10,
       VueImports::ResolveDirective =>   1<<11,
       VueImports::ToDisplayString =>    1<<12,

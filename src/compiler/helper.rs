@@ -3,6 +3,8 @@ pub struct CodeHelper <'a> {
   indent_str: &'a str
 }
 
+static MAX_INDENT: usize = 1024;
+
 impl <'a> Default for CodeHelper<'a> {
   fn default() -> Self {
     CodeHelper { indent_level: 0, indent_str: "  " }
@@ -29,6 +31,8 @@ impl <'a> CodeHelper <'a> {
 
   pub fn newline(self: &Self, buf: &mut String) {
     buf.push('\n');
+
+    assert!(self.indent_level <= MAX_INDENT, "Indentation is wrong!");
 
     // Add indent
     for _ in 0..self.indent_level {
