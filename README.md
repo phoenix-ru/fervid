@@ -1,7 +1,16 @@
 # rust-vue-compiler
 
 Vue SFC compiler written in Rust.
-Currently in early development, and the closest goal is to reach feature-parity with the current ![Vue SFC compiler](https://sfc.vuejs.org).
+Currently in early development, and the closest goal is to reach feature-parity with the current [Vue SFC compiler](https://sfc.vuejs.org).
+
+## Progress till MVP ![](https://geps.dev/progress/26)
+A minimal target of this project includes:
+- Vue 3 code generation;
+- ![unplugin](https://github.com/unjs/unplugin) integration;
+- Dev/prod mode support;
+- `<script setup>` support;
+- Example Vue project with configuration;
+- Performance comparison.
 
 ## Is it fast?
 Yes, it is incredibly fast. In fact, below are the parsing/compilation times benchmarked for a [test component](src/test/input.vue).
