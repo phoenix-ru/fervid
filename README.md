@@ -3,7 +3,7 @@
 Vue SFC compiler written in Rust.
 Currently in early development, and the closest goal is to reach feature-parity with the current [Vue SFC compiler](https://sfc.vuejs.org).
 
-## Progress till MVP ![](https://geps.dev/progress/26)
+## Progress till MVP ![](https://geps.dev/progress/30)
 A minimal target of this project includes:
 - Vue 3 code generation;
 - ![unplugin](https://github.com/unjs/unplugin) integration;
@@ -60,7 +60,7 @@ Code generator
     - [x] v-on
     - [x] v-bind
     - [x] v-if / v-else-if / v-else
-    - [ ] v-for
+    - [x] v-for
     - [x] v-show
     - [x] v-slot
     - [x] v-model
