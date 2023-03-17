@@ -68,8 +68,6 @@ impl CodegenContext<'_> {
   /// It must be called after the target element/component has been generated
   /// and only if `generate_vfor_prefix` returned `true`.
   pub fn generate_vfor_suffix(&mut self, buf: &mut String, starting_tag: &StartingTag) {
-    println!("We are stuck here");
-
     let has_key = starting_tag.attributes
       .iter()
       .any(|attr| match attr {
@@ -77,12 +75,8 @@ impl CodegenContext<'_> {
         _ => false
       });
 
-    println!("We are stuck after has_key");
-
     self.code_helper.unindent();
     self.code_helper.newline(buf);
-
-    println!("We are stuck after unindent");
 
     // TODO This can also be `)), 64 /* STABLE_FRAGMENT */))` when iterable is a number (`v-for="i in 3"`)
 
