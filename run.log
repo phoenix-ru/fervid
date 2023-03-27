@@ -7,18 +7,18 @@ const __sfc__ = defineComponent({
   setup() {
     return {
       inputModel: ref(''),
-      modelValue: ref('')
+      modelValue: ref(''),
+      list: [1, 2, 3]
     }
   },
 })
 
-import { createBlock as _createBlock, createCommentVNode as _createCommentVNode, createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createTextVNode as _createTextVNode, createVNode as _createVNode, openBlock as _openBlock, resolveComponent as _resolveComponent, resolveDirective as _resolveDirective, toDisplayString as _toDisplayString, vModelText as _vModelText, withCtx as _withCtx, withDirectives as _withDirectives, withModifiers as _withModifiers } from "vue"
+import { createBlock as _createBlock, createCommentVNode as _createCommentVNode, createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createTextVNode as _createTextVNode, createVNode as _createVNode, Fragment as _Fragment, openBlock as _openBlock, renderList as _renderList, resolveComponent as _resolveComponent, resolveDirective as _resolveDirective, toDisplayString as _toDisplayString, vModelText as _vModelText, vShow as _vShow, withCtx as _withCtx, withDirectives as _withDirectives, withModifiers as _withModifiers } from "vue"
 
 function render(_ctx, _cache, $props, $setup, $data, $options) {
-  const _component_another_element = _resolveComponent("another-element")
   const _component_abc_def = _resolveComponent("abc-def")
+  const _component_another_element = _resolveComponent("another-element")
   const _directive_directive = _resolveDirective("directive")
-  const _directive_for = _resolveDirective("for")
 
   return (_openBlock(), _createBlock(_component_abc_def, {
     modelValue: _ctx.modelValue,
@@ -33,15 +33,15 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
     onClick: _withModifiers(() => {}, ["prevent"]),
     onHello: world
   }, {
-    "test-slot": _withCtx(({ value }) => [_createTextVNode(" test " + _toDisplayString( value ), 1 /* TEXT */)]),
+    "test-slot": _withCtx(({ value }) => [_createTextVNode(" test " + _toDisplayString(value), 1 /* TEXT */)]),
     "custom-slot": _withCtx(({ prop }) => [
       _createElementVNode("span", {
         class: "span-class"
       }, " Span text ", -1 /* HOISTED */),
-      _createTextVNode("  " + _toDisplayString( prop ), 1 /* TEXT */)
+      _createTextVNode("  " + _toDisplayString(prop), 1 /* TEXT */)
     ]),
     default: _withCtx(() => [
-      _createTextVNode(" The text of the node " + _toDisplayString( dynamicValue ) + "  ", 1 /* TEXT */),
+      _createTextVNode(" The text of the node " + _toDisplayString(dynamicValue) + "  ", 1 /* TEXT */),
       _createCommentVNode(" Comment "),
       _createVNode(_component_another_element),
       _createTextVNode(" yet another text ", 1 /* TEXT */),
@@ -63,20 +63,28 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
         : false
           ? (_openBlock(), _createElementBlock("span", null, "else-if span", -1 /* HOISTED */))
           : _createCommentVNode("v-if", true),
-      _withDirectives(_createElementVNode("template", null, [
-        _createTextVNode(" hey ", 1 /* TEXT */),
-        _createElementVNode("span", {
+      (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(list, (i) => (
+        (_openBlock(), _createElementBlock("span", {
           key: i
-        }, _toDisplayString( i ), -1 /* HOISTED */)
-      ], -1 /* HOISTED */), [
-        [_directive_for, _ctx.i in list]
-      ])
+        }, "hey", -1 /* HOISTED */))
+      )), 128 /* KEYED_FRAGMENT */)),
+      _withDirectives(_createElementVNode("br", null, null, -1 /* HOISTED */), [
+        [_vShow, _ctx.false]
+      ]),
+      (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(list, (i) => (
+        (_openBlock(), _createElementBlock("template", null, [
+          _createTextVNode(" hey ", 1 /* TEXT */),
+          _createElementVNode("span", {
+            key: i
+          }, _toDisplayString(i), -1 /* HOISTED */)
+        ], -1 /* HOISTED */))
+      )), 256 /* UNKEYED_FRAGMENT */))
     ])
   }))
 }
 __sfc__.render = render
 export default __sfc__
-Time took: 125.537µs
+Time took: 152.718µs
 
 [Synthetic Compile Result]
 
@@ -101,4 +109,4 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
 }
 __sfc__.render = render
 export default __sfc__
-Time took: 34.435µs
+Time took: 35.948µs

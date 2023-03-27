@@ -35,6 +35,9 @@
     <div v-if="true">if div</div>
     <span v-else-if="false">else-if span</span>
 
+    <span v-for="i in list" :key="i">hey</span>
+    <br v-show="false">
+
     <template v-for="i in list">
       hey
       <span :key="i">{{ i }}</span>
@@ -49,7 +52,8 @@ export default defineComponent({
   setup() {
     return {
       inputModel: ref(''),
-      modelValue: ref('')
+      modelValue: ref(''),
+      list: [1, 2, 3]
     }
   },
 })
