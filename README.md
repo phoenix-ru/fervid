@@ -1,4 +1,10 @@
-# rust-vue-compiler
+<div style="text-align: center">
+<img src="logo.png" width="280" height="120">
+</div>
+
+<br>
+
+# fervid
 
 Vue SFC compiler written in Rust.
 Currently in early development, and the closest goal is to reach feature-parity with the current [Vue SFC compiler](https://sfc.vuejs.org).

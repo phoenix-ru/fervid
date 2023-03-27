@@ -428,6 +428,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "fervid"
+version = "0.0.1"
+dependencies = [
+ "criterion",
+ "nom",
+ "phf 0.11.1",
+ "regex",
+ "swc_common",
+ "swc_core",
+ "swc_ecma_codegen",
+ "swc_ecma_parser",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -917,20 +931,6 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-sys",
-]
-
-[[package]]
-name = "parser"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "nom",
- "phf 0.11.1",
- "regex",
- "swc_common",
- "swc_core",
- "swc_ecma_codegen",
- "swc_ecma_parser",
 ]
 
 [[package]]
