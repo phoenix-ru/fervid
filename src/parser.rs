@@ -60,7 +60,7 @@ fn parse_dynamic_expression(input: &str) -> IResult<&str, &str> {
 
 pub fn parse_dynamic_expression_node(input: &str) -> IResult<&str, Node> {
   let (input, expression_content) = parse_dynamic_expression(input)?;
-  Ok((input, Node::DynamicExpression(expression_content)))
+  Ok((input, Node::DynamicExpression { value: expression_content.trim(), template_scope: 0 }))
 }
 
 // todo implement different processing ways:
@@ -76,7 +76,8 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
       input,
       Node::ElementNode(ElementNode {
         starting_tag,
-        children: vec![]
+        children: vec![],
+        template_scope: 0
       })
     ));
   }
@@ -96,7 +97,8 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
     input,
     Node::ElementNode(ElementNode {
       starting_tag,
-      children
+      children,
+      template_scope: 0
     })
   ))
 }
@@ -177,7 +179,7 @@ pub fn parse_root_block(input: &str) -> IResult<&str, Node> {
 
   Ok((
     input,
-    Node::ElementNode(ElementNode { starting_tag, children })
+    Node::ElementNode(ElementNode { starting_tag, children, template_scope: 0 })
   ))
 }
 

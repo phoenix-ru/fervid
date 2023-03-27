@@ -4,7 +4,7 @@ extern crate swc_core;
 extern crate swc_ecma_codegen;
 use std::time::Instant;
 
-use crate::compiler::codegen::compile_sfc;
+use crate::compiler::codegen::compile_ast;
 use crate::parser::structs::{StartingTag, Node, ElementNode};
 use crate::parser::{html_utils::ElementKind, attributes::HtmlAttribute};
 use crate::templates::ast_optimizer;
@@ -59,7 +59,7 @@ fn test_real_compilation() {
     println!("\n[Real File Compile Result]");
     println!(
         "{}",
-        compile_sfc(optimized_ast).unwrap()
+        compile_ast(optimized_ast, Default::default()).unwrap()
     );
 }
 
@@ -83,7 +83,7 @@ fn test_synthetic_compilation() {
                 },
                 children: vec![
                     Node::TextNode("Hello world"),
-                    Node::DynamicExpression("testRef"),
+                    Node::DynamicExpression { value: "testRef", template_scope: 0 },
                     Node::TextNode("yes yes"),
                     // Just element
                     Node::ElementNode(ElementNode {
@@ -93,7 +93,11 @@ fn test_synthetic_compilation() {
                             is_self_closing: false,
                             kind: ElementKind::Normal
                         },
-                        children: vec![Node::TextNode("italics, mm"), Node::DynamicExpression("hey")]
+                        children: vec![
+                            Node::TextNode("italics, mm"),
+                            Node::DynamicExpression { value: "hey", template_scope: 0 }
+                        ],
+                        template_scope: 0
                     }),
                     // Component
                     Node::ElementNode(ElementNode {
@@ -103,12 +107,18 @@ fn test_synthetic_compilation() {
                             is_self_closing: false,
                             kind: ElementKind::Normal // is this needed?
                         },
-                        children: vec![Node::TextNode("italics, mm"), Node::DynamicExpression("hey")]
+                        children: vec![
+                            Node::TextNode("italics, mm"),
+                            Node::DynamicExpression { value: "hey", template_scope: 0 }
+                        ],
+                        template_scope: 0
                     }),
                     Node::TextNode("end of span node")
-                ]
+                ],
+                template_scope: 0
             })
-        ]
+        ],
+        template_scope: 0
     });
     let script = Node::ElementNode(ElementNode {
         starting_tag: StartingTag {
@@ -119,12 +129,13 @@ fn test_synthetic_compilation() {
         },
         children: vec![
             Node::TextNode("export default {\n  name: 'TestComponent'\n}")
-        ]
+        ],
+        template_scope: 0
     });
 
     println!("\n[Synthetic Compile Result]\n");
     println!(
         "{}",
-        compile_sfc(&[template, script]).unwrap()
+        compile_ast(&[template, script], Default::default()).unwrap()
     );
 }

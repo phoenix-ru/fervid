@@ -5,14 +5,15 @@ pub enum Node<'a> {
   ElementNode(ElementNode<'a>),
 
   TextNode(&'a str),
-  DynamicExpression(&'a str),
+  DynamicExpression { value: &'a str, template_scope: usize },
   CommentNode(&'a str)
 }
 
 #[derive(Debug, Clone)]
 pub struct ElementNode<'a> {
   pub starting_tag: StartingTag<'a>,
-  pub children: Vec<Node<'a>>
+  pub children: Vec<Node<'a>>,
+  pub template_scope: usize
 }
 
 #[derive(Debug, Clone)]

@@ -5,11 +5,12 @@ fn codegen_benchmark(c: &mut Criterion) {
 
     c.bench_function("codegen: generate CSR+DEV", |b| {
         let ast = fervid::parse_sfc(test_component);
-        let ast = fervid::optimize_ast(ast.1);
+        let mut ast = &mut ast.unwrap().1;
+        let ast = fervid::optimize_ast(&mut ast);
 
         b.iter_batched(
             || ast.clone(),
-            |ast| fervid::compile_ast(ast),
+            |ast| fervid::compile_ast(ast, Default::default()),
             criterion::BatchSize::SmallInput,
         );
     });

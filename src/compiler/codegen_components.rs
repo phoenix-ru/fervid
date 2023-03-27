@@ -192,7 +192,7 @@ impl <'a> CodegenContext <'a> {
       },
 
       // explicit just in case I decide to change node types and forget about this place
-      Node::DynamicExpression(_) | Node::TextNode(_) | Node::CommentNode(_) => true
+      Node::DynamicExpression { .. } | Node::TextNode(_) | Node::CommentNode(_) => true
     };
 
     // Start a Js object
@@ -208,7 +208,7 @@ impl <'a> CodegenContext <'a> {
         self.code_helper.comma_newline(buf);
       }
 
-      if let Node::ElementNode(ElementNode { starting_tag, children }) = template {
+      if let Node::ElementNode(ElementNode { starting_tag, children, .. }) = template {
         // Find needed attribute and generate the header (slot name + ctx)
         for attr in starting_tag.attributes.iter() {
           if let HtmlAttribute::VDirective (VDirective { name, argument, value, is_dynamic_slot, .. }) = attr {

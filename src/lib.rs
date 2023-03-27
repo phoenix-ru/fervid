@@ -9,27 +9,14 @@ use swc_core::ecma::visit::{VisitMut, VisitMutWith};
 use swc_ecma_codegen::{Emitter, text_writer::JsWriter};
 use swc_ecma_codegen::Node as CodegenNode;
 
+mod analyzer;
 mod compiler;
 mod parser;
 mod templates;
 
-use parser::structs::Node as AstNode;
-
-/// Function for testing the parser
-pub fn parse_sfc(source_code: &str) -> (&str, Vec<AstNode>) {
-    parser::parse_sfc(source_code).unwrap()
-}
-
-/// Function for testing the AST optimizer
-pub fn optimize_ast(mut ast: Vec<AstNode>) -> Vec<AstNode> {
-    templates::ast_optimizer::optimize_ast(&mut ast);
-    ast
-}
-
-/// Function for testing the code generation
-pub fn compile_ast(ast: Vec<AstNode>) -> Result<String, i32> {
-    compiler::codegen::compile_sfc(&ast)
-}
+pub use compiler::codegen::compile_ast;
+pub use parser::parse_sfc;
+pub use templates::ast_optimizer::optimize_ast;
 
 #[allow(dead_code)]
 pub fn test_swc_transform(source_code: &str) {

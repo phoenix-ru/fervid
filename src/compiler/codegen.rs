@@ -1,9 +1,10 @@
 extern crate regex;
 
-use std::{collections::HashMap};
+use std::collections::HashMap;
 use regex::Regex;
 
 use crate::parser::{attributes::HtmlAttribute, structs::{Node, ElementNode, StartingTag}};
+use crate::analyzer::scope::ScopeHelper;
 use super::{all_html_tags::is_html_tag, helper::CodeHelper, codegen_script::ScriptAndLang};
 
 #[derive(Default)]
@@ -12,7 +13,8 @@ pub struct CodegenContext <'a> {
   pub components: HashMap<String, String>,
   pub directives: HashMap<String, String>,
   pub used_imports: u64,
-  hoists: Vec<String>,
+  pub scope_helper: ScopeHelper<'a>,
+  // hoists: Vec<String>,
   is_custom_element: IsCustomElementParam<'a>
 }
 
@@ -38,7 +40,7 @@ impl Default for IsCustomElementParam<'_> {
 /**
  * Main entry point for the code generation
  */
-pub fn compile_sfc(blocks: &[Node]) -> Result<String, i32> {
+pub fn compile_ast(blocks: &[Node], scope_helper: ScopeHelper) -> Result<String, i32> {
   let mut template: Option<&Node> = None;
   // let mut template_lang: Option<&str> = None;
   let mut legacy_script: Option<ScriptAndLang> = None;
@@ -46,7 +48,7 @@ pub fn compile_sfc(blocks: &[Node]) -> Result<String, i32> {
 
   for block in blocks.iter() {
     match block {
-      Node::ElementNode(ElementNode { starting_tag, children }) => {
+      Node::ElementNode(ElementNode { starting_tag, children, .. }) => {
         // Extract lang attr, as this is used later
         let lang_attr = starting_tag.attributes.iter().find_map(|attr| match attr {
           HtmlAttribute::Regular { name, value } => {
@@ -133,6 +135,7 @@ pub fn compile_sfc(blocks: &[Node]) -> Result<String, i32> {
   /* Create the context */
   let mut ctx: CodegenContext = Default::default();
   ctx.is_custom_element = is_custom_element_re;
+  ctx.scope_helper = scope_helper;
 
   // Todo generate imports and hoists first in PROD mode (but this requires a smarter order of compilation)
 
@@ -222,7 +225,7 @@ impl <'a> CodegenContext <'a> {
   pub fn compile_node(&mut self, buf: &mut String, node: &Node, wrap_in_block: bool) {
     // todo add the code for `openBlock`, `createElementBlock` and Fragments when needed
     match node {
-      Node::ElementNode(ElementNode { starting_tag, children }) => {
+      Node::ElementNode(ElementNode { starting_tag, children, .. }) => {
         if self.is_component(starting_tag) {
           self.create_component_vnode(buf, starting_tag, children, wrap_in_block);
         } else {
@@ -238,16 +241,16 @@ impl <'a> CodegenContext <'a> {
     }
   }
 
-  fn add_to_hoists(self: &mut Self, expression: String) -> String {
-    let hoist_index = self.hoists.len() + 1;
-    let hoist_identifier = format!("_hoisted_{}", hoist_index);
+  // fn add_to_hoists(self: &mut Self, expression: String) -> String {
+  //   let hoist_index = self.hoists.len() + 1;
+  //   let hoist_identifier = format!("_hoisted_{}", hoist_index);
 
-    // todo add pure in consumer instead or provide a boolean flag to generate it
-    let hoist_expr = format!("const {} = /*#__PURE__*/ {}", hoist_identifier, expression);
-    self.hoists.push(hoist_expr);
+  //   // todo add pure in consumer instead or provide a boolean flag to generate it
+  //   let hoist_expr = format!("const {} = /*#__PURE__*/ {}", hoist_identifier, expression);
+  //   self.hoists.push(hoist_expr);
 
-    hoist_identifier
-  }
+  //   hoist_identifier
+  // }
 
   pub fn is_component(self: &Self, starting_tag: &StartingTag) -> bool {
     // todo use analyzed components? (fields of `components: {}`)
@@ -269,47 +272,47 @@ impl <'a> CodegenContext <'a> {
     !is_custom_element
   }
 
-  /**
+  /*
    * The element can be hoisted if it and all of its descendants do not have dynamic attributes
    * <div class="a"><span>text</span></div> => true
    * <button :disabled="isDisabled">text</button> => false
    * <span>{{ text }}</span> => false
    */
-  fn can_be_hoisted (self: &Self, node: &Node) -> bool {
-    match node {
-      Node::ElementNode(ElementNode { starting_tag, children }) => { 
-        /* Check starting tag */
-        if self.is_component(starting_tag) {
-          return false;
-        }
+  // fn can_be_hoisted (self: &Self, node: &Node) -> bool {
+  //   match node {
+  //     Node::ElementNode(ElementNode { starting_tag, children, .. }) => { 
+  //       /* Check starting tag */
+  //       if self.is_component(starting_tag) {
+  //         return false;
+  //       }
 
-        let has_any_dynamic_attr = starting_tag.attributes.iter().any(|it| {
-          match it {
-            HtmlAttribute::Regular { .. } => false,
-            HtmlAttribute::VDirective { .. } => true
-          }
-        });
+  //       let has_any_dynamic_attr = starting_tag.attributes.iter().any(|it| {
+  //         match it {
+  //           HtmlAttribute::Regular { .. } => false,
+  //           HtmlAttribute::VDirective { .. } => true
+  //         }
+  //       });
 
-        if has_any_dynamic_attr {
-          return false;
-        }
+  //       if has_any_dynamic_attr {
+  //         return false;
+  //       }
 
-        let cannot_be_hoisted = children.iter().any(|it| !self.can_be_hoisted(&it));
+  //       let cannot_be_hoisted = children.iter().any(|it| !self.can_be_hoisted(&it));
 
-        return !cannot_be_hoisted;
-      },
+  //       return !cannot_be_hoisted;
+  //     },
 
-      Node::TextNode(_) => {
-        return true
-      },
+  //     Node::TextNode(_) => {
+  //       return true
+  //     },
 
-      Node::DynamicExpression(_) => {
-        return false
-      },
+  //     Node::DynamicExpression { .. } => {
+  //       return false
+  //     },
 
-      Node::CommentNode(_) => {
-        return false;
-      }
-    };
-  }
+  //     Node::CommentNode(_) => {
+  //       return false;
+  //     }
+  //   };
+  // }
 }
