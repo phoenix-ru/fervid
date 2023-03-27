@@ -2,8 +2,6 @@
 <img src="logo.png" width="280" height="120">
 </div>
 
-<br>
-
 # fervid
 
 Vue SFC compiler written in Rust.
