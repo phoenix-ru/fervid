@@ -13,13 +13,9 @@ use std::str;
 
 use crate::parser::html_utils::classify_element_kind;
 
-use self::attributes::parse_attributes;
-use self::html_utils::{html_name, space0, ElementKind};
-use self::structs::{ElementNode, StartingTag, Node};
-
-pub mod attributes;
-pub mod html_utils;
-pub mod structs;
+use super::attributes::parse_attributes;
+use super::html_utils::{html_name, space0, ElementKind};
+use super::structs::{ElementNode, StartingTag, Node};
 
 pub fn parse_element_starting_tag(input: &str) -> IResult<&str, StartingTag> {
   let (input, (_, tag_name, attributes, _, ending_bracket)) = tuple((

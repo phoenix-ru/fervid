@@ -7,12 +7,11 @@ use std::time::Instant;
 use crate::compiler::codegen::compile_ast;
 use crate::parser::structs::{StartingTag, Node, ElementNode};
 use crate::parser::{html_utils::ElementKind, attributes::HtmlAttribute};
-use crate::templates::ast_optimizer;
+use crate::analyzer::ast_optimizer;
 
 mod parser;
 mod analyzer;
 mod compiler;
-mod templates;
 
 fn main() {
     let n = Instant::now();
@@ -43,7 +42,7 @@ fn main() {
 #[allow(dead_code)]
 fn test_real_compilation() {
     let test = include_str!("./test/input.vue");
-    let mut res = parser::parse_sfc(test).unwrap();
+    let mut res = parser::core::parse_sfc(test).unwrap();
     let optimized_ast = ast_optimizer::optimize_ast(&mut res.1);
 
     #[cfg(dbg_print)]

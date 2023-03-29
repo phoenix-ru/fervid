@@ -12,11 +12,10 @@ use swc_ecma_codegen::Node as CodegenNode;
 mod analyzer;
 mod compiler;
 mod parser;
-mod templates;
 
+pub use analyzer::ast_optimizer::optimize_ast;
 pub use compiler::codegen::compile_ast;
-pub use parser::parse_sfc;
-pub use templates::ast_optimizer::optimize_ast;
+pub use parser::core::parse_sfc;
 
 #[allow(dead_code)]
 pub fn test_swc_transform(source_code: &str) {
