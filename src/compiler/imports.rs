@@ -9,6 +9,8 @@ static CREATE_ELEMENT_VNODE: &str = "_createElementVNode";
 static CREATE_TEXT_VNODE: &str = "_createTextVNode";
 static CREATE_VNODE: &str = "_createVNode";
 static FRAGMENT: &str = "_Fragment";
+static NORMALIZE_CLASS: &str = "_normalizeClass";
+static NORMALIZE_STYLE: &str = "_normalizeStyle";
 static OPEN_BLOCK: &str = "_openBlock";
 static RENDER_LIST: &str = "_renderList";
 static RESOLVE_COMPONENT: &str = "_resolveComponent";
@@ -32,6 +34,8 @@ pub enum VueImports {
   CreateTextVNode,
   CreateVNode,
   Fragment,
+  NormalizeClass,
+  NormalizeStyle,
   OpenBlock,
   RenderList,
   ResolveComponent,
@@ -47,7 +51,7 @@ pub enum VueImports {
   WithModifiers
 }
 
-static ALL_IMPORTS: [VueImports; 20] = [
+static ALL_IMPORTS: [VueImports; 22] = [
   VueImports::CreateBlock,
   VueImports::CreateCommentVNode,
   VueImports::CreateElementBlock,
@@ -55,6 +59,8 @@ static ALL_IMPORTS: [VueImports; 20] = [
   VueImports::CreateTextVNode,
   VueImports::CreateVNode,
   VueImports::Fragment,
+  VueImports::NormalizeClass,
+  VueImports::NormalizeStyle,
   VueImports::OpenBlock,
   VueImports::RenderList,
   VueImports::ResolveComponent,
@@ -84,6 +90,8 @@ impl <'a> CodegenContext <'a> {
       VueImports::CreateTextVNode => CREATE_TEXT_VNODE,
       VueImports::CreateVNode => CREATE_VNODE,
       VueImports::Fragment => FRAGMENT,
+      VueImports::NormalizeClass => NORMALIZE_CLASS,
+      VueImports::NormalizeStyle => NORMALIZE_STYLE,
       VueImports::OpenBlock => OPEN_BLOCK,
       VueImports::RenderList => RENDER_LIST,
       VueImports::ResolveComponent => RESOLVE_COMPONENT,
@@ -141,20 +149,22 @@ impl <'a> CodegenContext <'a> {
       VueImports::CreateElementVNode => 1<<3,
       VueImports::CreateTextVNode =>    1<<4,
       VueImports::CreateVNode =>        1<<5,
-      VueImports::Fragment =>           1<<7,
-      VueImports::OpenBlock =>          1<<8,
-      VueImports::RenderList =>         1<<9,
-      VueImports::ResolveComponent =>   1<<10,
-      VueImports::ResolveDirective =>   1<<11,
-      VueImports::ToDisplayString =>    1<<12,
-      VueImports::VModelCheckbox =>     1<<35,
-      VueImports::VModelRadio =>        1<<36,
-      VueImports::VModelSelect =>       1<<37,
-      VueImports::VModelText =>         1<<38,
-      VueImports::VShow =>              1<<39,
-      VueImports::WithCtx =>            1<<40,
-      VueImports::WithDirectives =>     1<<41,
-      VueImports::WithModifiers =>      1<<42
+      VueImports::Fragment =>           1<<6,
+      VueImports::NormalizeClass =>     1<<25,
+      VueImports::NormalizeStyle =>     1<<26,
+      VueImports::OpenBlock =>          1<<34,
+      VueImports::RenderList =>         1<<35,
+      VueImports::ResolveComponent =>   1<<36,
+      VueImports::ResolveDirective =>   1<<37,
+      VueImports::ToDisplayString =>    1<<38,
+      VueImports::VModelCheckbox =>     1<<45,
+      VueImports::VModelRadio =>        1<<46,
+      VueImports::VModelSelect =>       1<<47,
+      VueImports::VModelText =>         1<<48,
+      VueImports::VShow =>              1<<49,
+      VueImports::WithCtx =>            1<<55,
+      VueImports::WithDirectives =>     1<<56,
+      VueImports::WithModifiers =>      1<<57
     }
   }
 }

@@ -1,4 +1,4 @@
-use crate::parser::structs::{StartingTag, Node};
+use crate::parser::structs::{Node, ElementNode};
 
 use super::codegen::CodegenContext;
 use super::directives::conditional::filter_nodes_with_conditional_directives;
@@ -38,7 +38,12 @@ impl <'a> CodegenContext <'a> {
 
     // Attributes
     CodeHelper::comma(buf);
-    let has_generated_attributes = self.generate_attributes(buf, &starting_tag.attributes, true);
+    let has_generated_attributes = self.generate_attributes(
+      buf,
+      &starting_tag.attributes,
+      true,
+      *template_scope
+    );
     if !has_generated_attributes {
       buf.push_str("null");
     }

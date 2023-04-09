@@ -1,7 +1,14 @@
+use lazy_static::lazy_static;
+use regex::Regex;
 use crate::parser::attributes::{HtmlAttribute, VDirective};
 use super::codegen::CodegenContext;
 use super::helper::CodeHelper;
 use super::imports::VueImports;
+use super::transform::swc::transform_scoped;
+
+lazy_static! {
+  static ref CSS_RE: Regex = Regex::new(r"(?U)((?:[a-zA-Z_]|--)[a-zA-Z_0-9-]*):\s*(.+)(?:;|;$|$)").unwrap();
+}
 
 impl CodegenContext <'_> {
   /// Generates attributes as a Js object,
@@ -12,7 +19,8 @@ impl CodegenContext <'_> {
     &mut self,
     buf: &mut String,
     attributes: &Vec<HtmlAttribute>,
-    generate_obj_shell: bool
+    generate_obj_shell: bool,
+    template_scope_id: u32
   ) -> bool {
     /* Work is not needed if we don't have any Regular attributes, v-on/v-bind directives */
     if !has_attributes_work(attributes) {
@@ -32,13 +40,37 @@ impl CodegenContext <'_> {
     /* For `withModifiers` import */
     let mut has_used_modifiers_import = false;
 
-    for attribute in attributes {
-      if has_first_element {
-        self.code_helper.comma_newline(buf);
-      }
+    // Special generation for `class` and `style` attributes,
+    // as they can have both Regular and VDirective variants
+    let mut class_regular = None;
+    let mut class_bind = None;
+    let mut style_regular = None;
+    let mut style_bind = None;
 
+    for attribute in attributes {
       match attribute {
+        // First, we check the special case: `class` and `style` attributes
+        HtmlAttribute::Regular { name: "class", value } => {
+          class_regular = Some(*value);
+        },
+
+        HtmlAttribute::VDirective(VDirective { name: "bind", argument: "class", value, .. }) => {
+          class_bind = *value;
+        },
+
+        HtmlAttribute::Regular { name: "style", value } => {
+          style_regular = Some(*value);
+        },
+
+        HtmlAttribute::VDirective(VDirective { name: "bind", argument: "style", value, .. }) => {
+          style_bind = *value;
+        },
+
         HtmlAttribute::Regular { name, value } => {
+          if has_first_element {
+            self.code_helper.comma_newline(buf);
+          }
+
           /* For obvious reasons, attributes containing a dash need to be escaped */
           let needs_quotes = CodeHelper::needs_escape(name);
 
@@ -56,8 +88,12 @@ impl CodegenContext <'_> {
           has_first_element = true
         },
 
-        // todo generate attributes bound with v-bind, v-on
+        // todo generate multiple attributes bound with v-bind, v-on
         HtmlAttribute::VDirective (VDirective { name, argument, modifiers, value, .. }) => {
+          if has_first_element {
+            self.code_helper.comma_newline(buf);
+          }
+
           /* v-on directive, shortcut `@`, e.g. `@custom-event.modifier="value"` */
           if *name == "on" {
             generate_v_on_attr(buf, argument, modifiers, *value);
@@ -76,6 +112,45 @@ impl CodegenContext <'_> {
       }
     }
 
+    // Process `class` attribute. We may have a regular one, a bound one, both or neither.
+    match (class_regular, class_bind) {
+      (Some(regular_value), Some(bound_value)) => {
+        if has_first_element {
+          self.code_helper.comma_newline(buf);
+        }
+
+        buf.push_str("class: ");
+        buf.push_str(self.get_and_add_import_str(VueImports::NormalizeClass));
+        CodeHelper::open_paren(buf);
+        CodeHelper::open_sq_bracket(buf);
+
+        // First, include the content of a regular class
+        CodeHelper::quoted(buf, regular_value);
+        CodeHelper::comma(buf);
+
+        let generated_class_binding = transform_scoped(
+          bound_value,
+          &self.scope_helper,
+          template_scope_id
+        ).unwrap_or_default();
+
+        buf.push_str(&generated_class_binding);
+
+        CodeHelper::close_sq_bracket(buf);
+        CodeHelper::close_paren(buf);
+      },
+
+      (Some(regular_value), None) => {
+        
+      },
+
+      (None, Some(bound_value)) => {
+
+      },
+
+      (None, None) => {}
+    }
+
     // Close a Js object notation
     if generate_obj_shell {
       self.code_helper.unindent();
@@ -92,15 +167,16 @@ impl CodegenContext <'_> {
   }
 }
 
+/// Check if there is work regarding attributes generation
+/// Work is not needed if we don't have any Regular attributes, v-on/v-bind directives
 pub fn has_attributes_work(attributes: &Vec<HtmlAttribute>) -> bool {
-  /* Work is not needed if we don't have any Regular attributes, v-on/v-bind directives */
-  attributes.iter().any(|it| match it {
-    HtmlAttribute::Regular { .. } => true,
-    HtmlAttribute::VDirective (VDirective { name, .. }) => match *name {
-      "on" | "bind" => true,
+  attributes
+    .iter()
+    .any(|it| match it {
+      HtmlAttribute::Regular { .. } |
+      HtmlAttribute::VDirective (VDirective { name: "on" | "bind", .. }) => true,
       _ => false
-    }
-  })
+    })
 }
 
 fn generate_v_bind_attr(buf: &mut String, argument: &str, value: Option<&str>) {
@@ -110,13 +186,10 @@ fn generate_v_bind_attr(buf: &mut String, argument: &str, value: Option<&str>) {
   // current js SFC compiler just discards the second appearance of the same attribute name (except for class)
 
   /* Do not generate empty values */
-  let value_expression: &str;
-  if let Some(v) = value {
-    value_expression = v
-  } else {
+  let Some(value_expression) = value else {
     // At this point js SFC compiler just panicks
     return
-  }
+  };
 
   /* For obvious reasons, attributes containing a dash need to be escaped */
   let needs_quotes = argument.contains('-');
@@ -200,7 +273,7 @@ fn test_attributes_generation() {
     HtmlAttribute::Regular { name: "dashed-attr-name", value: "spaced attr value" }
   ];
 
-  ctx.generate_attributes(&mut buf, &attributes, true);
+  ctx.generate_attributes(&mut buf, &attributes, true, 0);
   assert_eq!(
     &buf,
     &format!(r#"{initial_buf}{{class: "test", readonly: "", style: "background: red", "dashed-attr-name": "spaced attr value"}}"#)

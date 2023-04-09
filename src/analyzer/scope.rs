@@ -43,6 +43,21 @@ pub enum VarScopeDescriptor {
     Unknown
 }
 
+impl VarScopeDescriptor {
+    pub fn get_prefix(&self) -> &'static str {
+        match self {
+            Self::Builtin => "",
+            Self::Data => "$data.",
+            Self::Global => "_ctx.",
+            Self::Props => "$props.",
+            Self::Options => "$options.",
+            Self::Setup => "$setup.",
+            Self::Template(_) => "",
+            Self::Unknown => "_ctx."
+        }
+    }
+}
+
 impl ScopeHelper {
     pub fn add_template_scope(&mut self, scope: Scope) {
         self.template_scopes.push(scope)

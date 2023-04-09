@@ -79,7 +79,7 @@ impl <'a> CodegenContext <'a> {
           self.code_helper.comma_newline(buf);
         }
 
-        self.generate_attributes(buf, &starting_tag.attributes, false);
+        self.generate_attributes(buf, &starting_tag.attributes, false, *template_scope);
       }
 
       // Close Js object
