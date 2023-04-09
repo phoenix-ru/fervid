@@ -1,7 +1,5 @@
 extern crate lazy_static;
 
-use std::rc::Rc;
-
 use swc_common::Span;
 use swc_core::ecma::ast::{Ident, MemberExpr, MemberProp, Expr};
 use swc_core::ecma::atoms::JsWord;
@@ -22,7 +20,7 @@ pub use compiler::codegen::compile_ast;
 pub use parser::core::parse_sfc;
 
 #[allow(dead_code)]
-pub fn test_swc_transform(source_code: &str) -> Result<Rc<Vec<u8>>, Error> {
+pub fn test_swc_transform(source_code: &str) -> Result<Vec<u8>, Error> {
     let lexer = Lexer::new(
         // We want to parse ecmascript
         Syntax::Es(Default::default()),
@@ -47,9 +45,8 @@ pub fn test_swc_transform(source_code: &str) -> Result<Rc<Vec<u8>>, Error> {
             v.visit_mut_with(&mut folder);
 
             let cm: Lrc<SourceMap> = Default::default();
-            let mut buff: Rc<Vec<u8>> = Rc::new(Vec::with_capacity(source_code.len() * 2));
-            let buff2: &mut Vec<u8> = Rc::get_mut(&mut buff).unwrap();
-            let writer: JsWriter<&mut Vec<u8>> = JsWriter::new(cm.clone(), "\n", buff2, None);
+            let mut buff: Vec<u8> = Vec::with_capacity(source_code.len() * 2);
+            let writer: JsWriter<&mut Vec<u8>> = JsWriter::new(cm.clone(), "\n", &mut buff, None);
 
             let mut emitter = Emitter {
                 cfg: swc_ecma_codegen::Config {
@@ -63,12 +60,7 @@ pub fn test_swc_transform(source_code: &str) -> Result<Rc<Vec<u8>>, Error> {
                 cm
             };
 
-            let res = v.emit_with(&mut emitter);
-
-            if let Ok(_) = res {
-                // println!("{}", std::str::from_utf8(&buff).unwrap())
-                // return Ok(buff);
-            }
+            let _ = v.emit_with(&mut emitter);
 
             Ok(buff)
         },
