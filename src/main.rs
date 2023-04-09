@@ -22,9 +22,10 @@ fn main() {
     test_synthetic_compilation();
     println!("Time took: {:?}", n.elapsed());
 
-    // let n = Instant::now();
-    // test_swc_transform();
-    // println!("Time took for transform: {:?}", n.elapsed());
+    let n = Instant::now();
+    let swc_result = fervid::test_swc_transform("(item, index, false)");
+    println!("SWC result: {}", std::str::from_utf8(&swc_result.unwrap()).unwrap().trim().trim_end_matches(";"));
+    println!("Time took for transform: {:?}", n.elapsed());
 
     // println!("", swc_ecma_parser::parse_file_as_expr(fm, syntax, target, comments, recovered_errors));
 
@@ -42,23 +43,35 @@ fn main() {
 #[allow(dead_code)]
 fn test_real_compilation() {
     let test = include_str!("./test/input.vue");
-    let mut res = parser::core::parse_sfc(test).unwrap();
-    let optimized_ast = ast_optimizer::optimize_ast(&mut res.1);
 
-    #[cfg(dbg_print)]
+    // Parse
+    let res = parser::core::parse_sfc(test).unwrap();
+
+    // Optimize
+    let mut ast = res.1;
+    ast_optimizer::optimize_ast(&mut ast);
+
+    // Analyze scopes
+    let mut scope_helper = analyzer::scope::ScopeHelper::default();
+    scope_helper.transform_and_record_ast(&mut ast);
+
+    #[cfg(feature = "dbg_print")]
     {
-        println!("Result: {:#?}", optimized_ast);
+        println!("Result: {:#?}", ast);
         println!("Remaining: {:?}", res.0);
     
         println!();
-        println!("SFC blocks length: {}", optimized_ast.len());
+        println!("SFC blocks length: {}", ast.len());
+
+        println!();
+        println!("Scopes: {:#?}", scope_helper);
     }
 
     // Real codegen
     println!("\n[Real File Compile Result]");
     println!(
         "{}",
-        compile_ast(optimized_ast, Default::default()).unwrap()
+        compile_ast(&ast, scope_helper).unwrap()
     );
 }
 

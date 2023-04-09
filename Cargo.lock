@@ -432,6 +432,7 @@ name = "fervid"
 version = "0.0.1"
 dependencies = [
  "criterion",
+ "lazy_static",
  "nom",
  "phf 0.11.1",
  "regex",

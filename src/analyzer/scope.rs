@@ -1,20 +1,34 @@
-use std::time::Instant;
+use lazy_static::lazy_static;
+use regex::Regex;
+use swc_common::BytePos;
+use swc_core::ecma::{visit::{Visit, VisitWith}, atoms::JsWord};
+use swc_ecma_parser::{lexer::Lexer, Syntax, StringInput, Parser};
 
-static JS_BUILTINS: [&str; 7] = ["true", "false", "null", "undefined", "Array", "Set", "Map"];
+use crate::parser::{structs::Node, attributes::{HtmlAttribute, VDirective}};
 
-pub struct Scope<'a> {
-    variables: Vec<&'a str>,
+lazy_static! {
+    static ref JS_BUILTINS: [JsWord; 7] = ["true", "false", "null", "undefined", "Array", "Set", "Map"].map(JsWord::from);
+}
+
+// Regex for v-for directive
+lazy_static! {
+    static ref FOR_RE: Regex = Regex::new(r"^(.+)\s+(in|of)\s+(.+)$").unwrap();
+}
+
+#[derive(Debug)]
+pub struct Scope {
+    variables: Vec<JsWord>,
     parent: u32
 }
 
-#[derive(Default)]
-pub struct ScopeHelper<'a> {
-    pub template_scopes: Vec<Scope<'a>>,
-    setup_vars: Vec<&'a str>,
-    props_vars: Vec<&'a str>,
-    data_vars: Vec<&'a str>,
-    options_vars: Vec<&'a str>,
-    globals: Vec<&'a str>
+#[derive(Default, Debug)]
+pub struct ScopeHelper {
+    pub template_scopes: Vec<Scope>,
+    setup_vars: Vec<JsWord>,
+    props_vars: Vec<JsWord>,
+    data_vars: Vec<JsWord>,
+    options_vars: Vec<JsWord>,
+    globals: Vec<JsWord>
 }
 
 #[derive(Debug, PartialEq)]
@@ -29,17 +43,18 @@ pub enum VarScopeDescriptor {
     Unknown
 }
 
-impl <'a> ScopeHelper<'a> {
-    pub fn add_template_scope(&mut self, scope: Scope<'a>) {
+impl ScopeHelper {
+    pub fn add_template_scope(&mut self, scope: Scope) {
         self.template_scopes.push(scope)
     }
 
-    pub fn add_template_scopes(&mut self, mut scopes: Vec<Scope<'a>>) {
+    pub fn add_template_scopes(&mut self, mut scopes: Vec<Scope>) {
         self.template_scopes.append(&mut scopes)
     }
 
     pub fn find_scope_of_variable(&self, starting_scope: u32, variable: &str) -> VarScopeDescriptor {
         let mut current_scope_index = starting_scope;
+        let variable = JsWord::from(variable);
 
         // Macro to check if the variable is in the slice/Vec and conditionally return
         macro_rules! check_scope {
@@ -79,28 +94,186 @@ impl <'a> ScopeHelper<'a> {
 
         VarScopeDescriptor::Unknown
     }
+
+    /// Transforms an AST by assigning the scope identifiers to Nodes
+    /// The variables introduced in `v-for` and `v-slot` are recorded to the ScopeHelper
+    pub fn transform_and_record_ast(&mut self, ast: &mut [Node]) {
+        // Pre-allocate template scopes to at least the amount of root AST nodes
+        if self.template_scopes.len() == 0 && ast.len() != 0 {
+            self.template_scopes.reserve(ast.len());
+
+            // Add scope 0.
+            // It may be left unused, as it's reserved for some global template vars (undecided)
+            self.template_scopes.push(Scope { variables: vec![], parent: 0 });
+        }
+
+        for node in ast {
+            self.walk_ast_node(node, 0)
+        }
+    }
+
+    fn walk_ast_node(&mut self, node: &mut Node, current_scope_identifier: u32) {
+        match node {
+            Node::ElementNode(element_node) => {
+                // Finds a `v-for` or `v-slot` directive when in ElementNode
+                let scoping_directive = element_node.starting_tag
+                    .attributes
+                    .iter()
+                    .find_map(|attr| match attr {
+                        HtmlAttribute::VDirective(directive)
+                        if (directive.name == "for" || directive.name == "slot") &&
+                        directive.value.is_some() => Some(directive),
+            
+                        _ => None
+                    });
+
+                // A scope to use for both the current node and its children (as a parent)
+                let mut scope_to_use = current_scope_identifier;
+
+                // Create a new scope
+                if let Some(directive) = scoping_directive {
+                    // New scope will have ID equal to length
+                    scope_to_use = self.template_scopes.len() as u32;
+                    self.template_scopes.push(Scope {
+                        variables: vec![],
+                        parent: current_scope_identifier
+                    });
+
+                    // TODO Fail somehow if directive value is invalid?
+
+                    self.extract_directive_variables(directive, scope_to_use);
+                }
+
+                // Update Node's scope
+                element_node.template_scope = scope_to_use;
+
+                // Walk children
+                for mut child in element_node.children.iter_mut() {
+                    self.walk_ast_node(&mut child, scope_to_use);
+                }
+            },
+
+            // For dynamic expression, just update the scope
+            Node::DynamicExpression { template_scope, .. } => {
+                *template_scope = current_scope_identifier;
+            },
+
+            _ => {}
+        }
+    }
+
+    /// Extracts the variables introduced by `v-for` or `v-slot`
+    fn extract_directive_variables(&mut self, directive: &VDirective, scope_to_use: u32) {
+        match (directive.value, directive.name) {
+            (Some(directive_value), "for") => {
+                // TODO if there are no matches, what do we do?
+                let Some(captures) = FOR_RE.captures(directive_value) else {
+                    return;
+                };
+
+                // We only care of the left hand side variables
+                let introduced_variables = captures.get(1).map_or("", |x| x.as_str().trim());
+
+                // Get the needed scope and collect variables to it
+                let mut scope = &mut self.template_scopes[scope_to_use as usize];
+                Self::collect_variables(introduced_variables, &mut scope);
+            },
+
+            (Some(directive_value), "slot") => {
+                // Get the needed scope and collect variables to it
+                let mut scope = &mut self.template_scopes[scope_to_use as usize];
+                Self::collect_variables(directive_value, &mut scope);
+            },
+
+            _ => {}
+        }
+    }
+
+    fn collect_variables(input: &str, scope: &mut Scope) {
+        let lexer = Lexer::new(
+            // We want to parse ecmascript
+            Syntax::Es(Default::default()),
+            // EsVersion defaults to es5
+            Default::default(),
+            StringInput::new(input, BytePos(0), BytePos(1000)),
+            None,
+        );
+
+        let mut parser = Parser::new_from(lexer);
+
+        match parser.parse_expr() {
+            Ok(expr) => {
+                let mut visitor = IdentifierVisitor {
+                    collected: vec![]
+                };
+
+                expr.visit_with(&mut visitor);
+
+                scope.variables.reserve(visitor.collected.len());
+                for collected in visitor.collected {
+                    scope.variables.push(collected.sym)
+                }
+            },
+
+            _ => {}
+        }
+    }
+}
+
+struct IdentifierVisitor {
+    collected: Vec<swc_core::ecma::ast::Ident>
+}
+
+impl Visit for IdentifierVisitor {
+    fn visit_ident(&mut self, n: &swc_core::ecma::ast::Ident) {
+        self.collected.push(n.to_owned());
+    }
+
+    fn visit_object_lit(&mut self, n: &swc_core::ecma::ast::ObjectLit) {
+        self.collected.reserve(n.props.len());
+
+        for prop in n.props.iter() {
+            let swc_core::ecma::ast::PropOrSpread::Prop(prop) = prop else {
+                continue;
+            };
+
+            // This is shorthand `a` in `{ a }`
+            let shorthand = prop.as_shorthand();
+            if let Some(ident) = shorthand {
+                self.collected.push(ident.to_owned());
+                continue;
+            }
+
+            // This is key-value `a: b` in `{ a: b }`
+            let Some(keyvalue) = prop.as_key_value() else { continue };
+
+            // We only support renaming things (therefore value must be an identifier)
+            let Some(value) = keyvalue.value.as_ident() else { continue };
+            self.collected.push(value.to_owned());
+        }
+    }
 }
 
 #[test]
 fn feature() {
     let root_scope = Scope {
         parent: 0,
-        variables: vec!["root"],
+        variables: vec!["root".into()],
     };
 
     let child_scope = Scope {
         parent: 0,
-        variables: vec!["child1", "child2"],
+        variables: vec!["child1".into(), "child2".into()],
     };
 
     let grandchild1_scope = Scope {
         parent: 1,
-        variables: vec!["grand1_1", "grand1_2"],
+        variables: vec!["grand1_1".into(), "grand1_2".into()],
     };
 
     let grandchild2_scope = Scope {
         parent: 1,
-        variables: vec!["grand2_1", "grand2_2"],
+        variables: vec!["grand2_1".into(), "grand2_2".into()],
     };
 
     let mut scope_helper = ScopeHelper::default();
@@ -110,7 +283,7 @@ fn feature() {
 
     // Measure time to get an idea on performance
     // TODO move this to Criterion
-    let st = Instant::now();
+    let st = std::time::Instant::now();
 
     // All scopes have a root variable
     assert_eq!(scope_helper.find_scope_of_variable(0, "root"), VarScopeDescriptor::Template(0));

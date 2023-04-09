@@ -13,7 +13,7 @@ pub struct CodegenContext <'a> {
   pub components: HashMap<String, String>,
   pub directives: HashMap<String, String>,
   pub used_imports: u64,
-  pub scope_helper: ScopeHelper<'a>,
+  pub scope_helper: ScopeHelper,
   // hoists: Vec<String>,
   is_custom_element: IsCustomElementParam<'a>
 }

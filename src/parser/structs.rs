@@ -5,7 +5,7 @@ pub enum Node<'a> {
   ElementNode(ElementNode<'a>),
 
   TextNode(&'a str),
-  DynamicExpression { value: &'a str, template_scope: usize },
+  DynamicExpression { value: &'a str, template_scope: u32 },
   CommentNode(&'a str)
 }
 
@@ -13,7 +13,7 @@ pub enum Node<'a> {
 pub struct ElementNode<'a> {
   pub starting_tag: StartingTag<'a>,
   pub children: Vec<Node<'a>>,
-  pub template_scope: usize
+  pub template_scope: u32
 }
 
 #[derive(Debug, Clone)]
