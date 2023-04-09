@@ -7,10 +7,11 @@ impl <'a> CodegenContext <'a> {
   pub fn create_component_vnode(
     &mut self,
     buf: &mut String,
-    starting_tag: &StartingTag,
-    children: &[Node],
+    element_node: &ElementNode,
     wrap_in_block: bool
   ) {
+    let ElementNode { starting_tag, children, template_scope } = element_node;
+
     if wrap_in_block {
       self.generate_create_block(buf);
     } else {

@@ -9,10 +9,11 @@ impl <'a> CodegenContext <'a> {
   pub fn create_element_vnode(
     &mut self,
     buf: &mut String,
-    starting_tag: &StartingTag,
-    children: &[Node],
+    element_node: &ElementNode,
     wrap_in_block: bool // for doing (openBlock(), createElementBlock(...))
   ) {
+    let ElementNode { starting_tag, children, template_scope } = element_node;
+
     // Todo also add same logic to components
     let had_v_for = self.generate_vfor_prefix(buf, starting_tag);
 

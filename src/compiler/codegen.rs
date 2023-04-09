@@ -225,11 +225,11 @@ impl <'a> CodegenContext <'a> {
   pub fn compile_node(&mut self, buf: &mut String, node: &Node, wrap_in_block: bool) {
     // todo add the code for `openBlock`, `createElementBlock` and Fragments when needed
     match node {
-      Node::ElementNode(ElementNode { starting_tag, children, .. }) => {
-        if self.is_component(starting_tag) {
-          self.create_component_vnode(buf, starting_tag, children, wrap_in_block);
+      Node::ElementNode(element_node) => {
+        if self.is_component(&element_node.starting_tag) {
+          self.create_component_vnode(buf, element_node, wrap_in_block);
         } else {
-          self.create_element_vnode(buf, starting_tag, children, wrap_in_block);
+          self.create_element_vnode(buf, element_node, wrap_in_block);
         }
       },
 
