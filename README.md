@@ -7,10 +7,10 @@
 Vue SFC compiler written in Rust.
 Currently in early development, and the closest goal is to reach feature-parity with the current [Vue SFC compiler](https://sfc.vuejs.org).
 
-## Progress till MVP ![](https://geps.dev/progress/30)
+## Progress till MVP ![](https://geps.dev/progress/36)
 A minimal target of this project includes:
 - Vue 3 code generation;
-- ![unplugin](https://github.com/unjs/unplugin) integration;
+- [unplugin](https://github.com/unjs/unplugin) integration;
 - Dev/prod mode support;
 - `<script setup>` support;
 - Example Vue project with configuration;
@@ -37,7 +37,7 @@ Parser
 - [ ] W3 Spec compliance
 
 Analyzer
-- [ ] Template scope construction
+- [x] Template scope construction
 - [ ] Error reporting
 - [ ] JS/TS imports analysis (powered by swc_ecma_parser)
 - [ ] `setup`/`data`/`props` analysis
@@ -55,7 +55,7 @@ Code generator
     - [x] `createVNode`
     - [x] Slots
   - [ ] Context-awareness (`_ctx`, `$data`, `$setup`)
-  - [ ] Directives
+  - [x] Directives
     - [x] v-on
     - [x] v-bind
     - [x] v-if / v-else-if / v-else
