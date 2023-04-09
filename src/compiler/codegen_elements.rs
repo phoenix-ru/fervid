@@ -245,13 +245,14 @@ impl <'a> CodegenContext <'a> {
           let escaped_text = v.replace('"', "\\\"");
           let has_start_whitespace = escaped_text.starts_with(char::is_whitespace);
           let has_end_whitespace = escaped_text.ends_with(char::is_whitespace);
+          let trimmed_text = escaped_text.trim();
 
           buf.push('"');
           if has_start_whitespace {
             buf.push(' ');
           }
-          buf.push_str(escaped_text.trim());
-          if has_end_whitespace {
+          buf.push_str(trimmed_text);
+          if has_end_whitespace && trimmed_text.len() > 0 {
             buf.push(' ');
           }
           buf.push('"');
