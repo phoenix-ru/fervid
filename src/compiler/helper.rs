@@ -131,6 +131,46 @@ impl <'a> CodeHelper <'a> {
     self.obj_close_paren(buf, is_multiline);
   }
 
+  /// Generates a Js object from an iterator of (key, object).
+  /// The resulting object will not be spread across multiple lines and will be without whitespace.
+  ///
+  /// ## Example
+  /// Calling this function with `[("foo", "true"), ("1bar", "false")].iter()` would generate
+  /// `{foo:true,"1bar":false}`.
+  /// 
+  /// ## Example
+  /// Using `should_quote_values` will quote all the values. ``[("foo", "true")].iter()` would be turned to
+  /// `{foo:"true"}`
+  pub fn obj_from_entries_iter_inline<'c>(
+    buf: &mut String,
+    iter: impl Iterator<Item = (&'c str, &'c str)>,
+    should_quote_values: bool
+  ) {
+    buf.push('{');
+
+    for (index, (key, value)) in iter.enumerate() {
+      if index > 0 {
+        buf.push(',');
+      }
+
+      if CodeHelper::needs_escape(key) {
+        CodeHelper::quoted(buf, key);
+      } else {
+        buf.push_str(key);
+      }
+
+      buf.push(':');
+
+      if should_quote_values && !value.starts_with('"') && !value.ends_with('"') {
+        CodeHelper::quoted(buf, value);
+      } else {
+        buf.push_str(value);
+      }
+    }
+
+    buf.push('}');
+  }
+
   /// Opens the Js object paren `{`.\
   /// Will indent and start a new line if `is_multiline` set to `true`
   pub fn obj_open_paren(&mut self, buf: &mut String, is_multiline: bool) {

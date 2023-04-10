@@ -112,40 +112,118 @@ impl CodegenContext <'_> {
       }
     }
 
+    // Generate the attribute key if we have a `class` attr.
+    if class_regular.is_some() || class_bind.is_some() {
+      if has_first_element {
+        self.code_helper.comma_newline(buf);
+      }
+
+      buf.push_str("class: ");
+
+      has_first_element = true;
+    }
+
     // Process `class` attribute. We may have a regular one, a bound one, both or neither.
     match (class_regular, class_bind) {
+      // Both regular `class` and bound `:class`
       (Some(regular_value), Some(bound_value)) => {
-        if has_first_element {
-          self.code_helper.comma_newline(buf);
-        }
-
-        buf.push_str("class: ");
         buf.push_str(self.get_and_add_import_str(VueImports::NormalizeClass));
         CodeHelper::open_paren(buf);
         CodeHelper::open_sq_bracket(buf);
 
         // First, include the content of a regular class
         CodeHelper::quoted(buf, regular_value);
-        CodeHelper::comma(buf);
 
-        let generated_class_binding = transform_scoped(
+        transform_scoped(
           bound_value,
           &self.scope_helper,
           template_scope_id
-        ).unwrap_or_default();
-
-        buf.push_str(&generated_class_binding);
+        ).map(|transformed| {
+          CodeHelper::comma(buf);
+          buf.push_str(&transformed);
+        });
 
         CodeHelper::close_sq_bracket(buf);
         CodeHelper::close_paren(buf);
       },
 
+      // Just regular `class`
       (Some(regular_value), None) => {
-        
+        CodeHelper::quoted(buf, regular_value);
       },
 
+      // Just bound `:class`
       (None, Some(bound_value)) => {
+        buf.push_str(self.get_and_add_import_str(VueImports::NormalizeClass));
+        CodeHelper::open_paren(buf);
 
+        transform_scoped(
+          bound_value,
+          &self.scope_helper,
+        template_scope_id
+        ).map(|transformed| {
+          buf.push_str(&transformed);
+        });
+
+        CodeHelper::close_paren(buf);
+      },
+
+      // Neither
+      (None, None) => {}
+    }
+
+    // Generate the `style` the same way as `class`
+    if style_regular.is_some() || style_bind.is_some() {
+      if has_first_element {
+        self.code_helper.comma_newline(buf);
+      }
+
+      buf.push_str("style: ");
+    }
+
+    match (style_regular, style_bind) {
+      // Both `style` and `:style`
+      (Some(regular_value), Some(bound_value)) => {
+        buf.push_str(self.get_and_add_import_str(VueImports::NormalizeStyle));
+        CodeHelper::open_paren(buf);
+        CodeHelper::open_sq_bracket(buf);
+
+        // Regular style first
+        generate_regular_style(buf, regular_value);
+
+        // Then bound
+        transform_scoped(
+          bound_value,
+          &self.scope_helper,
+          template_scope_id
+        ).map(|it| {
+          CodeHelper::comma(buf);
+          buf.push_str(&it)
+        });
+
+        CodeHelper::close_paren(buf);
+        CodeHelper::close_sq_bracket(buf);
+      },
+
+      // `style`
+      (Some(regular_value), None) => {
+        generate_regular_style(buf, regular_value);
+      },
+
+      // `:style`
+      (None, Some(bound_value)) => {
+        buf.push_str(self.get_and_add_import_str(VueImports::NormalizeStyle));
+        CodeHelper::open_paren(buf);
+
+        transform_scoped(
+          bound_value,
+          &self.scope_helper,
+          template_scope_id
+        ).map(|it| {
+          buf.push_str(&it)
+        });
+
+        CodeHelper::close_paren(buf);
       },
 
       (None, None) => {}
@@ -177,6 +255,19 @@ pub fn has_attributes_work(attributes: &Vec<HtmlAttribute>) -> bool {
       HtmlAttribute::VDirective (VDirective { name: "on" | "bind", .. }) => true,
       _ => false
     })
+}
+
+fn generate_regular_style(buf: &mut String, style: &str) {
+  let matches = CSS_RE
+    .captures_iter(style)
+    .filter_map(|mat| {
+      let Some(style_name) = mat.get(1).map(|v| v.as_str().trim()) else { return None; };
+      let Some(style_value) = mat.get(2).map(|v| v.as_str().trim()) else { return None; };
+
+      Some((style_name, style_value))
+    });
+
+  CodeHelper::obj_from_entries_iter_inline(buf, matches, true);
 }
 
 fn generate_v_bind_attr(buf: &mut String, argument: &str, value: Option<&str>) {
