@@ -7,7 +7,7 @@ use super::imports::VueImports;
 use super::transform::swc::transform_scoped;
 
 lazy_static! {
-  static ref CSS_RE: Regex = Regex::new(r"(?U)((?:[a-zA-Z_]|--)[a-zA-Z_0-9-]*):\s*(.+)(?:;|;$|$)").unwrap();
+  static ref CSS_RE: Regex = Regex::new(r"(?U)([a-zA-Z_-][a-zA-Z_0-9-]*):\s*(.+)(?:;|$)").unwrap();
 }
 
 impl CodegenContext <'_> {
