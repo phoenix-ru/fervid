@@ -1,3 +1,4 @@
+use crate::parser::attributes::{HtmlAttribute, VDirective};
 use crate::parser::structs::{Node, ElementNode};
 
 use super::codegen::CodegenContext;
@@ -33,8 +34,25 @@ impl <'a> CodegenContext <'a> {
       CodeHelper::open_paren(buf);
     }
 
-    // Tag name
-    CodeHelper::quoted(buf, starting_tag.tag_name);
+    // There is a special case here: `<template>` with `v-if`/`v-else-if`/`v-else`/`v-for`
+    let should_generate_fragment_instead = starting_tag.tag_name == "template" && {
+      had_v_for ||
+      starting_tag
+        .attributes
+        .iter()
+        .any(|attr| match attr {
+          HtmlAttribute::VDirective(VDirective { name: "if" | "else-if" | "else", .. }) => true,
+          _ => false
+        })
+    };
+
+    // Tag name.
+    // For a special case with `template`, it would just be `Fragment`, otherwise a quoted name.
+    if should_generate_fragment_instead {
+      buf.push_str(self.get_and_add_import_str(VueImports::Fragment));
+    } else {
+      CodeHelper::quoted(buf, starting_tag.tag_name);
+    }
 
     // Attributes
     CodeHelper::comma(buf);
@@ -48,9 +66,10 @@ impl <'a> CodegenContext <'a> {
       buf.push_str("null");
     }
 
-    // Children
+    // Children. Inlining is forbidden if we changed from `<template>` to `Fragment`
     CodeHelper::comma(buf);
-    let has_generated_children = self.generate_element_children(buf, children, true);
+    let allow_inlining = !should_generate_fragment_instead;
+    let has_generated_children = self.generate_element_children(buf, children, allow_inlining);
     if !has_generated_children {
       buf.push_str("null");
     }
