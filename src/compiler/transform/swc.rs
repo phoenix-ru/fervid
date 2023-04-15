@@ -68,6 +68,14 @@ impl <'s> VisitMut for TransformVisitor <'s> {
         }
     }
 
+    fn visit_mut_member_expr(&mut self, n: &mut swc_core::ecma::ast::MemberExpr) {
+        if let Some(old_ident) = n.obj.as_mut_ident() {
+            old_ident.visit_mut_with(self);
+        } else {
+            n.visit_mut_children_with(self);
+        }
+    }
+
     fn visit_mut_object_lit(&mut self, n: &mut swc_core::ecma::ast::ObjectLit) {
         for prop in n.props.iter_mut() {
             match prop {
