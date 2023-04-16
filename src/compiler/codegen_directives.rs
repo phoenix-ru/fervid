@@ -111,8 +111,13 @@ impl<'a> CodegenContext<'a> {
 
     let resolve_fn_str = self.get_and_add_import_str(VueImports::ResolveDirective);
 
+    // We need sorted entries for stable output.
+    // Entries are sorted by Js identifier (second element of tuple in hashmap entry)
+    let mut sorted_directives: Vec<(&String, &String)> = self.directives.iter().collect();
+    sorted_directives.sort_by(|a, b| a.1.cmp(b.1));
+
     // Key is a component as used in template, value is the assigned Js identifier
-    for (index, (directive_name, identifier)) in self.directives.iter().enumerate() {
+    for (index, (directive_name, identifier)) in sorted_directives.iter().enumerate() {
       if index > 0 {
         self.code_helper.newline(buf);
       }

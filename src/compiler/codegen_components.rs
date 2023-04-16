@@ -135,15 +135,20 @@ impl <'a> CodegenContext <'a> {
     early_exit!();
   }
 
-  pub fn generate_components_string(self: &mut Self, buf: &mut String) {
+  pub fn generate_components_string(&mut self, buf: &mut String) {
     if self.components.len() == 0 {
       return;
     }
 
     let resolve_fn_str = self.get_and_add_import_str(VueImports::ResolveComponent);
 
+    // We need sorted entries for stable output.
+    // Entries are sorted by Js identifier (second element of tuple in hashmap entry)
+    let mut sorted_components: Vec<(&String, &String)> = self.components.iter().collect();
+    sorted_components.sort_by(|a, b| a.1.cmp(b.1));
+
     // Key is a component as used in template, value is the assigned Js identifier
-    for (index, (component_name, identifier)) in self.components.iter().enumerate() {
+    for (index, (component_name, identifier)) in sorted_components.iter().enumerate() {
       if index > 0 {
         self.code_helper.newline(buf);
       }
@@ -157,7 +162,7 @@ impl <'a> CodegenContext <'a> {
   /// First, it checks if we already have the component registered in the HashMap.
   /// If so, it will write the &str to buf and exit.
   /// Otherwise, it allocates a new String, writes to buf and moves ownership to HashMap.
-  fn add_to_components_and_write(self: &mut Self, buf: &mut String, tag_name: &str) {
+  fn add_to_components_and_write(&mut self, buf: &mut String, tag_name: &str) {
     /* Check component existence and early exit */
     let existing_component_name = self.components.get(tag_name);
     if let Some(component_name) = existing_component_name {
