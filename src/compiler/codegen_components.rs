@@ -1,5 +1,5 @@
 use std::fmt::Write;
-use crate::parser::{attributes::{HtmlAttribute, VDirective}, structs::{StartingTag, Node, ElementNode}};
+use crate::{parser::{attributes::{HtmlAttribute, VDirective}, structs::{StartingTag, Node, ElementNode}}, compiler::directives::needs_directive_wrapper};
 
 use super::{codegen::CodegenContext, imports::VueImports, codegen_attributes, helper::CodeHelper};
 
@@ -12,7 +12,19 @@ impl <'a> CodegenContext <'a> {
   ) {
     let ElementNode { starting_tag, children, template_scope } = element_node;
 
-    if wrap_in_block {
+    // First goes the v-for prefix: the component needs to be surrounded in a new block
+    let had_v_for = self.generate_vfor_prefix(buf, starting_tag);
+
+    // Special generation: `_withDirectives` prefix
+    let needs_directive = needs_directive_wrapper(starting_tag, true);
+    if needs_directive {
+      buf.push_str(self.get_and_add_import_str(VueImports::WithDirectives));
+      CodeHelper::open_paren(buf);
+    }
+
+    // Special generation: (openBlock(), createBlock(
+    let should_wrap_in_block = wrap_in_block || had_v_for;
+    if should_wrap_in_block {
       self.generate_create_block(buf);
     } else {
       buf.push_str(self.get_and_add_import_str(VueImports::CreateVNode));
@@ -53,6 +65,19 @@ impl <'a> CodegenContext <'a> {
           CodeHelper::close_paren(buf);
         }
         CodeHelper::close_paren(buf);
+
+        // Generate directives array if needed
+        if needs_directive {
+          CodeHelper::comma(buf);
+          self.generate_directives(buf, starting_tag, true);
+          CodeHelper::close_paren(buf);
+        }
+
+        // Close v-for if it was there
+        if had_v_for {
+          self.generate_vfor_suffix(buf, starting_tag);
+        }
+
         return
       };
     }
