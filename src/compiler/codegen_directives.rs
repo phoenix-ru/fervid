@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use crate::parser::{structs::StartingTag, attributes::{HtmlAttribute, VDirective}};
 
-use super::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports};
+use super::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports, directives::supports_with_directive};
 
 impl<'a> CodegenContext<'a> {
   pub fn generate_directives(&mut self, buf: &mut String, starting_tag: &StartingTag, is_component: bool) {
@@ -104,24 +104,6 @@ impl<'a> CodegenContext<'a> {
     CodeHelper::close_sq_bracket(buf);
   }
 
-  /// Function for determining whether a given element/component
-  /// needs to be wrapped in `_withDirectives(<node code>, <directives code>)`
-  /// Typically, it depends on `is_component` flag:
-  /// 1. `is_component = true` and has any directive except for 'on', 'bind', 'slot' and 'model';
-  /// 2. `is_component = false` and has any directive except for 'on', 'bind' and 'slot'.
-
-  pub fn needs_directive_wrapper(starting_tag: &StartingTag, is_component: bool) -> bool {
-    starting_tag.attributes.iter().any(|attr| {
-      match attr {
-        HtmlAttribute::VDirective (VDirective { name, .. }) => {
-          supports_with_directive(*name, is_component)
-        },
-
-        _ => false
-      }
-    })
-  }
-
   pub fn generate_directive_resolves(&mut self, buf: &mut String) {
     if self.directives.len() == 0 {
       return;
@@ -191,16 +173,5 @@ impl<'a> CodegenContext<'a> {
 
       _ => unreachable!("Adding v-model on native elements is only supported for <input>, <select> and <textarea>")
     }
-  }
-}
-
-/// Checks if `withDirective` can be generated for a given directive name
-/// "bind", "on" and "slot" are generated separately
-/// "model" for `is_component` also has a separate logic
-fn supports_with_directive(directive_name: &str, is_component: bool) -> bool {
-  match directive_name {
-    "bind" | "on" | "slot" | "if" | "else-if" | "else" | "for" => false,
-    "model" if is_component => false,
-    _ => true
   }
 }

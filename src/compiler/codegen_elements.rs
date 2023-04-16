@@ -3,6 +3,7 @@ use crate::parser::structs::{Node, ElementNode};
 
 use super::codegen::CodegenContext;
 use super::directives::conditional::filter_nodes_with_conditional_directives;
+use super::directives::needs_directive_wrapper;
 use super::helper::CodeHelper;
 use super::imports::VueImports;
 
@@ -15,11 +16,11 @@ impl <'a> CodegenContext <'a> {
   ) {
     let ElementNode { starting_tag, children, template_scope } = element_node;
 
-    // Todo also add same logic to components
+    // First goes the v-for prefix: the element needs to be surrounded in a new block
     let had_v_for = self.generate_vfor_prefix(buf, starting_tag);
 
     // Special generation: `_withDirectives` prefix
-    let needs_directive = Self::needs_directive_wrapper(starting_tag, false);
+    let needs_directive = needs_directive_wrapper(starting_tag, false);
     if needs_directive {
       buf.push_str(self.get_and_add_import_str(VueImports::WithDirectives));
       CodeHelper::open_paren(buf);

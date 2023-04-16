@@ -1,7 +1,7 @@
 use crate::{compiler::{codegen::CodegenContext, imports::VueImports, helper::CodeHelper}, parser::{structs::StartingTag, attributes::{HtmlAttribute, VDirective}}};
 
 impl CodegenContext<'_> {
-  /// Generates `(openBlock(true), createElementBlock(Fragment, null, renderList(<list>, (<item>) => { return
+  /// Generates `(openBlock(true), createElementBlock(Fragment, null, renderList(<list>, (<item>) => { return`
   pub fn generate_vfor_prefix(
     &mut self,
     buf: &mut String,
