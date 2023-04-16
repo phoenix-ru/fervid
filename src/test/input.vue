@@ -18,8 +18,8 @@
 
     yet another text
 
-    <template v-slot:test-slot="{ value }">
-      test {{ value }}
+    <template v-slot:test-slot="{ value, another: renamed }">
+      test {{ value }} {{ renamed }}
     </template>
 
     <template #custom-slot="{ prop }">
@@ -37,11 +37,32 @@
 
     <span v-for="i in list" :key="i">hey</span>
     <br v-show="false">
+    <another-element v-for="i in 3" :key="i" />
 
-    <template v-for="i in list">
+    <template v-for="([item1, item2], index) in list">
       hey
-      <span :key="i">{{ i }}</span>
+      <span :key="index">{{ item1 }}{{ index }}</span>
+      <div  :key="index" class="both regular and bound" :class="[item2, index]" />
+      <div  :key="index" class="just regular class" />
+      <div  :key="index" :class="[member.expr, globalIdent, item2, index]" />
     </template>
+
+    <template v-if="false">
+      this is a v-if template
+    </template>
+
+    <template v-else-if="true">
+    	another v-else-if template
+    </template>
+
+    <template v-else>
+    	else template
+    </template>
+
+    <div
+      style="background-color:red;color:#000;content: ''; grid-template-column: repeat(1fr, min(auto-fit, 100px))"
+      :style="{ backgroundColor: v ? 'yellow' : undefined }"
+    />
   </abc-def>
 </template>
 

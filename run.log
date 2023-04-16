@@ -13,14 +13,15 @@ const __sfc__ = defineComponent({
   },
 })
 
-import { createBlock as _createBlock, createCommentVNode as _createCommentVNode, createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createTextVNode as _createTextVNode, createVNode as _createVNode, Fragment as _Fragment, openBlock as _openBlock, renderList as _renderList, resolveComponent as _resolveComponent, resolveDirective as _resolveDirective, toDisplayString as _toDisplayString, vModelText as _vModelText, vShow as _vShow, withCtx as _withCtx, withDirectives as _withDirectives, withModifiers as _withModifiers } from "vue"
+import { createBlock as _createBlock, createCommentVNode as _createCommentVNode, createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createTextVNode as _createTextVNode, createVNode as _createVNode, Fragment as _Fragment, normalizeClass as _normalizeClass, normalizeStyle as _normalizeStyle, openBlock as _openBlock, renderList as _renderList, resolveComponent as _resolveComponent, resolveDirective as _resolveDirective, toDisplayString as _toDisplayString, vModelText as _vModelText, vShow as _vShow, withCtx as _withCtx, withDirectives as _withDirectives, withModifiers as _withModifiers } from "vue"
 
 function render(_ctx, _cache, $props, $setup, $data, $options) {
   const _component_abc_def = _resolveComponent("abc-def")
   const _component_another_element = _resolveComponent("another-element")
   const _directive_directive = _resolveDirective("directive")
+  const _directive_test_directive = _resolveDirective("test-directive")
 
-  return (_openBlock(), _createBlock(_component_abc_def, {
+  return _withDirectives((_openBlock(), _createBlock(_component_abc_def, {
     modelValue: _ctx.modelValue,
     "onUpdate:modelValue": $event => ((_ctx.modelValue) = $event),
     modelModifiers: {lazy: true},
@@ -29,19 +30,19 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
     "another-model-valueModifiers": {trim: true},
     "test-bound": bar + baz,
     disabled: "disabled",
-    class: "",
     onClick: _withModifiers(() => {}, ["prevent"]),
-    onHello: world
+    onHello: world,
+    class: ""
   }, {
-    "test-slot": _withCtx(({ value }) => [_createTextVNode(" test " + _toDisplayString(value), 1 /* TEXT */)]),
+    "test-slot": _withCtx(({ value, another: renamed }) => [_createTextVNode(" test " + _toDisplayString(value) + " " + _toDisplayString(renamed), 1 /* TEXT */)]),
     "custom-slot": _withCtx(({ prop }) => [
       _createElementVNode("span", {
         class: "span-class"
       }, " Span text ", -1 /* HOISTED */),
-      _createTextVNode("  " + _toDisplayString(prop), 1 /* TEXT */)
+      _createTextVNode(" " + _toDisplayString(prop), 1 /* TEXT */)
     ]),
     default: _withCtx(() => [
-      _createTextVNode(" The text of the node " + _toDisplayString(dynamicValue) + "  ", 1 /* TEXT */),
+      _createTextVNode(" The text of the node " + _toDisplayString(dynamicValue) + " ", 1 /* TEXT */),
       _createCommentVNode(" Comment "),
       _createVNode(_component_another_element),
       _createTextVNode(" yet another text ", 1 /* TEXT */),
@@ -71,20 +72,55 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
       _withDirectives(_createElementVNode("br", null, null, -1 /* HOISTED */), [
         [_vShow, _ctx.false]
       ]),
-      (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(list, (i) => (
-        (_openBlock(), _createElementBlock("template", null, [
+      (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(3, (i) => (
+        (_openBlock(), _createBlock(_component_another_element, {
+          key: i
+        })
+      )), 128 /* KEYED_FRAGMENT */)),
+      (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(list, ([item1, item2], index) => (
+        (_openBlock(), _createElementBlock(_Fragment, null, [
           _createTextVNode(" hey ", 1 /* TEXT */),
           _createElementVNode("span", {
-            key: i
-          }, _toDisplayString(i), -1 /* HOISTED */)
+            key: index
+          }, _toDisplayString(item1) + _toDisplayString(index), -1 /* HOISTED */),
+          _createElementVNode("div", {
+            key: index,
+            class: _normalizeClass(["both regular and bound", [item2,index]])
+          }, null, -1 /* HOISTED */),
+          _createElementVNode("div", {
+            key: index,
+            class: "just regular class"
+          }, null, -1 /* HOISTED */),
+          _createElementVNode("div", {
+            key: index,
+            class: _normalizeClass([_ctx.member.expr,_ctx.globalIdent,item2,index])
+          }, null, -1 /* HOISTED */)
         ], -1 /* HOISTED */))
-      )), 256 /* UNKEYED_FRAGMENT */))
+      )), 256 /* UNKEYED_FRAGMENT */)),
+      false
+        ? (_openBlock(), _createElementBlock(_Fragment, null, [_createTextVNode(" this is a v-if template ", 1 /* TEXT */)], -1 /* HOISTED */))
+        : true
+          ? (_openBlock(), _createElementBlock(_Fragment, null, [_createTextVNode(" another v-else-if template ", 1 /* TEXT */)], -1 /* HOISTED */))
+          : (_openBlock(), _createElementBlock(_Fragment, null, [_createTextVNode(" else template ", 1 /* TEXT */)], -1 /* HOISTED */)),
+      _createElementVNode("div", {
+        style: _normalizeStyle([{"background-color":"red",color:"#000",content:"''","grid-template-column":"repeat(1fr, min(auto-fit, 100px))"}, {backgroundColor:_ctx.v?"yellow":undefined})]
+      }, null, -1 /* HOISTED */)
     ])
-  }))
+  })), [
+    [
+      _directive_test_directive,
+      _ctx.foo - bar,
+      "test-argument",
+      {
+        foo: true,
+        bar: true
+      }
+    ]
+  ])
 }
 __sfc__.render = render
 export default __sfc__
-Time took: 152.718µs
+Time took: 450.201µs
 
 [Synthetic Compile Result]
 
@@ -109,4 +145,7 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
 }
 __sfc__.render = render
 export default __sfc__
-Time took: 35.948µs
+Time took: 32.896µs
+
+SWC result: [_ctx.a,_ctx.b,_ctx.c,{d:_ctx.d}]
+Time took for transform: 74.801µs
