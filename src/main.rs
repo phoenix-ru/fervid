@@ -22,9 +22,11 @@ fn main() {
     test_synthetic_compilation();
     println!("Time took: {:?}", n.elapsed());
 
+    println!();
+
     let n = Instant::now();
-    let swc_result = fervid::test_swc_transform("(item, index, false)");
-    println!("SWC result: {}", std::str::from_utf8(&swc_result.unwrap()).unwrap().trim().trim_end_matches(";"));
+    let swc_result = fervid::test_swc_transform("[a, b, c, { d }]");
+    println!("SWC result: {}", swc_result.unwrap().trim().trim_end_matches(";"));
     println!("Time took for transform: {:?}", n.elapsed());
 
     // println!("", swc_ecma_parser::parse_file_as_expr(fm, syntax, target, comments, recovered_errors));

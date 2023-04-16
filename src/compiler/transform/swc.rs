@@ -17,6 +17,9 @@ pub fn transform_scoped(expr: &str, scope_helper: &ScopeHelper, scope_to_use: u3
 
     let mut parser = Parser::new_from(lexer);
 
+    // TODO The use of `parse_expr` vs `parse_stmt` matters
+    // For v-for it may be best to use `parse_stmt`, but for `v-slot` you need to use `parse_expr`
+
     let Ok(mut parsed) = parser.parse_expr() else { return None };
 
     // Create and invoke the visitor
