@@ -1,5 +1,6 @@
 use lazy_static::lazy_static;
 use regex::Regex;
+use crate::analyzer::scope::ScopeHelper;
 use crate::parser::attributes::{HtmlAttribute, VDirective};
 use super::codegen::CodegenContext;
 use super::helper::CodeHelper;
@@ -96,7 +97,7 @@ impl CodegenContext <'_> {
 
           /* v-on directive, shortcut `@`, e.g. `@custom-event.modifier="value"` */
           if *name == "on" {
-            generate_v_on_attr(buf, argument, modifiers, *value);
+            generate_v_on_attr(buf, argument, modifiers, *value, &self.scope_helper, template_scope_id);
 
             has_used_modifiers_import |= modifiers.len() > 0;
             has_first_element = true
@@ -104,7 +105,7 @@ impl CodegenContext <'_> {
 
           /* v-bind directive, shortcut `:`, e.g. `:custom-prop="value"` */
           else if *name == "bind" {
-            generate_v_bind_attr(buf, argument, *value);
+            generate_v_bind_attr(buf, argument, *value, &self.scope_helper, template_scope_id);
 
             has_first_element = true
           }
@@ -270,27 +271,42 @@ fn generate_regular_style(buf: &mut String, style: &str) {
   CodeHelper::obj_from_entries_iter_inline(buf, matches, true);
 }
 
-fn generate_v_bind_attr(buf: &mut String, argument: &str, value: Option<&str>) {
+fn generate_v_bind_attr(
+  buf: &mut String,
+  argument: &str,
+  value: Option<&str>,
+  scope_helper: &ScopeHelper,
+  scope_to_use: u32
+) {
   // todo what to do when you have the same regular attribute??
   // I don't want to do O(n^2) search for every attribute, but I also don't want to allocate any extra memory for a vec/set
   // maybe the analysis lib should report such issues??
   // current js SFC compiler just discards the second appearance of the same attribute name (except for class)
 
-  /* Do not generate empty values */
+  // Do not generate empty values
   let Some(value_expression) = value else {
     // At this point js SFC compiler just panicks
     return
   };
 
-  /* For obvious reasons, attributes containing a dash need to be escaped */
+  // For obvious reasons, attributes containing a dash need to be escaped
   let needs_quotes = argument.contains('-');
 
-  /* "attr-name": attr_expression */
-  if needs_quotes { buf.push('"'); }
-  buf.push_str(argument);
-  if needs_quotes { buf.push('"'); }
+  /* `"attr-name": ` */
+  if needs_quotes {
+    CodeHelper::quoted(buf, argument)
+  } else {
+    buf.push_str(argument)
+  }
   buf.push_str(": ");
-  buf.push_str(value_expression); // todo use analysis and add _ctx
+
+  // Transformed attr_expression
+  // TODO Handle SWC failure
+  let transform_result = transform_scoped(value_expression, scope_helper, scope_to_use);
+  match transform_result {
+    Some(transformed) => buf.push_str(&transformed),
+    None => buf.push_str(r#""""#)
+  }
 }
 
 /// Generates the code for a v-on listener
@@ -298,7 +314,14 @@ fn generate_v_bind_attr(buf: &mut String, argument: &str, value: Option<&str>) {
 /// - argument is the name of the event to listen to (e.g. `click` in `@click`)
 /// - modifiers are event modifiers (e.g. `stop`, `prevent` in `@click.stop.prevent`)
 /// - value is the value of the listener, typically an expression (e.g. `doSmth` in `@click="doSmth"`)
-fn generate_v_on_attr(buf: &mut String, argument: &str, modifiers: &Vec<&str>, value: Option<&str>) {
+fn generate_v_on_attr(
+  buf: &mut String,
+  argument: &str,
+  modifiers: &Vec<&str>,
+  value: Option<&str>,
+  scope_helper: &ScopeHelper,
+  scope_to_use: u32
+) {
   /* Transform name of event to camelCase, e.g. `onCustomEventName` */
   buf.push_str("on");
   for word in argument.split('-') {
@@ -322,14 +345,16 @@ fn generate_v_on_attr(buf: &mut String, argument: &str, modifiers: &Vec<&str>, v
     buf.push('(');
   }
 
-  /* Value may be absent, e.g. `@click.stop` */
-  if let Some(v) = value {
-    // todo use _ctx
-    buf.push_str(v)
-  } else {
-    // todo use _cache
-    buf.push_str("() => {}")
-  }
+  // Try compiling the expression
+  // TODO Handle SWC failure
+  let transformed_expr = value
+    .and_then(|expr| transform_scoped(expr, scope_helper, scope_to_use));
+
+  // Value may be absent, e.g. `@click.stop`
+  buf.push_str(match transformed_expr {
+    Some(ref v) => v,
+    None => "() => {}" // todo use _cache
+  });
 
   /* Modifiers present: add them in a Js array of strings */
   if modifiers.len() > 0 {

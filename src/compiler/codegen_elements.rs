@@ -6,6 +6,7 @@ use super::directives::conditional::filter_nodes_with_conditional_directives;
 use super::directives::needs_directive_wrapper;
 use super::helper::CodeHelper;
 use super::imports::VueImports;
+use super::transform::swc::transform_scoped;
 
 impl <'a> CodegenContext <'a> {
   pub fn create_element_vnode(
@@ -70,7 +71,12 @@ impl <'a> CodegenContext <'a> {
     // Children. Inlining is forbidden if we changed from `<template>` to `Fragment`
     CodeHelper::comma(buf);
     let allow_inlining = !should_generate_fragment_instead;
-    let has_generated_children = self.generate_element_children(buf, children, allow_inlining);
+    let has_generated_children = self.generate_element_children(
+      buf,
+      children,
+      allow_inlining,
+      *template_scope
+    );
     if !has_generated_children {
       buf.push_str("null");
     }
@@ -101,7 +107,13 @@ impl <'a> CodegenContext <'a> {
     }
   }
 
-  pub fn generate_element_children(self: &mut Self, buf: &mut String, children: &[Node], allow_inlining: bool) -> bool {
+  pub fn generate_element_children(
+    &mut self,
+    buf: &mut String,
+    children: &[Node],
+    allow_inlining: bool,
+    scope_to_use: u32
+  ) -> bool {
     // Do no work if children vec is empty
     if children.len() == 0 {
       return false;
@@ -213,7 +225,12 @@ impl <'a> CodegenContext <'a> {
         if *start == index {
           let text_nodes = &children[*start..=*end];
 
-          self.create_text_concatenation_from_nodes(buf, text_nodes, !should_inline);
+          self.create_text_concatenation_from_nodes(
+            buf,
+            text_nodes,
+            !should_inline,
+            scope_to_use
+          );
 
           /* Advance iterators forward */
           text_node_ranges_current = text_node_ranges_iter.next();
@@ -246,7 +263,15 @@ impl <'a> CodegenContext <'a> {
     true
   }
 
-  fn create_text_concatenation_from_nodes(&mut self, buf: &mut String, nodes: &[Node], surround_with_create_text_vnode: bool) -> bool {
+  /// Merges multiple consecutive Node::TextNode and Node::DynamicExpression
+  /// to a Js string concatenation
+  fn create_text_concatenation_from_nodes(
+    &mut self,
+    buf: &mut String,
+    nodes: &[Node],
+    surround_with_create_text_vnode: bool,
+    scope_to_use: u32
+  ) -> bool {
     /* Add function call if asked */
     if surround_with_create_text_vnode {
       buf.push_str(self.get_and_add_import_str(VueImports::CreateTextVNode));
@@ -291,11 +316,17 @@ impl <'a> CodegenContext <'a> {
          * Adds context to the variables from component scope
          */
         Node::DynamicExpression { value, .. } => {
-          // todo add ctx reference depending on analysis
           buf.push_str(self.get_and_add_import_str(VueImports::ToDisplayString));
-          buf.push('(');
-          buf.push_str(&value);
-          buf.push(')');
+          CodeHelper::open_paren(buf);
+
+          // TODO Handle possible SWC failure?
+          let transformed_expr = transform_scoped(&value, &self.scope_helper, scope_to_use);
+          buf.push_str(match transformed_expr {
+            Some(ref expr) => &expr,
+            None => "''"
+          });
+
+          CodeHelper::close_paren(buf);
 
           had_first_el = true;
         },

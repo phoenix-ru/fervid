@@ -121,7 +121,7 @@ impl <'a> CodegenContext <'a> {
     // Children (default to null)
     CodeHelper::comma(buf);
     if has_children_work {
-      self.generate_slots(buf, children);
+      self.generate_slots(buf, children, *template_scope);
     } else if needs_props_hint {
       CodeHelper::null(buf);
     }
@@ -195,7 +195,7 @@ impl <'a> CodegenContext <'a> {
 
   /// Double-pass slots code generation
   /// First pass generates named slots, while the second is for default slot
-  fn generate_slots(self: &mut Self, buf: &mut String, children: &[Node]) {
+  fn generate_slots(&mut self, buf: &mut String, children: &[Node], scope_to_use: u32) {
     // A child is not from default slot if it is a `<template>` element,
     // which has `v-slot` with attribute which name is other than `default`.
     // Example: regular elements, text, `<template>` and `<template v-slot>` are from the default slot.
@@ -239,47 +239,50 @@ impl <'a> CodegenContext <'a> {
         self.code_helper.comma_newline(buf);
       }
 
-      if let Node::ElementNode(ElementNode { starting_tag, children, .. }) = template {
-        // Find needed attribute and generate the header (slot name + ctx)
-        for attr in starting_tag.attributes.iter() {
-          if let HtmlAttribute::VDirective (VDirective { name, argument, value, is_dynamic_slot, .. }) = attr {
-            if *name != "slot" {
-              continue;
-            }
-
-            // For dynamic slots, generate a dynamic slot name `[_ctx.slotName]
-            // todo support Scope (what if the slot name comes from the template scope??)
-            if *is_dynamic_slot {
-              buf.push_str("[_ctx.");
-              buf.push_str(argument);
-              buf.push(']');
-            } else {
-              CodeHelper::quoted(buf, argument);
-            }
-
-            // Context. Generates `: _withCtx(() =>` or `: _withCtx((ctx) =>`
-            buf.push_str(": ");
-            buf.push_str(self.get_and_add_import_str(VueImports::WithCtx));
-            CodeHelper::open_paren(buf);
-            CodeHelper::parens_option(buf, *value);
-            buf.push_str(" => ");
-
-            break
-          }
-        }
-
-        // Children
-        let had_children_work = self.generate_element_children(buf, children, false);
-        if !had_children_work {
-          buf.push_str("[]");
-        }
-
-        // todo mode hint, e.g. `_: 2 /* Dynamic */`
-
-        CodeHelper::close_paren(buf)
-      } else {
+      let Node::ElementNode(ElementNode { starting_tag, children, template_scope }) = template else {
         unreachable!("This should be impossible")
+      };
+
+      // Find needed attribute and generate the header (slot name + ctx)
+      for attr in starting_tag.attributes.iter() {
+        let HtmlAttribute::VDirective (VDirective { name: "slot", argument, value, is_dynamic_slot, .. }) = attr else {
+          continue;
+        };
+
+        // For dynamic slots, generate a dynamic slot name `[_ctx.slotName]
+        // todo support Scope (what if the slot name comes from the template scope??)
+        if *is_dynamic_slot {
+          buf.push_str("[_ctx.");
+          buf.push_str(argument);
+          buf.push(']');
+        } else {
+          CodeHelper::quoted(buf, argument);
+        }
+
+        // Context. Generates `: _withCtx(() =>` or `: _withCtx((ctx) =>`
+        buf.push_str(": ");
+        buf.push_str(self.get_and_add_import_str(VueImports::WithCtx));
+        CodeHelper::open_paren(buf);
+        CodeHelper::parens_option(buf, *value);
+        buf.push_str(" => ");
+
+        break
       }
+
+      // Children
+      let had_children_work = self.generate_element_children(
+        buf,
+        children,
+        false,
+        *template_scope
+      );
+      if !had_children_work {
+        buf.push_str("[]");
+      }
+
+      // todo mode hint, e.g. `_: 2 /* Dynamic */`
+
+      CodeHelper::close_paren(buf);
 
       needs_slot_comma = true;
       // processed_named_slots += 1;
@@ -301,10 +304,14 @@ impl <'a> CodegenContext <'a> {
         self.code_helper.comma_newline(buf);
       }
 
-      // TODO support ctx
       // TODO withCtx import
       buf.push_str("default: _withCtx(() => ");
-      self.generate_element_children(buf, &default_slot_children, false);
+      self.generate_element_children(
+        buf,
+        &default_slot_children,
+        false,
+        scope_to_use
+      );
       CodeHelper::close_paren(buf);
     }
 

@@ -28,10 +28,10 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
     "another-model-value": _ctx.modelValue,
     "onUpdate:anotherModelValue": $event => ((_ctx.modelValue) = $event),
     "another-model-valueModifiers": {trim: true},
-    "test-bound": bar + baz,
+    "test-bound": _ctx.bar+_ctx.baz,
     disabled: "disabled",
     onClick: _withModifiers(() => {}, ["prevent"]),
-    onHello: world,
+    onHello: _ctx.world,
     class: ""
   }, {
     "test-slot": _withCtx(({ value, another: renamed }) => [_createTextVNode(" test " + _toDisplayString(value) + " " + _toDisplayString(renamed), 1 /* TEXT */)]),
@@ -42,7 +42,7 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
       _createTextVNode(" " + _toDisplayString(prop), 1 /* TEXT */)
     ]),
     default: _withCtx(() => [
-      _createTextVNode(" The text of the node " + _toDisplayString(dynamicValue) + " ", 1 /* TEXT */),
+      _createTextVNode(" The text of the node " + _toDisplayString(_ctx.dynamicValue) + " ", 1 /* TEXT */),
       _createCommentVNode(" Comment "),
       _createVNode(_component_another_element),
       _createTextVNode(" yet another text ", 1 /* TEXT */),
@@ -120,7 +120,7 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
 }
 __sfc__.render = render
 export default __sfc__
-Time took: 450.201µs
+Time took: 537.785µs
 
 [Synthetic Compile Result]
 
@@ -135,17 +135,17 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
   return (_openBlock(), _createElementBlock("span", {
     class: "yes"
   }, [
-    _createTextVNode("Hello world" + _toDisplayString(testRef) + "yes yes", 1 /* TEXT */),
-    _createElementVNode("i", null, "italics, mm" + _toDisplayString(hey), -1 /* HOISTED */),
+    _createTextVNode("Hello world" + _toDisplayString(_ctx.testRef) + "yes yes", 1 /* TEXT */),
+    _createElementVNode("i", null, "italics, mm" + _toDisplayString(_ctx.hey), -1 /* HOISTED */),
     _createVNode(_component_CustomComponent, null, {
-      default: _withCtx(() => [_createTextVNode("italics, mm" + _toDisplayString(hey), 1 /* TEXT */)])
+      default: _withCtx(() => [_createTextVNode("italics, mm" + _toDisplayString(_ctx.hey), 1 /* TEXT */)])
     }),
     _createTextVNode("end of span node", 1 /* TEXT */)
   ], -1 /* HOISTED */))
 }
 __sfc__.render = render
 export default __sfc__
-Time took: 32.896µs
+Time took: 38.553µs
 
 SWC result: [_ctx.a,_ctx.b,_ctx.c,{d:_ctx.d}]
-Time took for transform: 74.801µs
+Time took for transform: 43.232µs
