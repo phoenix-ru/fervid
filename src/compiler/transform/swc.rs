@@ -59,7 +59,7 @@ struct TransformVisitor <'s> {
 impl <'s> VisitMut for TransformVisitor <'s> {
     fn visit_mut_ident(&mut self, n: &mut swc_core::ecma::ast::Ident) {
         let symbol = &n.sym;
-        let scope = self.scope_helper.find_scope_of_variable(self.current_scope, &symbol);
+        let scope = self.scope_helper.find_scope_of_variable(self.current_scope, symbol);
 
         // Get the prefix which fits the scope (e.g. `_ctx.` for unknown scopes, `$setup.` for setup scope)
         let prefix = scope.get_prefix();

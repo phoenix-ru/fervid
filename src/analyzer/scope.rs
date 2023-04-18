@@ -59,22 +59,13 @@ impl VarScopeDescriptor {
 }
 
 impl ScopeHelper {
-    pub fn add_template_scope(&mut self, scope: Scope) {
-        self.template_scopes.push(scope)
-    }
-
-    pub fn add_template_scopes(&mut self, mut scopes: Vec<Scope>) {
-        self.template_scopes.append(&mut scopes)
-    }
-
-    pub fn find_scope_of_variable(&self, starting_scope: u32, variable: &str) -> VarScopeDescriptor {
+    pub fn find_scope_of_variable(&self, starting_scope: u32, variable: &JsWord) -> VarScopeDescriptor {
         let mut current_scope_index = starting_scope;
-        let variable = JsWord::from(variable);
 
         // Macro to check if the variable is in the slice/Vec and conditionally return
         macro_rules! check_scope {
             ($vars: expr, $ret_descriptor: expr) => {
-                if $vars.iter().any(|it| *it == variable) {
+                if $vars.iter().any(|it| it == variable) {
                     return $ret_descriptor;
                 }
             };
@@ -87,7 +78,7 @@ impl ScopeHelper {
         // Check template scope
         while let Some(current_scope) = self.template_scopes.get(current_scope_index as usize) {
             // Check variable existence in the current scope
-            let found = current_scope.variables.iter().find(|it| **it == variable);
+            let found = current_scope.variables.iter().find(|it| *it == variable);
             if let Some(_) = found {
                 return VarScopeDescriptor::Template(current_scope_index);
             }
@@ -271,73 +262,84 @@ impl Visit for IdentifierVisitor {
 
 #[test]
 fn feature() {
+    let v_root = JsWord::from("root");
     let root_scope = Scope {
         parent: 0,
-        variables: vec!["root".into()],
+        variables: vec![v_root.to_owned()],
     };
 
+    let v_child1 = JsWord::from("child1");
+    let v_child2 = JsWord::from("child2");
     let child_scope = Scope {
         parent: 0,
-        variables: vec!["child1".into(), "child2".into()],
+        variables: vec![v_child1.to_owned(), v_child2.to_owned()],
     };
 
+    let v_grand1_1 = JsWord::from("grand1_1");
+    let v_grand1_2 = JsWord::from("grand1_2");
     let grandchild1_scope = Scope {
         parent: 1,
-        variables: vec!["grand1_1".into(), "grand1_2".into()],
+        variables: vec![v_grand1_1.to_owned(), v_grand1_2.to_owned()],
     };
 
+    let v_grand2_1 = JsWord::from("grand2_1");
+    let v_grand2_2 = JsWord::from("grand2_2");
     let grandchild2_scope = Scope {
         parent: 1,
-        variables: vec!["grand2_1".into(), "grand2_2".into()],
+        variables: vec![v_grand2_1.to_owned(), v_grand2_2.to_owned()],
     };
 
     let mut scope_helper = ScopeHelper::default();
-    scope_helper.add_template_scopes(
+    scope_helper.template_scopes.extend(
         vec![root_scope, child_scope, grandchild1_scope, grandchild2_scope]
     );
 
     // Measure time to get an idea on performance
     // TODO move this to Criterion
-    let st = std::time::Instant::now();
+    let st0 = std::time::Instant::now();
 
     // All scopes have a root variable
-    assert_eq!(scope_helper.find_scope_of_variable(0, "root"), VarScopeDescriptor::Template(0));
-    assert_eq!(scope_helper.find_scope_of_variable(1, "root"), VarScopeDescriptor::Template(0));
-    assert_eq!(scope_helper.find_scope_of_variable(2, "root"), VarScopeDescriptor::Template(0));
-    assert_eq!(scope_helper.find_scope_of_variable(3, "root"), VarScopeDescriptor::Template(0));
-    println!("Elapsed root: {:?}", st.elapsed());
+    assert_eq!(scope_helper.find_scope_of_variable(0, &v_root), VarScopeDescriptor::Template(0));
+    assert_eq!(scope_helper.find_scope_of_variable(1, &v_root), VarScopeDescriptor::Template(0));
+    assert_eq!(scope_helper.find_scope_of_variable(2, &v_root), VarScopeDescriptor::Template(0));
+    assert_eq!(scope_helper.find_scope_of_variable(3, &v_root), VarScopeDescriptor::Template(0));
+    println!("Elapsed root: {:?}", st0.elapsed());
 
     // Only `child1` and its children have `child1` and `child2` vars
-    assert_eq!(scope_helper.find_scope_of_variable(0, "child1"), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(1, "child1"), VarScopeDescriptor::Template(1));
-    assert_eq!(scope_helper.find_scope_of_variable(2, "child1"), VarScopeDescriptor::Template(1));
-    assert_eq!(scope_helper.find_scope_of_variable(3, "child1"), VarScopeDescriptor::Template(1));
-    assert_eq!(scope_helper.find_scope_of_variable(0, "child2"), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(1, "child2"), VarScopeDescriptor::Template(1));
-    assert_eq!(scope_helper.find_scope_of_variable(2, "child2"), VarScopeDescriptor::Template(1));
-    assert_eq!(scope_helper.find_scope_of_variable(3, "child2"), VarScopeDescriptor::Template(1));
-    println!("Elapsed child1: {:?}", st.elapsed());
+    let st1 = std::time::Instant::now();
+    assert_eq!(scope_helper.find_scope_of_variable(0, &v_child1), VarScopeDescriptor::Unknown);
+    assert_eq!(scope_helper.find_scope_of_variable(1, &v_child1), VarScopeDescriptor::Template(1));
+    assert_eq!(scope_helper.find_scope_of_variable(2, &v_child1), VarScopeDescriptor::Template(1));
+    assert_eq!(scope_helper.find_scope_of_variable(3, &v_child1), VarScopeDescriptor::Template(1));
+    assert_eq!(scope_helper.find_scope_of_variable(0, &v_child2), VarScopeDescriptor::Unknown);
+    assert_eq!(scope_helper.find_scope_of_variable(1, &v_child2), VarScopeDescriptor::Template(1));
+    assert_eq!(scope_helper.find_scope_of_variable(2, &v_child2), VarScopeDescriptor::Template(1));
+    assert_eq!(scope_helper.find_scope_of_variable(3, &v_child2), VarScopeDescriptor::Template(1));
+    println!("Elapsed child1: {:?}", st1.elapsed());
 
     // Only `grandchild1` has `grand1_1` and `grand1_2` vars
-    assert_eq!(scope_helper.find_scope_of_variable(0, "grand1_1"), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(1, "grand1_1"), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(2, "grand1_1"), VarScopeDescriptor::Template(2));
-    assert_eq!(scope_helper.find_scope_of_variable(3, "grand1_1"), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(0, "grand1_2"), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(1, "grand1_2"), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(2, "grand1_2"), VarScopeDescriptor::Template(2));
-    assert_eq!(scope_helper.find_scope_of_variable(3, "grand1_2"), VarScopeDescriptor::Unknown);
-    println!("Elapsed grand1: {:?}", st.elapsed());
+    let st2 = std::time::Instant::now();
+    assert_eq!(scope_helper.find_scope_of_variable(0, &v_grand1_1), VarScopeDescriptor::Unknown);
+    assert_eq!(scope_helper.find_scope_of_variable(1, &v_grand1_1), VarScopeDescriptor::Unknown);
+    assert_eq!(scope_helper.find_scope_of_variable(2, &v_grand1_1), VarScopeDescriptor::Template(2));
+    assert_eq!(scope_helper.find_scope_of_variable(3, &v_grand1_1), VarScopeDescriptor::Unknown);
+    assert_eq!(scope_helper.find_scope_of_variable(0, &v_grand1_2), VarScopeDescriptor::Unknown);
+    assert_eq!(scope_helper.find_scope_of_variable(1, &v_grand1_2), VarScopeDescriptor::Unknown);
+    assert_eq!(scope_helper.find_scope_of_variable(2, &v_grand1_2), VarScopeDescriptor::Template(2));
+    assert_eq!(scope_helper.find_scope_of_variable(3, &v_grand1_2), VarScopeDescriptor::Unknown);
+    println!("Elapsed grand1: {:?}", st2.elapsed());
 
     // Only `grandchild2` has `grand2_1` and `grand2_2` vars
-    assert_eq!(scope_helper.find_scope_of_variable(0, "grand2_1"), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(1, "grand2_1"), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(2, "grand2_1"), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(3, "grand2_1"), VarScopeDescriptor::Template(3));
-    assert_eq!(scope_helper.find_scope_of_variable(0, "grand2_2"), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(1, "grand2_2"), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(2, "grand2_2"), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(3, "grand2_2"), VarScopeDescriptor::Template(3));
+    let st3 = std::time::Instant::now();
+    assert_eq!(scope_helper.find_scope_of_variable(0, &v_grand2_1), VarScopeDescriptor::Unknown);
+    assert_eq!(scope_helper.find_scope_of_variable(1, &v_grand2_1), VarScopeDescriptor::Unknown);
+    assert_eq!(scope_helper.find_scope_of_variable(2, &v_grand2_1), VarScopeDescriptor::Unknown);
+    assert_eq!(scope_helper.find_scope_of_variable(3, &v_grand2_1), VarScopeDescriptor::Template(3));
+    assert_eq!(scope_helper.find_scope_of_variable(0, &v_grand2_2), VarScopeDescriptor::Unknown);
+    assert_eq!(scope_helper.find_scope_of_variable(1, &v_grand2_2), VarScopeDescriptor::Unknown);
+    assert_eq!(scope_helper.find_scope_of_variable(2, &v_grand2_2), VarScopeDescriptor::Unknown);
+    assert_eq!(scope_helper.find_scope_of_variable(3, &v_grand2_2), VarScopeDescriptor::Template(3));
+    println!("Elapsed grand2: {:?}", st3.elapsed());
 
-    println!("Elapsed total: {:?}", st.elapsed())
+    println!("Elapsed total: {:?}", st0.elapsed())
 }
