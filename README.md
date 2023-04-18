@@ -54,9 +54,9 @@ Analyzer
 
 Code generator
 - [ ] Basic Vue3 code generation
-  - [ ] Elements
+  - [x] Elements
     - [x] `createElementVNode`
-    - [ ] Attributes
+    - [x] Attributes
       - [x] Static + Dynamic
       - [x] `style` merging
       - [x] `class` merging
@@ -64,7 +64,7 @@ Code generator
   - [x] Components
     - [x] `createVNode`
     - [x] Slots
-  - [ ] Context-awareness (`_ctx`, `$data`, `$setup`)
+  - [x] Context-awareness (`_ctx`, `$data`, `$setup`)
   - [x] Directives
     - [x] v-on
     - [x] v-bind
