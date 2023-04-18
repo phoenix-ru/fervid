@@ -1,10 +1,16 @@
 use std::fmt::Write;
 use crate::parser::{structs::StartingTag, attributes::{HtmlAttribute, VDirective}};
 
-use super::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports, directives::supports_with_directive};
+use super::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports, directives::supports_with_directive, transform::swc::transform_scoped};
 
 impl<'a> CodegenContext<'a> {
-  pub fn generate_directives(&mut self, buf: &mut String, starting_tag: &StartingTag, is_component: bool) {
+  pub fn generate_directives(
+    &mut self,
+    buf: &mut String,
+    starting_tag: &StartingTag,
+    is_component: bool,
+    scope_to_use: u32
+  ) {
     // Open Js array
     CodeHelper::open_sq_bracket(buf);
 
@@ -59,9 +65,12 @@ impl<'a> CodegenContext<'a> {
           CodeHelper::comma(buf);
         }
 
-        // TODO use context-dependent variables (not msg, but _ctx.msg or $setup.msg)
-        buf.push_str("_ctx.");
-        buf.push_str(directive_value)
+        // Transform the directive value
+        let transformed = transform_scoped(directive_value, &self.scope_helper, scope_to_use);
+        buf.push_str(match transformed {
+          Some(ref v) => &v,
+          None => "void 0"
+        });
       } else if has_arg_or_modifiers {
         self.code_helper.comma_newline(buf);
         buf.push_str("void 0")

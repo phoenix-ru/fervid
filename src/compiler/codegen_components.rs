@@ -69,7 +69,7 @@ impl <'a> CodegenContext <'a> {
         // Generate directives array if needed
         if needs_directive {
           CodeHelper::comma(buf);
-          self.generate_directives(buf, starting_tag, true);
+          self.generate_directives(buf, starting_tag, true, *template_scope);
           CodeHelper::close_paren(buf);
         }
 
