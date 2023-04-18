@@ -70,7 +70,7 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
         }, "hey", -1 /* HOISTED */))
       )), 128 /* KEYED_FRAGMENT */)),
       _withDirectives(_createElementVNode("br", null, null, -1 /* HOISTED */), [
-        [_vShow, _ctx.false]
+        [_vShow, false]
       ]),
       (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(3, (i) => (
         (_openBlock(), _createBlock(_component_another_element, {
@@ -109,7 +109,7 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
   })), [
     [
       _directive_test_directive,
-      _ctx.foo - bar,
+      _ctx.foo-_ctx.bar,
       "test-argument",
       {
         foo: true,
@@ -120,7 +120,7 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
 }
 __sfc__.render = render
 export default __sfc__
-Time took: 537.785µs
+Time took: 423.033µs
 
 [Synthetic Compile Result]
 
@@ -145,7 +145,7 @@ function render(_ctx, _cache, $props, $setup, $data, $options) {
 }
 __sfc__.render = render
 export default __sfc__
-Time took: 38.553µs
+Time took: 38.902µs
 
 SWC result: [_ctx.a,_ctx.b,_ctx.c,{d:_ctx.d}]
-Time took for transform: 43.232µs
+Time took for transform: 43.721µs
