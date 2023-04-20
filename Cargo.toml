@@ -1,7 +1,7 @@
 [package]
 name = "fervid"
 description = "Vue SFC compiler written in Rust"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 authors = ["Marsel Shaikhin <phoenix.apps@yahoo.com>"]
 repository = "https://github.com/phoenix-ru/rust-vue-compiler"
