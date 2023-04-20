@@ -179,6 +179,18 @@ pub fn parse_root_block(input: &str) -> IResult<&str, Node> {
   ))
 }
 
+/// Parses the Vue Single-File Component
+///
+/// The Ok variant is a tuple, where:
+/// - the `.0` element is the remaining input. It should be any trailing whitespace if parsing succeeded;
+/// - the `.1` element is a vector of root blocks, i.e. all `<script>`, `<template>`, `<style>` and custom blocks.
+///
+/// This function produces untyped and unoptimized `Node`s and
+/// it also does not modify whitespace inside the blocks.
+///
+/// To convert `Node`s into typed blocks, use [`crate::parser::sfc_blocks::convert_node_to_typed`].
+///
+/// To optimize template node, use [`crate::analyzer::ast_optimizer::optimize_ast`]
 pub fn parse_sfc(input: &str) -> IResult<&str, Vec<Node>> {
   many0(parse_root_block)(input)
 }
