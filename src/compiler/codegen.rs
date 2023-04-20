@@ -3,9 +3,9 @@ extern crate regex;
 use std::collections::HashMap;
 use regex::Regex;
 
-use crate::parser::{attributes::HtmlAttribute, structs::{Node, ElementNode, StartingTag}};
+use crate::parser::{structs::{Node, StartingTag}, sfc_blocks::{convert_node_to_typed, SfcTemplateBlock, SfcScriptBlock, SfcStyleBlock, SfcBlock}};
 use crate::analyzer::scope::ScopeHelper;
-use super::{all_html_tags::is_html_tag, helper::CodeHelper, codegen_script::ScriptAndLang};
+use super::{all_html_tags::is_html_tag, helper::CodeHelper};
 
 #[derive(Default)]
 pub struct CodegenContext <'a> {
@@ -39,86 +39,48 @@ impl Default for IsCustomElementParam<'_> {
 
 /**
  * Main entry point for the code generation
+ * TODO REFACTOR
  */
 pub fn compile_ast(blocks: &[Node], scope_helper: ScopeHelper) -> Result<String, i32> {
-  let mut template: Option<&Node> = None;
+  let mut template: Option<SfcTemplateBlock> = None;
   // let mut template_lang: Option<&str> = None;
-  let mut legacy_script: Option<ScriptAndLang> = None;
-  let mut setup_script: Option<ScriptAndLang> = None;
+  let mut legacy_script: Option<SfcScriptBlock> = None;
+  let mut setup_script: Option<SfcScriptBlock> = None;
+
+  #[allow(unused)]
+  let mut style: Option<SfcStyleBlock> = None;
 
   for block in blocks.iter() {
-    match block {
-      Node::ElementNode(ElementNode { starting_tag, children, .. }) => {
-        // Extract lang attr, as this is used later
-        let lang_attr = starting_tag.attributes.iter().find_map(|attr| match attr {
-          HtmlAttribute::Regular { name, value } => {
-            if *name == "lang" {
-              Some(*value)
-            } else {
-              None
-            }
-          },
-          _ => None
-        });
+    let Node::ElementNode(element_node) = block else { continue; };
 
-        // Template is supported if it doesn't have a `lang` attr or has `lang="html"`
-        // todo check if we have two templates in an SFC (do this in analyzer)
-        if starting_tag.tag_name == "template" {
-          // todo what should the code do?? the unsupported template compilation should be done outside (e.g. Pug)
-          match lang_attr {
-            None | Some("html") => {},
-            _ => return Err(-2)
-          }
+    let sfc_block = convert_node_to_typed(element_node);
 
-          // Save the found template
-          template = Some(block);
-          // template_lang = lang_attr.or(Some("html"));
-        }
+    // TODO check if we have two templates/three scripts/etc. in an SFC (do this in analyzer)
+    // TODO how to handle custom blocks???
+    // TODO use different functions for compiling template/script/style and expose a utility to combine the results
+    // compile_template -> template render code, hoists, imports, etc.
+    // compile_script -> compiled code, analyzed props/emits/setup vars/etc.
+    // compile_style -> ?
 
-        // Script is supported if it has empty `lang`, `lang="js"` or `lang="ts"`
-        if starting_tag.tag_name == "script" && children.len() > 0 {
-          // todo what should the code do?? maybe return ScriptAndLang in a SFC descriptor
-          match lang_attr {
-            None | Some("js") | Some("ts") => {},
-            _ => return Err(-2)
-          }
-
-          // We already did the check for children.len() before
-          let script_content = match children[0] {
-            Node::TextNode(v) => Ok(v),
-            _ => Err(-3) // todo more meaningful error?
-          }?;
-
-          // Construct the struct that we can pass around
-          let script = Some(ScriptAndLang {
-            content: script_content,
-            lang: lang_attr.unwrap_or("js")
-          });
-
-          let is_setup = starting_tag.attributes.iter().any(|attr| match attr {
-            HtmlAttribute::Regular { name, .. } => {
-              *name == "setup"
-            },
-            _ => false
-          });
-
-          if is_setup {
-            setup_script = script
-          } else {
-            legacy_script = script
-          }
+    match sfc_block {
+      SfcBlock::Template(sfc_template_block) => template = Some(sfc_template_block),
+      SfcBlock::Script(sfc_script_block) => {
+        // TODO is that needed?
+        if sfc_script_block.is_setup {
+          setup_script = Some(sfc_script_block)
+        } else {
+          legacy_script = Some(sfc_script_block)
         }
       },
-
-      _ => {
-        // do what?
-      }
+      #[allow(unused_assignments)]
+      SfcBlock::Style(sfc_style_block) => style = Some(sfc_style_block),
+      SfcBlock::Custom(_) => {}
     }
   }
 
   // Check that there is some work to do
   if !(template.is_some() || legacy_script.is_some() || setup_script.is_some()) {
-    return Err(-1000); // todo error enums
+    return Err(-1000); // todo error enums or anyhow
   }
 
   // Resulting buffer
@@ -140,7 +102,7 @@ pub fn compile_ast(blocks: &[Node], scope_helper: ScopeHelper) -> Result<String,
   // Todo generate imports and hoists first in PROD mode (but this requires a smarter order of compilation)
 
   // Generate scripts
-  ctx.compile_scripts(&mut result, &legacy_script, &setup_script);
+  ctx.compile_scripts(&mut result, legacy_script, setup_script);
 
   // Generate template
   if let Some(template_node) = template {
@@ -177,17 +139,15 @@ pub fn compile_ast(blocks: &[Node], scope_helper: ScopeHelper) -> Result<String,
 }
 
 impl <'a> CodegenContext <'a> {
-  pub fn compile_template(self: &mut Self, template: &'a Node) -> Result<String, i32> {
+  pub fn compile_template(&mut self, template: SfcTemplateBlock) -> Result<String, i32> {
     // Try compiling the template. Indent because this will end up in a body of a function.
     // We first need to compile template before knowing imports, components and hoists
     self.code_helper.indent();
     let mut compiled_template = String::new();
-    if let Node::ElementNode(ElementNode { children, .. }) = template {
-      // todo better handling of multiple root children (use Fragment)
-      self.compile_node(&mut compiled_template, &children[0], true);
-    } else {
-      unreachable!()
-    }
+
+    // todo better handling of multiple root children (use Fragment)
+    self.compile_node(&mut compiled_template, &template.roots[0], true);
+
     self.code_helper.unindent();
 
     // todo do not generate this inside compile_template, as PROD mode puts it to the top
