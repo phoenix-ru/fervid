@@ -74,6 +74,14 @@ Code generator
     - [x] v-slot
     - [x] v-model
     - [x] Other directives (less priority)
+  - [ ] Built-in components
+    - [ ] keep-alive
+    - [ ] component
+    - [ ] transition
+    - [ ] transition-group
+    - [ ] teleport
+    - [x] slot
+    - [ ] suspense
   - [ ] Patch flags
   - [ ] Hoisting
 
@@ -86,5 +94,5 @@ Code generator
 Integrations
 - [ ] WASM binary (with/without WASI)
 - [ ] NAPI binary
-- [ ] ![unplugin](https://github.com/unjs/unplugin)
-- [ ] ![Turbopack](https://github.com/vercel/turbo) plugin (when plugin system is defined)
+- [ ] [unplugin](https://github.com/unjs/unplugin)
+- [ ] [Turbopack](https://github.com/vercel/turbo) plugin (when plugin system is defined)
