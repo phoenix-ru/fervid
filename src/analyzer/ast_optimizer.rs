@@ -1,4 +1,4 @@
-use crate::parser::structs::{Node, ElementNode};
+use crate::{parser::{structs::{Node, ElementNode}, attributes::{HtmlAttribute, VDirective}}, compiler::all_html_tags, StartingTag};
 
 pub fn optimize_ast <'a> (ast: &'a mut [Node]) -> &'a [Node<'a>] {
   let mut ast_optimizer = AstOptimizer;
@@ -57,7 +57,24 @@ impl <'a> VisitMutWith for AstOptimizer {
       should_retain
     });
 
+    // For components, reorder children so that named slots come first
+    if self.is_component(&element_node.starting_tag) && element_node.children.len() > 0 {
+      element_node.children.sort_by(|a, b| {
+        let a_is_from_default = is_from_default_slot(a);
+        let b_is_from_default = is_from_default_slot(b);
+
+        a_is_from_default.cmp(&b_is_from_default)
+      });
+    }
+
     element_node.visit_mut_children_with(self);
+  }
+}
+
+impl AstOptimizer {
+  fn is_component(&self, starting_tag: &StartingTag) -> bool {
+    // TODO Use is_custom_element as well
+    !all_html_tags::is_html_tag(starting_tag.tag_name)
   }
 }
 
@@ -80,4 +97,29 @@ impl ElementNode<'_> {
   fn visit_mut_with(&mut self, visitor: &mut impl VisitMutWith) {
     visitor.visit_element_node(self);
   }
+}
+
+fn is_from_default_slot(node: &Node) -> bool {
+  let Node::ElementNode(ElementNode { starting_tag, .. }) = node else {
+    return true;
+  };
+
+  if starting_tag.tag_name != "template" {
+    return true;
+  }
+
+  // Slot is not default if its `v-slot` has an argument which is not "" or "default"
+  // `v-slot` is default
+  // `v-slot:default` is default
+  // `v-slot:custom` is not default
+  !starting_tag
+    .attributes
+    .iter()
+    .any(|attr| match attr {
+      HtmlAttribute::VDirective (VDirective { name, argument, .. }) => {
+        *name == "slot" && *argument != "" && *argument != "default"
+      },
+
+      HtmlAttribute::Regular { .. } => false
+    })
 }

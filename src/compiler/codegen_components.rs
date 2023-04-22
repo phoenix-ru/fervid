@@ -200,7 +200,8 @@ impl <'a> CodegenContext <'a> {
     // which has `v-slot` with attribute which name is other than `default`.
     // Example: regular elements, text, `<template>` and `<template v-slot>` are from the default slot.
     // `<template v-slot:some-slot>` is not a default slot
-    let is_from_default_slot = |node: &&Node| match node {
+    // TODO Move to common/core, because analyzer also uses it
+    let is_from_default_slot = |node: &Node| match node {
       Node::ElementNode(ElementNode { starting_tag, .. }) => {
         if starting_tag.tag_name != "template" {
           return true;
@@ -233,8 +234,11 @@ impl <'a> CodegenContext <'a> {
     let mut needs_slot_comma = false;
     // let mut processed_named_slots = 0;
 
+    // Because optimizer has already sorted component's children based on slots, it is safe to partition
+    let partition_point = children.partition_point(|it| !is_from_default_slot(&it));
+
     // First pass: named slots. Those are `<template>` elements with a defined slot name
-    for template in children.iter().filter(|it| !is_from_default_slot(it)) {
+    for template in &children[..partition_point] {
       if needs_slot_comma {
         self.code_helper.comma_newline(buf);
       }
@@ -289,9 +293,6 @@ impl <'a> CodegenContext <'a> {
     }
 
     // Second pass: default slot
-    // TODO I really don't like the idea of allocating a Vec and cloning just to call a function,
-    // but I also don't understand how to properly pass iterators to functions
-    let default_slot_children: Vec<_> = children.iter().filter(is_from_default_slot).cloned().collect();
 
     // TODO support `<template v-slot>` and `<template v-slot:default>` by processing them in the named slots??
     // Current SFC compiler panicks or tries to discard children not in `<template>` if it's present alongside normal elements
@@ -299,16 +300,19 @@ impl <'a> CodegenContext <'a> {
     // but you have to put everything inside of it.
     // I think the biggest issue here is `<template v-slot:default="props">`, this needs to be checked and analyzed
 
+    let default_slot_children = &children[partition_point..];
+
     if default_slot_children.len() > 0 {
       if needs_slot_comma {
         self.code_helper.comma_newline(buf);
       }
 
-      // TODO withCtx import
-      buf.push_str("default: _withCtx(() => ");
+      buf.push_str("default: ");
+      buf.push_str(self.get_and_add_import_str(VueImports::WithCtx));
+      buf.push_str("(() => ");
       self.generate_element_children(
         buf,
-        &default_slot_children,
+        default_slot_children,
         false,
         scope_to_use
       );
