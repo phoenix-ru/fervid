@@ -56,7 +56,9 @@ impl <'a> CodegenContext <'a> {
     let has_vmodels_work = vmodels.peek().is_some();
 
     // Attributes work is regular attributes plus `v-on` and `v-bind` directives
-    let has_attributes_work = codegen_attributes::has_attributes_work(&starting_tag.attributes);
+    let has_attributes_work = codegen_attributes::has_attributes_work(
+      starting_tag.attributes.iter()
+    );
 
     // Early exit helper macro
     macro_rules! early_exit {
@@ -104,7 +106,12 @@ impl <'a> CodegenContext <'a> {
           self.code_helper.comma_newline(buf);
         }
 
-        self.generate_attributes(buf, &starting_tag.attributes, false, *template_scope);
+        self.generate_attributes(
+          buf,
+          starting_tag.attributes.iter(),
+          false,
+           *template_scope
+        );
       }
 
       // Close Js object

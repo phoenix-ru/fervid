@@ -60,7 +60,7 @@ impl <'a> CodegenContext <'a> {
     CodeHelper::comma(buf);
     let has_generated_attributes = self.generate_attributes(
       buf,
-      &starting_tag.attributes,
+      starting_tag.attributes.iter(),
       true,
       *template_scope
     );

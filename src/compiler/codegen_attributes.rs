@@ -16,15 +16,15 @@ impl CodegenContext <'_> {
   /// where keys are attribute names and values are attribute values.
   ///
   /// - `generate_obj_shell` is for surrounding the resulting object in the Js {} object notation
-  pub fn generate_attributes(
+  pub fn generate_attributes<'a>(
     &mut self,
     buf: &mut String,
-    attributes: &Vec<HtmlAttribute>,
+    attributes: impl Iterator<Item = &'a HtmlAttribute<'a>> + Clone,
     generate_obj_shell: bool,
     template_scope_id: u32
   ) -> bool {
     /* Work is not needed if we don't have any Regular attributes, v-on/v-bind directives */
-    if !has_attributes_work(attributes) {
+    if !has_attributes_work(attributes.clone()) {
       return false;
     }
 
@@ -248,9 +248,8 @@ impl CodegenContext <'_> {
 
 /// Check if there is work regarding attributes generation
 /// Work is not needed if we don't have any Regular attributes, v-on/v-bind directives
-pub fn has_attributes_work(attributes: &Vec<HtmlAttribute>) -> bool {
-  attributes
-    .iter()
+pub fn has_attributes_work<'a>(mut attributes_iter: impl Iterator<Item = &'a HtmlAttribute<'a>>) -> bool {
+  attributes_iter
     .any(|it| match it {
       HtmlAttribute::Regular { .. } |
       HtmlAttribute::VDirective (VDirective { name: "on" | "bind", .. }) => true,
@@ -389,7 +388,7 @@ fn test_attributes_generation() {
     HtmlAttribute::Regular { name: "dashed-attr-name", value: "spaced attr value" }
   ];
 
-  ctx.generate_attributes(&mut buf, &attributes, true, 0);
+  ctx.generate_attributes(&mut buf, attributes.iter(), true, 0);
   assert_eq!(
     &buf,
     &format!(r#"{initial_buf}{{class: "test", readonly: "", style: "background: red", "dashed-attr-name": "spaced attr value"}}"#)
