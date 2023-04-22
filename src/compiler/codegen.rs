@@ -188,6 +188,8 @@ impl <'a> CodegenContext <'a> {
       Node::ElementNode(element_node) => {
         if self.is_component(&element_node.starting_tag) {
           self.create_component_vnode(buf, element_node, wrap_in_block);
+        } else if let Some(builtin_type) = Self::is_builtin(element_node) {
+          self.compile_builtin(buf, element_node, builtin_type);
         } else {
           self.create_element_vnode(buf, element_node, wrap_in_block);
         }

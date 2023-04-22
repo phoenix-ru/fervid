@@ -13,6 +13,16 @@
 
     {{ dynamicValue }}
 
+    <slot />
+
+    <slot name="named-slot-1" />
+
+    <slot name="named-slot-2" class="ye" :prop="modelValue">
+      <div>
+        default content
+      </div>
+    </slot>
+
     <!-- Comment -->
     <another-element />
 

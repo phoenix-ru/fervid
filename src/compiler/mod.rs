@@ -1,5 +1,6 @@
 pub mod codegen;
 pub mod all_html_tags;
+pub mod builtins;
 pub mod codegen_attributes;
 pub mod codegen_directives;
 pub mod codegen_elements;
