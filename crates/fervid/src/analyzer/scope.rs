@@ -1,10 +1,9 @@
+use fervid_core::{Node, VDirective, HtmlAttribute};
 use lazy_static::lazy_static;
 use regex::Regex;
 use swc_common::BytePos;
 use swc_core::ecma::{visit::{Visit, VisitWith}, atoms::JsWord};
 use swc_ecma_parser::{lexer::Lexer, Syntax, StringInput, Parser};
-
-use crate::parser::{structs::Node, attributes::{HtmlAttribute, VDirective}};
 
 lazy_static! {
     static ref JS_BUILTINS: [JsWord; 7] = ["true", "false", "null", "undefined", "Array", "Set", "Map"].map(JsWord::from);

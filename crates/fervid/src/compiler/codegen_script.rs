@@ -1,4 +1,4 @@
-use crate::parser::sfc_blocks::SfcScriptBlock;
+use fervid_core::SfcScriptBlock;
 
 use super::codegen::CodegenContext;
 

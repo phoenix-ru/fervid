@@ -1,8 +1,6 @@
-use crate::{
-    compiler::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports},
-    parser::attributes::HtmlAttribute,
-    ElementNode,
-};
+use fervid_core::{ElementNode, HtmlAttribute};
+
+use crate::compiler::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports};
 
 impl CodegenContext<'_> {
     pub fn compile_slot(&mut self, buf: &mut String, element_node: &ElementNode) {

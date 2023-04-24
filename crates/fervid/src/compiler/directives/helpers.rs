@@ -1,4 +1,4 @@
-use crate::parser::{structs::StartingTag, attributes::{HtmlAttribute, VDirective}};
+use fervid_core::{StartingTag, HtmlAttribute, VDirective};
 
 /// Function for determining whether a given element/component
 /// needs to be wrapped in `_withDirectives(<node code>, <directives code>)`

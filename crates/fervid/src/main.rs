@@ -4,9 +4,9 @@ extern crate swc_core;
 extern crate swc_ecma_codegen;
 use std::time::Instant;
 
+use fervid_core::{ElementNode, Node, StartingTag, ElementKind, HtmlAttribute};
+
 use crate::compiler::codegen::compile_ast;
-use crate::parser::structs::{StartingTag, Node, ElementNode};
-use crate::parser::{html_utils::ElementKind, attributes::HtmlAttribute};
 use crate::analyzer::ast_optimizer;
 
 mod parser;

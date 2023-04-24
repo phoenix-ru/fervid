@@ -1,4 +1,6 @@
-use crate::{parser::{structs::{Node, ElementNode}, attributes::{HtmlAttribute, VDirective}}, compiler::all_html_tags, StartingTag};
+use fervid_core::{Node, ElementNode, StartingTag, HtmlAttribute, VDirective};
+
+use crate::compiler::all_html_tags;
 
 pub fn optimize_ast <'a> (ast: &'a mut [Node]) -> &'a [Node<'a>] {
   let mut ast_optimizer = AstOptimizer;
@@ -13,11 +15,19 @@ pub fn optimize_ast <'a> (ast: &'a mut [Node]) -> &'a [Node<'a>] {
 
 struct AstOptimizer;
 
-trait VisitMutWith {
+trait Visitor {
   fn visit_element_node(&mut self, element_node: &mut ElementNode);
 }
 
-impl <'a> VisitMutWith for AstOptimizer {
+trait VisitMut {
+  fn visit_mut_with(&mut self, visitor: &mut impl Visitor);
+}
+
+trait VisitMutChildren {
+  fn visit_mut_children_with(&mut self, visitor: &mut impl Visitor);
+}
+
+impl <'a> Visitor for AstOptimizer {
   fn visit_element_node(&mut self, element_node: &mut ElementNode) {
     let children_len = element_node.children.len();
 
@@ -78,8 +88,8 @@ impl AstOptimizer {
   }
 }
 
-impl Node<'_> {
-  fn visit_mut_with(&mut self, visitor: &mut impl VisitMutWith) {
+impl VisitMut for Node<'_> {
+  fn visit_mut_with(&mut self, visitor: &mut impl Visitor) {
     match self {
       Node::ElementNode(el) => { el.visit_mut_with(visitor) },
       _ => {}
@@ -87,15 +97,17 @@ impl Node<'_> {
   }
 }
 
-impl ElementNode<'_> {
-  fn visit_mut_children_with(&mut self, visitor: &mut impl VisitMutWith) {
+impl VisitMut for ElementNode<'_> {
+  fn visit_mut_with(&mut self, visitor: &mut impl Visitor) {
+    visitor.visit_element_node(self);
+  }
+}
+
+impl VisitMutChildren for ElementNode<'_> {
+  fn visit_mut_children_with(&mut self, visitor: &mut impl Visitor) {
     for child in &mut self.children {
       child.visit_mut_with(visitor)
     }
-  }
-
-  fn visit_mut_with(&mut self, visitor: &mut impl VisitMutWith) {
-    visitor.visit_element_node(self);
   }
 }
 

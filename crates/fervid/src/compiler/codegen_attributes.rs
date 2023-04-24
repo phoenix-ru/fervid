@@ -1,7 +1,7 @@
+use fervid_core::{HtmlAttribute, VDirective};
 use lazy_static::lazy_static;
 use regex::Regex;
 use crate::analyzer::scope::ScopeHelper;
-use crate::parser::attributes::{HtmlAttribute, VDirective};
 use super::codegen::CodegenContext;
 use super::helper::CodeHelper;
 use super::imports::VueImports;

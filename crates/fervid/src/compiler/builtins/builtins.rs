@@ -1,4 +1,6 @@
-use crate::{compiler::codegen::CodegenContext, ElementNode};
+use fervid_core::ElementNode;
+
+use crate::compiler::codegen::CodegenContext;
 
 #[derive(Debug)]
 pub enum VueBuiltin {

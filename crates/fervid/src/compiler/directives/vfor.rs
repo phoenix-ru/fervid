@@ -1,4 +1,6 @@
-use crate::{compiler::{codegen::CodegenContext, imports::VueImports, helper::CodeHelper}, parser::{structs::StartingTag, attributes::{HtmlAttribute, VDirective}}};
+use fervid_core::{StartingTag, HtmlAttribute, VDirective};
+
+use crate::{compiler::{codegen::CodegenContext, imports::VueImports, helper::CodeHelper}};
 
 impl CodegenContext<'_> {
   /// Generates `(openBlock(true), createElementBlock(Fragment, null, renderList(<list>, (<item>) => { return`

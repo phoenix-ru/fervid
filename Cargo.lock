@@ -432,6 +432,7 @@ name = "fervid"
 version = "0.0.2"
 dependencies = [
  "criterion",
+ "fervid_core",
  "lazy_static",
  "nom",
  "phf 0.11.1",
@@ -441,6 +442,10 @@ dependencies = [
  "swc_ecma_codegen",
  "swc_ecma_parser",
 ]
+
+[[package]]
+name = "fervid_core"
+version = "0.0.1"
 
 [[package]]
 name = "fnv"

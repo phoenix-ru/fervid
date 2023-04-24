@@ -1,31 +1,4 @@
-use super::{
-    attributes::HtmlAttribute,
-    structs::{ElementNode, Node},
-};
-
-pub struct SfcTemplateBlock<'a> {
-    pub lang: &'a str,
-    pub roots: &'a [Node<'a>],
-}
-
-pub struct SfcScriptBlock<'a> {
-    pub lang: &'a str,
-    pub content: &'a str,
-    pub is_setup: bool,
-}
-
-pub struct SfcStyleBlock<'a> {
-    pub lang: &'a str,
-    pub content: &'a str,
-    pub is_scoped: bool,
-}
-
-pub enum SfcBlock<'a> {
-    Template(SfcTemplateBlock<'a>),
-    Script(SfcScriptBlock<'a>),
-    Style(SfcStyleBlock<'a>),
-    Custom(&'a ElementNode<'a>),
-}
+use fervid_core::{ElementNode, Node, HtmlAttribute, SfcBlock, SfcTemplateBlock, SfcStyleBlock, SfcScriptBlock};
 
 /// Converts an untyped root block (which is always a [`Node::ElementNode`]) to an [`SfcBlock`],
 /// which is a Vue SFC descriptor block

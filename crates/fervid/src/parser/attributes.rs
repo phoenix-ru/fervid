@@ -1,3 +1,4 @@
+use fervid_core::{HtmlAttribute, VDirective};
 use nom::{
   IResult,
   bytes::complete::{take_till, tag},
@@ -8,24 +9,6 @@ use nom::{
 };
 
 use crate::parser::html_utils::{html_name, space1};
-
-#[derive(Debug, Default, Clone)]
-pub struct VDirective<'a> {
-  pub name: &'a str,
-  pub argument: &'a str,
-  pub modifiers: Vec<&'a str>,
-  pub value: Option<&'a str>,
-  pub is_dynamic_slot: bool
-}
-
-#[derive(Debug, Clone)]
-pub enum HtmlAttribute <'a> {
-  Regular {
-    name: &'a str,
-    value: &'a str
-  },
-  VDirective(VDirective<'a>)
-}
 
 fn parse_attr_value(input: &str) -> IResult<&str, &str> {
   delimited(

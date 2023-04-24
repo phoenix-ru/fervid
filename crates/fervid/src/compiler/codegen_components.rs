@@ -1,5 +1,7 @@
 use std::fmt::Write;
-use crate::{parser::{attributes::{HtmlAttribute, VDirective}, structs::{StartingTag, Node, ElementNode}}, compiler::directives::needs_directive_wrapper};
+use fervid_core::{ElementNode, StartingTag, VDirective, HtmlAttribute, Node};
+
+use crate::{compiler::directives::needs_directive_wrapper};
 
 use super::{codegen::CodegenContext, imports::VueImports, codegen_attributes, helper::CodeHelper};
 

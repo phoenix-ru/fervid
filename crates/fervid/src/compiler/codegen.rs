@@ -1,10 +1,10 @@
 extern crate regex;
 
 use std::collections::HashMap;
+use fervid_core::{SfcTemplateBlock, Node, SfcScriptBlock, SfcStyleBlock, SfcBlock, StartingTag};
 use regex::Regex;
 
-use crate::parser::{structs::{Node, StartingTag}, sfc_blocks::{convert_node_to_typed, SfcTemplateBlock, SfcScriptBlock, SfcStyleBlock, SfcBlock}};
-use crate::analyzer::scope::ScopeHelper;
+use crate::{analyzer::scope::ScopeHelper, parser::sfc_blocks::convert_node_to_typed};
 use super::{all_html_tags::is_html_tag, helper::CodeHelper};
 
 #[derive(Default)]

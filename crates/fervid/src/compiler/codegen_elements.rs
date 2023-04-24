@@ -1,5 +1,4 @@
-use crate::parser::attributes::{HtmlAttribute, VDirective};
-use crate::parser::structs::{Node, ElementNode};
+use fervid_core::{ElementNode, VDirective, HtmlAttribute, Node};
 
 use super::codegen::CodegenContext;
 use super::directives::conditional::filter_nodes_with_conditional_directives;

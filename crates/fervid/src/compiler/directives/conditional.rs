@@ -1,6 +1,8 @@
 use std::iter::Peekable;
 
-use crate::{parser::{structs::Node, attributes::{VDirective, HtmlAttribute}}, compiler::{codegen::CodegenContext, imports::VueImports, helper::CodeHelper}};
+use fervid_core::{Node, VDirective, HtmlAttribute};
+
+use crate::compiler::{codegen::CodegenContext, imports::VueImports, helper::CodeHelper};
 
 impl CodegenContext<'_> {
   /// Generates a sequence of `v-if` / `v-else-if` / `v-else` nodes
