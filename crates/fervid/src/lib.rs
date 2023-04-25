@@ -8,7 +8,7 @@ pub use analyzer::ast_optimizer::optimize_ast;
 pub use compiler::codegen::compile_ast;
 pub use parser::core::parse_sfc;
 pub use parser::sfc_blocks::*;
-pub use parser::structs::*;
+pub use fervid_core::*;
 
 #[allow(dead_code)]
 pub fn test_swc_transform(source_code: &str) -> Option<String> {
