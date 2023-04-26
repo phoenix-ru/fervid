@@ -1,16 +1,20 @@
-use fervid_core::{Node, ElementNode, StartingTag, HtmlAttribute, VDirective};
+use fervid_core::{Node, ElementNode, StartingTag, HtmlAttribute, VDirective, SfcTemplateBlock};
 
 use crate::compiler::all_html_tags;
 
-pub fn optimize_ast <'a> (ast: &'a mut [Node]) -> &'a [Node<'a>] {
+pub fn optimize_template<'a> (template: &'a mut SfcTemplateBlock) -> &'a SfcTemplateBlock<'a> {
   let mut ast_optimizer = AstOptimizer;
 
+  // Only retain `ElementNode`s as template roots
+  template.roots.retain(|root| matches!(root, Node::ElementNode(_)));
+
+  let ast = &mut template.roots;
   let mut iter = ast.iter_mut();
   while let Some(ref mut node) = iter.next() {
     node.visit_mut_with(&mut ast_optimizer);   
   }
 
-  ast
+  template
 }
 
 struct AstOptimizer;

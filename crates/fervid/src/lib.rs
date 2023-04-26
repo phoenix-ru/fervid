@@ -1,13 +1,12 @@
 extern crate lazy_static;
 
-mod analyzer;
-mod compiler;
-mod parser;
+pub mod analyzer;
+pub mod compiler;
+pub mod parser;
 
-pub use analyzer::ast_optimizer::optimize_ast;
-pub use compiler::codegen::compile_ast;
+pub use analyzer::ast_optimizer::optimize_template;
+pub use compiler::codegen::compile_sfc;
 pub use parser::core::parse_sfc;
-pub use parser::sfc_blocks::*;
 pub use fervid_core::*;
 
 #[allow(dead_code)]

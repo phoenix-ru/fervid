@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use fervid_core::{SfcTemplateBlock, Node, SfcScriptBlock, SfcStyleBlock, SfcBlock, StartingTag};
 use regex::Regex;
 
-use crate::{analyzer::scope::ScopeHelper, parser::sfc_blocks::convert_node_to_typed};
+use crate::analyzer::scope::ScopeHelper;
 use super::{all_html_tags::is_html_tag, helper::CodeHelper};
 
 #[derive(Default)]
@@ -41,40 +41,26 @@ impl Default for IsCustomElementParam<'_> {
  * Main entry point for the code generation
  * TODO REFACTOR
  */
-pub fn compile_ast(blocks: &[Node], scope_helper: ScopeHelper) -> Result<String, i32> {
+pub fn compile_sfc(blocks: Vec<SfcBlock>, scope_helper: ScopeHelper) -> Result<String, i32> {
   let mut template: Option<SfcTemplateBlock> = None;
-  // let mut template_lang: Option<&str> = None;
   let mut legacy_script: Option<SfcScriptBlock> = None;
   let mut setup_script: Option<SfcScriptBlock> = None;
-
   #[allow(unused)]
   let mut style: Option<SfcStyleBlock> = None;
 
-  for block in blocks.iter() {
-    let Node::ElementNode(element_node) = block else { continue; };
-
-    let sfc_block = convert_node_to_typed(element_node);
-
-    // TODO check if we have two templates/three scripts/etc. in an SFC (do this in analyzer)
-    // TODO how to handle custom blocks???
-    // TODO use different functions for compiling template/script/style and expose a utility to combine the results
-    // compile_template -> template render code, hoists, imports, etc.
-    // compile_script -> compiled code, analyzed props/emits/setup vars/etc.
-    // compile_style -> ?
-
-    match sfc_block {
-      SfcBlock::Template(sfc_template_block) => template = Some(sfc_template_block),
-      SfcBlock::Script(sfc_script_block) => {
-        // TODO is that needed?
-        if sfc_script_block.is_setup {
-          setup_script = Some(sfc_script_block)
+  for block in blocks.into_iter() {
+    match block {
+      SfcBlock::Template(template_block) => template = Some(template_block),
+      SfcBlock::Script(script_block) => {
+        if script_block.is_setup {
+          setup_script = Some(script_block);
         } else {
-          legacy_script = Some(sfc_script_block)
+          legacy_script = Some(script_block);
         }
       },
       #[allow(unused_assignments)]
-      SfcBlock::Style(sfc_style_block) => style = Some(sfc_style_block),
-      SfcBlock::Custom(_) => {}
+      SfcBlock::Style(style_block) => style = Some(style_block),
+      _ => {}
     }
   }
 
