@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
 fn swc_benchmark(c: &mut Criterion) {
     c.bench_function("swc transform", |b| {
@@ -7,11 +7,18 @@ fn swc_benchmark(c: &mut Criterion) {
 }
 
 fn parser_benchmark(c: &mut Criterion) {
-    let test_component = include_str!("../src/test/input.vue");
+    let inputs = vec![
+        ("input.vue", include_str!("./fixtures/input.vue")),
+        ("ElTable.vue", include_str!("./fixtures/ElTable.vue"))
+    ];
 
-    c.bench_function("parser: parse", |b| {
-        b.iter(|| fervid::parse_sfc(black_box(test_component)))
-    });
+    for input in inputs {
+        c.bench_with_input(
+            BenchmarkId::new("parser: parse", input.0),
+            &input.1,
+            |b, component| b.iter(|| fervid::parse_sfc(black_box(component))),
+        );
+    }
 }
 
 criterion_group!(benches, swc_benchmark, parser_benchmark);

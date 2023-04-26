@@ -45,7 +45,7 @@ fn main() {
 
 #[allow(dead_code)]
 fn test_real_compilation() {
-    let test = include_str!("./test/input.vue");
+    let test = include_str!("../benches/fixtures/input.vue");
 
     // Parse
     let res = parser::core::parse_sfc(test).unwrap();
