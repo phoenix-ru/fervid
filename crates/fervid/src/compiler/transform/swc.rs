@@ -1,5 +1,6 @@
-use swc_common::{BytePos, sync::Lrc, SourceMap};
-use swc_core::ecma::{visit::{VisitMut, VisitMutWith}, ast::{PropOrSpread, Prop, KeyValueProp, PropName, Expr}};
+use std::sync::Arc;
+
+use swc_core::{ecma::{visit::{VisitMut, VisitMutWith}, ast::{PropOrSpread, Prop, KeyValueProp, PropName, Expr}}, common::{BytePos, SourceMap}};
 use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
 use swc_ecma_parser::{lexer::Lexer, Syntax, StringInput, Parser};
 
@@ -30,7 +31,7 @@ pub fn transform_scoped(expr: &str, scope_helper: &ScopeHelper, scope_to_use: u3
     parsed.visit_mut_with(&mut visitor);
 
     // Emitting the result requires some setup with SWC
-    let cm: Lrc<SourceMap> = Default::default();
+    let cm: Arc<SourceMap> = Default::default();
     let mut buff: Vec<u8> = Vec::with_capacity(expr.len() * 2);
     let writer: JsWriter<&mut Vec<u8>> = JsWriter::new(cm.clone(), "\n", &mut buff, None);
 

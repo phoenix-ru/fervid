@@ -18,10 +18,9 @@ fervid_core = { path="../fervid_core" }
 nom = "7"
 regex = "1"
 phf = { version = "0.11", features = ["macros"] }
-swc_common = "0.29.17"
-swc_ecma_codegen = "0.128.*"
-swc_ecma_parser = "0.123.2"
-swc_core = { version = "0.44.*", features = ["plugin_transform"] }
+swc_ecma_codegen = "0.138.*"
+swc_ecma_parser = "0.133.*"
+swc_core = { version = "0.75.*", features = ["common_plugin_transform", "ecma_ast"] }
 lazy_static = "1.4.0"
 
 [dev-dependencies]

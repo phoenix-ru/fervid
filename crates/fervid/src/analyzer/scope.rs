@@ -1,7 +1,7 @@
 use fervid_core::{Node, VDirective, HtmlAttribute};
 use lazy_static::lazy_static;
 use regex::Regex;
-use swc_common::BytePos;
+use swc_core::common::BytePos;
 use swc_core::ecma::{visit::{Visit, VisitWith}, atoms::JsWord};
 use swc_ecma_parser::{lexer::Lexer, Syntax, StringInput, Parser};
 
