@@ -34,7 +34,7 @@ pub fn is_space_char(x: char) -> bool {
 // todo allow more symbols as per W3 spec
 pub fn is_valid_name_char(x: char) -> bool {
   // (x >= 'A' && x <= 'Z') || (x >= 'a' && x <= 'z')
-  x.is_alphabetic()
+  x.is_alphanumeric()
 }
 
 pub fn html_name(input: &str) -> IResult<&str, &str> {
