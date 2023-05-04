@@ -9,7 +9,8 @@ fn swc_benchmark(c: &mut Criterion) {
 fn parser_benchmark(c: &mut Criterion) {
     let inputs = vec![
         ("input.vue", include_str!("./fixtures/input.vue")),
-        ("ElTable.vue", include_str!("./fixtures/ElTable.vue"))
+        ("ElTable.vue", include_str!("./fixtures/ElTable.vue")),
+        ("TodoApp.vue", include_str!("./fixtures/TodoApp.vue")),
     ];
 
     for input in inputs {

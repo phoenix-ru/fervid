@@ -57,7 +57,7 @@ fn test_real_compilation() {
         _ => None,
     });
     let Some(template_block) = template_block else {
-        panic!("Test component has template block");
+        panic!("Test component has no template block");
     };
 
     // Optimize
