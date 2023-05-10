@@ -1,3 +1,41 @@
+//! Style transformer for Vue `<style scoped>`
+//!
+//! ## Example
+//! ```
+//! use lightningcss::{targets::Browsers, stylesheet::{MinifyOptions, PrinterOptions}};
+//! use fervid_css::{Transformer, TransformOptions};
+//!
+//! let input = r#"
+//! .example {
+//!   background: yellow;
+//! }
+//! "#;
+//!
+//! let mut transformer = Transformer::new(input, "data-v-abcd1234");
+//! let options = TransformOptions {
+//!     parse: Default::default(),
+//!     minify: Some(MinifyOptions {
+//!         targets: Some(Browsers {
+//!             chrome: Some(100 << 16),
+//!             firefox: Some(100 << 16),
+//!             safari: Some(16 << 16),
+//!             ..Default::default()
+//!         }),
+//!         ..Default::default()
+//!     }),
+//!     to_css: PrinterOptions {
+//!         minify: true,
+//!         ..Default::default()
+//!     },
+//! };
+//!
+//! let result = transformer.transform_style_scoped(options);
+//!
+//! if let Ok(to_css_result) = result {
+//!     assert_eq!(".example[data-v-abcd1234]{background:#ff0}", to_css_result.code);
+//! }
+//! ```
+
 mod transform_style_scoped;
 
 pub use transform_style_scoped::*;
@@ -6,11 +44,11 @@ pub use transform_style_scoped::*;
 mod tests {
     use lightningcss::{targets::Browsers, stylesheet::{MinifyOptions, PrinterOptions}};
 
-    use crate::{transform_style_scoped::Transformer, TransformOptions};
+    use crate::{Transformer, TransformOptions};
 
     macro_rules! test_output {
         ($input: expr, $expected: expr, $options: expr) => {
-            let mut transformer = Transformer::new($input, "abcd1234");
+            let mut transformer = Transformer::new($input, "data-v-abcd1234");
             let out = transformer.transform_style_scoped($options);
 
             let actual = match out {

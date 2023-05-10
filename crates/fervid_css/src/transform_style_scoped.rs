@@ -31,6 +31,9 @@ pub struct Transformer<'i> {
 }
 
 impl<'i> Transformer<'i> {
+    /// Creates a new <u>single-use</u> transformer tied to `input`.
+    ///
+    /// `scope` is the prefix which should be applied, e.g. `data-v-abcd1234`
     pub fn new(input: &'i str, scope: &'i str) -> Self {
         Self {
             input,
@@ -40,14 +43,18 @@ impl<'i> Transformer<'i> {
     }
 
     /// Transforms stylesheets using `lightningcss`.
+    /// After calling the method, transformer instance becomes unusable and any subsequent calls
+    /// will trigger a panic.
     ///
+    /// ### Why is transformer not consumed?
     /// Because `lightningcss` aims to be a borrow parser,
     /// dynamically rewriting `:deep()` rules is a tricky problem due to Rust's lifetimes.
     /// That is why we need to persuade the compiler that all the strings we create will be valid
     /// for at least the same lifetime as the input stylesheet, and this is what `cache` is for.
     ///
     /// An additional benefit of using `cache` is that we can reliably return warnings and errors
-    /// produced by `lightningcss`, because they must have the same lifetime as input.
+    /// produced by `lightningcss`, because they must have the same lifetime
+    /// as input (and as transformer).
     pub fn transform_style_scoped(
         &'i mut self,
         options: TransformOptions<'i>,
@@ -67,7 +74,7 @@ impl<'i> Transformer<'i> {
 
         let mut stylesheet = StyleSheet::parse(self.input, parse)?;
 
-        let suffix = format!("data-v-{}", self.scope).into();
+        let suffix = self.scope.into();
 
         transform_cached_strategy(&mut stylesheet, &suffix, &mut self.cache);
 
