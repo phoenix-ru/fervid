@@ -1,13 +1,16 @@
 [package]
 name = "fervid_css"
+description = "Vue style transformer"
 version = "0.0.1"
 edition = "2021"
+authors = ["Marsel Shaikhin <phoenix.apps@yahoo.com>"]
+repository = "https://github.com/phoenix-ru/rust-vue-compiler"
+license = "Apache-2.0"
+keywords = ["vue", "css", "style", "compiler", "transformer"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 cssparser = "0.29.6"
-# lightningcss = { version = "1.0.0-alpha.41", features = ["visitor"] }
-# parcel_selectors = "0.25.3"
-lightningcss = { git = "https://github.com/phoenix-ru/lightningcss.git", features = ["visitor"] }
-parcel_selectors = { git = "https://github.com/phoenix-ru/lightningcss.git" }
+lightningcss = { version = "1.0.0-alpha.41", git = "https://github.com/phoenix-ru/lightningcss.git", features = ["visitor"] }
+parcel_selectors = { version = "0.25.3", git = "https://github.com/phoenix-ru/lightningcss.git" }
