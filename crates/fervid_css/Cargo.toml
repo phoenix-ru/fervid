@@ -1,0 +1,13 @@
+[package]
+name = "fervid_css"
+version = "0.0.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cssparser = "0.29.6"
+# lightningcss = { version = "1.0.0-alpha.41", features = ["visitor"] }
+# parcel_selectors = "0.25.3"
+lightningcss = { git = "https://github.com/phoenix-ru/lightningcss.git", features = ["visitor"] }
+parcel_selectors = { git = "https://github.com/phoenix-ru/lightningcss.git" }
