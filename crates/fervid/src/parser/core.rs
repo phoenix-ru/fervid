@@ -52,7 +52,7 @@ fn parse_root_block<'a>(input: &'a str) -> IResult<&'a str, SfcBlock<'a>> {
       let Node::TextNode(content) = v.1 else {
         unreachable!("parse_text_node always returns a Node::TextNode")
       };
-      (input, content)
+      (v.0, content)
     }
   );
 

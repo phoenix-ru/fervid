@@ -1,4 +1,3 @@
-extern crate swc_common;
 extern crate swc_core;
 extern crate swc_ecma_codegen;
 extern crate swc_ecma_parser;
@@ -49,6 +48,8 @@ fn test_real_compilation() {
 
     // Parse
     let res = parser::core::parse_sfc(test).unwrap();
+
+    assert!(res.0.trim().len() == 0, "Input was not fully consumed");
 
     // Find template block
     let mut sfc_blocks = res.1;
