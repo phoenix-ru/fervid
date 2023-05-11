@@ -7,7 +7,7 @@
 Vue SFC compiler written in Rust.
 Currently in early development, and the closest goal is to reach feature-parity with the current [Vue SFC compiler](https://sfc.vuejs.org).
 
-## Progress till MVP ![](https://geps.dev/progress/44)
+## Progress till MVP ![](https://geps.dev/progress/48)
 A minimal target of this project includes:
 - Vue 3 code generation;
 - [unplugin](https://github.com/unjs/unplugin) integration;
@@ -85,7 +85,7 @@ Code generator
   - [ ] Patch flags
   - [ ] Hoisting
 
-- [ ] Processing `<style scoped>`
+- [x] Processing `<style scoped>`
 - [ ] `<script setup>` support
 - [ ] Vue 2.7 support
 - [ ] SSR with inline critical CSS support
