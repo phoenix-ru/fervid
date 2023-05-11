@@ -40,6 +40,7 @@ mod transform_style_scoped;
 
 pub use transform_style_scoped::*;
 
+#[cfg(test)]
 #[allow(unused)]
 mod tests {
     use lightningcss::{targets::Browsers, stylesheet::{MinifyOptions, PrinterOptions}};
