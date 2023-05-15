@@ -1,6 +1,6 @@
 extern crate regex;
 
-use std::collections::HashMap;
+use fxhash::FxHashMap as HashMap;
 use fervid_core::{SfcTemplateBlock, Node, SfcScriptBlock, SfcStyleBlock, SfcBlock, StartingTag};
 use regex::Regex;
 

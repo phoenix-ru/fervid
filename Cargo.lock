@@ -519,6 +519,7 @@ dependencies = [
  "criterion",
  "fervid_core",
  "fervid_css",
+ "fxhash",
  "lazy_static",
  "nom",
  "phf 0.11.1",
