@@ -543,6 +543,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fervid_script"
+version = "0.1.0"
+dependencies = [
+ "swc_core",
+ "swc_ecma_codegen",
+ "swc_ecma_parser",
+]
+
+[[package]]
 name = "form_urlencoded"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
