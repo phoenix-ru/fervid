@@ -3,8 +3,8 @@
 </div>
 
 # fervid
+All-In-One Vue compiler written in Rust.
 
-Vue SFC compiler written in Rust.
 Currently in early development, and the closest goal is to reach feature-parity with the current [Vue SFC compiler](https://sfc.vuejs.org).
 
 ## Progress till MVP ![](https://geps.dev/progress/48)
@@ -40,6 +40,31 @@ Micro-benchmarking has been done using Criterion, code for benchmarks can be fou
 
 Actual benchmarking is a TODO and has much lower priority compared to feature-completeness and usability in real-world scenarios, so **Pull Requests are welcome**.
 
+## Crates
+
+### `fervid` ![wip](https://badgen.net/badge/Status/In%20progress/blue)
+The main crate. At the moment of writing, it is responsible for everything, starting from parsing SFC and all the way to code generation, but this is temporary. In the future, this crate will most likely be used for CLI utility and re-exports from other crates.
+
+### `fervid_css` ![wip](https://badgen.net/badge/Status/In%20progress/blue)
+Works on the `<style>` block and enables `scoped` styles, CSS Modules and Vue-specific transformations. The backbone of this crate is [lightningcss](https://github.com/parcel-bundler/lightningcss).
+
+### `fervid_script` ![wip](https://badgen.net/badge/Status/In%20progress/blue)
+Handles `<script>` and `<script setup>` analysis and transformations, along with Typescript. Based on [SWC](https://github.com/swc-project/swc) and provides fast and correct transforms without using regular expressions.
+
+### `fervid_core` ![wip](https://badgen.net/badge/Status/In%20progress/blue)
+The core structures and functionality shared across crates.
+
+### `fervid_parser` ![future](https://badgen.net/badge/Status/Planned/orange)
+Parser for Vue SFC based on [Servo html5ever](https://github.com/servo/html5ever), the industry-grade HTML parser.
+
+### `fervid_napi` ![future](https://badgen.net/badge/Status/Planned/orange)
+NAPI-rs bindings for usage in Node.js.
+
+### `fervid_deno` ![future](https://badgen.net/badge/Status/Planned/orange)
+Deno bindings for usage in Deno.
+
+### `fervid_plugin` and `fervid_plugin_api` ![future](https://badgen.net/badge/Status/Planned/orange)
+These crates allow authoring plugins for `fervid` in Rust using dynamically loaded libraries (`.so`, `.dll` and `.dylib`). These plugins allow anyone to customize how a Vue SFC is parsed, optimized and code-generated.
 
 ## Roadmap
 Parser
