@@ -1,94 +1,73 @@
-use std::sync::Arc;
+#[macro_use]
+extern crate lazy_static;
 
-use script_legacy::analyze_script_legacy;
-use swc_core::common::{FileName, SourceMap};
-use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node as _};
+pub mod atoms;
+pub mod parser;
+pub mod script_legacy;
+pub mod script_setup;
 
-mod parser;
-mod script_legacy;
-mod script_setup;
+// use std::sync::Arc;
 
-pub use parser::*;
+// use swc_core::common::{FileName, SourceMap};
+// use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node as _};
 
-pub fn read_script(input: &str) -> Result<String, ()> {
-    let parse_result = parser::parse_typescript_module(input, 0, Default::default());
+// mod experimental_compile;
 
-    let parsed = match parse_result {
-        Ok(module) => module,
-        Err(e) => {
-            eprintln!("{:?}", e.kind());
-            return Err(());
-        }
-    };
+// pub fn read_script(input: &str) -> Result<String, ()> {
+//     let parse_result = parser::parse_typescript_module(input, 0, Default::default());
 
-    analyze_script_legacy(&parsed);
+//     let parsed = match parse_result {
+//         Ok(module) => module,
+//         Err(e) => {
+//             eprintln!("{:?}", e.kind());
+//             return Err(());
+//         }
+//     };
 
-    // Create and invoke the visitor
-    // let mut visitor = TransformVisitor {
-    //     current_scope: scope_to_use,
-    //     scope_helper
-    // };
-    // parsed.visit_mut_with(&mut visitor);
+//     let (module, comments) = parsed;
 
-    // Emitting the result requires some setup with SWC
-    let cm: Arc<SourceMap> = Default::default();
-    let src = input.to_owned();
-    cm.new_source_file(FileName::Custom("test.ts".to_owned()), src);
-    let mut buff: Vec<u8> = Vec::with_capacity(input.len() * 2);
-    let writer: JsWriter<&mut Vec<u8>> = JsWriter::new(cm.clone(), "\n", &mut buff, None);
+//     let analysis_res = analyze_script_legacy(&module);
+//     if let Ok(analyzed) = analysis_res {
+//         for field in analyzed.setup.iter() {
+//             println!("SETUP: {:?}", field);
+//         }
 
-    let mut emitter = Emitter {
-        cfg: swc_ecma_codegen::Config {
-            target: Default::default(),
-            ascii_only: false,
-            minify: false,
-            omit_last_semi: false,
-        },
-        comments: None,
-        wr: writer,
-        cm,
-    };
+//         for field in analyzed.data.iter() {
+//             println!("DATA: {:?}", field);
+//         }
 
-    let _ = parsed.emit_with(&mut emitter);
+//         for field in analyzed.props.iter() {
+//             println!("PROPS: {:?}", field);
+//         }
+//     }
 
-    String::from_utf8(buff).map_err(|_| ())
-}
+//     // Create and invoke the visitor
+//     // let mut visitor = TransformVisitor {
+//     //     current_scope: scope_to_use,
+//     //     scope_helper
+//     // };
+//     // parsed.visit_mut_with(&mut visitor);
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+//     // Emitting the result requires some setup with SWC
+//     let cm: Arc<SourceMap> = Default::default();
+//     let src = input.to_owned();
+//     cm.new_source_file(FileName::Custom("test.ts".to_owned()), src);
+//     let mut buff: Vec<u8> = Vec::with_capacity(input.len() * 2);
+//     let writer: JsWriter<&mut Vec<u8>> = JsWriter::new(cm.clone(), "\n", &mut buff, None);
 
-    #[test]
-    fn it_works() {
-        // TODO Write tests to check that all the needed values were scraped
-        // Check cases with/without `defineComponent` and without `export default`
+//     let mut emitter = Emitter {
+//         cfg: swc_ecma_codegen::Config {
+//             target: Default::default(),
+//             ascii_only: false,
+//             minify: false,
+//             omit_last_semi: false,
+//         },
+//         comments: Some(&comments),
+//         wr: writer,
+//         cm,
+//     };
 
-        let result = read_script(
-            r#"
-        import { defineComponent, ref } from 'vue'
+//     let _ = module.emit_with(&mut emitter);
 
-        export default defineComponent({
-            data() {
-                return {
-                    hello: 'world'
-                }
-            },
-            setup() {
-                const inputModel = ref('')
-                const modelValue = ref('')
-                const list = [1, 2, 3]
-
-                return {
-                    inputModel,
-                    modelValue,
-                    list
-                }
-            },
-        })
-        "#,
-        );
-        assert!(result.is_ok());
-
-        println!("{}", result.unwrap())
-    }
-}
+//     String::from_utf8(buff).map_err(|_| ())
+// }
