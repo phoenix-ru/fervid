@@ -9,7 +9,7 @@ use swc_core::ecma::{
 pub fn find_default_export(module: &Module) -> Option<&ObjectLit> {
     let define_component = JsWord::from("defineComponent");
 
-    module.body.iter().find_map(|module_item| {
+    module.body.iter().rev().find_map(|module_item| {
         let ModuleItem::ModuleDecl(module_decl) = module_item else {
             return None;
         };

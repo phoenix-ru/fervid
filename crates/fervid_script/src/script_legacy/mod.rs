@@ -1,102 +1,58 @@
-use swc_core::ecma::{
-    ast::{
-        ArrayLit, ArrowExpr, BlockStmtOrExpr, Expr, Function, Lit, Module, ObjectLit, Prop,
-        PropName, PropOrSpread,
-    },
-    atoms::JsWord,
-};
+use swc_core::ecma::ast::Module;
 
-use crate::atoms::*;
-use self::{
-    components::collect_components_object,
-    computed::collect_computed_object,
-    data::{collect_data_bindings_block_stmt, collect_data_bindings_expr},
-    directives::collect_directives_object,
-    emits::{collect_emits_bindings_array, collect_emits_bindings_object},
-    expose::collect_expose_bindings_array,
-    inject::{collect_inject_bindings_array, collect_inject_bindings_object},
-    methods::collect_methods_object,
-    props::{collect_prop_bindings_array, collect_prop_bindings_object},
-    setup::{collect_setup_bindings_block_stmt, collect_setup_bindings_expr},
-    utils::find_default_export,
-};
+use crate::structs::ScriptLegacyVars;
 
-pub use structs::ScriptLegacyVars;
-
+mod analyzer;
 mod components;
 mod computed;
 mod data;
 mod directives;
 mod emits;
 mod expose;
+mod imports;
 mod inject;
 mod methods;
 mod props;
 mod setup;
-mod structs;
 pub mod utils;
 
-pub fn analyze_script_legacy(module: &Module) -> Result<ScriptLegacyVars, ()> {
+#[derive(Default)]
+pub struct AnalyzeOptions {
+    /// Setting this to `true` will cause `analyze_script_legacy`
+    /// to return Err if no default export was found
+    pub require_default_export: bool,
+    /// When `true`, all the top-level statements will be
+    /// analyzed as if they are directly available to template via setup (same as in `<script setup>`)
+    /// 
+    /// TODO: Is it really correct to put these statements into `setup`?
+    /// In `PROD` mode they are available to the inline template as module globals,
+    /// in `DEV` mode they are available under `$setup` because of `__returned` object
+    pub collect_top_level_stmts: bool
+}
+
+pub fn analyze_script_legacy(
+    module: &Module,
+    opts: AnalyzeOptions,
+) -> Result<ScriptLegacyVars, ()> {
+    // Default export should be either an object or `defineComponent({ /* ... */ })`
+    let maybe_default_export = utils::find_default_export(module);
+
+    // Sometimes we care about default export, e.g. in tests
+    if let (None, true) = (maybe_default_export, opts.require_default_export) {
+        return Err(())
+    }
+
     // This is where we collect all the analyzed stuff
     let mut script_legacy_vars = ScriptLegacyVars::default();
 
-    // Default export should be either an object or `defineComponent({ /* ... */ })`
-    let Some(default_export) = find_default_export(module) else {
-        return Err(());
-    };
+    // Analyze the imports and top level items
+    if opts.collect_top_level_stmts {
+        analyzer::analyze_top_level_items(module, &mut script_legacy_vars)
+    }
 
-    // tl;dr Visit every method, arrow function, object or array and forward control
-    for field in default_export.props.iter() {
-        let PropOrSpread::Prop(prop) = field else {
-            continue;
-        };
-
-        match **prop {
-            Prop::KeyValue(ref key_value) => {
-                let sym = match key_value.key {
-                    PropName::Ident(ref ident) => &ident.sym,
-                    PropName::Str(ref s) => &s.value,
-                    _ => continue,
-                };
-
-                match *key_value.value {
-                    Expr::Array(ref array_lit) => {
-                        handle_options_array(sym, array_lit, &mut script_legacy_vars)
-                    }
-                    Expr::Object(ref obj_lit) => {
-                        handle_options_obj(sym, obj_lit, &mut script_legacy_vars)
-                    }
-                    Expr::Fn(ref fn_expr) => {
-                        handle_options_function(sym, &fn_expr.function, &mut script_legacy_vars)
-                    }
-                    Expr::Arrow(ref arrow_expr) => {
-                        handle_options_arrow_function(sym, arrow_expr, &mut script_legacy_vars)
-                    }
-                    Expr::Lit(ref lit) => handle_options_lit(sym, lit, &mut script_legacy_vars),
-
-                    // These latter types technically can be analyzed as well,
-                    // because they only need `.expr` unwrapping and re-matching.
-                    // It can be done when the match moves into a function
-                    // which can be recursively called.
-                    // Expr::TsTypeAssertion(_) => todo!(),
-                    // Expr::TsConstAssertion(_) => todo!(),
-                    // Expr::TsAs(_) => todo!(),
-                    _ => {
-                        continue;
-                    }
-                }
-            }
-            Prop::Method(ref method) => {
-                let sym = match method.key {
-                    PropName::Ident(ref ident) => &ident.sym,
-                    PropName::Str(ref s) => &s.value,
-                    _ => continue,
-                };
-
-                handle_options_function(sym, &method.function, &mut script_legacy_vars)
-            }
-            _ => {}
-        }
+    // Analyze the default export
+    if let Some(default_export) = maybe_default_export {
+        analyzer::analyze_default_export(default_export, &mut script_legacy_vars)
     }
 
     Ok(script_legacy_vars)
@@ -106,119 +62,21 @@ pub fn transform_script_legacy(_module: &mut Module) {
     todo!()
 }
 
-/// In Options API, `props`, `inject`, `emits` and `expose` may be arrays
-fn handle_options_array(
-    field: &JsWord,
-    array_lit: &ArrayLit,
-    script_legacy_vars: &mut ScriptLegacyVars,
-) {
-    if *field == *PROPS {
-        collect_prop_bindings_array(array_lit, script_legacy_vars)
-    } else if *field == *INJECT {
-        collect_inject_bindings_array(array_lit, script_legacy_vars)
-    } else if *field == *EMITS {
-        collect_emits_bindings_array(array_lit, script_legacy_vars)
-    } else if *field == *EXPOSE {
-        collect_expose_bindings_array(array_lit, script_legacy_vars)
-    }
-}
-
-/// Similar to [handle_options_array], only `data`, `setup` may be declared as arrow fns
-fn handle_options_arrow_function(
-    field: &JsWord,
-    arrow_expr: &ArrowExpr,
-    script_legacy_vars: &mut ScriptLegacyVars,
-) {
-    // Arrow functions may either have a body or an expression
-    // `() => {}` is a body which returns nothing
-    // `() => ({})` is an expression which returns an empty object
-    macro_rules! forward_block_stmt_or_expr {
-        ($forward_block_stmt: ident, $forward_expr: ident) => {
-            match *arrow_expr.body {
-                BlockStmtOrExpr::BlockStmt(ref block_stmt) => {
-                    $forward_block_stmt(block_stmt, script_legacy_vars)
-                }
-                BlockStmtOrExpr::Expr(ref arrow_body_expr) => {
-                    $forward_expr(arrow_body_expr, script_legacy_vars)
-                }
-            }
-        };
-    }
-
-    // It reads a bit cryptic because of the macro calls,
-    // but you should only care about the functions which are called,
-    // e.g. [`collect_data_bindings_block_stmt`]
-    if *field == *DATA {
-        forward_block_stmt_or_expr!(collect_data_bindings_block_stmt, collect_data_bindings_expr);
-    } else if *field == *SETUP {
-        forward_block_stmt_or_expr!(
-            collect_setup_bindings_block_stmt,
-            collect_setup_bindings_expr
-        )
-    }
-}
-
-/// Same as [handle_options_arrow_function], `data` and `setup`
-fn handle_options_function(
-    field: &JsWord,
-    function: &Function,
-    script_legacy_vars: &mut ScriptLegacyVars,
-) {
-    let Some(ref function_body) = function.body else {
-        return;
-    };
-
-    if *field == *DATA {
-        collect_data_bindings_block_stmt(function_body, script_legacy_vars)
-    } else if *field == *SETUP {
-        collect_setup_bindings_block_stmt(function_body, script_legacy_vars)
-    }
-}
-
-/// `name`
-fn handle_options_lit(field: &JsWord, lit: &Lit, script_legacy_vars: &mut ScriptLegacyVars) {
-    if *field == *NAME {
-        if let Lit::Str(name) = lit {
-            script_legacy_vars.name = Some(name.value.to_owned())
-        }
-    }
-}
-
-/// `props`, `computed`, `inject`, `emits`, `components`, `methods`, `directives`
-fn handle_options_obj(
-    field: &JsWord,
-    obj_lit: &ObjectLit,
-    script_legacy_vars: &mut ScriptLegacyVars,
-) {
-    if *field == *PROPS {
-        collect_prop_bindings_object(obj_lit, script_legacy_vars)
-    } else if *field == *COMPUTED {
-        collect_computed_object(obj_lit, script_legacy_vars)
-    } else if *field == *INJECT {
-        collect_inject_bindings_object(obj_lit, script_legacy_vars)
-    } else if *field == *EMITS {
-        collect_emits_bindings_object(obj_lit, script_legacy_vars)
-    } else if *field == *COMPONENTS {
-        collect_components_object(obj_lit, script_legacy_vars)
-    } else if *field == *METHODS {
-        collect_methods_object(obj_lit, script_legacy_vars)
-    } else if *field == *DIRECTIVES {
-        collect_directives_object(obj_lit, script_legacy_vars)
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use swc_core::ecma::atoms::JsWord;
-    use crate::parser::*;
     use super::*;
+    use crate::{
+        parser::*,
+        structs::{BindingTypes, SetupBinding},
+    };
+    use swc_core::ecma::atoms::JsWord;
 
     fn analyze_js(input: &str) -> ScriptLegacyVars {
         let parsed = parse_javascript_module(input, 0, Default::default())
             .expect("analyze_js expects the input to be parseable")
             .0;
 
-        let analyzed = analyze_script_legacy(&parsed)
+        let analyzed = analyze_script_legacy(&parsed, Default::default())
             .expect("analyze_js expects the input to be analyzed successfully");
 
         analyzed
@@ -229,7 +87,7 @@ mod tests {
             .expect("analyze_ts expects the input to be parseable")
             .0;
 
-        let analyzed = analyze_script_legacy(&parsed)
+        let analyzed = analyze_script_legacy(&parsed, Default::default())
             .expect("analyze_ts expects the input to be analyzed successfully");
 
         analyzed
@@ -273,12 +131,30 @@ mod tests {
                 let parsed = parse_javascript_module($input, 0, Default::default())
                     .expect("parsing js should not err")
                     .0;
-                assert_eq!(analyze_script_legacy(&parsed), Err(()));
+                assert_eq!(
+                    analyze_script_legacy(
+                        &parsed,
+                        AnalyzeOptions {
+                            require_default_export: true,
+                            ..Default::default()
+                        }
+                    ),
+                    Err(())
+                );
 
                 let parsed = parse_typescript_module($input, 0, Default::default())
                     .expect("parsing ts should not err")
                     .0;
-                assert_eq!(analyze_script_legacy(&parsed), Err(()))
+                assert_eq!(
+                    analyze_script_legacy(
+                        &parsed,
+                        AnalyzeOptions {
+                            require_default_export: true,
+                            ..Default::default()
+                        }
+                    ),
+                    Err(())
+                )
             };
         }
 
@@ -629,10 +505,10 @@ mod tests {
     fn it_analyzes_setup() {
         let expected = ScriptLegacyVars {
             setup: vec![
-                JsWord::from("foo"),
-                JsWord::from("bar"),
-                JsWord::from("baz"),
-                JsWord::from("pi"),
+                SetupBinding(JsWord::from("foo"), BindingTypes::SetupMaybeRef),
+                SetupBinding(JsWord::from("bar"), BindingTypes::SetupMaybeRef),
+                SetupBinding(JsWord::from("baz"), BindingTypes::SetupMaybeRef),
+                SetupBinding(JsWord::from("pi"), BindingTypes::SetupMaybeRef),
             ],
             ..Default::default()
         };
@@ -769,9 +645,9 @@ mod tests {
                 props: vec![JsWord::from("foo"), JsWord::from("bar")],
                 data: vec![JsWord::from("hello")],
                 setup: vec![
-                    JsWord::from("inputModel"),
-                    JsWord::from("modelValue"),
-                    JsWord::from("list")
+                    SetupBinding(JsWord::from("inputModel"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(JsWord::from("modelValue"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(JsWord::from("list"), BindingTypes::SetupMaybeRef),
                 ],
                 ..Default::default()
             }

@@ -5,6 +5,7 @@ pub mod atoms;
 pub mod parser;
 pub mod script_legacy;
 pub mod script_setup;
+pub mod structs;
 
 // use std::sync::Arc;
 

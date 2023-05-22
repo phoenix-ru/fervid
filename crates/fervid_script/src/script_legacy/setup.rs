@@ -1,5 +1,7 @@
 use swc_core::ecma::ast::{BlockStmt, Expr};
 
+use crate::structs::{BindingTypes, SetupBinding};
+
 use super::{ScriptLegacyVars, utils::{collect_block_stmt_return_fields, unroll_paren_seq, collect_obj_fields}};
 
 /// Collects all the bindings from `setup`, e.g. `setup() { return { foo: 'bar', baz: 42 } }`
@@ -7,7 +9,14 @@ use super::{ScriptLegacyVars, utils::{collect_block_stmt_return_fields, unroll_p
 /// https://vuejs.org/api/composition-api-setup.html
 #[inline]
 pub fn collect_setup_bindings_block_stmt(block_stmt: &BlockStmt, script_legacy_vars: &mut ScriptLegacyVars) {
-    collect_block_stmt_return_fields(block_stmt, &mut script_legacy_vars.setup)
+    // TODO Implement the algorithm
+
+    let mut tmp = Vec::new();
+    collect_block_stmt_return_fields(block_stmt, &mut tmp);
+
+    script_legacy_vars.setup.extend(
+        tmp.into_iter().map(|word| SetupBinding(word, BindingTypes::SetupMaybeRef))
+    );
 }
 
 /// Collects all the bindings from `setup` expression, e.g. `setup: () => ({ foo: 'bar' })`
@@ -23,5 +32,10 @@ pub fn collect_setup_bindings_expr(expr: &Expr, script_legacy_vars: &mut ScriptL
         return;
     };
 
-    collect_obj_fields(obj_lit, &mut script_legacy_vars.setup)
+    let mut tmp = Vec::new();
+    collect_obj_fields(obj_lit, &mut tmp);
+
+    script_legacy_vars.setup.extend(
+        tmp.into_iter().map(|word| SetupBinding(word, BindingTypes::SetupMaybeRef))
+    );
 }
