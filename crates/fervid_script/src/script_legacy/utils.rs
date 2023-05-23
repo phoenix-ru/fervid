@@ -1,7 +1,7 @@
 use swc_core::ecma::{
     ast::{
         BlockStmt, Callee, Expr, Function, Module, ModuleDecl, ModuleItem, ObjectLit, Prop,
-        PropName, PropOrSpread, ReturnStmt, Stmt, ArrayLit, ExprOrSpread, Lit,
+        PropName, PropOrSpread, ReturnStmt, Stmt, ArrayLit, ExprOrSpread, Lit, Tpl,
     },
     atoms::JsWord,
 };
@@ -160,31 +160,49 @@ pub fn collect_string_arr(arr: &ArrayLit, out: &mut Vec<JsWord>) {
         };
 
         // Only string literals are supported in array syntax
+        let Some(s) = get_string_expr(expr) else {
+            continue;
+        };
+
         // We do not dedupe anything in general
-        match **expr {
-            Expr::Lit(Lit::Str(ref s)) => {
-                out.push(s.value.to_owned())
-            }
-            // Js template string: `foo` (with backticks)
-            Expr::Tpl(ref tpl) => {
-                // This is not a js runtime, only simple template strings are supported
-                if tpl.exprs.len() > 0 || tpl.quasis.len() != 1 {
-                    continue;
-                };
-
-                let Some(template_elem) = tpl.quasis.get(0) else {
-                    continue;
-                };
-
-                let Some(ref template_string) = template_elem.cooked else {
-                    continue;
-                };
-
-                out.push(template_string.as_ref().into())
-            }
-            _ => {}
-        }
+        out.push(s)
     }
+}
+
+/// Gets a `string` value from expr, either `'literal'` or from \`template string\`
+pub fn get_string_expr(expr: &Expr) -> Option<JsWord> {
+    match *expr {
+        Expr::Lit(Lit::Str(ref s)) => {
+            Some(s.value.to_owned())
+        }
+
+        // Js template string: `foo` (with backticks)
+        Expr::Tpl(ref tpl) => {
+            get_string_tpl(tpl)
+        }
+
+        _ => None
+    }
+}
+
+/// Gets the template string if it is simple:
+/// - \`something simple\` is trivial and returns `Some(JsWord::from("something simple"))`;
+/// - \`something ${notSoSimple}\` is not trivial and will return `None`.
+pub fn get_string_tpl(tpl: &Tpl) -> Option<JsWord> {
+    // This is not a js runtime, only simple template strings are supported
+    if tpl.exprs.len() > 0 || tpl.quasis.len() != 1 {
+        return None;
+    };
+
+    let Some(template_elem) = tpl.quasis.get(0) else {
+        return None;
+    };
+
+    let Some(ref template_string) = template_elem.cooked else {
+        return None;
+    };
+
+    Some(template_string.as_ref().into())
 }
 
 /// Unrolls an expression from parenthesis and sequences.

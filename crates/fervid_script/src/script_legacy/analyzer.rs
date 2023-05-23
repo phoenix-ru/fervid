@@ -1,7 +1,7 @@
 use swc_core::ecma::{
     ast::{
-        ArrayLit, ArrowExpr, BlockStmtOrExpr, Decl, Expr, Function, Lit, Module,
-        ModuleDecl, ModuleItem, ObjectLit, Pat, Prop, PropName, PropOrSpread, Stmt, VarDeclKind,
+        ArrayLit, ArrowExpr, BlockStmtOrExpr, Callee, Decl, Expr, Function, Lit, Module,
+        ModuleDecl, ModuleItem, ObjectLit, Pat, Prop, PropName, PropOrSpread, Stmt, VarDeclKind, Tpl,
     },
     atoms::JsWord,
 };
@@ -18,12 +18,12 @@ use super::{
     methods::collect_methods_object,
     props::{collect_prop_bindings_array, collect_prop_bindings_object},
     setup::{collect_setup_bindings_block_stmt, collect_setup_bindings_expr},
-    utils::unroll_paren_seq,
+    utils::{unroll_paren_seq, get_string_tpl},
     ScriptLegacyVars,
 };
 use crate::{
     atoms::*,
-    structs::{BindingTypes, SetupBinding},
+    structs::{BindingTypes, SetupBinding, VueResolvedImports},
 };
 
 pub fn analyze_default_export(default_export: &ObjectLit, out: &mut ScriptLegacyVars) {
@@ -49,6 +49,7 @@ pub fn analyze_default_export(default_export: &ObjectLit, out: &mut ScriptLegacy
                         handle_options_arrow_function(sym, arrow_expr, out)
                     }
                     Expr::Lit(ref lit) => handle_options_lit(sym, lit, out),
+                    Expr::Tpl(ref tpl) => handle_options_tpl(sym, tpl, out),
 
                     // These latter types technically can be analyzed as well,
                     // because they only need `.expr` unwrapping and re-matching.
@@ -76,105 +77,146 @@ pub fn analyze_default_export(default_export: &ObjectLit, out: &mut ScriptLegacy
     }
 }
 
-pub fn analyze_top_level_items(module: &Module, out: &mut ScriptLegacyVars) {
-    // TODO allow passing both `imports` and `setup` arrays simultaneously
-
+pub fn analyze_top_level_items(
+    module: &Module,
+    out: &mut ScriptLegacyVars,
+    vue_imports: &mut VueResolvedImports,
+) {
     for module_item in module.body.iter() {
         match *module_item {
             ModuleItem::ModuleDecl(ModuleDecl::Import(ref import_decl)) => {
-                collect_imports(import_decl, out)
+                collect_imports(import_decl, out, vue_imports)
             }
 
-            ModuleItem::Stmt(ref stmt) => match stmt {
-                Stmt::Decl(decl) => match decl {
-                    Decl::Class(class) => out.setup.push(SetupBinding(
-                        class.ident.sym.to_owned(),
-                        BindingTypes::SetupConst,
-                    )),
-                    Decl::Fn(fn_decl) => out.setup.push(SetupBinding(
-                        fn_decl.ident.sym.to_owned(),
-                        BindingTypes::SetupConst,
-                    )),
-                    Decl::Var(var_decl) => {
-                        let is_const = matches!(var_decl.kind, VarDeclKind::Const);
-
-                        for decl in var_decl.decls.iter() {
-                            // SOOQA JAVASCRIPT BLYAT
-                            match decl.name {
-                                Pat::Ident(ref ident) => {
-                                    // If no init expr, that means this is not a const anyways
-                                    // `let tmp;` is valid, but `const tmp;` is not
-                                    let Some(ref init_expr) = decl.init else {
-                                        out.setup.push(SetupBinding(
-                                            ident.sym.to_owned(),
-                                            BindingTypes::SetupLet
-                                        ));
-                                        continue;
-                                    };
-
-                                    let init_expr = unroll_paren_seq(init_expr);
-
-                                    match init_expr {
-                                        // We only support Vue's function calls, the rest is just let/const
-                                        Expr::Call(_) => todo!(),
-
-                                        // That may be a ref
-                                        // Expr::Await(_) => todo!(),
-                                        Expr::Ident(_) => {
-                                            out.setup.push(SetupBinding(
-                                                ident.sym.to_owned(),
-                                                BindingTypes::SetupMaybeRef
-                                            ))
-                                        }
-
-                                        // The other variants are never refs
-                                        _ => {
-                                            out.setup.push(SetupBinding(
-                                                ident.sym.to_owned(),
-                                                if is_const {
-                                                    BindingTypes::SetupConst
-                                                } else {
-                                                    BindingTypes::SetupLet
-                                                }
-                                            ))
-                                        }
-
-                                        // Idk what to do with these
-                                        // Expr::TsTypeAssertion(_) => todo!(),
-                                        // Expr::TsConstAssertion(_) => todo!(),
-                                        // Expr::TsNonNull(_) => todo!(),
-                                        // Expr::TsAs(_) => todo!(),
-                                        // Expr::TsInstantiation(_) => todo!(),
-                                        // Expr::TsSatisfies(_) => todo!(),
-                                    }
-                                }
-
-                                // TODO handle destructures
-                                // I hate js...
-
-                                Pat::Array(_) => todo!(),
-                                Pat::Rest(_) => todo!(),
-                                Pat::Object(_) => todo!(),
-                                Pat::Assign(_) => todo!(),
-                                Pat::Invalid(_) => todo!(),
-                                _ => {}
-                            }
-                        }
-                    }
-
-                    // TODO: What?
-                    Decl::TsInterface(_) => todo!(),
-                    Decl::TsTypeAlias(_) => todo!(),
-                    Decl::TsEnum(_) => todo!(),
-                    Decl::TsModule(_) => todo!(),
-                },
-
-                _ => {}
-            },
+            ModuleItem::Stmt(ref stmt) => analyze_top_level_stmt(stmt, out, vue_imports),
 
             // Exports are ignored
             _ => {}
         }
+    }
+}
+
+#[inline]
+fn analyze_top_level_stmt(
+    stmt: &Stmt,
+    out: &mut ScriptLegacyVars,
+    vue_imports: &mut VueResolvedImports,
+) {
+    match stmt {
+        Stmt::Decl(decl) => match decl {
+            Decl::Class(class) => out.setup.push(SetupBinding(
+                class.ident.sym.to_owned(),
+                BindingTypes::SetupConst,
+            )),
+
+            Decl::Fn(fn_decl) => out.setup.push(SetupBinding(
+                fn_decl.ident.sym.to_owned(),
+                BindingTypes::SetupConst,
+            )),
+
+            Decl::Var(var_decl) => {
+                let is_const = matches!(var_decl.kind, VarDeclKind::Const);
+
+                for decl in var_decl.decls.iter() {
+                    // SOOQA JAVASCRIPT BLYAT
+                    match decl.name {
+                        Pat::Ident(ref decl_ident) => {
+                            macro_rules! push {
+                                ($typ: expr) => {
+                                    out.setup
+                                        .push(SetupBinding(decl_ident.sym.to_owned(), $typ))
+                                };
+                            }
+
+                            // For `let` and `var` type is always BindingTypes::SetupLet
+                            if !is_const {
+                                push!(BindingTypes::SetupLet);
+                                continue;
+                            }
+
+                            // If no init expr, that means this is not a const anyways
+                            // `let tmp;` is valid, but `const tmp;` is not
+                            let Some(ref init_expr) = decl.init else {
+                                push!(BindingTypes::SetupLet);
+                                continue;
+                            };
+
+                            let init_expr = unroll_paren_seq(init_expr);
+
+                            match init_expr {
+                                // We only support Vue's function calls.
+                                // If this is not a Vue function, it is either SetupMaybeRef or SetupLet
+                                Expr::Call(call_expr) => {
+                                    match call_expr.callee {
+                                        Callee::Expr(ref callee_expr) if callee_expr.is_ident() => {
+                                            let Expr::Ident(ref callee_ident) = **callee_expr else {
+                                                unreachable!()
+                                            };
+
+                                            // Check Vue atoms (they must have been imported before)
+                                            // Use PartialEq on Option<Id> for convenience
+                                            let callee_ident_option = Some(callee_ident.to_id());
+
+                                            if callee_ident_option == vue_imports.ref_import {
+                                                push!(BindingTypes::SetupRef)
+                                            } else if callee_ident_option == vue_imports.computed {
+                                                push!(BindingTypes::SetupRef)
+                                            } else if callee_ident_option == vue_imports.reactive {
+                                                push!(BindingTypes::SetupReactiveConst)
+                                            } else {
+                                                push!(BindingTypes::SetupMaybeRef)
+                                            }
+                                        }
+
+                                        // This is something unsupported, just add a MaybeRef binding
+                                        _ => {
+                                            push!(BindingTypes::SetupMaybeRef);
+                                            continue;
+                                        }
+                                    }
+                                },
+
+                                // MaybeRef binding
+                                // Expr::Await(_) => todo!(),
+                                Expr::Ident(_) => {
+                                    push!(BindingTypes::SetupMaybeRef);
+                                }
+
+                                // The other variants are never refs
+                                _ => {
+                                    push!(BindingTypes::SetupConst)
+                                }
+
+                                // Idk what to do with these
+                                // Expr::TsTypeAssertion(_) => todo!(),
+                                // Expr::TsConstAssertion(_) => todo!(),
+                                // Expr::TsNonNull(_) => todo!(),
+                                // Expr::TsAs(_) => todo!(),
+                                // Expr::TsInstantiation(_) => todo!(),
+                                // Expr::TsSatisfies(_) => todo!(),
+                            }
+                        }
+
+                        // TODO handle destructures
+                        // I hate js...
+                        Pat::Array(_) => todo!(),
+                        Pat::Rest(_) => todo!(),
+                        Pat::Object(_) => todo!(),
+                        Pat::Assign(_) => todo!(),
+                        Pat::Invalid(_) => todo!(),
+                        _ => {}
+                    }
+                }
+            }
+
+            // TODO: What?
+            Decl::TsInterface(_) => todo!(),
+            Decl::TsTypeAlias(_) => todo!(),
+            Decl::TsEnum(_) => todo!(),
+            Decl::TsModule(_) => todo!(),
+        },
+
+        _ => {}
     }
 }
 
@@ -253,6 +295,13 @@ fn handle_options_lit(field: &JsWord, lit: &Lit, script_legacy_vars: &mut Script
         if let Lit::Str(name) = lit {
             script_legacy_vars.name = Some(name.value.to_owned())
         }
+    }
+}
+
+/// `name`
+fn handle_options_tpl(field: &JsWord, tpl: &Tpl, script_legacy_vars: &mut ScriptLegacyVars) {
+    if *field == *NAME {
+        script_legacy_vars.name = get_string_tpl(tpl);
     }
 }
 

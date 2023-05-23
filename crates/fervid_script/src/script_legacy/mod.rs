@@ -1,6 +1,6 @@
 use swc_core::ecma::ast::Module;
 
-use crate::structs::ScriptLegacyVars;
+use crate::structs::{ScriptLegacyVars, VueResolvedImports};
 
 mod analyzer;
 mod components;
@@ -16,18 +16,18 @@ mod props;
 mod setup;
 pub mod utils;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct AnalyzeOptions {
     /// Setting this to `true` will cause `analyze_script_legacy`
     /// to return Err if no default export was found
     pub require_default_export: bool,
     /// When `true`, all the top-level statements will be
     /// analyzed as if they are directly available to template via setup (same as in `<script setup>`)
-    /// 
+    ///
     /// TODO: Is it really correct to put these statements into `setup`?
     /// In `PROD` mode they are available to the inline template as module globals,
     /// in `DEV` mode they are available under `$setup` because of `__returned` object
-    pub collect_top_level_stmts: bool
+    pub collect_top_level_stmts: bool,
 }
 
 pub fn analyze_script_legacy(
@@ -39,15 +39,16 @@ pub fn analyze_script_legacy(
 
     // Sometimes we care about default export, e.g. in tests
     if let (None, true) = (maybe_default_export, opts.require_default_export) {
-        return Err(())
+        return Err(());
     }
 
     // This is where we collect all the analyzed stuff
     let mut script_legacy_vars = ScriptLegacyVars::default();
+    let mut vue_imports = VueResolvedImports::default();
 
     // Analyze the imports and top level items
     if opts.collect_top_level_stmts {
-        analyzer::analyze_top_level_items(module, &mut script_legacy_vars)
+        analyzer::analyze_top_level_items(module, &mut script_legacy_vars, &mut vue_imports)
     }
 
     // Analyze the default export
@@ -69,25 +70,25 @@ mod tests {
         parser::*,
         structs::{BindingTypes, SetupBinding},
     };
-    use swc_core::ecma::atoms::JsWord;
+    use swc_core::{ecma::{atoms::JsWord}, common::SyntaxContext};
 
-    fn analyze_js(input: &str) -> ScriptLegacyVars {
+    fn analyze_js(input: &str, opts: AnalyzeOptions) -> ScriptLegacyVars {
         let parsed = parse_javascript_module(input, 0, Default::default())
             .expect("analyze_js expects the input to be parseable")
             .0;
 
-        let analyzed = analyze_script_legacy(&parsed, Default::default())
+        let analyzed = analyze_script_legacy(&parsed, opts)
             .expect("analyze_js expects the input to be analyzed successfully");
 
         analyzed
     }
 
-    fn analyze_ts(input: &str) -> ScriptLegacyVars {
+    fn analyze_ts(input: &str, opts: AnalyzeOptions) -> ScriptLegacyVars {
         let parsed = parse_typescript_module(input, 0, Default::default())
             .expect("analyze_ts expects the input to be parseable")
             .0;
 
-        let analyzed = analyze_script_legacy(&parsed, Default::default())
+        let analyzed = analyze_script_legacy(&parsed, opts)
             .expect("analyze_ts expects the input to be analyzed successfully");
 
         analyzed
@@ -95,8 +96,13 @@ mod tests {
 
     macro_rules! test_js_and_ts {
         ($input: expr, $expected: expr) => {
-            assert_eq!(analyze_js($input), $expected);
-            assert_eq!(analyze_ts($input), $expected);
+            assert_eq!(analyze_js($input, Default::default()), $expected);
+            assert_eq!(analyze_ts($input, Default::default()), $expected);
+        };
+
+        ($input: expr, $expected: expr, $opts: expr) => {
+            assert_eq!(analyze_js($input, $opts.clone()), $expected);
+            assert_eq!(analyze_ts($input, $opts.clone()), $expected);
         };
     }
 
@@ -181,8 +187,8 @@ mod tests {
         };
 
         test_js_and_ts!(r"export default { name: 'TestComponent' }", test_name);
-
         test_js_and_ts!(r#"export default { name: "TestComponent" }"#, test_name);
+        test_js_and_ts!(r"export default { name: `TestComponent` }", test_name);
 
         test_js_and_ts!(
             r"export default defineComponent({ name: 'TestComponent' })",
@@ -651,6 +657,81 @@ mod tests {
                 ],
                 ..Default::default()
             }
+        );
+    }
+
+    #[test]
+    fn it_analyzes_top_level() {
+        let opts = AnalyzeOptions {
+            require_default_export: false,
+            collect_top_level_stmts: true,
+        };
+
+        // Regular usage
+        test_js_and_ts!(
+            r"
+            import { ref, computed, reactive } from 'vue'
+
+            const foo = ref(42)
+            const bar = computed(() => 'vue computed')
+            const baz = reactive({ qux: true })
+            ",
+            ScriptLegacyVars {
+                setup: vec![
+                    SetupBinding(JsWord::from("foo"), BindingTypes::SetupRef),
+                    SetupBinding(JsWord::from("bar"), BindingTypes::SetupRef),
+                    SetupBinding(JsWord::from("baz"), BindingTypes::SetupReactiveConst),
+                ],
+                ..Default::default()
+            },
+            opts
+        );
+
+        // Aliased usage
+        test_js_and_ts!(
+            r"
+            import { ref as rf, computed as cm, reactive as ra } from 'vue'
+
+            const foo = rf(42)
+            const bar = cm(() => 'vue computed')
+            const baz = ra({ qux: true })
+            ",
+            ScriptLegacyVars {
+                setup: vec![
+                    SetupBinding(JsWord::from("foo"), BindingTypes::SetupRef),
+                    SetupBinding(JsWord::from("bar"), BindingTypes::SetupRef),
+                    SetupBinding(JsWord::from("baz"), BindingTypes::SetupReactiveConst),
+                ],
+                ..Default::default()
+            },
+            opts
+        );
+
+        // Usage not from main package should not be recognized as vue
+        test_js_and_ts!(
+            r"
+            import { ref } from 'vue-but-not-really'
+            import { computed } from './vue'
+            import { reactive } from 'vue/some/internals'
+
+            const foo = ref(42)
+            const bar = computed(() => 'vue computed')
+            const baz = reactive({ qux: true })
+            ",
+            ScriptLegacyVars {
+                setup: vec![
+                    SetupBinding(JsWord::from("foo"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(JsWord::from("bar"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(JsWord::from("baz"), BindingTypes::SetupMaybeRef),
+                ],
+                imports: vec![
+                    (JsWord::from("ref"), SyntaxContext::default()),
+                    (JsWord::from("computed"), SyntaxContext::default()),
+                    (JsWord::from("reactive"), SyntaxContext::default()),
+                ],
+                ..Default::default()
+            },
+            opts
         );
     }
 }

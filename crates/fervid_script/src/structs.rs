@@ -31,24 +31,6 @@ pub enum BindingTypes {
 #[derive(Debug, PartialEq)]
 pub struct SetupBinding(pub JsWord, pub BindingTypes);
 
-#[derive(Debug, PartialEq)]
-pub struct VueImport {
-    pub kind: VueImportKind,
-    pub renamed_as: Option<Id>
-}
-
-#[derive(Debug, PartialEq)]
-pub enum VueImportKind {
-    Ref,
-    Reactive,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum ImportBinding {
-    Vue(VueImport),
-    Custom(Id)
-}
-
 // Todo maybe use SmallVec?
 #[derive(Debug, Default, PartialEq)]
 pub struct ScriptLegacyVars {
@@ -63,5 +45,13 @@ pub struct ScriptLegacyVars {
     pub expose: Vec<JsWord>,
     pub name: Option<JsWord>,
     pub directives: Vec<JsWord>,
-    pub imports: Vec<ImportBinding>
+    pub imports: Vec<Id>
+}
+
+/// Imports from "vue" package
+#[derive(Debug, Default)]
+pub struct VueResolvedImports {
+    pub ref_import: Option<Id>,
+    pub computed: Option<Id>,
+    pub reactive: Option<Id>
 }
