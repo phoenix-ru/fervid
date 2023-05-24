@@ -1,8 +1,6 @@
 use swc_core::ecma::ast::{BlockStmt, Expr};
 
-use crate::structs::{BindingTypes, SetupBinding};
-
-use super::{ScriptLegacyVars, utils::{collect_block_stmt_return_fields, unroll_paren_seq, collect_obj_fields}};
+use crate::{structs::{BindingTypes, ScriptLegacyVars, SetupBinding}, common::utils::{collect_block_stmt_return_fields, unroll_paren_seq, collect_obj_fields}};
 
 /// Collects all the bindings from `setup`, e.g. `setup() { return { foo: 'bar', baz: 42 } }`
 ///

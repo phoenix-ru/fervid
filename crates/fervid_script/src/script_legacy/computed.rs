@@ -1,6 +1,6 @@
 use swc_core::ecma::ast::ObjectLit;
 
-use super::{ScriptLegacyVars, utils::collect_obj_fields};
+use crate::{common::utils::collect_obj_fields, script_legacy::ScriptLegacyVars};
 
 /// Collects the computed bindings in form `{ foo() { return this.bar }, baz: () => 'qux' }`
 ///

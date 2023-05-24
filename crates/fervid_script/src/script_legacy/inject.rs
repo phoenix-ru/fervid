@@ -1,6 +1,6 @@
 use swc_core::ecma::ast::{ObjectLit, ArrayLit};
 
-use super::{ScriptLegacyVars, utils::{collect_obj_fields, collect_string_arr}};
+use crate::{script_legacy::ScriptLegacyVars, common::utils::{collect_obj_fields, collect_string_arr}};
 
 /// Collects injects defined in object syntax, e.g. `{ foo: 'foo', bar: { from: 'baz' } }`
 ///

@@ -1,6 +1,9 @@
 use swc_core::ecma::ast::ObjectLit;
 
-use super::{ScriptLegacyVars, utils::collect_obj_fields};
+use crate::{
+    script_legacy::ScriptLegacyVars,
+    common::utils::collect_obj_fields
+};
 
 /// Collects the methods bindings in form `{ foo() { this.bar = 'bar' }, baz: () => { console.log('qux') } }`
 ///

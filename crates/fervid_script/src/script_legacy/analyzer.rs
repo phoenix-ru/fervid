@@ -1,9 +1,14 @@
 use swc_core::ecma::{
     ast::{
-        ArrayLit, ArrowExpr, BlockStmtOrExpr, Callee, Decl, Expr, Function, Lit, Module,
-        ModuleDecl, ModuleItem, ObjectLit, Pat, Prop, PropName, PropOrSpread, Stmt, VarDeclKind, Tpl,
+        ArrayLit, ArrowExpr, BlockStmtOrExpr, Expr, Function, Lit, Module, ModuleDecl, ModuleItem,
+        ObjectLit, Prop, PropName, PropOrSpread, Tpl,
     },
     atoms::JsWord,
+};
+
+use crate::{
+    atoms::*, common::utils::get_string_tpl, script_legacy::ScriptLegacyVars, setup_analyzer,
+    structs::VueResolvedImports,
 };
 
 use super::{
@@ -18,16 +23,11 @@ use super::{
     methods::collect_methods_object,
     props::{collect_prop_bindings_array, collect_prop_bindings_object},
     setup::{collect_setup_bindings_block_stmt, collect_setup_bindings_expr},
-    utils::{unroll_paren_seq, get_string_tpl},
-    ScriptLegacyVars,
-};
-use crate::{
-    atoms::*,
-    structs::{BindingTypes, SetupBinding, VueResolvedImports},
 };
 
+/// Analyzes all the fields of `export default` according to Options API.\
+/// tl;dr Visit every method, arrow function, object or array and forward control
 pub fn analyze_default_export(default_export: &ObjectLit, out: &mut ScriptLegacyVars) {
-    // tl;dr Visit every method, arrow function, object or array and forward control
     for field in default_export.props.iter() {
         let PropOrSpread::Prop(prop) = field else {
             continue;
@@ -88,135 +88,13 @@ pub fn analyze_top_level_items(
                 collect_imports(import_decl, out, vue_imports)
             }
 
-            ModuleItem::Stmt(ref stmt) => analyze_top_level_stmt(stmt, out, vue_imports),
-
-            // Exports are ignored
-            _ => {}
-        }
-    }
-}
-
-#[inline]
-fn analyze_top_level_stmt(
-    stmt: &Stmt,
-    out: &mut ScriptLegacyVars,
-    vue_imports: &mut VueResolvedImports,
-) {
-    match stmt {
-        Stmt::Decl(decl) => match decl {
-            Decl::Class(class) => out.setup.push(SetupBinding(
-                class.ident.sym.to_owned(),
-                BindingTypes::SetupConst,
-            )),
-
-            Decl::Fn(fn_decl) => out.setup.push(SetupBinding(
-                fn_decl.ident.sym.to_owned(),
-                BindingTypes::SetupConst,
-            )),
-
-            Decl::Var(var_decl) => {
-                let is_const = matches!(var_decl.kind, VarDeclKind::Const);
-
-                for decl in var_decl.decls.iter() {
-                    // SOOQA JAVASCRIPT BLYAT
-                    match decl.name {
-                        Pat::Ident(ref decl_ident) => {
-                            macro_rules! push {
-                                ($typ: expr) => {
-                                    out.setup
-                                        .push(SetupBinding(decl_ident.sym.to_owned(), $typ))
-                                };
-                            }
-
-                            // For `let` and `var` type is always BindingTypes::SetupLet
-                            if !is_const {
-                                push!(BindingTypes::SetupLet);
-                                continue;
-                            }
-
-                            // If no init expr, that means this is not a const anyways
-                            // `let tmp;` is valid, but `const tmp;` is not
-                            let Some(ref init_expr) = decl.init else {
-                                push!(BindingTypes::SetupLet);
-                                continue;
-                            };
-
-                            let init_expr = unroll_paren_seq(init_expr);
-
-                            match init_expr {
-                                // We only support Vue's function calls.
-                                // If this is not a Vue function, it is either SetupMaybeRef or SetupLet
-                                Expr::Call(call_expr) => {
-                                    match call_expr.callee {
-                                        Callee::Expr(ref callee_expr) if callee_expr.is_ident() => {
-                                            let Expr::Ident(ref callee_ident) = **callee_expr else {
-                                                unreachable!()
-                                            };
-
-                                            // Check Vue atoms (they must have been imported before)
-                                            // Use PartialEq on Option<Id> for convenience
-                                            let callee_ident_option = Some(callee_ident.to_id());
-
-                                            if callee_ident_option == vue_imports.ref_import {
-                                                push!(BindingTypes::SetupRef)
-                                            } else if callee_ident_option == vue_imports.computed {
-                                                push!(BindingTypes::SetupRef)
-                                            } else if callee_ident_option == vue_imports.reactive {
-                                                push!(BindingTypes::SetupReactiveConst)
-                                            } else {
-                                                push!(BindingTypes::SetupMaybeRef)
-                                            }
-                                        }
-
-                                        // This is something unsupported, just add a MaybeRef binding
-                                        _ => {
-                                            push!(BindingTypes::SetupMaybeRef);
-                                            continue;
-                                        }
-                                    }
-                                },
-
-                                // MaybeRef binding
-                                // Expr::Await(_) => todo!(),
-                                Expr::Ident(_) => {
-                                    push!(BindingTypes::SetupMaybeRef);
-                                }
-
-                                // The other variants are never refs
-                                _ => {
-                                    push!(BindingTypes::SetupConst)
-                                }
-
-                                // Idk what to do with these
-                                // Expr::TsTypeAssertion(_) => todo!(),
-                                // Expr::TsConstAssertion(_) => todo!(),
-                                // Expr::TsNonNull(_) => todo!(),
-                                // Expr::TsAs(_) => todo!(),
-                                // Expr::TsInstantiation(_) => todo!(),
-                                // Expr::TsSatisfies(_) => todo!(),
-                            }
-                        }
-
-                        // TODO handle destructures
-                        // I hate js...
-                        Pat::Array(_) => todo!(),
-                        Pat::Rest(_) => todo!(),
-                        Pat::Object(_) => todo!(),
-                        Pat::Assign(_) => todo!(),
-                        Pat::Invalid(_) => todo!(),
-                        _ => {}
-                    }
-                }
+            ModuleItem::Stmt(ref stmt) => {
+                setup_analyzer::analyze_stmt(stmt, &mut out.setup, vue_imports)
             }
 
-            // TODO: What?
-            Decl::TsInterface(_) => todo!(),
-            Decl::TsTypeAlias(_) => todo!(),
-            Decl::TsEnum(_) => todo!(),
-            Decl::TsModule(_) => todo!(),
-        },
-
-        _ => {}
+            // Exports are ignored (ModuleDecl::Export* and ModuleDecl::Ts*)
+            _ => {}
+        }
     }
 }
 

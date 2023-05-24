@@ -1,6 +1,6 @@
 use swc_core::ecma::ast::ObjectLit;
 
-use super::{ScriptLegacyVars, utils::collect_obj_fields};
+use crate::{common::utils::collect_obj_fields, script_legacy::ScriptLegacyVars};
 
 /// Collects the components in form `{ Foo, BarBaz, Qux: ComponentQux }`
 ///

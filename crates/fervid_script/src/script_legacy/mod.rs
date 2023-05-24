@@ -1,6 +1,6 @@
 use swc_core::ecma::ast::Module;
 
-use crate::structs::{ScriptLegacyVars, VueResolvedImports};
+use crate::{structs::{ScriptLegacyVars, VueResolvedImports}, common::utils::find_default_export};
 
 mod analyzer;
 mod components;
@@ -14,7 +14,6 @@ mod inject;
 mod methods;
 mod props;
 mod setup;
-pub mod utils;
 
 #[derive(Default, Clone)]
 pub struct AnalyzeOptions {
@@ -35,7 +34,7 @@ pub fn analyze_script_legacy(
     opts: AnalyzeOptions,
 ) -> Result<ScriptLegacyVars, ()> {
     // Default export should be either an object or `defineComponent({ /* ... */ })`
-    let maybe_default_export = utils::find_default_export(module);
+    let maybe_default_export = find_default_export(module);
 
     // Sometimes we care about default export, e.g. in tests
     if let (None, true) = (maybe_default_export, opts.require_default_export) {

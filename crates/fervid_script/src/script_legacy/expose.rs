@@ -1,6 +1,6 @@
 use swc_core::ecma::ast::ArrayLit;
 
-use super::{ScriptLegacyVars, utils::collect_string_arr};
+use crate::{script_legacy::ScriptLegacyVars, common::utils::collect_string_arr};
 
 /// Collects an array of exposes defined as `string[]`, e.g. `['foo', 'bar', 'baz']`
 ///

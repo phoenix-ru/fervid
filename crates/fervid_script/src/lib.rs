@@ -2,10 +2,14 @@
 extern crate lazy_static;
 
 pub mod atoms;
+pub mod common;
 pub mod parser;
 pub mod script_legacy;
 pub mod script_setup;
+pub mod setup_analyzer;
 pub mod structs;
+
+mod experimental_compile;
 
 // use std::sync::Arc;
 
