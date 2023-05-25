@@ -76,7 +76,7 @@ pub fn experimental_compile() {
 // _createBlock()
 fn create_block() -> CallExpr {
     let callee = Callee::Expr(Box::from(Expr::Ident(Ident::new(
-        OPEN_BLOCK.to_owned(),
+        CREATE_BLOCK.to_owned(),
         DUMMY_SP,
     ))));
 
