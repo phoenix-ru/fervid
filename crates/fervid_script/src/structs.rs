@@ -1,7 +1,7 @@
 use swc_core::ecma::{atoms::JsWord, ast::Id};
 
 /// https://github.com/vuejs/core/blob/020851e57d9a9f727c6ea07e9c1575430af02b73/packages/compiler-core/src/options.ts#L76
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum BindingTypes {
     /// returned from data()
     Data,

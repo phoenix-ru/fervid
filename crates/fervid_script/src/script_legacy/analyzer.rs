@@ -22,6 +22,7 @@ use super::{
     methods::collect_methods_object,
     props::{collect_prop_bindings_array, collect_prop_bindings_object},
     setup::{collect_setup_bindings_block_stmt, collect_setup_bindings_expr},
+    exports::{collect_exports_decl, collect_exports_named},
 };
 
 /// Analyzes all the fields of `export default` according to Options API.\
@@ -85,16 +86,28 @@ pub fn analyze_top_level_items(
 ) {
     for module_item in module.body.iter() {
         match *module_item {
-            ModuleItem::ModuleDecl(ModuleDecl::Import(ref import_decl)) => {
-                setup_analyzer::collect_imports(import_decl, &mut out.imports, vue_imports)
+            ModuleItem::ModuleDecl(ref module_decl) => {
+                match module_decl {
+                    ModuleDecl::Import(ref import_decl) => {
+                        setup_analyzer::collect_imports(import_decl, &mut out.imports, vue_imports)
+                    },
+
+                    ModuleDecl::ExportNamed(ref named_exports) => {
+                        collect_exports_named(named_exports, &mut out.setup)
+                    }
+
+                    ModuleDecl::ExportDecl(ref export_decl) => {
+                        collect_exports_decl(export_decl, &mut out.setup, vue_imports)
+                    }
+
+                    // Other types are ignored (ModuleDecl::Export* and ModuleDecl::Ts*)
+                    _ => {}
+                }
             }
 
             ModuleItem::Stmt(ref stmt) => {
                 setup_analyzer::analyze_stmt(stmt, &mut out.setup, vue_imports)
             }
-
-            // Exports are ignored (ModuleDecl::Export* and ModuleDecl::Ts*)
-            _ => {}
         }
     }
 }

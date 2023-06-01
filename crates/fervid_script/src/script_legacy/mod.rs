@@ -8,6 +8,7 @@ mod computed;
 mod data;
 mod directives;
 mod emits;
+mod exports;
 mod expose;
 mod inject;
 mod methods;
@@ -227,7 +228,11 @@ mod tests {
                         return this.bar
                     },
                     bar: () => 'baz' + 'qux',
-                    lorem: 'not a valid computed but should be analyzed'
+                    lorem: 'not a valid computed but should be analyzed',
+                    getterSetter: {
+                        get() {},
+                        set() {},
+                    }
                 }
             }
             ",
@@ -235,7 +240,8 @@ mod tests {
                 computed: vec![
                     JsWord::from("foo"),
                     JsWord::from("bar"),
-                    JsWord::from("lorem")
+                    JsWord::from("lorem"),
+                    JsWord::from("getterSetter")
                 ],
                 ..Default::default()
             }
@@ -730,6 +736,46 @@ mod tests {
                 ..Default::default()
             },
             opts
+        );
+    }
+
+    #[test]
+    fn it_analyzes_top_level_exports() {
+        let opts = AnalyzeOptions {
+            require_default_export: false,
+            collect_top_level_stmts: true,
+        };
+
+        // Different types of exports
+        test_js_and_ts!(
+            r"
+            export * as foo from '@loremipsum/foo'
+            // export bar from 'mod-bar' // is this a valid syntax?
+            export { default as baz, qux } from './rest'
+            ",
+            ScriptLegacyVars {
+                setup: vec![
+                    SetupBinding(JsWord::from("foo"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(JsWord::from("baz"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(JsWord::from("qux"), BindingTypes::SetupMaybeRef),
+                ],
+
+                ..Default::default()
+            },
+            opts
+        );
+
+        // Type-only exports should be ignored
+        assert_eq!(
+            analyze_ts(
+                r"
+                export type * as foo from '@loremipsum/foo'
+                export type { bar } from 'mod-bar'
+                export { type default as baz, type qux } from './rest'
+                ",
+                opts
+            ),
+            ScriptLegacyVars::default()
         );
     }
 }

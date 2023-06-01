@@ -18,29 +18,38 @@ pub fn analyze_stmt(
     vue_imports: &VueResolvedImports,
 ) {
     match stmt {
-        Stmt::Decl(decl) => match decl {
-            Decl::Class(class) => out.push(categorize_class(class)),
+        Stmt::Decl(decl) => analyze_decl(decl, out, vue_imports),
 
-            Decl::Fn(fn_decl) => out.push(categorize_fn_decl(fn_decl)),
+        // Todo stmt expression macro like defineProps?
+        // Stmt::Expr()
 
-            Decl::Var(var_decl) => categorize_var_decls(var_decl, out, vue_imports),
+        _ => {}
+    }
+}
 
-            Decl::TsEnum(ts_enum) => {
-                // Ambient enums are also included, this is intentional
-                // I am not sure about `const enum`s though
-                out.push(SetupBinding(
-                    ts_enum.id.sym.to_owned(),
-                    BindingTypes::LiteralConst,
-                ))
-            }
+/// Analyzes the declaration in `script setup` context.
+/// These are typically `var`/`let`/`const` declarations, function declarations, etc.
+pub fn analyze_decl(decl: &Decl, out: &mut Vec<SetupBinding>, vue_imports: &VueResolvedImports) {
+    match decl {
+        Decl::Class(class) => out.push(categorize_class(class)),
 
-            // TODO: What?
-            // Decl::TsInterface(_) => todo!(),
-            // Decl::TsTypeAlias(_) => todo!(),
-            // Decl::TsModule(_) => todo!(),
-            _ => {}
-        },
+        Decl::Fn(fn_decl) => out.push(categorize_fn_decl(fn_decl)),
 
+        Decl::Var(var_decl) => categorize_var_decls(var_decl, out, vue_imports),
+
+        Decl::TsEnum(ts_enum) => {
+            // Ambient enums are also included, this is intentional
+            // I am not sure about `const enum`s though
+            out.push(SetupBinding(
+                ts_enum.id.sym.to_owned(),
+                BindingTypes::LiteralConst,
+            ))
+        }
+
+        // TODO: What?
+        // Decl::TsInterface(_) => todo!(),
+        // Decl::TsTypeAlias(_) => todo!(),
+        // Decl::TsModule(_) => todo!(),
         _ => {}
     }
 }
