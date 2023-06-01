@@ -9,7 +9,6 @@ mod data;
 mod directives;
 mod emits;
 mod expose;
-mod imports;
 mod inject;
 mod methods;
 mod props;
@@ -69,7 +68,7 @@ mod tests {
         parser::*,
         structs::{BindingTypes, SetupBinding},
     };
-    use swc_core::{ecma::{atoms::JsWord}, common::SyntaxContext};
+    use swc_core::{ecma::atoms::JsWord, common::SyntaxContext};
 
     fn analyze_js(input: &str, opts: AnalyzeOptions) -> ScriptLegacyVars {
         let parsed = parse_javascript_module(input, 0, Default::default())

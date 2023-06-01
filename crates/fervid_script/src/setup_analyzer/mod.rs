@@ -1,181 +1,274 @@
-use swc_core::ecma::ast::{ClassDecl, FnDecl, VarDecl, VarDeclKind, Pat, Expr, Callee, Stmt, Decl};
+mod imports;
+mod statements;
 
-use crate::{structs::{SetupBinding, BindingTypes, VueResolvedImports}, common::utils::unroll_paren_seq};
+pub use imports::*;
+pub use statements::*;
 
-/// Analyzes the statement in `script setup` context.
-/// This can either be:
-/// 1. The whole body of `<script setup>`;
-/// 2. The top-level statements in `<script>` when using mixed `<script>` + `<script setup>`;
-/// 3. The insides of `setup()` function in `<script>` Options API.
-pub fn analyze_stmt(
-    stmt: &Stmt,
-    out: &mut Vec<SetupBinding>,
-    vue_imports: &mut VueResolvedImports,
-) {
-    match stmt {
-        Stmt::Decl(decl) => match decl {
-            Decl::Class(class) => out.push(categorize_class(class)),
-
-            Decl::Fn(fn_decl) => out.push(categorize_fn_decl(fn_decl)),
-
-            Decl::Var(var_decl) => categorize_var_decls(var_decl, out, vue_imports),
-
-            Decl::TsEnum(ts_enum) => {
-                // Ambient enums are also included, this is intentional
-                // I am not sure about `const enum`s though
-                out.push(SetupBinding(ts_enum.id.sym.to_owned(), BindingTypes::LiteralConst))
-            },
-
-            // TODO: What?
-            // Decl::TsInterface(_) => todo!(),
-            // Decl::TsTypeAlias(_) => todo!(),
-            // Decl::TsModule(_) => todo!(),
-            _ => {}
+#[cfg(test)]
+mod tests {
+    use crate::{
+        parser::*,
+        setup_analyzer,
+        structs::{SetupBinding, VueResolvedImports, BindingTypes},
+    };
+    use swc_core::{
+        common::SyntaxContext,
+        ecma::{
+            ast::{Id, Module, ModuleDecl, ModuleItem},
+            atoms::JsWord,
         },
+    };
 
-        _ => {}
+    #[derive(Debug, Default, PartialEq)]
+    struct MockAnalysisResult {
+        imports: Vec<Id>,
+        vue_imports: VueResolvedImports,
+        setup: Vec<SetupBinding>,
     }
-}
 
+    fn analyze_mock(module: &Module) -> MockAnalysisResult {
+        let mut imports = Vec::new();
+        let mut vue_imports = VueResolvedImports::default();
+        let mut setup = Vec::new();
 
-/// Javascript class declaration is always constant.
-/// ```js
-/// class Foo {}
-/// ```
-/// will be categorized as `SetupBinding("Foo", BindingTypes::SetupConst)`
-#[inline]
-pub fn categorize_class(class: &ClassDecl) -> SetupBinding {
-    SetupBinding(
-        class.ident.sym.to_owned(),
-        BindingTypes::SetupConst,
-    )
-}
-
-/// Javascript function declaration is always constant.
-/// ```js
-/// function foo() {}
-/// ```
-/// will be categorized as `SetupBinding("Foo", BindingTypes::SetupConst)`
-#[inline]
-pub fn categorize_fn_decl(fn_decl: &FnDecl) -> SetupBinding {
-    SetupBinding(
-        fn_decl.ident.sym.to_owned(),
-        BindingTypes::SetupConst,
-    )
-}
-
-// TODO The algorithms are actually QUITE different for <script>, <script setup> and setup()
-// I still need to test how it works MORE
-
-/// Categorizes `var`/`let`/`const` declaration block
-/// which may include multiple variables.
-/// Categorization strongly depends on the previously analyzed `vue_imports`.
-/// 
-/// ## Examples
-/// ```js
-/// import { ref, computed, reactive } from 'vue'
-///
-/// let foo = ref(1)                    // BindingTypes::SetupLet
-/// const
-///     pi = 3.14,                      // BindingTypes::LiteralConst
-///     bar = ref(2),                   // BindingTypes::SetupRef
-///     baz = computed(() => 3),        // BindingTypes::SetupRef
-///     qux = reactive({ x: 4 }),       // BindingTypes::SetupReactiveConst
-/// ```
-/// 
-pub fn categorize_var_decls(
-    var_decl: &VarDecl,
-    out: &mut Vec<SetupBinding>,
-    vue_imports: &VueResolvedImports
-) {
-    let is_const = matches!(var_decl.kind, VarDeclKind::Const);
-
-    for decl in var_decl.decls.iter() {
-        match decl.name {
-            Pat::Ident(ref decl_ident) => {
-                macro_rules! push {
-                    ($typ: expr) => {
-                        out.push(SetupBinding(decl_ident.sym.to_owned(), $typ))
-                    };
+        for module_item in module.body.iter() {
+            match *module_item {
+                ModuleItem::ModuleDecl(ModuleDecl::Import(ref import_decl)) => {
+                    setup_analyzer::collect_imports(import_decl, &mut imports, &mut vue_imports)
                 }
 
-                // For `let` and `var` type is always BindingTypes::SetupLet
-                if !is_const {
-                    push!(BindingTypes::SetupLet);
-                    continue;
+                ModuleItem::Stmt(ref stmt) => {
+                    setup_analyzer::analyze_stmt(stmt, &mut setup, &mut vue_imports)
                 }
 
-                // If no init expr, that means this is not a const anyways
-                // `let tmp;` is valid, but `const tmp;` is not
-                let Some(ref init_expr) = decl.init else {
-                    push!(BindingTypes::SetupLet);
-                    continue;
-                };
+                // Exports are ignored (ModuleDecl::Export* and ModuleDecl::Ts*)
+                _ => {}
+            }
+        }
 
-                let init_expr = unroll_paren_seq(init_expr);
+        MockAnalysisResult {
+            imports,
+            vue_imports,
+            setup,
+        }
+    }
 
-                match init_expr {
-                    // We only support Vue's function calls.
-                    // If this is not a Vue function, it is either SetupMaybeRef or SetupLet
-                    Expr::Call(call_expr) => {
-                        match call_expr.callee {
-                            Callee::Expr(ref callee_expr) if callee_expr.is_ident() => {
-                                let Expr::Ident(ref callee_ident) = **callee_expr else {
-                                    unreachable!()
-                                };
+    fn analyze_js(input: &str) -> MockAnalysisResult {
+        let parsed = parse_javascript_module(input, 0, Default::default())
+            .expect("analyze_js expects the input to be parseable")
+            .0;
 
-                                // Check Vue atoms (they must have been imported before)
-                                // Use PartialEq on Option<Id> for convenience
-                                let callee_ident_option = Some(callee_ident.to_id());
+        analyze_mock(&parsed)
+    }
 
-                                if callee_ident_option == vue_imports.ref_import {
-                                    push!(BindingTypes::SetupRef)
-                                } else if callee_ident_option == vue_imports.computed {
-                                    push!(BindingTypes::SetupRef)
-                                } else if callee_ident_option == vue_imports.reactive {
-                                    push!(BindingTypes::SetupReactiveConst)
-                                } else {
-                                    push!(BindingTypes::SetupMaybeRef)
-                                }
-                            }
+    fn analyze_ts(input: &str) -> MockAnalysisResult {
+        let parsed = parse_typescript_module(input, 0, Default::default())
+            .expect("analyze_ts expects the input to be parseable")
+            .0;
 
-                            // This is something unsupported, just add a MaybeRef binding
-                            _ => {
-                                push!(BindingTypes::SetupMaybeRef);
-                                continue;
-                            }
-                        }
-                    },
+        analyze_mock(&parsed)
+    }
 
-                    // MaybeRef binding
-                    // Expr::Await(_) => todo!(),
-                    Expr::Ident(_) => {
-                        push!(BindingTypes::SetupMaybeRef);
-                    }
+    macro_rules! test_js_and_ts {
+        ($input: expr, $expected: expr) => {
+            assert_eq!(analyze_js($input), $expected);
+            assert_eq!(analyze_ts($input), $expected);
+        };
+    }
 
-                    // The other variants are never refs
-                    _ => {
-                        push!(BindingTypes::SetupConst)
-                    }
+    #[test]
+    fn it_collects_vue_imports() {
+        test_js_and_ts!(
+            r"
+            import { ref, computed, reactive } from 'vue'
+            ",
+            MockAnalysisResult {
+                vue_imports: VueResolvedImports {
+                    ref_import: Some((JsWord::from("ref"), SyntaxContext::default())),
+                    computed: Some((JsWord::from("computed"), SyntaxContext::default())),
+                    reactive: Some((JsWord::from("reactive"), SyntaxContext::default()))
+                },
+                ..Default::default()
+            }
+        );
 
-                    // Idk what to do with these
-                    // Expr::TsTypeAssertion(_) => todo!(),
-                    // Expr::TsConstAssertion(_) => todo!(),
-                    // Expr::TsNonNull(_) => todo!(),
-                    // Expr::TsAs(_) => todo!(),
-                    // Expr::TsInstantiation(_) => todo!(),
-                    // Expr::TsSatisfies(_) => todo!(),
-                }
+        // Aliased
+        test_js_and_ts!(
+            r"
+            import { ref as foo, computed as bar, reactive as baz } from 'vue'
+            ",
+            MockAnalysisResult {
+                vue_imports: VueResolvedImports {
+                    ref_import: Some((JsWord::from("foo"), SyntaxContext::default())),
+                    computed: Some((JsWord::from("bar"), SyntaxContext::default())),
+                    reactive: Some((JsWord::from("baz"), SyntaxContext::default()))
+                },
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn it_collects_non_vue_imports() {
+        test_js_and_ts!(
+            r"
+            import { ref } from './vue'
+            import { computed } from 'vue-impostor'
+            import { reactive } from 'vue/internals'
+
+            import * as foo from './foo'
+            import Bar from 'bar-js'
+            import { baz, qux } from '@loremipsum/core'
+            ",
+            MockAnalysisResult {
+                imports: vec![
+                    (JsWord::from("ref"), SyntaxContext::default()),
+                    (JsWord::from("computed"), SyntaxContext::default()),
+                    (JsWord::from("reactive"), SyntaxContext::default()),
+                    (JsWord::from("foo"), SyntaxContext::default()),
+                    (JsWord::from("Bar"), SyntaxContext::default()),
+                    (JsWord::from("baz"), SyntaxContext::default()),
+                    (JsWord::from("qux"), SyntaxContext::default()),
+                ],
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn it_collects_mixed_imports() {
+        test_js_and_ts!(
+            r"
+            import { ref, computed, reactive } from 'vue'
+
+            import * as foo from './foo'
+            import Bar from 'bar-js'
+            import { baz, qux } from '@loremipsum/core'
+            ",
+            MockAnalysisResult {
+                imports: vec![
+                    (JsWord::from("foo"), SyntaxContext::default()),
+                    (JsWord::from("Bar"), SyntaxContext::default()),
+                    (JsWord::from("baz"), SyntaxContext::default()),
+                    (JsWord::from("qux"), SyntaxContext::default()),
+                ],
+                vue_imports: VueResolvedImports {
+                    ref_import: Some((JsWord::from("ref"), SyntaxContext::default())),
+                    computed: Some((JsWord::from("computed"), SyntaxContext::default())),
+                    reactive: Some((JsWord::from("reactive"), SyntaxContext::default()))
+                },
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn it_ignores_type_imports() {
+        assert_eq!(
+            analyze_ts(
+                r"
+            import type { ref } from 'vue'
+            import type { foo } from './foo'
+            import { type computed } from 'vue'
+            import { type baz, type qux } from 'baz'
+            "
+            ),
+            MockAnalysisResult::default()
+        )
+    }
+
+    #[test]
+    fn it_collects_refs() {
+        test_js_and_ts!(
+            r"
+            import { ref, computed } from 'vue'
+
+            const foo = ref()
+            const bar = ref(42)
+            const baz = computed()
+            const qux = computed(() => 42)
+            ",
+            MockAnalysisResult {
+                setup: vec![
+                    SetupBinding(JsWord::from("foo"), BindingTypes::SetupRef),
+                    SetupBinding(JsWord::from("bar"), BindingTypes::SetupRef),
+                    SetupBinding(JsWord::from("baz"), BindingTypes::SetupRef),
+                    SetupBinding(JsWord::from("qux"), BindingTypes::SetupRef),
+                ],
+                vue_imports: VueResolvedImports {
+                    ref_import: Some((JsWord::from("ref"), SyntaxContext::default())),
+                    computed: Some((JsWord::from("computed"), SyntaxContext::default())),
+                    reactive: None
+                },
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn it_recognizes_non_vue_refs() {
+        test_js_and_ts!(
+            r"
+            import { ref } from './vue'
+            import { computed } from 'vue-impostor'
+            import { reactive } from 'vue/internals'
+
+            const foo = ref()
+            const bar = ref(42)
+            const baz = computed()
+            const qux = computed(() => 42)
+            const rea = reactive()
+            const reb = reactive({})
+            ",
+            MockAnalysisResult {
+                imports: vec![
+                    (JsWord::from("ref"), SyntaxContext::default()),
+                    (JsWord::from("computed"), SyntaxContext::default()),
+                    (JsWord::from("reactive"), SyntaxContext::default()),
+                ],
+                setup: vec![
+                    SetupBinding(JsWord::from("foo"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(JsWord::from("bar"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(JsWord::from("baz"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(JsWord::from("qux"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(JsWord::from("rea"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(JsWord::from("reb"), BindingTypes::SetupMaybeRef),
+                ],
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn it_supports_ts_enums() {
+        assert_eq!(
+            analyze_ts(
+                r"
+            enum Foo {}
+            const enum Bar {
+                One,
+                Two,
+                Three
             }
 
-            // TODO handle destructures
-            // I hate js...
-            Pat::Array(_) => todo!(),
-            Pat::Rest(_) => todo!(),
-            Pat::Object(_) => todo!(),
-            Pat::Assign(_) => todo!(),
-            Pat::Invalid(_) => todo!(),
-            _ => {}
-        }
+            // Ambient enums are also supported
+            // Compiler will assume they are available to the module
+            declare enum Baz {}
+            declare const enum Qux {
+                AmbientOne,
+                AmbientTwo
+            }
+            "
+            ),
+            MockAnalysisResult {
+                setup: vec![
+                    SetupBinding(JsWord::from("Foo"), BindingTypes::LiteralConst),
+                    SetupBinding(JsWord::from("Bar"), BindingTypes::LiteralConst),
+                    SetupBinding(JsWord::from("Baz"), BindingTypes::LiteralConst),
+                    SetupBinding(JsWord::from("Qux"), BindingTypes::LiteralConst),
+                ],
+                ..Default::default()
+            }
+        )
     }
 }

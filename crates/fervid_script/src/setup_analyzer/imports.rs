@@ -5,12 +5,12 @@ use swc_core::ecma::{
 
 use crate::{
     atoms::{VUE, REF, COMPUTED, REACTIVE},
-    structs::{ScriptLegacyVars, VueResolvedImports},
+    structs::VueResolvedImports,
 };
 
 pub fn collect_imports(
     import_decl: &ImportDecl,
-    out: &mut ScriptLegacyVars,
+    out: &mut Vec<Id>,
     vue_imports: &mut VueResolvedImports,
 ) {
     if import_decl.type_only {
@@ -21,14 +21,18 @@ pub fn collect_imports(
         // examples below are from SWC
         match specifier {
             // e.g. `import * as foo from 'mod.js'`
-            ImportSpecifier::Namespace(ns_spec) => out.imports.push(ns_spec.local.to_id()),
+            ImportSpecifier::Namespace(ns_spec) => out.push(ns_spec.local.to_id()),
 
             // e.g. `import foo from 'mod.js'`
-            ImportSpecifier::Default(default_spec) => out.imports.push(default_spec.local.to_id()),
+            ImportSpecifier::Default(default_spec) => out.push(default_spec.local.to_id()),
 
             // e.g. `import { foo } from 'mod.js'` -> local = foo, imported = None
             // e.g. `import { foo as bar } from 'mod.js'` -> local = bar, imported = Some(foo)
             ImportSpecifier::Named(named_spec) => {
+                if named_spec.is_type_only {
+                    return;
+                }
+
                 if import_decl.src.value == *VUE {
                     if let Some(ref was_renamed_from) = named_spec.imported {
                         // Renamed: `import { ref as r }` or `import { "ref" as r }`
@@ -47,7 +51,7 @@ pub fn collect_imports(
                         )
                     }
                 } else {
-                    out.imports.push(named_spec.local.to_id())
+                    out.push(named_spec.local.to_id())
                 }
             }
         }

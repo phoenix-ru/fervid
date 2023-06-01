@@ -49,7 +49,7 @@ pub struct ScriptLegacyVars {
 }
 
 /// Imports from "vue" package
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct VueResolvedImports {
     pub ref_import: Option<Id>,
     pub computed: Option<Id>,

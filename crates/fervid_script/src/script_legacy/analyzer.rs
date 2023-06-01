@@ -18,7 +18,6 @@ use super::{
     directives::collect_directives_object,
     emits::{collect_emits_bindings_array, collect_emits_bindings_object},
     expose::collect_expose_bindings_array,
-    imports::collect_imports,
     inject::{collect_inject_bindings_array, collect_inject_bindings_object},
     methods::collect_methods_object,
     props::{collect_prop_bindings_array, collect_prop_bindings_object},
@@ -77,6 +76,8 @@ pub fn analyze_default_export(default_export: &ObjectLit, out: &mut ScriptLegacy
     }
 }
 
+/// Analyzes the top level statements in dual-script mode,
+/// i.e. when both `<script>` and `<script setup>` are present.
 pub fn analyze_top_level_items(
     module: &Module,
     out: &mut ScriptLegacyVars,
@@ -85,7 +86,7 @@ pub fn analyze_top_level_items(
     for module_item in module.body.iter() {
         match *module_item {
             ModuleItem::ModuleDecl(ModuleDecl::Import(ref import_decl)) => {
-                collect_imports(import_decl, out, vue_imports)
+                setup_analyzer::collect_imports(import_decl, &mut out.imports, vue_imports)
             }
 
             ModuleItem::Stmt(ref stmt) => {
