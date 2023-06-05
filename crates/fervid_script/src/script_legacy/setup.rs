@@ -8,6 +8,7 @@ use crate::{structs::{BindingTypes, ScriptLegacyVars, SetupBinding}, common::uti
 #[inline]
 pub fn collect_setup_bindings_block_stmt(block_stmt: &BlockStmt, script_legacy_vars: &mut ScriptLegacyVars) {
     // TODO Implement the algorithm
+    // But the current Vue SFC compiler is doing the same
 
     let mut tmp = Vec::new();
     collect_block_stmt_return_fields(block_stmt, &mut tmp);
@@ -25,6 +26,7 @@ pub fn collect_setup_bindings_expr(expr: &Expr, script_legacy_vars: &mut ScriptL
     let expr = unroll_paren_seq(expr);
 
     // TODO The actual algorithm is much more complicated
+    // But the current Vue SFC compiler is doing the same
 
     let Expr::Object(ref obj_lit) = *expr else {
         return;

@@ -271,4 +271,47 @@ mod tests {
             }
         )
     }
+
+    #[test]
+    fn it_supports_multi_declarations() {
+        test_js_and_ts!(
+            r"
+            import { ref, computed, reactive } from 'vue'
+
+            const
+                cstFoo = ref('foo'),
+                cstBar = computed(() => 42),
+                cstBaz = reactive({ qux: true })
+
+            let
+                letFoo = ref('foo'),
+                letBar = computed(() => 42),
+                letBaz = reactive({ qux: true })
+
+            var
+                varFoo = ref('foo'),
+                varBar = computed(() => 42),
+                varBaz = reactive({ qux: true })
+            ",
+            MockAnalysisResult {
+                vue_imports: VueResolvedImports {
+                    ref_import: Some((JsWord::from("ref"), SyntaxContext::default())),
+                    computed: Some((JsWord::from("computed"), SyntaxContext::default())),
+                    reactive: Some((JsWord::from("reactive"), SyntaxContext::default()))
+                },
+                setup: vec![
+                    SetupBinding(JsWord::from("cstFoo"), BindingTypes::SetupRef),
+                    SetupBinding(JsWord::from("cstBar"), BindingTypes::SetupRef),
+                    SetupBinding(JsWord::from("cstBaz"), BindingTypes::SetupReactiveConst),
+                    SetupBinding(JsWord::from("letFoo"), BindingTypes::SetupLet),
+                    SetupBinding(JsWord::from("letBar"), BindingTypes::SetupLet),
+                    SetupBinding(JsWord::from("letBaz"), BindingTypes::SetupLet),
+                    SetupBinding(JsWord::from("varFoo"), BindingTypes::SetupLet),
+                    SetupBinding(JsWord::from("varBar"), BindingTypes::SetupLet),
+                    SetupBinding(JsWord::from("varBaz"), BindingTypes::SetupLet),
+                ],
+                ..Default::default()
+            }
+        );
+    }
 }
