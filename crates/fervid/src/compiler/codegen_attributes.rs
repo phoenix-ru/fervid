@@ -1,4 +1,4 @@
-use fervid_core::{HtmlAttribute, VDirective};
+use fervid_core::{HtmlAttribute, VDirective, VBindDirective, VOnDirective};
 use lazy_static::lazy_static;
 use regex::Regex;
 use crate::analyzer::scope::ScopeHelper;
@@ -51,31 +51,36 @@ impl CodegenContext <'_> {
     for attribute in attributes {
       match attribute {
         // First, we check the special case: `class` and `style` attributes
+        // class
         HtmlAttribute::Regular { name: "class", value } => {
           class_regular = Some(*value);
         },
 
-        HtmlAttribute::VDirective(VDirective { name: "bind", argument: "class", value, .. }) => {
-          class_bind = *value;
+        // :class
+        HtmlAttribute::VDirective(VDirective::Bind(VBindDirective { argument: Some("class"), value, .. })) => {
+          class_bind = Some(*value);
         },
 
+        // style
         HtmlAttribute::Regular { name: "style", value } => {
           style_regular = Some(*value);
         },
 
-        HtmlAttribute::VDirective(VDirective { name: "bind", argument: "style", value, .. }) => {
-          style_bind = *value;
+        // :style
+        HtmlAttribute::VDirective(VDirective::Bind(VBindDirective { argument: Some("style"), value, .. })) => {
+          style_bind = Some(*value);
         },
 
+        // Any regular attribute
         HtmlAttribute::Regular { name, value } => {
           if has_first_element {
             self.code_helper.comma_newline(buf);
           }
 
-          /* For obvious reasons, attributes containing a dash need to be escaped */
+          // For obvious reasons, attributes containing a dash need to be escaped
           let needs_quotes = CodeHelper::needs_escape(name);
 
-          /* "attr-name": "attr value" */
+          // "attr-name": "attr value"
           if needs_quotes { buf.push('"'); }
           buf.push_str(name);
           if needs_quotes { buf.push('"'); }
@@ -83,33 +88,33 @@ impl CodegenContext <'_> {
           buf.push_str(value);
           buf.push('"');
 
-          // todo special handling for `style` attribute
-          // todo special handling for `class` attribute (because of :class)
-
           has_first_element = true
         },
 
-        // todo generate multiple attributes bound with v-bind, v-on
-        HtmlAttribute::VDirective (VDirective { name, argument, modifiers, value, .. }) => {
+        // v-bind directive, shortcut `:`, e.g. `:custom-prop="value"`
+        HtmlAttribute::VDirective(VDirective::Bind(v_bind)) => {
           if has_first_element {
             self.code_helper.comma_newline(buf);
           }
 
-          /* v-on directive, shortcut `@`, e.g. `@custom-event.modifier="value"` */
-          if *name == "on" {
-            generate_v_on_attr(buf, argument, modifiers, *value, &self.scope_helper, template_scope_id);
+          generate_v_bind_attr(buf, v_bind, &self.scope_helper, template_scope_id);
 
-            has_used_modifiers_import |= modifiers.len() > 0;
-            has_first_element = true
-          }
-
-          /* v-bind directive, shortcut `:`, e.g. `:custom-prop="value"` */
-          else if *name == "bind" {
-            generate_v_bind_attr(buf, argument, *value, &self.scope_helper, template_scope_id);
-
-            has_first_element = true
-          }
+          has_first_element = true
         }
+
+        // v-on directive, shortcut `@`, e.g. `@custom-event.modifier="value"`
+        HtmlAttribute::VDirective(VDirective::On(v_on)) => {
+          if has_first_element {
+            self.code_helper.comma_newline(buf);
+          }
+
+          generate_v_on_attr(buf, v_on, &self.scope_helper, template_scope_id);
+
+          has_used_modifiers_import |= v_on.modifiers.len() > 0;
+          has_first_element = true
+        },
+
+        _ => {}
       }
     }
 
@@ -252,7 +257,7 @@ pub fn has_attributes_work<'a>(mut attributes_iter: impl Iterator<Item = &'a Htm
   attributes_iter
     .any(|it| match it {
       HtmlAttribute::Regular { .. } |
-      HtmlAttribute::VDirective (VDirective { name: "on" | "bind", .. }) => true,
+      HtmlAttribute::VDirective (VDirective::Bind(_) | VDirective::On(_)) => true,
       _ => false
     })
 }
@@ -272,8 +277,7 @@ fn generate_regular_style(buf: &mut String, style: &str) {
 
 fn generate_v_bind_attr(
   buf: &mut String,
-  argument: &str,
-  value: Option<&str>,
+  v_bind: &VBindDirective,
   scope_helper: &ScopeHelper,
   scope_to_use: u32
 ) {
@@ -282,16 +286,24 @@ fn generate_v_bind_attr(
   // maybe the analysis lib should report such issues??
   // current js SFC compiler just discards the second appearance of the same attribute name (except for class)
 
-  // Do not generate empty values
-  let Some(value_expression) = value else {
-    // At this point js SFC compiler just panicks
-    return
+  // Do not generate empty values?
+  let value_expression = v_bind.value;
+
+  // IN:
+  // v-on="ons" v-bind="bounds" @click=""
+  //
+  // OUT:
+  // _mergeProps(_toHandlers(_ctx.ons), _ctx.bounds, {
+  //   onClick: _cache[1] || (_cache[1] = () => {})
+  // })
+  let Some(argument) = v_bind.argument else {
+    todo!("v-bind without argument is not implemented yet")
   };
 
   // For obvious reasons, attributes containing a dash need to be escaped
   let needs_quotes = argument.contains('-');
 
-  /* `"attr-name": ` */
+  // `"attr-name": `
   if needs_quotes {
     CodeHelper::quoted(buf, argument)
   } else {
@@ -315,38 +327,48 @@ fn generate_v_bind_attr(
 /// - value is the value of the listener, typically an expression (e.g. `doSmth` in `@click="doSmth"`)
 fn generate_v_on_attr(
   buf: &mut String,
-  argument: &str,
-  modifiers: &Vec<&str>,
-  value: Option<&str>,
+  v_on: &VOnDirective,
   scope_helper: &ScopeHelper,
   scope_to_use: u32
 ) {
-  /* Transform name of event to camelCase, e.g. `onCustomEventName` */
+  // Transform name of event to camelCase, e.g. `onCustomEventName`
   buf.push_str("on");
-  for word in argument.split('-') {
+
+  // IN:
+  // v-on="ons" v-bind="bounds" @click=""
+  //
+  // OUT:
+  // _mergeProps(_toHandlers(_ctx.ons), _ctx.bounds, {
+  //   onClick: _cache[1] || (_cache[1] = () => {})
+  // })
+  let Some(event_name) = v_on.event else {
+    todo!("v-on without argument is not implemented yet")
+  };
+
+  for word in event_name.split('-') {
     let first_char = word.chars().next();
     if let Some(ch) = first_char {
-      /* Uppercase the first char and append to buf */
+      // Uppercase the first char and append to buf
       for ch_component in ch.to_uppercase() {
         buf.push(ch_component);
       }
 
-      /* Push the rest of the word */
+      // Push the rest of the word
       buf.push_str(&word[ch.len_utf8()..]);
     }
   }
 
   buf.push_str(": ");
 
-  /* Modifiers present: add function call */
-  if modifiers.len() > 0 {
+  // Modifiers present: add function call
+  if v_on.modifiers.len() > 0 {
     buf.push_str(CodegenContext::get_import_str(VueImports::WithModifiers));
     buf.push('(');
   }
 
   // Try compiling the expression
   // TODO Handle SWC failure
-  let transformed_expr = value
+  let transformed_expr = v_on.handler
     .and_then(|expr| transform_scoped(expr, scope_helper, scope_to_use));
 
   // Value may be absent, e.g. `@click.stop`
@@ -355,11 +377,11 @@ fn generate_v_on_attr(
     None => "() => {}" // todo use _cache
   });
 
-  /* Modifiers present: add them in a Js array of strings */
-  if modifiers.len() > 0 {
+  // Modifiers present: add them in a Js array of strings
+  if v_on.modifiers.len() > 0 {
     buf.push_str(", [");
 
-    for (index, modifier) in modifiers.iter().enumerate() {
+    for (index, modifier) in v_on.modifiers.iter().enumerate() {
       if index > 0 {
         buf.push_str(", ");
       }
@@ -376,12 +398,14 @@ fn generate_v_on_attr(
 
 #[test]
 fn test_attributes_generation() {
+  use fervid_core::VCustomDirective;
+
   let initial_buf = "fn(arg1, ";
   let mut buf = String::from(initial_buf);
   let mut ctx: CodegenContext = Default::default();
 
   let attributes = vec![
-    HtmlAttribute::VDirective (VDirective { name: "test", ..Default::default() }),
+    HtmlAttribute::VDirective (VDirective::Custom(VCustomDirective { name: "test", ..Default::default() })),
     HtmlAttribute::Regular { name: "class", value: "test" },
     HtmlAttribute::Regular { name: "readonly", value: "" },
     HtmlAttribute::Regular { name: "style", value: "background: red" },

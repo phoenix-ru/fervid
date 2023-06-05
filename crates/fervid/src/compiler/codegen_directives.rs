@@ -1,10 +1,15 @@
 use std::fmt::Write;
 
-use fervid_core::{HtmlAttribute, VDirective, StartingTag};
+use fervid_core::{HtmlAttribute, VDirective, StartingTag, VCustomDirective, VModelDirective};
 
-use super::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports, directives::supports_with_directive, transform::swc::transform_scoped};
+use super::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports, transform::swc::transform_scoped};
 
 impl<'a> CodegenContext<'a> {
+  /// Generates directives array for `withDirectives` function call
+  ///
+  /// TODO This is a great target for experimental SWC compilation,
+  /// although I will need to setup a writer interface just for emitting,
+  /// which I kind of don't like
   pub fn generate_directives(
     &mut self,
     buf: &mut String,
@@ -15,18 +20,36 @@ impl<'a> CodegenContext<'a> {
     // Open Js array
     CodeHelper::open_sq_bracket(buf);
 
-    for attr in &starting_tag.attributes {
-      let HtmlAttribute::VDirective (VDirective {
-        name,
-        argument,
-        modifiers,
-        value,
-        is_dynamic_slot: _
-      }) = attr else { continue };
+    // TODO Builtin directives are not handled here
+    // TODO Generation for different built-in directives differs a lot
+    // Do a more complex multi-step algorithm (e.g. `v-once` must be the last)
+    // https://play.vuejs.org/#eNqdUktugzAUvMqrNyRSUtRtlEStuukNuihdEDDBqv2MwKapEHfvGEgU2i6iSgj7/WbGHnfiqaruWy/FRmybrFaVo0Y6X5FO+bhLhGsSsU9YmcrWjjqqZUE9FbU1FGEsSjjhzHLjyDRH2oX6InqRWlt6tbXO76Jlwtt4hAYQgolmTjBifJapk62sARSVCuDyNPDmski9Bn/CRHnq0sVy3BMIna/5HFGQ0WxolACAkOrDgh++uRInTaXBiIhoWz7su26Yp74nbC9q+n4bozp0Ka68o3ZtbC419KN/OABKuTfma52haBkVnCgRCA6Kc4QH6zkPmcdMq+wDmWkOk2ch6G60dZvpvFOZqFRTYzyXHE+UE79qAaCKcKu1lwO5kcYifns/R4HDcjYuQT9So04nTw4JcAmKgXhFJlbi2ZqfD2XuINHlkUC+YhkmLEt2vx7MX65yaiR8KwffVqHrBqcx8E+Pb/L0+gb6b717Dtg=
 
-      if !supports_with_directive(*name, is_component) {
-        continue;
-      }
+    for attr in &starting_tag.attributes {
+      let HtmlAttribute::VDirective (directive) = attr else { continue };
+
+      // Try to fit the old VDirective interface
+      let empty_vec = vec![];
+      let (name, argument, value, modifiers) = match directive {
+        VDirective::Model(VModelDirective { argument, value, modifiers })
+        if !is_component => (
+          "model",
+          *argument,
+          Some(*value),
+          modifiers
+        ),
+
+        VDirective::Show(condition) => ("show", None, Some(*condition), &empty_vec),
+
+        VDirective::Custom(VCustomDirective { name, argument, modifiers, value }) => (
+          *name,
+          *argument,
+          *value,
+          modifiers
+        ),
+
+        _ => continue
+      };
 
       self.code_helper.indent();
       self.code_helper.newline(buf);
@@ -34,7 +57,7 @@ impl<'a> CodegenContext<'a> {
       // todo generate
 
       // Whether to split generated input across multiple lines or inline in one
-      let has_argument = argument.len() > 0;
+      let has_argument = argument.is_some();
       let has_modifiers = modifiers.len() > 0;
       let has_arg_or_modifiers = has_argument || has_modifiers;
 
@@ -48,10 +71,10 @@ impl<'a> CodegenContext<'a> {
 
       // Write <directive_ident>. This is either from Vue (vModel*) or the identifier of custom directive
       // TODO better handle `is_component`
-      if *name == "model" && !is_component {
+      if name == "model" && !is_component {
         let vmodel_directive = self.get_vmodel_directive_name(starting_tag);
         buf.push_str(vmodel_directive);
-      } else if *name == "show" {
+      } else if name == "show" {
         // v-show comes from "vue" import
         buf.push_str(self.get_and_add_import_str(VueImports::VShow));
       } else {
@@ -59,7 +82,7 @@ impl<'a> CodegenContext<'a> {
       }
 
       // <directive_value>?
-      if let Some(directive_value) = *value {
+      if let Some(directive_value) = value {
         if has_arg_or_modifiers {
           self.code_helper.comma_newline(buf);
         } else {
@@ -81,7 +104,7 @@ impl<'a> CodegenContext<'a> {
       if has_arg_or_modifiers {
         self.code_helper.comma_newline(buf);
 
-        if has_argument {
+        if let Some(argument) = argument {
           CodeHelper::quoted(buf, argument)
         } else {
           buf.push_str("void 0")

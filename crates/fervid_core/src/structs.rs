@@ -60,13 +60,81 @@ pub enum HtmlAttribute <'a> {
   VDirective(VDirective<'a>)
 }
 
-#[derive(Debug, Default, Clone)]
-pub struct VDirective<'a> {
-  pub name: &'a str,
-  pub argument: &'a str,
-  pub modifiers: Vec<&'a str>,
+#[derive(Clone, Debug)]
+pub enum VDirective<'a> {
+  Bind(VBindDirective<'a>),
+  Cloak,
+  Custom(VCustomDirective<'a>),
+  Else,
+  ElseIf(&'a str),
+  For(VForDirective<'a>),
+  Html(&'a str),
+  If(&'a str),
+  Memo(&'a str),
+  Model(VModelDirective<'a>),
+  On(VOnDirective<'a>),
+  Once,
+  Pre,
+  Show(&'a str),
+  Slot(VSlotDirective<'a>),
+  Text(&'a str),
+}
+
+#[derive(Clone, Debug)]
+pub struct VForDirective<'a> {
+  pub iterable: &'a str,
+  pub iterator: &'a str
+}
+
+#[derive(Clone, Debug)]
+pub struct VOnDirective<'a> {
+  /// What event to listen to. If None, that is equal to `v-on="smth"`. Also, see `is_dynamic_event`.
+  pub event: Option<&'a str>,
+  /// What is the handler to use. If None, `modifiers` must not be empty.
+  pub handler: Option<&'a str>,
+  /// If the event itself is dynamic, e.g. `v-on:[event]` or `@[event]`
+  pub is_dynamic_event: bool,
+  /// A list of modifiers after the dot, e.g. `stop` and `prevent` in `@click.stop.prevent="handleClick"`
+  pub modifiers: Vec<&'a str>
+}
+
+#[derive(Clone, Debug)]
+pub struct VBindDirective<'a> {
+  /// Attribute name to bind. If None, it is equivalent to `v-bind="smth"`. Also, see `is_dynamic_attr`.
+  pub argument: Option<&'a str>,
+  /// Attribute value, e.g. `smth` in `:attr="smth"`
+  pub value: &'a str,
+  /// `:[dynamic]`
+  pub is_dynamic_attr: bool,
+  /// .camel modifier
+  pub is_camel: bool,
+  /// .prop modifier
+  pub is_prop: bool,
+  /// .attr modifier
+  pub is_attr: bool
+}
+
+#[derive(Clone, Debug)]
+pub struct VModelDirective<'a> {
+  /// What to apply v-model to, e.g. `first-name` in `v-model:first-name="first"`
+  pub argument: Option<&'a str>,
+  pub value: &'a str,
+  pub modifiers: Vec<&'a str>
+}
+
+#[derive(Clone, Debug)]
+pub struct VSlotDirective<'a> {
+  pub slot_name: Option<&'a str>,
   pub value: Option<&'a str>,
   pub is_dynamic_slot: bool
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct VCustomDirective<'a> {
+  pub name: &'a str,
+  pub argument: Option<&'a str>,
+  pub modifiers: Vec<&'a str>,
+  pub value: Option<&'a str>
 }
 
 #[derive(Debug, Clone)]

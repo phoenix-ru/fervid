@@ -1,4 +1,4 @@
-use fervid_core::{StartingTag, HtmlAttribute, VDirective};
+use fervid_core::{StartingTag, HtmlAttribute, VDirective, VBindDirective};
 
 use crate::{compiler::{codegen::CodegenContext, imports::VueImports, helper::CodeHelper}};
 
@@ -13,9 +13,7 @@ impl CodegenContext<'_> {
       .attributes
       .iter()
       .find_map(|attr| match attr {
-        HtmlAttribute::VDirective(directive)
-        if directive.name == "for" && directive.value.is_some() => Some(directive),
-
+        HtmlAttribute::VDirective(VDirective::For(v_for)) => Some(v_for),
         _ => None
       });
 
@@ -34,9 +32,8 @@ impl CodegenContext<'_> {
         buf.push_str(self.get_and_add_import_str(VueImports::RenderList));
         CodeHelper::open_paren(buf);
 
-        let (itervar, iterable) = split_itervar_and_iterable(
-          directive.value.expect("directive value should be checked previously")
-        );
+        let itervar = directive.iterator;
+        let iterable = directive.iterable;
 
         // Add iterable
         // TODO Contextual compile
@@ -73,7 +70,7 @@ impl CodegenContext<'_> {
     let has_key = starting_tag.attributes
       .iter()
       .any(|attr| match attr {
-        HtmlAttribute::VDirective(VDirective { name: "bind", argument: "key", .. }) => true,
+        HtmlAttribute::VDirective(VDirective::Bind(VBindDirective { argument: Some("key"), .. })) => true,
         _ => false
       });
 
@@ -88,21 +85,4 @@ impl CodegenContext<'_> {
       buf.push_str(")), 256 /* UNKEYED_FRAGMENT */))");
     }
   }
-}
-
-fn split_itervar_and_iterable<'a>(raw: &'a str) -> (&'a str, &'a str) {
-  // Try guessing: `item in iterable`
-  let mut split = raw.splitn(2, " in ");
-  if let (Some(itervar), Some(iterable)) = (split.next(), split.next()) {
-    return (itervar.trim(), iterable.trim());
-  }
-
-  // Do `item of iterable`
-  let mut split = raw.splitn(2, " of ");
-  if let (Some(itervar), Some(iterable)) = (split.next(), split.next()) {
-    return (itervar.trim(), iterable.trim());
-  }
-
-  // Invalid `v-for` should be dropped by analyzer
-  unreachable!();
 }

@@ -42,7 +42,7 @@ impl <'a> CodegenContext <'a> {
         .attributes
         .iter()
         .any(|attr| match attr {
-          HtmlAttribute::VDirective(VDirective { name: "if" | "else-if" | "else", .. }) => true,
+          HtmlAttribute::VDirective(VDirective::If(_) | VDirective::ElseIf(_) | VDirective::Else) => true,
           _ => false
         })
     };

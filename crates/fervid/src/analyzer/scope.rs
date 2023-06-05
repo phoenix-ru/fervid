@@ -1,23 +1,21 @@
-use fervid_core::{Node, VDirective, HtmlAttribute};
+use fervid_core::{HtmlAttribute, Node, VDirective, VSlotDirective};
 use lazy_static::lazy_static;
-use regex::Regex;
 use swc_core::common::BytePos;
-use swc_core::ecma::{visit::{Visit, VisitWith}, atoms::JsWord};
-use swc_ecma_parser::{lexer::Lexer, Syntax, StringInput, Parser};
+use swc_core::ecma::{
+    atoms::JsWord,
+    visit::{Visit, VisitWith},
+};
+use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
 
 lazy_static! {
-    static ref JS_BUILTINS: [JsWord; 7] = ["true", "false", "null", "undefined", "Array", "Set", "Map"].map(JsWord::from);
-}
-
-// Regex for v-for directive
-lazy_static! {
-    static ref FOR_RE: Regex = Regex::new(r"^(.+)\s+(in|of)\s+(.+)$").unwrap();
+    static ref JS_BUILTINS: [JsWord; 7] =
+        ["true", "false", "null", "undefined", "Array", "Set", "Map"].map(JsWord::from);
 }
 
 #[derive(Debug)]
 pub struct Scope {
     variables: Vec<JsWord>,
-    parent: u32
+    parent: u32,
 }
 
 #[derive(Default, Debug)]
@@ -27,7 +25,7 @@ pub struct ScopeHelper {
     props_vars: Vec<JsWord>,
     data_vars: Vec<JsWord>,
     options_vars: Vec<JsWord>,
-    globals: Vec<JsWord>
+    globals: Vec<JsWord>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -39,7 +37,7 @@ pub enum VarScopeDescriptor {
     Options,
     Setup,
     Template(u32), // I know it takes 4 extra bytes, but this is more convenient
-    Unknown
+    Unknown,
 }
 
 impl VarScopeDescriptor {
@@ -52,13 +50,17 @@ impl VarScopeDescriptor {
             Self::Options => "$options.",
             Self::Setup => "$setup.",
             Self::Template(_) => "",
-            Self::Unknown => "_ctx."
+            Self::Unknown => "_ctx.",
         }
     }
 }
 
 impl ScopeHelper {
-    pub fn find_scope_of_variable(&self, starting_scope: u32, variable: &JsWord) -> VarScopeDescriptor {
+    pub fn find_scope_of_variable(
+        &self,
+        starting_scope: u32,
+        variable: &JsWord,
+    ) -> VarScopeDescriptor {
         let mut current_scope_index = starting_scope;
 
         // Macro to check if the variable is in the slice/Vec and conditionally return
@@ -109,7 +111,10 @@ impl ScopeHelper {
 
             // Add scope 0.
             // It may be left unused, as it's reserved for some global template vars (undecided)
-            self.template_scopes.push(Scope { variables: vec![], parent: 0 });
+            self.template_scopes.push(Scope {
+                variables: vec![],
+                parent: 0,
+            });
         }
 
         for node in ast {
@@ -121,16 +126,23 @@ impl ScopeHelper {
         match node {
             Node::ElementNode(element_node) => {
                 // Finds a `v-for` or `v-slot` directive when in ElementNode
-                let scoping_directive = element_node.starting_tag
-                    .attributes
-                    .iter()
-                    .find_map(|attr| match attr {
-                        HtmlAttribute::VDirective(directive)
-                        if (directive.name == "for" || directive.name == "slot") &&
-                        directive.value.is_some() => Some(directive),
-            
-                        _ => None
-                    });
+                let scoping_directive =
+                    element_node
+                        .starting_tag
+                        .attributes
+                        .iter()
+                        .find_map(|attr| match attr {
+                            HtmlAttribute::VDirective(directive)
+                                if matches!(
+                                    directive,
+                                    VDirective::For(_) | VDirective::Slot(_)
+                                ) =>
+                            {
+                                Some(directive)
+                            }
+
+                            _ => None,
+                        });
 
                 // A scope to use for both the current node and its children (as a parent)
                 let mut scope_to_use = current_scope_identifier;
@@ -141,7 +153,7 @@ impl ScopeHelper {
                     scope_to_use = self.template_scopes.len() as u32;
                     self.template_scopes.push(Scope {
                         variables: vec![],
-                        parent: current_scope_identifier
+                        parent: current_scope_identifier,
                     });
 
                     // TODO Fail somehow if directive value is invalid?
@@ -156,39 +168,38 @@ impl ScopeHelper {
                 for mut child in element_node.children.iter_mut() {
                     self.walk_ast_node(&mut child, scope_to_use);
                 }
-            },
+            }
 
             // For dynamic expression, just update the scope
             Node::DynamicExpression { template_scope, .. } => {
                 *template_scope = current_scope_identifier;
-            },
+            }
 
             _ => {}
         }
     }
 
     /// Extracts the variables introduced by `v-for` or `v-slot`
+    #[inline]
     fn extract_directive_variables(&mut self, directive: &VDirective, scope_to_use: u32) {
-        match (directive.value, directive.name) {
-            (Some(directive_value), "for") => {
-                // TODO if there are no matches, what do we do?
-                let Some(captures) = FOR_RE.captures(directive_value) else {
-                    return;
-                };
-
+        match directive {
+            VDirective::For(v_for) => {
                 // We only care of the left hand side variables
-                let introduced_variables = captures.get(1).map_or("", |x| x.as_str().trim());
+                let introduced_variables = v_for.iterator;
 
                 // Get the needed scope and collect variables to it
                 let mut scope = &mut self.template_scopes[scope_to_use as usize];
                 Self::collect_variables(introduced_variables, &mut scope);
-            },
+            }
 
-            (Some(directive_value), "slot") => {
+            VDirective::Slot(VSlotDirective {
+                value: Some(v_slot_value),
+                ..
+            }) => {
                 // Get the needed scope and collect variables to it
                 let mut scope = &mut self.template_scopes[scope_to_use as usize];
-                Self::collect_variables(directive_value, &mut scope);
-            },
+                Self::collect_variables(&v_slot_value, &mut scope);
+            }
 
             _ => {}
         }
@@ -208,9 +219,7 @@ impl ScopeHelper {
 
         match parser.parse_expr() {
             Ok(expr) => {
-                let mut visitor = IdentifierVisitor {
-                    collected: vec![]
-                };
+                let mut visitor = IdentifierVisitor { collected: vec![] };
 
                 expr.visit_with(&mut visitor);
 
@@ -218,7 +227,7 @@ impl ScopeHelper {
                 for collected in visitor.collected {
                     scope.variables.push(collected.sym)
                 }
-            },
+            }
 
             _ => {}
         }
@@ -226,7 +235,7 @@ impl ScopeHelper {
 }
 
 struct IdentifierVisitor {
-    collected: Vec<swc_core::ecma::ast::Ident>
+    collected: Vec<swc_core::ecma::ast::Ident>,
 }
 
 impl Visit for IdentifierVisitor {
@@ -289,55 +298,142 @@ fn feature() {
     };
 
     let mut scope_helper = ScopeHelper::default();
-    scope_helper.template_scopes.extend(
-        vec![root_scope, child_scope, grandchild1_scope, grandchild2_scope]
-    );
+    scope_helper.template_scopes.extend(vec![
+        root_scope,
+        child_scope,
+        grandchild1_scope,
+        grandchild2_scope,
+    ]);
 
     // Measure time to get an idea on performance
     // TODO move this to Criterion
     let st0 = std::time::Instant::now();
 
     // All scopes have a root variable
-    assert_eq!(scope_helper.find_scope_of_variable(0, &v_root), VarScopeDescriptor::Template(0));
-    assert_eq!(scope_helper.find_scope_of_variable(1, &v_root), VarScopeDescriptor::Template(0));
-    assert_eq!(scope_helper.find_scope_of_variable(2, &v_root), VarScopeDescriptor::Template(0));
-    assert_eq!(scope_helper.find_scope_of_variable(3, &v_root), VarScopeDescriptor::Template(0));
+    assert_eq!(
+        scope_helper.find_scope_of_variable(0, &v_root),
+        VarScopeDescriptor::Template(0)
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(1, &v_root),
+        VarScopeDescriptor::Template(0)
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(2, &v_root),
+        VarScopeDescriptor::Template(0)
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(3, &v_root),
+        VarScopeDescriptor::Template(0)
+    );
     println!("Elapsed root: {:?}", st0.elapsed());
 
     // Only `child1` and its children have `child1` and `child2` vars
     let st1 = std::time::Instant::now();
-    assert_eq!(scope_helper.find_scope_of_variable(0, &v_child1), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(1, &v_child1), VarScopeDescriptor::Template(1));
-    assert_eq!(scope_helper.find_scope_of_variable(2, &v_child1), VarScopeDescriptor::Template(1));
-    assert_eq!(scope_helper.find_scope_of_variable(3, &v_child1), VarScopeDescriptor::Template(1));
-    assert_eq!(scope_helper.find_scope_of_variable(0, &v_child2), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(1, &v_child2), VarScopeDescriptor::Template(1));
-    assert_eq!(scope_helper.find_scope_of_variable(2, &v_child2), VarScopeDescriptor::Template(1));
-    assert_eq!(scope_helper.find_scope_of_variable(3, &v_child2), VarScopeDescriptor::Template(1));
+    assert_eq!(
+        scope_helper.find_scope_of_variable(0, &v_child1),
+        VarScopeDescriptor::Unknown
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(1, &v_child1),
+        VarScopeDescriptor::Template(1)
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(2, &v_child1),
+        VarScopeDescriptor::Template(1)
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(3, &v_child1),
+        VarScopeDescriptor::Template(1)
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(0, &v_child2),
+        VarScopeDescriptor::Unknown
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(1, &v_child2),
+        VarScopeDescriptor::Template(1)
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(2, &v_child2),
+        VarScopeDescriptor::Template(1)
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(3, &v_child2),
+        VarScopeDescriptor::Template(1)
+    );
     println!("Elapsed child1: {:?}", st1.elapsed());
 
     // Only `grandchild1` has `grand1_1` and `grand1_2` vars
     let st2 = std::time::Instant::now();
-    assert_eq!(scope_helper.find_scope_of_variable(0, &v_grand1_1), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(1, &v_grand1_1), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(2, &v_grand1_1), VarScopeDescriptor::Template(2));
-    assert_eq!(scope_helper.find_scope_of_variable(3, &v_grand1_1), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(0, &v_grand1_2), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(1, &v_grand1_2), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(2, &v_grand1_2), VarScopeDescriptor::Template(2));
-    assert_eq!(scope_helper.find_scope_of_variable(3, &v_grand1_2), VarScopeDescriptor::Unknown);
+    assert_eq!(
+        scope_helper.find_scope_of_variable(0, &v_grand1_1),
+        VarScopeDescriptor::Unknown
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(1, &v_grand1_1),
+        VarScopeDescriptor::Unknown
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(2, &v_grand1_1),
+        VarScopeDescriptor::Template(2)
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(3, &v_grand1_1),
+        VarScopeDescriptor::Unknown
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(0, &v_grand1_2),
+        VarScopeDescriptor::Unknown
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(1, &v_grand1_2),
+        VarScopeDescriptor::Unknown
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(2, &v_grand1_2),
+        VarScopeDescriptor::Template(2)
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(3, &v_grand1_2),
+        VarScopeDescriptor::Unknown
+    );
     println!("Elapsed grand1: {:?}", st2.elapsed());
 
     // Only `grandchild2` has `grand2_1` and `grand2_2` vars
     let st3 = std::time::Instant::now();
-    assert_eq!(scope_helper.find_scope_of_variable(0, &v_grand2_1), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(1, &v_grand2_1), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(2, &v_grand2_1), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(3, &v_grand2_1), VarScopeDescriptor::Template(3));
-    assert_eq!(scope_helper.find_scope_of_variable(0, &v_grand2_2), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(1, &v_grand2_2), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(2, &v_grand2_2), VarScopeDescriptor::Unknown);
-    assert_eq!(scope_helper.find_scope_of_variable(3, &v_grand2_2), VarScopeDescriptor::Template(3));
+    assert_eq!(
+        scope_helper.find_scope_of_variable(0, &v_grand2_1),
+        VarScopeDescriptor::Unknown
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(1, &v_grand2_1),
+        VarScopeDescriptor::Unknown
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(2, &v_grand2_1),
+        VarScopeDescriptor::Unknown
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(3, &v_grand2_1),
+        VarScopeDescriptor::Template(3)
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(0, &v_grand2_2),
+        VarScopeDescriptor::Unknown
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(1, &v_grand2_2),
+        VarScopeDescriptor::Unknown
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(2, &v_grand2_2),
+        VarScopeDescriptor::Unknown
+    );
+    assert_eq!(
+        scope_helper.find_scope_of_variable(3, &v_grand2_2),
+        VarScopeDescriptor::Template(3)
+    );
     println!("Elapsed grand2: {:?}", st3.elapsed());
 
     println!("Elapsed total: {:?}", st0.elapsed())
