@@ -1,0 +1,16 @@
+[package]
+name = "fervid_codegen"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+fervid_core = { path="../fervid_core" }
+lazy_static = "1.4.0"
+swc_core = { version = "0.75.*", features = ["common_plugin_transform", "ecma_ast"] }
+swc_ecma_codegen = "0.138.*"
+swc_ecma_parser = "0.133.*"
+fxhash = "0.2.1"
+smallvec = "1.10.0"
+regex = "1"

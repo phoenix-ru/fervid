@@ -98,7 +98,7 @@ pub struct VOnDirective<'a> {
   pub modifiers: Vec<&'a str>
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct VBindDirective<'a> {
   /// Attribute name to bind. If None, it is equivalent to `v-bind="smth"`. Also, see `is_dynamic_attr`.
   pub argument: Option<&'a str>,
