@@ -17,7 +17,7 @@ use crate::{
     context::CodegenContext,
     imports::VueImports,
     transform::{transform_scoped, MockScopeHelper},
-    utils::{str_to_propname, to_camelcase},
+    utils::{str_to_propname, to_pascalcase},
 };
 
 lazy_static! {
@@ -543,7 +543,7 @@ fn event_name_to_handler(event_name: &str) -> JsWord {
     result.push_str("on");
 
     // ignore error, idk what to do if writing to String fails
-    let _ = to_camelcase(event_name, &mut result);
+    let _ = to_pascalcase(event_name, &mut result);
 
     JsWord::from(result)
 }
