@@ -13,7 +13,7 @@ use swc_core::{
 use crate::{
     context::CodegenContext,
     transform::{transform_scoped, MockScopeHelper},
-    utils::{is_valid_ident, str_to_propname, to_camelcase},
+    utils::{str_to_propname, to_camelcase},
 };
 
 impl CodegenContext {
