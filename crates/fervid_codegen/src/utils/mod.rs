@@ -4,6 +4,10 @@ use std::fmt::{Write, Error};
 
 use swc_core::{ecma::ast::{Ident, IdentExt, PropName, Str}, common::Span};
 
+mod all_html_tags;
+
+pub use all_html_tags::is_html_tag;
+
 /// Adapted from SWC Ident::verify_symbol
 #[inline]
 pub fn is_valid_ident(s: &str) -> bool {

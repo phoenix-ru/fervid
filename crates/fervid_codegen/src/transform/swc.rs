@@ -3,6 +3,7 @@ use swc_ecma_parser::{lexer::Lexer, Syntax, StringInput, Parser};
 
 // use crate::analyzer::scope::ScopeHelper;
 
+#[derive(Debug, Default)]
 pub struct MockScopeHelper;
 pub enum MockScope {
     Yes,

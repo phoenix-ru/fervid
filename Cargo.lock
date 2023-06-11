@@ -536,6 +536,7 @@ dependencies = [
  "fervid_core",
  "fxhash",
  "lazy_static",
+ "phf 0.11.1",
  "regex",
  "smallvec",
  "swc_core",
