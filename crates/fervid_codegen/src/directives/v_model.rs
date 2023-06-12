@@ -155,10 +155,7 @@ fn generate_v_model_modifiers(modifiers: &[&str], span: Span) -> ObjectLit {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
-    use swc_core::{common::SourceMap, ecma::ast::ObjectLit};
-    use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
+    use swc_core::ecma::ast::ObjectLit;
 
     use super::*;
 
@@ -250,29 +247,6 @@ mod tests {
         for v_model in input.iter() {
             ctx.generate_v_model_for_component(v_model, &mut out.props, 0);
         }
-        assert_eq!(to_str(out), expected)
-    }
-
-    fn to_str(obj_lit: ObjectLit) -> String {
-        // Emitting the result requires some setup with SWC
-        let cm: Arc<SourceMap> = Default::default();
-        let mut buff: Vec<u8> = Vec::with_capacity(128);
-        let writer: JsWriter<&mut Vec<u8>> = JsWriter::new(cm.clone(), "\n", &mut buff, None);
-
-        let mut emitter = Emitter {
-            cfg: swc_ecma_codegen::Config {
-                target: Default::default(),
-                ascii_only: false,
-                minify: true,
-                omit_last_semi: false,
-            },
-            comments: None,
-            wr: writer,
-            cm,
-        };
-
-        let _ = obj_lit.emit_with(&mut emitter);
-
-        String::from_utf8(buff).unwrap()
+        assert_eq!(crate::test_utils::to_str(out), expected)
     }
 }

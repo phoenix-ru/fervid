@@ -4,7 +4,7 @@ use swc_core::{
     ecma::{
         ast::{
             ArrayLit, ArrowExpr, BlockStmtOrExpr, CallExpr, Callee, Expr, ExprOrSpread, Ident,
-            KeyValueProp, Lit, Null, Number, ObjectLit, ParenExpr, Prop, PropOrSpread, SeqExpr,
+            KeyValueProp, Lit, Null, Number, ObjectLit, Prop, PropOrSpread,
         },
         atoms::{js_word, JsWord},
     },
@@ -318,11 +318,7 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use fervid_core::{HtmlAttribute, Node, StartingTag};
-    use swc_core::common::SourceMap;
-    use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node as _};
 
     use super::*;
 
@@ -424,29 +420,6 @@ mod tests {
     fn test_out(input: ElementNode, expected: &str, wrap_in_block: bool) {
         let mut ctx = CodegenContext::default();
         let out = ctx.generate_component_vnode(&input, wrap_in_block);
-        assert_eq!(to_str(out), expected)
-    }
-
-    fn to_str(expr: Expr) -> String {
-        // Emitting the result requires some setup with SWC
-        let cm: Arc<SourceMap> = Default::default();
-        let mut buff: Vec<u8> = Vec::with_capacity(128);
-        let writer: JsWriter<&mut Vec<u8>> = JsWriter::new(cm.clone(), "\n", &mut buff, None);
-
-        let mut emitter = Emitter {
-            cfg: swc_ecma_codegen::Config {
-                target: Default::default(),
-                ascii_only: false,
-                minify: true,
-                omit_last_semi: false,
-            },
-            comments: None,
-            wr: writer,
-            cm,
-        };
-
-        let _ = expr.emit_with(&mut emitter);
-
-        String::from_utf8(buff).unwrap()
+        assert_eq!(crate::test_utils::to_str(out), expected)
     }
 }

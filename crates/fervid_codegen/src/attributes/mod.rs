@@ -566,14 +566,11 @@ fn empty_arrow_expr(span: Span) -> Expr {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use fervid_core::{HtmlAttribute, VBindDirective, VDirective, VOnDirective};
     use swc_core::{
-        common::{SourceMap, DUMMY_SP},
+        common::DUMMY_SP,
         ecma::ast::ObjectLit,
     };
-    use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
 
     use crate::context::CodegenContext;
 
@@ -808,29 +805,6 @@ mod tests {
         };
         let mut unsupported_directives = DirectivesToProcess::new();
         ctx.generate_attributes(&input, &mut out.props, &mut unsupported_directives, 0);
-        assert_eq!(to_str(out), expected)
-    }
-
-    fn to_str(obj_lit: ObjectLit) -> String {
-        // Emitting the result requires some setup with SWC
-        let cm: Arc<SourceMap> = Default::default();
-        let mut buff: Vec<u8> = Vec::with_capacity(128);
-        let writer: JsWriter<&mut Vec<u8>> = JsWriter::new(cm.clone(), "\n", &mut buff, None);
-
-        let mut emitter = Emitter {
-            cfg: swc_ecma_codegen::Config {
-                target: Default::default(),
-                ascii_only: false,
-                minify: true,
-                omit_last_semi: false,
-            },
-            comments: None,
-            wr: writer,
-            cm,
-        };
-
-        let _ = obj_lit.emit_with(&mut emitter);
-
-        String::from_utf8(buff).unwrap()
+        assert_eq!(crate::test_utils::to_str(out), expected)
     }
 }
