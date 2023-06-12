@@ -264,10 +264,178 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
+    use fervid_core::{Node, StartingTag, VBindDirective};
+
     use super::*;
 
     #[test]
     fn it_generates_basic_usage() {
-        todo!("write tests")
+        // <div foo="bar">hello from div</div>
+        test_out(
+            ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "div",
+                    attributes: vec![HtmlAttribute::Regular {
+                        name: "foo",
+                        value: "bar",
+                    }],
+                    is_self_closing: false,
+                    kind: fervid_core::ElementKind::Normal,
+                },
+                children: vec![Node::TextNode("hello from div")],
+                template_scope: 0,
+            },
+            r#"_createElementVNode("div",{foo:"bar"},"hello from div")"#,
+            false,
+        )
+    }
+
+    #[test]
+    fn it_generates_attrless() {
+        // <div>hello from div</div>
+        test_out(
+            ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "div",
+                    attributes: vec![],
+                    is_self_closing: false,
+                    kind: fervid_core::ElementKind::Normal,
+                },
+                children: vec![Node::TextNode("hello from div")],
+                template_scope: 0,
+            },
+            r#"_createElementVNode("div",null,"hello from div")"#,
+            false,
+        )
+    }
+
+    #[test]
+    fn it_generates_childless() {
+        // <div foo="bar"></div>
+        test_out(
+            ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "div",
+                    attributes: vec![
+                        HtmlAttribute::Regular {
+                            name: "foo",
+                            value: "bar",
+                        },
+                        HtmlAttribute::VDirective(VDirective::Bind(VBindDirective {
+                            argument: Some("some-baz"),
+                            value: "qux",
+                            is_dynamic_attr: false,
+                            is_camel: false,
+                            is_prop: false,
+                            is_attr: false,
+                        })),
+                    ],
+                    is_self_closing: false,
+                    kind: fervid_core::ElementKind::Normal,
+                },
+                children: vec![],
+                template_scope: 0,
+            },
+            r#"_createElementVNode("div",{foo:"bar","some-baz":_ctx.qux})"#,
+            false,
+        );
+
+        // <div foo="bar" />
+        test_out(
+            ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "div",
+                    attributes: vec![
+                        HtmlAttribute::Regular {
+                            name: "foo",
+                            value: "bar",
+                        },
+                        HtmlAttribute::VDirective(VDirective::Bind(VBindDirective {
+                            argument: Some("some-baz"),
+                            value: "qux",
+                            is_dynamic_attr: false,
+                            is_camel: false,
+                            is_prop: false,
+                            is_attr: false,
+                        })),
+                    ],
+                    is_self_closing: true,
+                    kind: fervid_core::ElementKind::Normal,
+                },
+                children: vec![],
+                template_scope: 0,
+            },
+            r#"_createElementVNode("div",{foo:"bar","some-baz":_ctx.qux})"#,
+            false,
+        )
+    }
+
+    #[test]
+    fn it_generates_text_nodes_concatenation() {
+        // <div>hello from div {{ true }} bye!</div>
+        test_out(
+            ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "div",
+                    attributes: vec![],
+                    is_self_closing: false,
+                    kind: fervid_core::ElementKind::Normal,
+                },
+                children: vec![
+                    Node::TextNode("hello from div "),
+                    Node::DynamicExpression {
+                        value: "true",
+                        template_scope: 0,
+                    },
+                    Node::TextNode(" bye!"),
+                ],
+                template_scope: 0,
+            },
+            r#"_createElementVNode("div",null,"hello from div "+_toDisplayString(true)+" bye!")"#,
+            false,
+        )
+    }
+
+    #[test]
+    fn it_generates_children() {
+        // <div>hello from div {{ true }}<span>bye!</span></div>
+        test_out(
+            ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "div",
+                    attributes: vec![],
+                    is_self_closing: false,
+                    kind: fervid_core::ElementKind::Normal,
+                },
+                children: vec![
+                    Node::TextNode("hello from div "),
+                    Node::DynamicExpression {
+                        value: "true",
+                        template_scope: 0,
+                    },
+                    Node::ElementNode(ElementNode {
+                        starting_tag: StartingTag {
+                            tag_name: "span",
+                            attributes: vec![],
+                            is_self_closing: false,
+                            kind: fervid_core::ElementKind::Normal,
+                        },
+                        children: vec![
+                            Node::TextNode("bye!")
+                        ],
+                        template_scope: 0,
+                    }),
+                ],
+                template_scope: 0,
+            },
+            r#"_createElementVNode("div",null,[_createTextVNode("hello from div "+_toDisplayString(true),1),_createElementVNode("span",null,"bye!")])"#,
+            false,
+        )
+    }
+
+    fn test_out(input: ElementNode, expected: &str, wrap_in_block: bool) {
+        let mut ctx = CodegenContext::default();
+        let out = ctx.generate_element_vnode(&input, wrap_in_block);
+        assert_eq!(crate::test_utils::to_str(out), expected)
     }
 }
