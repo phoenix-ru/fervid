@@ -355,7 +355,10 @@ mod tests {
             r"_createVNode(_component_test_component)",
             false,
         );
+    }
 
+    #[test]
+    fn it_generates_attributes() {
         // <test-component foo="bar" :baz="qux"></test-component>
         test_out(
             ElementNode {
