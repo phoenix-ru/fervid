@@ -3,6 +3,7 @@ extern crate lazy_static;
 
 mod atoms;
 mod attributes;
+mod comments;
 mod components;
 mod context;
 mod control_flow;

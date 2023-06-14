@@ -11,7 +11,6 @@ type TextNodesConcatenationVec = SmallVec<[Expr; 3]>;
 
 impl CodegenContext {
     pub fn generate_node(&mut self, node: &Node, wrap_in_block: bool) -> Expr {
-        // TODO wrap in block
         match node {
             Node::TextNode(contents) => self.generate_text_node(contents, DUMMY_SP),
             Node::DynamicExpression {
@@ -28,7 +27,7 @@ impl CodegenContext {
                 // todo builtins as well
             }
 
-            _ => todo!(),
+            Node::CommentNode(comment) => self.generate_comment_vnode(comment, DUMMY_SP),
         }
     }
 
