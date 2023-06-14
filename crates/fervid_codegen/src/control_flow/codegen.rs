@@ -1,11 +1,14 @@
-use fervid_core::{Node, StartingTag};
+use fervid_core::{ElementNode, HtmlAttribute, Node, StartingTag, VDirective};
 use smallvec::SmallVec;
 use swc_core::{
     common::{BytePos, Span, SyntaxContext, DUMMY_SP},
-    ecma::ast::{BinExpr, BinaryOp, CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, Number, ParenExpr, SeqExpr},
+    ecma::ast::{
+        BinExpr, BinaryOp, CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, Number, ParenExpr,
+        SeqExpr,
+    },
 };
 
-use crate::{context::CodegenContext, imports::VueImports, utils};
+use crate::{attributes::DirectivesToProcess, context::CodegenContext, imports::VueImports, utils};
 
 type TextNodesConcatenationVec = SmallVec<[Expr; 3]>;
 
@@ -65,7 +68,7 @@ impl CodegenContext {
                         },
                     );
                     out.push(concatenation);
-    
+
                     // Reset text nodes
                     text_nodes.clear();
                     text_nodes_span[0] = BytePos(0);
@@ -149,6 +152,33 @@ impl CodegenContext {
                 ],
             })),
         })
+    }
+
+    pub fn generate_remaining_directives(
+        &mut self,
+        expr: &mut Expr,
+        remaining_directives: &DirectivesToProcess,
+    ) {
+        todo!()
+    }
+
+    /// Special case: `<template>` with `v-if`/`v-else-if`/`v-else`/`v-for`
+    #[inline]
+    pub fn should_generate_fragment(&self, element_node: &ElementNode) -> bool {
+        element_node.starting_tag.tag_name == "template"
+            && element_node
+                .starting_tag
+                .attributes
+                .iter()
+                .any(|attr| match attr {
+                    HtmlAttribute::VDirective(
+                        VDirective::If(_)
+                        | VDirective::ElseIf(_)
+                        | VDirective::Else
+                        | VDirective::For(_),
+                    ) => true,
+                    _ => false,
+                })
     }
 
     fn concatenate_text_nodes(

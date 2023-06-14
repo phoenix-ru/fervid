@@ -17,25 +17,17 @@ pub struct SlottedIterator<'n> {
 impl<'n> Iterator for SlottedIterator<'n> {
     type Item = &'n Node<'n>;
 
-    /// Gets the next item from the same slot as current iteration mode.
-    /// To switch mode, use [`SlottedIterator::toggle_mode`]
+    /// Gets the next item and advances the iterator
     fn next(&mut self) -> Option<Self::Item> {
-        match self.nodes.get(self.idx) {
-            Some(node) => {
-                // From default slot and mode is Default,
-                // or not from default slot and mode is Named
-                let is_suitable =
-                    (self.mode == SlottedIteratorMode::Default) == is_from_default_slot(node);
-
-                if is_suitable {
-                    self.idx += 1;
-                    Some(node)
-                } else {
-                    None
-                }
-            }
-            None => None,
+        let next_item = self.peek();
+        if let Some(_) = next_item {
+            self.idx += 1;
         }
+        next_item
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.nodes.len(), Some(self.nodes.len()))
     }
 }
 
@@ -65,6 +57,35 @@ impl<'n> SlottedIterator<'n> {
     /// Whether there are more elements to consume, irrespective of mode
     pub fn has_more(&self) -> bool {
         self.idx < self.nodes.len()
+    }
+
+    /// Custom peek implementation.
+    /// Gets the next item from the same slot as current iteration mode,
+    /// but does not advance the iterator.
+    ///
+    /// To switch mode, use [`SlottedIterator::toggle_mode`]
+    pub fn peek(&self) -> Option<&'n Node<'n>> {
+        match self.nodes.get(self.idx) {
+            Some(node) => {
+                // From default slot and mode is Default,
+                // or not from default slot and mode is Named
+                let is_suitable =
+                    (self.mode == SlottedIteratorMode::Default) == is_from_default_slot(node);
+
+                if is_suitable {
+                    Some(node)
+                } else {
+                    None
+                }
+            }
+            None => None
+        }
+    }
+
+    /// Not a safe method, please avoid it in favor of `next`
+    /// This is only made to work in tandem with [`SlottedIterator::peek`]
+    pub fn advance(&mut self) {
+        self.idx += 1;
     }
 }
 

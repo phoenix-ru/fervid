@@ -1,10 +1,12 @@
-use fervid_core::{ElementNode, VDirective};
+use fervid_core::{
+    ElementNode, HtmlAttribute, Node, StartingTag, VDirective, VForDirective, VSlotDirective,
+};
 use swc_core::{
-    common::DUMMY_SP,
+    common::{Span, DUMMY_SP},
     ecma::{
         ast::{
             ArrayLit, ArrowExpr, BlockStmtOrExpr, CallExpr, Callee, Expr, ExprOrSpread, Ident,
-            KeyValueProp, Lit, Null, Number, ObjectLit, Prop, PropOrSpread,
+            KeyValueProp, Lit, Null, Number, ObjectLit, Pat, Prop, PropName, PropOrSpread,
         },
         atoms::{js_word, JsWord},
     },
@@ -12,8 +14,19 @@ use swc_core::{
 
 use crate::{
     attributes::DirectivesToProcess, context::CodegenContext, control_flow::SlottedIterator,
-    imports::VueImports,
+    imports::VueImports, utils::str_to_propname,
 };
+
+/// Describes the `v-slot`, `v-for`, `v-if`,
+/// `v-else-if`, `v-else` directives supported by <template>
+#[derive(Default)]
+struct TemplateDirectives<'d> {
+    v_slot: Option<&'d VSlotDirective<'d>>,
+    v_for: Option<&'d VForDirective<'d>>,
+    v_if: Option<&'d str>,
+    v_else_if: Option<&'d str>,
+    v_else: Option<()>,
+}
 
 impl CodegenContext {
     pub fn generate_component_vnode(
@@ -45,7 +58,7 @@ impl CodegenContext {
         // 4th (optional) - component patch flag.
         let expected_component_args_count = if needs_patch_flags {
             4
-        } else if children_slots.len() != 0 {
+        } else if children_slots.is_some() {
             3
         } else if let Some(_) = attributes_expr {
             2
@@ -88,14 +101,7 @@ impl CodegenContext {
 
         // Arg 3 (optional): component children expression (default to null)
         if expected_component_args_count >= 3 {
-            let expr_to_push = if children_slots.len() != 0 {
-                Box::new(Expr::Object(ObjectLit {
-                    span: DUMMY_SP, // TODO
-                    props: children_slots,
-                }))
-            } else {
-                null!()
-            };
+            let expr_to_push = children_slots.map_or_else(|| null!(), |expr| Box::new(expr));
             create_component_args.push(ExprOrSpread {
                 spread: None,
                 expr: expr_to_push,
@@ -193,13 +199,13 @@ impl CodegenContext {
         (result, remaining_directives)
     }
 
-    fn generate_component_children(&mut self, component_node: &ElementNode) -> Vec<PropOrSpread> {
-        let mut result = Vec::new();
+    fn generate_component_children(&mut self, component_node: &ElementNode) -> Option<Expr> {
+        let mut result_static_slots = Vec::new();
         let total_children = component_node.children.len();
 
         // No children work, return immediately
         if total_children == 0 {
-            return result;
+            return None;
         }
 
         // Prepare the necessities.
@@ -211,78 +217,193 @@ impl CodegenContext {
         // and it will stop yielding elements unless [`SlottedIterator::toggle_mode`] is called.
         let mut slotted_iterator = SlottedIterator::new(&component_node.children);
 
+        // Whether the default slot element was encountered
+        // This is needed to avoid situation like that:
+        // <some-component>
+        //   <template v-slot:default="{ value }">{{ value }}</template>
+        //   not hi
+        // </some-component>
+        //
+        // We cannot really compile such templates,
+        // because `value` is only available to the first element.
+        //
+        // TODO But we can optimize it and put all the children inside the first <template>:
+        // <some-component>
+        //   <template v-slot:default="{ value }">
+        //     {{ value }}
+        //     not hi
+        //   </template>
+        // </some-component>
+        // This needs an RFC
+        let mut has_encountered_default_slot = false;
+        // let mut default_slot_is_not_template = false;
+
         // Generate the default slot items into the `default_slot_children` vec,
         // and named slots into the `result` vec.
         while slotted_iterator.has_more() {
+            // Generate either the default slot child, or `<template v-slot:default>`
             if slotted_iterator.is_default_slot_mode() {
-                self.generate_node_sequence(
-                    &mut slotted_iterator,
-                    &mut default_slot_children,
-                    total_children,
-                    false,
+                // Default slot children.
+                // We generate a sequence only if we know that
+                // the component has multiple children not belonging to a `<template>`,
+                // e.g. `<some-component><span>Hi</span>there</some-component>`.
+                if has_encountered_default_slot {
+                    self.generate_node_sequence(
+                        &mut slotted_iterator,
+                        &mut default_slot_children,
+                        total_children,
+                        false,
+                    );
+                    continue;
+                }
+
+                has_encountered_default_slot = true;
+
+                // Check if we found a `<template v-slot:default>` or `<template v-slot>`
+                // If we found it, we are in a similar case as if it was a named template.
+
+                let Some(node) = slotted_iterator.peek() else {
+                    slotted_iterator.toggle_mode();
+                    continue;
+                };
+
+                macro_rules! not_in_a_template_v_slot {
+                    () => {
+                        continue;
+                    };
+                }
+
+                // Check if this is a `<template>` or not
+                let Node::ElementNode(
+                    ElementNode {
+                        starting_tag: StartingTag {
+                            tag_name: "template",
+                            attributes,
+                            ..
+                        },
+                        children,
+                        template_scope
+                    }) = node else {
+                    not_in_a_template_v_slot!();
+                };
+
+                // Find all the supported directives
+                let supported_directives = find_template_supported_directives(attributes);
+
+                // Check `v-slot` existence
+                let Some(v_slot_directive) = supported_directives.v_slot else {
+                    not_in_a_template_v_slot!();
+                };
+
+                // At this point, we have `<template v-slot="maybeSomeBinding">`
+                // We need to generate it as if it was a named slot
+                self.generate_named_slot(
+                    v_slot_directive,
+                    &children,
+                    *template_scope,
+                    &supported_directives,
+                    &mut result_static_slots,
                 );
             } else {
-                todo!("Named slots compilation")
+                // Generate the slotted child
+                let Some(slotted_node) = slotted_iterator.next() else {
+                    slotted_iterator.toggle_mode();
+                    continue;
+                };
+
+                let Node::ElementNode(slotted_node) = slotted_node else {
+                    unreachable!("Only element node can be slotted")
+                };
+
+                // TODO Components with v-slot are not supported yet?..
             }
 
             slotted_iterator.toggle_mode();
         }
 
         // Add default slot children when needed
+        // TODO Error on cases when both `<template v-slot:default>`
+        // and non-slotted children are present (analyzer), e.g.:
+        // <some-component>
+        //   <template v-slot:default>hi</template>
+        //   not hi
+        // </some-component>
         if default_slot_children.len() != 0 {
-            // e.g. child1, child2, child3
-            let children_elems = default_slot_children
-                .into_iter()
-                .map(|child| {
-                    Some(ExprOrSpread {
-                        spread: None,
-                        expr: Box::new(child),
-                    })
-                })
-                .collect();
-
-            // [child1, child2, child3]
-            let children_arr = ArrayLit {
-                span: component_span,
-                elems: children_elems,
-            };
-
             // withCtx(() => [child1, child2, child3])
-            result.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                key: swc_core::ecma::ast::PropName::Ident(Ident {
-                    span: component_span,
-                    sym: js_word!("default"),
-                    optional: false,
-                }),
-                value: Box::new(Expr::Call(CallExpr {
-                    span: component_span,
-                    // withCtx
-                    callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                        span: component_span,
-                        sym: with_ctx_ident.clone(),
-                        optional: false,
-                    }))),
-                    args: vec![ExprOrSpread {
-                        spread: None,
-                        // () => [child1, child2, child3]
-                        expr: Box::new(Expr::Arrow(ArrowExpr {
-                            span: component_span,
-                            params: vec![],
-                            body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::Array(
-                                children_arr,
-                            )))),
-                            is_async: false,
-                            is_generator: false,
-                            type_params: None,
-                            return_type: None,
-                        })),
-                    }],
-                    type_args: None,
-                })),
-            }))));
+            result_static_slots.push(self.generate_slot_shell(
+                js_word!("default"),
+                default_slot_children,
+                None, // todo get the binding for `<template v-slot="binding"`
+                component_span,
+            ));
         }
 
-        result
+        // TODO Add `createSlots` if needed
+        Some(Expr::Object(ObjectLit {
+            span: component_span,
+            props: result_static_slots,
+        }))
+    }
+
+    /// Generates a named slot using a vector of slot children.
+    /// Primarily for `<template v-slot:named>` or `<template v-slot:default>`
+    fn generate_named_slot(
+        &mut self,
+        v_slot: &VSlotDirective,
+        slot_children: &[Node],
+        slot_scope: u32,
+        template_directives: &TemplateDirectives,
+        out_static_slots: &mut Vec<PropOrSpread>,
+    ) {
+        // Extra logic is needed if this is more than just `<template v-slot>`
+        let is_complex = template_directives.v_if.is_some()
+            || template_directives.v_else_if.is_some()
+            || template_directives.v_else.is_some()
+            || template_directives.v_for.is_some();
+
+        if is_complex {
+            todo!("createSlots is not supported yet");
+            // https://play.vuejs.org/#eNqVVNtuozAQ/ZUpWolGKo2y+xaRqFVfdr9gH0qlOngIVo2NbEMbRfz7js0l0G33okTgmfGcMzfmHN3X9W3bYLSNUpsbUTuw6JoaJFPHXRY5m0X7TImq1sbBGQwW0EFhdAUxucWZylSulXVQ2SPsvP06/o5SavipjeRX8SpT6bqHJiASBpolQY/xWjKHLRoCiktB4PgWeDkWrJHEnykAzhy7XvVnIELXGDVK4MOwW+hDIACv6vyLHvRfRuKwqiUxkgSQctFCm1RYoQ0KyFxabvbnc8CErgM6ThF2Xboma8+QClU3zntrjpKyIo+QVjDypqpOSU5mrchGmWYRCQehOIkH3SjuNXe5FPkLab4QgXKw20PJFJf44PXXvXYVYDPnf+lVksC9lOBKBE0PA1wYzJ1o0QIzCOKotEEOooDnNhHFMwgLhSe8hR/8xeuFiy3k2ng/SJIhZop6LA5FaqV226EH0wWAUkyX14tSfuj/yE+KVSJ/miH4aoLSr3/A+RSPGmXpLAo/RKZBKsy/hBH6SwJKi72zAKFgM7XL5/UbULoemjj1NAzLjLwfHU3y49MoeVKt8v7lp8JzB6PDN0cKqmAE6zCMAbXcUHc8xoEZslxqNt69m2vm8tdBMTCNY7qEr2HLhWUHiX7wiGmWdGprpvalODH6RvzxUg0/XwZHFOhHpiLFskM+5qFY9eA98bZJoc1Y628hznnjLlxLBCq7aOk060d0Ez3o6v3OWi4TCnHcVzS1QqH30Mp/VO9310cLhgqKtELKsEJu+rz/unTI4f/WzbRa5qvk00Uyr0D3Cy9D1W8=
+            // idk if that should be wrapped in block or not
+            // _createSlots({
+            //     default: _withCtx(() => [
+            //       _createTextVNode(" hi ")
+            //     ]),
+            //     _: 2 /* DYNAMIC */
+            //   }, [
+            //     _renderList(1, (i) => {
+            //       return {
+            //         name: "memes",
+            //         fn: _withCtx(() => [
+            //           _createTextVNode(" hi")
+            //         ])
+            //       }
+            //     })
+            //   ]), 1040 /* FULL_PROPS, DYNAMIC_SLOTS */)
+            // let generated = self.generate_node(slotted_node, false);
+        } else {
+            // Generate the children of the `<template v-slot>`
+            let total_children = slot_children.len();
+            let mut slotted_children_results = Vec::with_capacity(total_children);
+            let mut slotted_children_iter = slot_children.iter();
+
+            self.generate_node_sequence(
+                &mut slotted_children_iter,
+                &mut slotted_children_results,
+                total_children,
+                false,
+            );
+
+            let slot_name = JsWord::from(v_slot.slot_name.unwrap_or("default"));
+            let span = DUMMY_SP; // todo?
+
+            out_static_slots.push(self.generate_slot_shell(
+                slot_name,
+                slotted_children_results,
+                None,
+                span,
+            ));
+        }
     }
 
     /// Creates the SWC identifier from a tag name. Will fetch from cache if present
@@ -312,8 +433,93 @@ impl CodegenContext {
         create_component_expr: &mut Expr,
         remaining_directives: &DirectivesToProcess,
     ) {
-        todo!()
+        self.generate_remaining_directives(create_component_expr, remaining_directives)
     }
+
+    /// Generates `_slotName_: withCtx((_maybeCtx_) => [slot, children])`
+    fn generate_slot_shell(
+        &mut self,
+        slot_name: JsWord,
+        slot_children: Vec<Expr>,
+        slot_binding: Option<Pat>,
+        span: Span,
+    ) -> PropOrSpread {
+        // e.g. child1, child2, child3
+        let children_elems = slot_children
+            .into_iter()
+            .map(|child| {
+                Some(ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(child),
+                })
+            })
+            .collect();
+
+        // [child1, child2, child3]
+        let children_arr = ArrayLit {
+            span,
+            elems: children_elems,
+        };
+
+        // Params to arrow function.
+        // `withCtx(() => /*...*/)` or `withCtx(({ maybe: destructure }) => /*...*/)`
+        let params = if let Some(slot_binding) = slot_binding {
+            vec![slot_binding]
+        } else {
+            Vec::new()
+        };
+
+        PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+            key: PropName::Ident(Ident {
+                span,
+                sym: slot_name,
+                optional: false,
+            }),
+            value: Box::new(Expr::Call(CallExpr {
+                span,
+                // withCtx
+                callee: Callee::Expr(Box::new(Expr::Ident(Ident {
+                    span,
+                    sym: self.get_and_add_import_ident(VueImports::WithCtx),
+                    optional: false,
+                }))),
+                args: vec![ExprOrSpread {
+                    spread: None,
+                    // () => [child1, child2, child3]
+                    expr: Box::new(Expr::Arrow(ArrowExpr {
+                        span,
+                        params,
+                        body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::Array(children_arr)))),
+                        is_async: false,
+                        is_generator: false,
+                        type_params: None,
+                        return_type: None,
+                    })),
+                }],
+                type_args: None,
+            })),
+        })))
+    }
+}
+
+/// Finds the `v-slot`, `v-for`, `v-if`, `v-else-if`, `v-else` directives
+fn find_template_supported_directives<'e>(
+    attributes: &'e [HtmlAttribute],
+) -> TemplateDirectives<'e> {
+    let mut result = TemplateDirectives::default();
+
+    for attr in attributes.iter() {
+        match attr {
+            HtmlAttribute::VDirective(VDirective::If(cond)) => result.v_if = Some(&cond),
+            HtmlAttribute::VDirective(VDirective::ElseIf(cond)) => result.v_else_if = Some(&cond),
+            HtmlAttribute::VDirective(VDirective::Else) => result.v_else = Some(()),
+            HtmlAttribute::VDirective(VDirective::For(v_for)) => result.v_for = Some(v_for),
+            HtmlAttribute::VDirective(VDirective::Slot(v_slot)) => result.v_slot = Some(v_slot),
+            _ => {}
+        }
+    }
+
+    result
 }
 
 #[cfg(test)]
