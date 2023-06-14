@@ -315,7 +315,23 @@ impl CodegenContext {
                     unreachable!("Only element node can be slotted")
                 };
 
+                let supported_directives =
+                    find_template_supported_directives(&slotted_node.starting_tag.attributes);
+
+                // Check `v-slot` existence
+                let Some(v_slot_directive) = supported_directives.v_slot else {
+                    unreachable!("Slotted node should have a v-slot directive");
+                };
+
                 // TODO Components with v-slot are not supported yet?..
+
+                self.generate_named_slot(
+                    v_slot_directive,
+                    &slotted_node.children,
+                    slotted_node.template_scope,
+                    &supported_directives,
+                    &mut result_static_slots,
+                );
             }
 
             slotted_iterator.toggle_mode();
