@@ -26,6 +26,7 @@ impl<'n> Iterator for SlottedIterator<'n> {
         next_item
     }
 
+    #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         (self.nodes.len(), Some(self.nodes.len()))
     }
@@ -49,12 +50,22 @@ impl<'n> SlottedIterator<'n> {
         };
     }
 
+    /// Switches the iteration mode if peek() yields None
+    #[inline]
+    pub fn toggle_mode_if_peek_is_none(&mut self) {
+        if let None = self.peek() {
+            self.toggle_mode();
+        }
+    }
+
     /// Is iteration mode Default
+    #[inline]
     pub fn is_default_slot_mode(&self) -> bool {
         self.mode == SlottedIteratorMode::Default
     }
 
     /// Whether there are more elements to consume, irrespective of mode
+    #[inline]
     pub fn has_more(&self) -> bool {
         self.idx < self.nodes.len()
     }
@@ -84,6 +95,7 @@ impl<'n> SlottedIterator<'n> {
 
     /// Not a safe method, please avoid it in favor of `next`
     /// This is only made to work in tandem with [`SlottedIterator::peek`]
+    #[inline]
     pub fn advance(&mut self) {
         self.idx += 1;
     }

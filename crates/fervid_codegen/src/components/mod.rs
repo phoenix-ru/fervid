@@ -243,6 +243,11 @@ impl CodegenContext {
         while slotted_iterator.has_more() {
             // Generate either the default slot child, or `<template v-slot:default>`
             if slotted_iterator.is_default_slot_mode() {
+                let Some(node) = slotted_iterator.peek() else {
+                    slotted_iterator.toggle_mode();
+                    continue;
+                };
+
                 // Default slot children.
                 // We generate a sequence only if we know that
                 // the component has multiple children not belonging to a `<template>`,
@@ -254,6 +259,7 @@ impl CodegenContext {
                         total_children,
                         false,
                     );
+                    slotted_iterator.toggle_mode_if_peek_is_none();
                     continue;
                 }
 
@@ -261,11 +267,6 @@ impl CodegenContext {
 
                 // Check if we found a `<template v-slot:default>` or `<template v-slot>`
                 // If we found it, we are in a similar case as if it was a named template.
-
-                let Some(node) = slotted_iterator.peek() else {
-                    slotted_iterator.toggle_mode();
-                    continue;
-                };
 
                 macro_rules! not_in_a_template_v_slot {
                     () => {
@@ -304,6 +305,9 @@ impl CodegenContext {
                     &supported_directives,
                     &mut result_static_slots,
                 );
+
+                // Advance the iterator forward
+                slotted_iterator.next();
             } else {
                 // Generate the slotted child
                 let Some(slotted_node) = slotted_iterator.next() else {
@@ -347,7 +351,7 @@ impl CodegenContext {
         if default_slot_children.len() != 0 {
             // withCtx(() => [child1, child2, child3])
             result_static_slots.push(self.generate_slot_shell(
-                js_word!("default"),
+                "default",
                 default_slot_children,
                 None, // todo get the binding for `<template v-slot="binding"`
                 component_span,
@@ -410,7 +414,7 @@ impl CodegenContext {
                 false,
             );
 
-            let slot_name = JsWord::from(v_slot.slot_name.unwrap_or("default"));
+            let slot_name = v_slot.slot_name.unwrap_or("default");
             let span = DUMMY_SP; // todo?
 
             out_static_slots.push(self.generate_slot_shell(
@@ -455,7 +459,7 @@ impl CodegenContext {
     /// Generates `_slotName_: withCtx((_maybeCtx_) => [slot, children])`
     fn generate_slot_shell(
         &mut self,
-        slot_name: JsWord,
+        slot_name: &str,
         slot_children: Vec<Expr>,
         slot_binding: Option<Pat>,
         span: Span,
@@ -486,11 +490,7 @@ impl CodegenContext {
         };
 
         PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-            key: PropName::Ident(Ident {
-                span,
-                sym: slot_name,
-                optional: false,
-            }),
+            key: str_to_propname(slot_name, span),
             value: Box::new(Expr::Call(CallExpr {
                 span,
                 // withCtx
@@ -637,7 +637,418 @@ mod tests {
                 ],
                 template_scope: 0,
             },
-            r#"_createVNode(_component_test_component,null,{default:_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
+            r#"_createVNode(_component_test_component,null,{"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
+            false,
+        );
+
+        // <test-component>
+        //   <tempate v-slot:default>hello from component<div>hello from div</div></template>
+        // </test-component>
+        test_out(
+            ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "test-component",
+                    attributes: vec![],
+                    is_self_closing: false,
+                    kind: fervid_core::ElementKind::Normal,
+                },
+                children: vec![Node::ElementNode(ElementNode {
+                    starting_tag: StartingTag {
+                        tag_name: "template",
+                        attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
+                            VSlotDirective {
+                                slot_name: Some("default"),
+                                value: None,
+                                is_dynamic_slot: false,
+                            },
+                        ))],
+                        is_self_closing: false,
+                        kind: fervid_core::ElementKind::Normal,
+                    },
+                    children: vec![
+                        Node::TextNode("hello from component"),
+                        Node::ElementNode(ElementNode {
+                            starting_tag: StartingTag {
+                                tag_name: "div",
+                                attributes: vec![],
+                                is_self_closing: false,
+                                kind: fervid_core::ElementKind::Normal,
+                            },
+                            children: vec![Node::TextNode("hello from div")],
+                            template_scope: 0,
+                        }),
+                    ],
+                    template_scope: 0,
+                })],
+                template_scope: 0,
+            },
+            r#"_createVNode(_component_test_component,null,{"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
+            false,
+        );
+    }
+
+    #[test]
+    fn it_generates_named_slot() {
+        // <test-component>
+        //   <tempate v-slot:foo-bar>hello from component<div>hello from div</div></template>
+        // </test-component>
+        test_out(
+            ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "test-component",
+                    attributes: vec![],
+                    is_self_closing: false,
+                    kind: fervid_core::ElementKind::Normal,
+                },
+                children: vec![Node::ElementNode(ElementNode {
+                    starting_tag: StartingTag {
+                        tag_name: "template",
+                        attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
+                            VSlotDirective {
+                                slot_name: Some("foo-bar"),
+                                value: None,
+                                is_dynamic_slot: false,
+                            },
+                        ))],
+                        is_self_closing: false,
+                        kind: fervid_core::ElementKind::Normal,
+                    },
+                    children: vec![
+                        Node::TextNode("hello from component"),
+                        Node::ElementNode(ElementNode {
+                            starting_tag: StartingTag {
+                                tag_name: "div",
+                                attributes: vec![],
+                                is_self_closing: false,
+                                kind: fervid_core::ElementKind::Normal,
+                            },
+                            children: vec![Node::TextNode("hello from div")],
+                            template_scope: 0,
+                        }),
+                    ],
+                    template_scope: 0,
+                })],
+                template_scope: 0,
+            },
+            r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
+            false,
+        );
+    }
+
+    #[test]
+    fn it_generates_multiple_named_slots() {
+        // <test-component>
+        //   <tempate v-slot:foo-bar>hello from slot {{ one }}</template>
+        //   <tempate v-slot:baz>hello from slot <b>two</b></template>
+        // </test-component>
+        test_out(
+            ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "test-component",
+                    attributes: vec![],
+                    is_self_closing: false,
+                    kind: fervid_core::ElementKind::Normal,
+                },
+                children: vec![
+                    Node::ElementNode(ElementNode {
+                        starting_tag: StartingTag {
+                            tag_name: "template",
+                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
+                                VSlotDirective {
+                                    slot_name: Some("foo-bar"),
+                                    value: None,
+                                    is_dynamic_slot: false,
+                                },
+                            ))],
+                            is_self_closing: false,
+                            kind: fervid_core::ElementKind::Normal,
+                        },
+                        children: vec![
+                            Node::TextNode("hello from slot "),
+                            Node::DynamicExpression {
+                                value: "one",
+                                template_scope: 0,
+                            }
+                        ],
+                        template_scope: 0,
+                    }),
+                    Node::ElementNode(ElementNode {
+                        starting_tag: StartingTag {
+                            tag_name: "template",
+                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
+                                VSlotDirective {
+                                    slot_name: Some("baz"),
+                                    value: None,
+                                    is_dynamic_slot: false,
+                                },
+                            ))],
+                            is_self_closing: false,
+                            kind: fervid_core::ElementKind::Normal,
+                        },
+                        children: vec![
+                            Node::TextNode("hello from slot "),
+                            Node::ElementNode(ElementNode {
+                                starting_tag: StartingTag {
+                                    tag_name: "b",
+                                    attributes: vec![],
+                                    is_self_closing: false,
+                                    kind: fervid_core::ElementKind::Normal,
+                                },
+                                children: vec![Node::TextNode("two")],
+                                template_scope: 0,
+                            }),
+                        ],
+                        template_scope: 0,
+                    }),
+                ],
+                template_scope: 0,
+            },
+            r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot "+_toDisplayString(_ctx.one),1)]),baz:_withCtx(()=>[_createTextVNode("hello from slot "),_createElementVNode("b",null,"two")])})"#,
+            false,
+        );
+    }
+
+    #[test]
+    fn it_generates_mixed_slots() {
+        // <test-component>
+        //   hello from component<div>hello from div</div>
+        //   <tempate v-slot:foo-bar>hello from slot</template>
+        // </test-component>
+        test_out(
+            ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "test-component",
+                    attributes: vec![],
+                    is_self_closing: false,
+                    kind: fervid_core::ElementKind::Normal,
+                },
+                children: vec![
+                    Node::TextNode("hello from component"),
+                    Node::ElementNode(ElementNode {
+                        starting_tag: StartingTag {
+                            tag_name: "div",
+                            attributes: vec![],
+                            is_self_closing: false,
+                            kind: fervid_core::ElementKind::Normal,
+                        },
+                        children: vec![Node::TextNode("hello from div")],
+                        template_scope: 0,
+                    }),
+                    Node::ElementNode(ElementNode {
+                        starting_tag: StartingTag {
+                            tag_name: "template",
+                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
+                                VSlotDirective {
+                                    slot_name: Some("foo-bar"),
+                                    value: None,
+                                    is_dynamic_slot: false,
+                                },
+                            ))],
+                            is_self_closing: false,
+                            kind: fervid_core::ElementKind::Normal,
+                        },
+                        children: vec![Node::TextNode("hello from slot")],
+                        template_scope: 0,
+                    }),
+                ],
+                template_scope: 0,
+            },
+            r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
+            false,
+        );
+
+        // <test-component>
+        //   <template v-slot>hello from default<div>hello from div</div></template>
+        //   <tempate v-slot:foo-bar>hello from slot</template>
+        // </test-component>
+        test_out(
+            ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "test-component",
+                    attributes: vec![],
+                    is_self_closing: false,
+                    kind: fervid_core::ElementKind::Normal,
+                },
+                children: vec![
+                    Node::ElementNode(ElementNode {
+                        starting_tag: StartingTag {
+                            tag_name: "template",
+                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
+                                VSlotDirective {
+                                    slot_name: None,
+                                    value: None,
+                                    is_dynamic_slot: false,
+                                },
+                            ))],
+                            is_self_closing: false,
+                            kind: fervid_core::ElementKind::Normal,
+                        },
+                        children: vec![
+                            Node::TextNode("hello from default"),
+                            Node::ElementNode(ElementNode {
+                                starting_tag: StartingTag {
+                                    tag_name: "div",
+                                    attributes: vec![],
+                                    is_self_closing: false,
+                                    kind: fervid_core::ElementKind::Normal,
+                                },
+                                children: vec![Node::TextNode("hello from div")],
+                                template_scope: 0,
+                            }),
+                        ],
+                        template_scope: 0,
+                    }),
+                    Node::ElementNode(ElementNode {
+                        starting_tag: StartingTag {
+                            tag_name: "template",
+                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
+                                VSlotDirective {
+                                    slot_name: Some("foo-bar"),
+                                    value: None,
+                                    is_dynamic_slot: false,
+                                },
+                            ))],
+                            is_self_closing: false,
+                            kind: fervid_core::ElementKind::Normal,
+                        },
+                        children: vec![Node::TextNode("hello from slot")],
+                        template_scope: 0,
+                    }),
+                ],
+                template_scope: 0,
+            },
+            r#"_createVNode(_component_test_component,null,{"default":_withCtx(()=>[_createTextVNode("hello from default"),_createElementVNode("div",null,"hello from div")]),"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")])})"#,
+            false,
+        );
+
+        // <test-component>
+        //   <tempate v-slot:foo-bar>hello from slot</template>
+        //   hello from component<div>hello from div</div>
+        // </test-component>
+        test_out(
+            ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "test-component",
+                    attributes: vec![],
+                    is_self_closing: false,
+                    kind: fervid_core::ElementKind::Normal,
+                },
+                children: vec![
+                    Node::ElementNode(ElementNode {
+                        starting_tag: StartingTag {
+                            tag_name: "template",
+                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
+                                VSlotDirective {
+                                    slot_name: Some("foo-bar"),
+                                    value: None,
+                                    is_dynamic_slot: false,
+                                },
+                            ))],
+                            is_self_closing: false,
+                            kind: fervid_core::ElementKind::Normal,
+                        },
+                        children: vec![Node::TextNode("hello from slot")],
+                        template_scope: 0,
+                    }),
+                    Node::TextNode("hello from component"),
+                    Node::ElementNode(ElementNode {
+                        starting_tag: StartingTag {
+                            tag_name: "div",
+                            attributes: vec![],
+                            is_self_closing: false,
+                            kind: fervid_core::ElementKind::Normal,
+                        },
+                        children: vec![Node::TextNode("hello from div")],
+                        template_scope: 0,
+                    }),
+                ],
+                template_scope: 0,
+            },
+            r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
+            false,
+        );
+    }
+
+    #[test]
+    fn it_generates_mixed_slots_multiple() {
+        // <test-component>
+        //   <tempate v-slot:foo-bar>hello from slot</template>
+        //   <template v-slot>hello from default<div>hello from div</div></template>
+        //   <tempate v-slot:baz>hello from baz</template>
+        // </test-component>
+        test_out(
+            ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "test-component",
+                    attributes: vec![],
+                    is_self_closing: false,
+                    kind: fervid_core::ElementKind::Normal,
+                },
+                children: vec![
+                    Node::ElementNode(ElementNode {
+                        starting_tag: StartingTag {
+                            tag_name: "template",
+                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
+                                VSlotDirective {
+                                    slot_name: Some("foo-bar"),
+                                    value: None,
+                                    is_dynamic_slot: false,
+                                },
+                            ))],
+                            is_self_closing: false,
+                            kind: fervid_core::ElementKind::Normal,
+                        },
+                        children: vec![Node::TextNode("hello from slot")],
+                        template_scope: 0,
+                    }),
+                    Node::ElementNode(ElementNode {
+                        starting_tag: StartingTag {
+                            tag_name: "template",
+                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
+                                VSlotDirective {
+                                    slot_name: None,
+                                    value: None,
+                                    is_dynamic_slot: false,
+                                },
+                            ))],
+                            is_self_closing: false,
+                            kind: fervid_core::ElementKind::Normal,
+                        },
+                        children: vec![
+                            Node::TextNode("hello from default"),
+                            Node::ElementNode(ElementNode {
+                                starting_tag: StartingTag {
+                                    tag_name: "div",
+                                    attributes: vec![],
+                                    is_self_closing: false,
+                                    kind: fervid_core::ElementKind::Normal,
+                                },
+                                children: vec![Node::TextNode("hello from div")],
+                                template_scope: 0,
+                            }),
+                        ],
+                        template_scope: 0,
+                    }),
+                    Node::ElementNode(ElementNode {
+                        starting_tag: StartingTag {
+                            tag_name: "template",
+                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
+                                VSlotDirective {
+                                    slot_name: Some("baz"),
+                                    value: None,
+                                    is_dynamic_slot: false,
+                                },
+                            ))],
+                            is_self_closing: false,
+                            kind: fervid_core::ElementKind::Normal,
+                        },
+                        children: vec![Node::TextNode("hello from baz")],
+                        template_scope: 0,
+                    }),
+                ],
+                template_scope: 0,
+            },
+            r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),"default":_withCtx(()=>[_createTextVNode("hello from default"),_createElementVNode("div",null,"hello from div")]),baz:_withCtx(()=>[_createTextVNode("hello from baz")])})"#,
             false,
         );
     }

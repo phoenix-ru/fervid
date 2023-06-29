@@ -159,7 +159,9 @@ impl CodegenContext {
         expr: &mut Expr,
         remaining_directives: &DirectivesToProcess,
     ) {
-        todo!()
+        if remaining_directives.len() != 0 {
+            todo!("Remaining directives are not implemented yet")
+        }
     }
 
     /// Special case: `<template>` with `v-if`/`v-else-if`/`v-else`/`v-for`
