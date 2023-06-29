@@ -283,7 +283,7 @@ impl CodegenContext {
                             ..
                         },
                         children,
-                        template_scope
+                        ..
                     }) = node else {
                     not_in_a_template_v_slot!();
                 };
@@ -301,7 +301,6 @@ impl CodegenContext {
                 self.generate_named_slot(
                     v_slot_directive,
                     &children,
-                    *template_scope,
                     &supported_directives,
                     &mut result_static_slots,
                 );
@@ -332,7 +331,6 @@ impl CodegenContext {
                 self.generate_named_slot(
                     v_slot_directive,
                     &slotted_node.children,
-                    slotted_node.template_scope,
                     &supported_directives,
                     &mut result_static_slots,
                 );
@@ -371,7 +369,6 @@ impl CodegenContext {
         &mut self,
         v_slot: &VSlotDirective,
         slot_children: &[Node],
-        slot_scope: u32,
         template_directives: &TemplateDirectives,
         out_static_slots: &mut Vec<PropOrSpread>,
     ) {
