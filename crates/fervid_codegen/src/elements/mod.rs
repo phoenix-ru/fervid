@@ -256,28 +256,57 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{Node, StartingTag, VBindDirective};
+    use fervid_core::{Node, StartingTag, VBindDirective, VOnDirective};
 
     use super::*;
 
     #[test]
     fn it_generates_basic_usage() {
-        // <div foo="bar">hello from div</div>
+        // <div
+        //   foo="bar"
+        //   :baz="qux"
+        //   :readonly="true"
+        //   @click="handleClick"
+        // >hello from div</div>
         test_out(
             ElementNode {
                 starting_tag: StartingTag {
                     tag_name: "div",
-                    attributes: vec![HtmlAttribute::Regular {
-                        name: "foo",
-                        value: "bar",
-                    }],
+                    attributes: vec![
+                        HtmlAttribute::Regular {
+                            name: "foo",
+                            value: "bar",
+                        },
+                        HtmlAttribute::VDirective(VDirective::Bind(VBindDirective {
+                            argument: Some("baz"),
+                            value: "qux",
+                            is_dynamic_attr: false,
+                            is_camel: false,
+                            is_prop: false,
+                            is_attr: false,
+                        })),
+                        HtmlAttribute::VDirective(VDirective::Bind(VBindDirective {
+                            argument: Some("readonly"),
+                            value: "true",
+                            is_dynamic_attr: false,
+                            is_camel: false,
+                            is_prop: false,
+                            is_attr: false,
+                        })),
+                        HtmlAttribute::VDirective(VDirective::On(VOnDirective {
+                            event: Some("click"),
+                            handler: Some("handleClick"),
+                            is_dynamic_event: false,
+                            modifiers: vec![],
+                        })),
+                    ],
                     is_self_closing: false,
                     kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![Node::TextNode("hello from div")],
                 template_scope: 0,
             },
-            r#"_createElementVNode("div",{foo:"bar"},"hello from div")"#,
+            r#"_createElementVNode("div",{foo:"bar",baz:_ctx.qux,readonly:true,onClick:_ctx.handleClick},"hello from div")"#,
             false,
         )
     }
@@ -412,9 +441,7 @@ mod tests {
                             is_self_closing: false,
                             kind: fervid_core::ElementKind::Normal,
                         },
-                        children: vec![
-                            Node::TextNode("bye!")
-                        ],
+                        children: vec![Node::TextNode("bye!")],
                         template_scope: 0,
                     }),
                 ],
