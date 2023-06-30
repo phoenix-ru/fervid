@@ -4,7 +4,7 @@ extern crate swc_ecma_parser;
 use std::time::Instant;
 
 use fervid::{compile_sfc, SfcBlock, SfcScriptBlock};
-use fervid_core::{ElementKind, ElementNode, HtmlAttribute, Node, StartingTag};
+use fervid_core::{ElementNode, HtmlAttribute, Node, StartingTag};
 
 use fervid::analyzer::ast_optimizer;
 use fervid::analyzer::scope::ScopeHelper;
@@ -96,9 +96,7 @@ fn test_synthetic_compilation() {
                     attributes: vec![HtmlAttribute::Regular {
                         name: "class",
                         value: "yes",
-                    }],
-                    is_self_closing: false,
-                    kind: ElementKind::Normal,
+                    }]
                 },
                 children: vec![
                     Node::TextNode("Hello world"),
@@ -111,9 +109,7 @@ fn test_synthetic_compilation() {
                     Node::ElementNode(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "i",
-                            attributes: vec![],
-                            is_self_closing: false,
-                            kind: ElementKind::Normal,
+                            attributes: vec![]
                         },
                         children: vec![
                             Node::TextNode("italics, mm"),
@@ -128,9 +124,7 @@ fn test_synthetic_compilation() {
                     Node::ElementNode(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "CustomComponent",
-                            attributes: vec![],
-                            is_self_closing: false,
-                            kind: ElementKind::Normal, // is this needed?
+                            attributes: vec![]
                         },
                         children: vec![
                             Node::TextNode("italics, mm"),

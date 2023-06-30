@@ -1,4 +1,3 @@
-use fervid_core::ElementKind;
 use nom::{bytes::complete::{take_while1, take_while}, IResult};
 
 // According to https://www.w3.org/TR/2011/WD-html5-20110525/syntax.html#elements-0
@@ -6,6 +5,14 @@ const VOID_TAGS: [&str; 16] = ["area", "base", "br", "col", "command", "embed", 
 const RAW_TEXT_ELEMENTS: [&str; 2] = ["script", "style"];
 const RCDATA_ELEMENTS: [&str; 2] = ["textarea", "title"];
 const FOREIGN_ELEMENTS: [&str; 1] = ["svg"]; // todo
+
+pub enum ElementKind {
+  RCData,
+  Foreign,
+  RawText,
+  Void,
+  Normal
+}
 
 pub fn classify_element_kind(tag_name: &str) -> ElementKind {
   let tag_lowercase = &tag_name.to_lowercase();

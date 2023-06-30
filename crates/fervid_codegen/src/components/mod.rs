@@ -549,8 +549,6 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
-                    is_self_closing: false,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![],
                 template_scope: 0,
@@ -565,8 +563,6 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
-                    is_self_closing: true,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![],
                 template_scope: 0,
@@ -597,8 +593,6 @@ mod tests {
                             is_attr: false,
                         })),
                     ],
-                    is_self_closing: false,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![],
                 template_scope: 0,
@@ -616,8 +610,6 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
-                    is_self_closing: false,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![
                     Node::TextNode("hello from component"),
@@ -625,8 +617,6 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "div",
                             attributes: vec![],
-                            is_self_closing: false,
-                            kind: fervid_core::ElementKind::Normal,
                         },
                         children: vec![Node::TextNode("hello from div")],
                         template_scope: 0,
@@ -646,8 +636,6 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
-                    is_self_closing: false,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![Node::ElementNode(ElementNode {
                     starting_tag: StartingTag {
@@ -659,8 +647,6 @@ mod tests {
                                 is_dynamic_slot: false,
                             },
                         ))],
-                        is_self_closing: false,
-                        kind: fervid_core::ElementKind::Normal,
                     },
                     children: vec![
                         Node::TextNode("hello from component"),
@@ -668,8 +654,6 @@ mod tests {
                             starting_tag: StartingTag {
                                 tag_name: "div",
                                 attributes: vec![],
-                                is_self_closing: false,
-                                kind: fervid_core::ElementKind::Normal,
                             },
                             children: vec![Node::TextNode("hello from div")],
                             template_scope: 0,
@@ -694,8 +678,6 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
-                    is_self_closing: false,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![Node::ElementNode(ElementNode {
                     starting_tag: StartingTag {
@@ -707,8 +689,6 @@ mod tests {
                                 is_dynamic_slot: false,
                             },
                         ))],
-                        is_self_closing: false,
-                        kind: fervid_core::ElementKind::Normal,
                     },
                     children: vec![
                         Node::TextNode("hello from component"),
@@ -716,8 +696,6 @@ mod tests {
                             starting_tag: StartingTag {
                                 tag_name: "div",
                                 attributes: vec![],
-                                is_self_closing: false,
-                                kind: fervid_core::ElementKind::Normal,
                             },
                             children: vec![Node::TextNode("hello from div")],
                             template_scope: 0,
@@ -743,8 +721,6 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
-                    is_self_closing: false,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![
                     Node::ElementNode(ElementNode {
@@ -757,15 +733,13 @@ mod tests {
                                     is_dynamic_slot: false,
                                 },
                             ))],
-                            is_self_closing: false,
-                            kind: fervid_core::ElementKind::Normal,
                         },
                         children: vec![
                             Node::TextNode("hello from slot "),
                             Node::DynamicExpression {
                                 value: "one",
                                 template_scope: 0,
-                            }
+                            },
                         ],
                         template_scope: 0,
                     }),
@@ -779,8 +753,6 @@ mod tests {
                                     is_dynamic_slot: false,
                                 },
                             ))],
-                            is_self_closing: false,
-                            kind: fervid_core::ElementKind::Normal,
                         },
                         children: vec![
                             Node::TextNode("hello from slot "),
@@ -788,8 +760,6 @@ mod tests {
                                 starting_tag: StartingTag {
                                     tag_name: "b",
                                     attributes: vec![],
-                                    is_self_closing: false,
-                                    kind: fervid_core::ElementKind::Normal,
                                 },
                                 children: vec![Node::TextNode("two")],
                                 template_scope: 0,
@@ -816,8 +786,6 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
-                    is_self_closing: false,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![
                     Node::TextNode("hello from component"),
@@ -825,8 +793,6 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "div",
                             attributes: vec![],
-                            is_self_closing: false,
-                            kind: fervid_core::ElementKind::Normal,
                         },
                         children: vec![Node::TextNode("hello from div")],
                         template_scope: 0,
@@ -841,8 +807,6 @@ mod tests {
                                     is_dynamic_slot: false,
                                 },
                             ))],
-                            is_self_closing: false,
-                            kind: fervid_core::ElementKind::Normal,
                         },
                         children: vec![Node::TextNode("hello from slot")],
                         template_scope: 0,
@@ -863,8 +827,6 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
-                    is_self_closing: false,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![
                     Node::ElementNode(ElementNode {
@@ -877,8 +839,6 @@ mod tests {
                                     is_dynamic_slot: false,
                                 },
                             ))],
-                            is_self_closing: false,
-                            kind: fervid_core::ElementKind::Normal,
                         },
                         children: vec![
                             Node::TextNode("hello from default"),
@@ -886,8 +846,6 @@ mod tests {
                                 starting_tag: StartingTag {
                                     tag_name: "div",
                                     attributes: vec![],
-                                    is_self_closing: false,
-                                    kind: fervid_core::ElementKind::Normal,
                                 },
                                 children: vec![Node::TextNode("hello from div")],
                                 template_scope: 0,
@@ -905,8 +863,6 @@ mod tests {
                                     is_dynamic_slot: false,
                                 },
                             ))],
-                            is_self_closing: false,
-                            kind: fervid_core::ElementKind::Normal,
                         },
                         children: vec![Node::TextNode("hello from slot")],
                         template_scope: 0,
@@ -927,8 +883,6 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
-                    is_self_closing: false,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![
                     Node::ElementNode(ElementNode {
@@ -941,8 +895,6 @@ mod tests {
                                     is_dynamic_slot: false,
                                 },
                             ))],
-                            is_self_closing: false,
-                            kind: fervid_core::ElementKind::Normal,
                         },
                         children: vec![Node::TextNode("hello from slot")],
                         template_scope: 0,
@@ -952,8 +904,6 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "div",
                             attributes: vec![],
-                            is_self_closing: false,
-                            kind: fervid_core::ElementKind::Normal,
                         },
                         children: vec![Node::TextNode("hello from div")],
                         template_scope: 0,
@@ -978,8 +928,6 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
-                    is_self_closing: false,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![
                     Node::ElementNode(ElementNode {
@@ -992,8 +940,6 @@ mod tests {
                                     is_dynamic_slot: false,
                                 },
                             ))],
-                            is_self_closing: false,
-                            kind: fervid_core::ElementKind::Normal,
                         },
                         children: vec![Node::TextNode("hello from slot")],
                         template_scope: 0,
@@ -1008,8 +954,6 @@ mod tests {
                                     is_dynamic_slot: false,
                                 },
                             ))],
-                            is_self_closing: false,
-                            kind: fervid_core::ElementKind::Normal,
                         },
                         children: vec![
                             Node::TextNode("hello from default"),
@@ -1017,8 +961,6 @@ mod tests {
                                 starting_tag: StartingTag {
                                     tag_name: "div",
                                     attributes: vec![],
-                                    is_self_closing: false,
-                                    kind: fervid_core::ElementKind::Normal,
                                 },
                                 children: vec![Node::TextNode("hello from div")],
                                 template_scope: 0,
@@ -1036,8 +978,6 @@ mod tests {
                                     is_dynamic_slot: false,
                                 },
                             ))],
-                            is_self_closing: false,
-                            kind: fervid_core::ElementKind::Normal,
                         },
                         children: vec![Node::TextNode("hello from baz")],
                         template_scope: 0,

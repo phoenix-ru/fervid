@@ -89,7 +89,7 @@ impl<'n> SlottedIterator<'n> {
                     None
                 }
             }
-            None => None
+            None => None,
         }
     }
 
@@ -229,8 +229,6 @@ mod tests {
             starting_tag: StartingTag {
                 tag_name: "h1",
                 attributes: vec![],
-                is_self_closing: false,
-                kind: fervid_core::ElementKind::Normal,
             },
             children: vec![Node::TextNode("This is an h1")],
             template_scope: 0,
@@ -256,8 +254,6 @@ mod tests {
                         is_attr: false,
                     })),
                 ],
-                is_self_closing: true,
-                kind: fervid_core::ElementKind::Normal,
             },
             children: vec![],
             template_scope: 0,
@@ -285,8 +281,6 @@ mod tests {
                         modifiers: vec![],
                     })),
                 ],
-                is_self_closing: true,
-                kind: fervid_core::ElementKind::Normal,
             },
             children: vec![Node::TextNode("This is a component")],
             template_scope: 0,
@@ -299,8 +293,6 @@ mod tests {
             starting_tag: StartingTag {
                 tag_name: "template",
                 attributes: vec![],
-                is_self_closing: false,
-                kind: fervid_core::ElementKind::Normal,
             },
             children: vec![Node::TextNode("This is just a template")],
             template_scope: 0,
@@ -319,8 +311,6 @@ mod tests {
                         is_dynamic_slot: false,
                     },
                 ))],
-                is_self_closing: false,
-                kind: fervid_core::ElementKind::Normal,
             },
             children: vec![Node::TextNode("This is a default template")],
             template_scope: 0,
@@ -339,8 +329,6 @@ mod tests {
                         is_dynamic_slot: false,
                     },
                 ))],
-                is_self_closing: false,
-                kind: fervid_core::ElementKind::Normal,
             },
             children: vec![Node::TextNode("This is a named template")],
             template_scope: 0,

@@ -45,9 +45,7 @@ pub struct ElementNode<'a> {
 #[derive(Debug, Clone)]
 pub struct StartingTag<'a> {
   pub tag_name: &'a str,
-  pub attributes: Vec<HtmlAttribute<'a>>,
-  pub is_self_closing: bool,
-  pub kind: ElementKind
+  pub attributes: Vec<HtmlAttribute<'a>>
 }
 
 /// Attribute may either be `Regular` (static) or a `VDirective` (application-specific)
@@ -135,13 +133,4 @@ pub struct VCustomDirective<'a> {
   pub argument: Option<&'a str>,
   pub modifiers: Vec<&'a str>,
   pub value: Option<&'a str>
-}
-
-#[derive(Debug, Clone)]
-pub enum ElementKind {
-  Void,
-  RawText,
-  RCData,
-  Foreign,
-  Normal
 }

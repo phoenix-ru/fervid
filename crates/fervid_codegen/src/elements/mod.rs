@@ -256,7 +256,7 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{Node, StartingTag, VBindDirective, VOnDirective, HtmlAttribute, VDirective};
+    use fervid_core::{HtmlAttribute, Node, StartingTag, VBindDirective, VDirective, VOnDirective};
 
     use super::*;
 
@@ -300,8 +300,6 @@ mod tests {
                             modifiers: vec![],
                         })),
                     ],
-                    is_self_closing: false,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![Node::TextNode("hello from div")],
                 template_scope: 0,
@@ -319,8 +317,6 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "div",
                     attributes: vec![],
-                    is_self_closing: false,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![Node::TextNode("hello from div")],
                 template_scope: 0,
@@ -351,8 +347,6 @@ mod tests {
                             is_attr: false,
                         })),
                     ],
-                    is_self_closing: false,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![],
                 template_scope: 0,
@@ -380,8 +374,6 @@ mod tests {
                             is_attr: false,
                         })),
                     ],
-                    is_self_closing: true,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![],
                 template_scope: 0,
@@ -399,8 +391,6 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "div",
                     attributes: vec![],
-                    is_self_closing: false,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![
                     Node::TextNode("hello from div "),
@@ -425,8 +415,6 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "div",
                     attributes: vec![],
-                    is_self_closing: false,
-                    kind: fervid_core::ElementKind::Normal,
                 },
                 children: vec![
                     Node::TextNode("hello from div "),
@@ -438,8 +426,6 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "span",
                             attributes: vec![],
-                            is_self_closing: false,
-                            kind: fervid_core::ElementKind::Normal,
                         },
                         children: vec![Node::TextNode("bye!")],
                         template_scope: 0,
