@@ -59,7 +59,7 @@ impl CodegenContext {
         &mut self,
         attributes: &'attr [HtmlAttribute],
         out: &mut Vec<PropOrSpread>,
-        unsupported_directives: &mut DirectivesToProcess<'attr>,
+        remaining_directives: &mut DirectivesToProcess<'attr>,
         template_scope_id: u32,
     ) -> GenerateAttributesResultHints<'attr> {
         // Special generation for `class` and `style` attributes,
@@ -303,7 +303,7 @@ impl CodegenContext {
                             ))));
                         }
 
-                        _ => unsupported_directives.push(directive),
+                        _ => remaining_directives.push(directive),
                     }
                 }
             }
