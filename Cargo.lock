@@ -534,6 +534,7 @@ name = "fervid_codegen"
 version = "0.1.0"
 dependencies = [
  "fervid_core",
+ "flagset",
  "fxhash",
  "lazy_static",
  "phf 0.11.1",
@@ -566,6 +567,12 @@ dependencies = [
  "swc_ecma_codegen",
  "swc_ecma_parser",
 ]
+
+[[package]]
+name = "flagset"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cda653ca797810c02f7ca4b804b40b8b95ae046eb989d356bce17919a8c25499"
 
 [[package]]
 name = "form_urlencoded"
