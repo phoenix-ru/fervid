@@ -1,4 +1,4 @@
-use fervid_core::{ElementNode, HtmlAttribute, VDirective};
+use fervid_core::ElementNode;
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
@@ -256,7 +256,7 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{Node, StartingTag, VBindDirective, VOnDirective};
+    use fervid_core::{Node, StartingTag, VBindDirective, VOnDirective, HtmlAttribute, VDirective};
 
     use super::*;
 

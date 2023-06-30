@@ -31,7 +31,7 @@ impl MockScope {
 
 pub type ScopeHelper = MockScopeHelper;
 
-pub fn transform_scoped(expr: &str, scope_helper: &ScopeHelper, scope_to_use: u32) -> Option<Box<Expr>> {
+pub fn transform_scoped(expr: &str, scope_helper: &ScopeHelper, scope_to_use: u32) -> Option<(Box<Expr>, bool)> {
     let lexer = Lexer::new(
         // We want to parse ecmascript
         Syntax::Es(Default::default()),
@@ -51,16 +51,18 @@ pub fn transform_scoped(expr: &str, scope_helper: &ScopeHelper, scope_to_use: u3
     // Create and invoke the visitor
     let mut visitor = TransformVisitor {
         current_scope: scope_to_use,
-        scope_helper
+        scope_helper,
+        has_js_bindings: false
     };
     parsed.visit_mut_with(&mut visitor);
 
-    Some(parsed)
+    Some((parsed, visitor.has_js_bindings))
 }
 
 struct TransformVisitor <'s> {
     current_scope: u32,
-    scope_helper: &'s ScopeHelper
+    scope_helper: &'s ScopeHelper,
+    has_js_bindings: bool
 }
 
 impl <'s> VisitMut for TransformVisitor <'s> {
@@ -80,7 +82,8 @@ impl <'s> VisitMut for TransformVisitor <'s> {
                             optional: false,
                         })),
                         prop: MemberProp::Ident(ident_expr.to_owned()),
-                    })
+                    });
+                    self.has_js_bindings = true;
                 }
             }
 
@@ -124,6 +127,7 @@ impl <'s> VisitMut for TransformVisitor <'s> {
                             key: prop_name,
                             value: Box::new(value_expr)
                         }).into();
+                        self.has_js_bindings = true;
                     } else if let Some(keyvalue) = prop.as_mut_key_value() {
                         keyvalue.value.visit_mut_with(self);
                     }

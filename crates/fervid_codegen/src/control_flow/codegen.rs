@@ -13,9 +13,10 @@ use crate::{attributes::DirectivesToProcess, context::CodegenContext, imports::V
 type TextNodesConcatenationVec = SmallVec<[Expr; 3]>;
 
 impl CodegenContext {
-    pub fn generate_node(&mut self, node: &Node, wrap_in_block: bool) -> Expr {
+    /// Returns `true` when node generation involved some Js variables
+    pub fn generate_node(&mut self, node: &Node, wrap_in_block: bool) -> (Expr, bool) {
         match node {
-            Node::TextNode(contents) => self.generate_text_node(contents, DUMMY_SP),
+            Node::TextNode(contents) => (self.generate_text_node(contents, DUMMY_SP), false),
             Node::DynamicExpression {
                 value,
                 template_scope,
@@ -23,14 +24,16 @@ impl CodegenContext {
 
             Node::ElementNode(element_node) => {
                 if self.is_component(&element_node.starting_tag) {
-                    self.generate_component_vnode(element_node, wrap_in_block)
+                    // TODO
+                    (self.generate_component_vnode(element_node, wrap_in_block), false)
                 } else {
-                    self.generate_element_vnode(element_node, wrap_in_block)
+                    // TODO
+                    (self.generate_element_vnode(element_node, wrap_in_block), false)
                 }
                 // todo builtins as well
             }
 
-            Node::CommentNode(comment) => self.generate_comment_vnode(comment, DUMMY_SP),
+            Node::CommentNode(comment) => (self.generate_comment_vnode(comment, DUMMY_SP), false),
         }
     }
 
@@ -83,7 +86,7 @@ impl CodegenContext {
         }
 
         while let Some(node) = iter.next() {
-            let generated = self.generate_node(node, false);
+            let (generated, has_js) = self.generate_node(node, false);
             let is_text_node = matches!(node, Node::TextNode(_) | Node::DynamicExpression { .. });
 
             if is_text_node {

@@ -17,26 +17,28 @@ use crate::{
 };
 
 impl CodegenContext {
+    /// Returns true when v-model value was transformed
     pub fn generate_v_model_for_component(
         &self,
         v_model: &VModelDirective,
         out: &mut Vec<PropOrSpread>,
         scope_to_use: u32,
-    ) {
+    ) -> bool {
         // TODO Spans
         let span = DUMMY_SP;
 
         // Empty v-models are skipped.
         // They should be reported in the analyzer
         if v_model.value == "" {
-            return;
+            return false;
         }
 
         // `v-model="smth"` is same as `v-model:modelValue="smth"`
         let bound_attribute = v_model.argument.unwrap_or("modelValue");
 
         // 1. Transform the binding
-        let transformed = self.transform_v_model_value(v_model.value, scope_to_use, span);
+        let (transformed, has_js_bindings) =
+            self.transform_v_model_value(v_model.value, scope_to_use, span);
 
         // 2. Push model attribute and its binding,
         // e.g. `v-model="smth"` -> `modelValue: _ctx.smth`
@@ -59,7 +61,7 @@ impl CodegenContext {
 
         // 5. Optionally generate modifiers
         if v_model.modifiers.len() == 0 {
-            return;
+            return has_js_bindings;
         }
 
         // Because we already used `event_listener` buffer,
@@ -84,15 +86,22 @@ impl CodegenContext {
                 span,
             ))),
         }))));
+
+        has_js_bindings
     }
 
     /// Transforms the binding of `v-model`.
     /// Because the rules of transformation differ a lot depending on the `BindingType`,
     /// transformed expression may also differ a lot.
-    fn transform_v_model_value(&self, value: &str, scope_to_use: u32, span: Span) -> Box<Expr> {
+    fn transform_v_model_value(
+        &self,
+        value: &str,
+        scope_to_use: u32,
+        span: Span,
+    ) -> (Box<Expr>, bool) {
         // TODO Implement the correct transformation based on BindingTypes
         transform_scoped(value, &MockScopeHelper, scope_to_use)
-            .unwrap_or_else(|| Box::new(Expr::Invalid(Invalid { span })))
+            .unwrap_or_else(|| (Box::new(Expr::Invalid(Invalid { span })), false))
     }
 
     /// Generates the update code for the `v-model`.
@@ -101,7 +110,8 @@ impl CodegenContext {
         // TODO Actual implementation
 
         // todo maybe re-use the previously generated expression from generate_v_model_for_component?
-        let transformed_v_model = self.transform_v_model_value(value, scope_to_use, span);
+        let (transformed_v_model, was_transformed) =
+            self.transform_v_model_value(value, scope_to_use, span);
 
         // $event => ((_ctx.modelValue) = $event)
         Box::new(Expr::Arrow(ArrowExpr {

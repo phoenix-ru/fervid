@@ -43,6 +43,15 @@ pub struct GenerateAttributesResultHints<'i> {
 
     /// When `v-on="smth"` was found
     pub v_on_no_event: Option<&'i VOnDirective<'i>>,
+
+    /// When a js binding in :class was found
+    pub class_patch_flag: bool,
+
+    /// When a js binding in :style was found
+    pub style_patch_flag: bool,
+
+    /// When a prop other than `class` or `style` has a js binding
+    pub props_patch_flag: bool
 }
 
 impl CodegenContext {
@@ -158,16 +167,21 @@ impl CodegenContext {
                             }
 
                             // Transform the raw expression
-                            let transformed =
+                            let (transformed, was_transformed) =
                                 transform_scoped(&value, &MockScopeHelper, template_scope_id)
-                                    .unwrap_or_else(|| Box::new(Expr::Invalid(Invalid { span })));
+                                    .unwrap_or_else(|| {
+                                        (Box::new(Expr::Invalid(Invalid { span })), false)
+                                    });
+
+                            // Add the PROPS patch flag
+                            result_hints.props_patch_flag = result_hints.props_patch_flag || was_transformed;
 
                             let key = if *is_dynamic_attr {
                                 // For dynamic attributes, keys are in form `[_ctx.dynamic || ""]`
-                                let key_transformed =
+                                let (key_transformed, was_key_transformed) =
                                     transform_scoped(&value, &MockScopeHelper, template_scope_id)
                                         .unwrap_or_else(|| {
-                                            Box::new(Expr::Invalid(Invalid { span }))
+                                            (Box::new(Expr::Invalid(Invalid { span })), false)
                                         });
 
                                 // `[key_transformed || ""]`
@@ -206,11 +220,12 @@ impl CodegenContext {
                             // TODO Use _cache
 
                             // Transform or default to () => {}
-                            let transformed = handler
+                            // The patch flag does not apply to v-on
+                            let (transformed, _was_transformed) = handler
                                 .and_then(|handler| {
                                     transform_scoped(handler, &MockScopeHelper, template_scope_id)
                                 })
-                                .unwrap_or_else(|| Box::new(empty_arrow_expr(span)));
+                                .unwrap_or_else(|| (Box::new(empty_arrow_expr(span)), false));
 
                             // To generate as an array of `["modifier1", "modifier2"]`
                             let modifiers: Vec<Option<ExprOrSpread>> = modifiers
@@ -288,29 +303,29 @@ impl CodegenContext {
                             ))));
                         }
 
-                        _ => {
-                            unsupported_directives.push(directive)
-                        }
+                        _ => unsupported_directives.push(directive),
                     }
                 }
             }
         }
 
-        self.generate_class_bindings(class_regular_attr, class_bound, out, template_scope_id);
-        self.generate_style_bindings(style_regular_attr, style_bound, out, template_scope_id);
+        result_hints.class_patch_flag = self.generate_class_bindings(class_regular_attr, class_bound, out, template_scope_id);
+        result_hints.style_patch_flag = self.generate_style_bindings(style_regular_attr, style_bound, out, template_scope_id);
 
         result_hints
     }
 
     /// Process `class` attribute. We may have a regular one, a bound one, both or neither.
+    /// Returns `true` when there were JavaScript bindings
     fn generate_class_bindings(
         &mut self,
         class_regular_attr: Option<(&str, Span)>,
         class_bound: Option<(&str, Span)>,
         out: &mut Vec<PropOrSpread>,
         scope_to_use: u32,
-    ) {
+    ) -> bool {
         let mut expr: Option<Expr> = None;
+        let mut has_js_bindings = false;
 
         match (class_regular_attr, class_bound) {
             // Both regular `class` and bound `:class`
@@ -334,8 +349,10 @@ impl CodegenContext {
                 }));
 
                 // 3. Transform the bound value
-                let transformed = transform_scoped(bound_value, &MockScopeHelper, scope_to_use)
-                    .unwrap_or_else(|| Box::new(Expr::Invalid(Invalid { span: bound_span })));
+                let (transformed, was_transformed) =
+                    transform_scoped(bound_value, &MockScopeHelper, scope_to_use).unwrap_or_else(
+                        || (Box::new(Expr::Invalid(Invalid { span: bound_span })), false),
+                    );
 
                 // 4. ["regular classes", boundClasses]
                 normalize_array.elems.push(Some(ExprOrSpread {
@@ -357,6 +374,8 @@ impl CodegenContext {
                     }],
                     type_args: None,
                 }));
+
+                has_js_bindings = was_transformed;
             }
 
             // Just regular `class`
@@ -370,8 +389,9 @@ impl CodegenContext {
 
             // Just bound `:class`
             (None, Some((bound_value, span))) => {
-                let transformed = transform_scoped(bound_value, &MockScopeHelper, scope_to_use)
-                    .unwrap_or_else(|| Box::new(Expr::Invalid(Invalid { span })));
+                let (transformed, was_transformed) =
+                    transform_scoped(bound_value, &MockScopeHelper, scope_to_use)
+                        .unwrap_or_else(|| (Box::new(Expr::Invalid(Invalid { span })), false));
 
                 // `normalizeClass(boundClasses)`
                 expr = Some(Expr::Call(CallExpr {
@@ -387,6 +407,8 @@ impl CodegenContext {
                     }],
                     type_args: None,
                 }));
+
+                has_js_bindings = was_transformed;
             }
 
             // Neither
@@ -402,16 +424,21 @@ impl CodegenContext {
                 },
             ))));
         }
+
+        has_js_bindings
     }
 
+    /// Process `style` attribute. We may have a regular one, a bound one, both or neither.
+    /// Returns `true` when there were JavaScript bindings
     fn generate_style_bindings(
         &mut self,
         style_regular_attr: Option<(&str, Span)>,
         style_bound: Option<(&str, Span)>,
         out: &mut Vec<PropOrSpread>,
-        scope_to_use: u32
-    ) {
+        scope_to_use: u32,
+    ) -> bool {
         let mut expr = None;
+        let mut has_js_bindings = false;
 
         match (style_regular_attr, style_bound) {
             // Both `style` and `:style`
@@ -435,8 +462,8 @@ impl CodegenContext {
                 }));
 
                 // 4. Transform the bound value
-                let transformed = transform_scoped(bound_value, &MockScopeHelper, scope_to_use)
-                    .unwrap_or_else(|| Box::new(Expr::Invalid(Invalid { span: bound_span })));
+                let (transformed, was_transformed) = transform_scoped(bound_value, &MockScopeHelper, scope_to_use)
+                    .unwrap_or_else(|| (Box::new(Expr::Invalid(Invalid { span: bound_span })), false));
 
                 // 5. [{ regular: "styles as an object" }, boundStyles]
                 normalize_array.elems.push(Some(ExprOrSpread {
@@ -458,6 +485,8 @@ impl CodegenContext {
                     }],
                     type_args: None,
                 }));
+
+                has_js_bindings = was_transformed;
             }
 
             // `style`
@@ -467,8 +496,8 @@ impl CodegenContext {
 
             // `:style`
             (None, Some((bound_value, span))) => {
-                let transformed = transform_scoped(bound_value, &MockScopeHelper, scope_to_use)
-                    .unwrap_or_else(|| Box::new(Expr::Invalid(Invalid { span })));
+                let (transformed, was_transformed) = transform_scoped(bound_value, &MockScopeHelper, scope_to_use)
+                    .unwrap_or_else(|| (Box::new(Expr::Invalid(Invalid { span })), false));
 
                 // `normalizeStyle(boundStyles)`
                 expr = Some(Expr::Call(CallExpr {
@@ -484,6 +513,8 @@ impl CodegenContext {
                     }],
                     type_args: None,
                 }));
+
+                has_js_bindings = was_transformed;
             }
 
             (None, None) => {}
@@ -498,6 +529,8 @@ impl CodegenContext {
                 },
             ))));
         }
+
+        has_js_bindings
     }
 }
 
@@ -567,10 +600,7 @@ fn empty_arrow_expr(span: Span) -> Expr {
 #[cfg(test)]
 mod tests {
     use fervid_core::{HtmlAttribute, VBindDirective, VDirective, VOnDirective};
-    use swc_core::{
-        common::DUMMY_SP,
-        ecma::ast::ObjectLit,
-    };
+    use swc_core::{common::DUMMY_SP, ecma::ast::ObjectLit};
 
     use crate::context::CodegenContext;
 
