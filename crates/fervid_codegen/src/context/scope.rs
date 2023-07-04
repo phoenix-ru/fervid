@@ -20,8 +20,8 @@ pub struct ScopeHelper {
 }
 
 impl ScopeHelper {
-    pub fn find_scope_of_variable(&self, starting_scope: u32, symbol: &str) -> BindingTypes {
-        if JS_BUILTINS.contains(symbol) {
+    pub fn get_var_binding_type(&self, starting_scope: u32, variable: &str) -> BindingTypes {
+        if JS_BUILTINS.contains(variable) {
             return BindingTypes::JsGlobal;
         }
 
@@ -30,7 +30,7 @@ impl ScopeHelper {
         // Check template scope
         while let Some(current_scope) = self.template_scopes.get(current_scope_index as usize) {
             // Check variable existence in the current scope
-            let found = current_scope.variables.iter().find(|it| *it == symbol);
+            let found = current_scope.variables.iter().find(|it| *it == variable);
 
             if let Some(_) = found {
                 return BindingTypes::TemplateLocal;
@@ -51,7 +51,7 @@ impl ScopeHelper {
             .iter()
             .chain(self.options_api_vars.setup.iter())
         {
-            if &binding.0 == symbol {
+            if &binding.0 == variable {
                 return binding.1;
             }
         }
@@ -59,7 +59,7 @@ impl ScopeHelper {
         // Macro to check if the variable is in the slice/Vec and conditionally return
         macro_rules! check_scope {
             ($vars: expr, $ret_descriptor: expr) => {
-                if $vars.iter().any(|it| it == symbol) {
+                if $vars.iter().any(|it| it == variable) {
                     return $ret_descriptor;
                 }
             };
@@ -76,7 +76,7 @@ impl ScopeHelper {
         // Check options API imports.
         // Currently it ignores the SyntaxContext (same as in js implementation)
         for binding in options_api_vars.imports.iter() {
-            if &binding.0 == symbol {
+            if &binding.0 == variable {
                 return BindingTypes::SetupMaybeRef;
             }
         }
@@ -128,7 +128,7 @@ mod tests {
         for builtin in JS_BUILTINS.iter() {
             assert_eq!(
                 BindingTypes::JsGlobal,
-                helper.find_scope_of_variable(0, builtin)
+                helper.get_var_binding_type(0, builtin)
             );
         }
 
@@ -137,7 +137,7 @@ mod tests {
         for builtin in JS_BUILTINS.iter() {
             assert_eq!(
                 BindingTypes::JsGlobal,
-                helper.find_scope_of_variable(0, builtin)
+                helper.get_var_binding_type(0, builtin)
             );
         }
     }

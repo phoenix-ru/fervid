@@ -51,15 +51,15 @@ impl<'s> VisitMut for TransformVisitor<'s> {
         match n {
             Expr::Ident(ident_expr) => {
                 let symbol = &ident_expr.sym;
-                let scope = self
+                let binding_type = self
                     .scope_helper
-                    .find_scope_of_variable(self.current_scope, symbol);
+                    .get_var_binding_type(self.current_scope, symbol);
 
                 // TODO The logic for setup variables actually differs quite significantly
                 // https://play.vuejs.org/#eNp9UU1rwzAM/SvCl25QEkZvIRTa0cN22Mq6oy8hUVJ3iW380QWC//tkh2Y7jN6k956kJ2liO62zq0dWsNLWRmgHFp3XWy7FoJVxMMEOArRGDbDK8v2KywZbIfFolLYPE5cArVIFnJwRsuMyPHJZ5nMv6kKJw0H3lUPKAMrz03aaYgmEQAE1D2VOYKxalGzNnK2VbEWXXaySZC9N4qxWgxY9mnfthJKWswISE7mq79X3a8Kc8bi+4fUZ669/8IsdI8bZ0aBFc0XOFs5VpkM304fTG44UL+SgGt+T+g75gVb1PnqcZXsvG7L9R5fcvqQj0+E+7WF0KO1tqWg0KkPSc0Y/er6z+q/dTbZJdfQJFn4A+DKelw==
 
                 // Get the prefix which fits the scope (e.g. `_ctx.` for unknown scopes, `$setup.` for setup scope)
-                if let Some(prefix) = get_prefix(&scope, self.is_inline) {
+                if let Some(prefix) = get_prefix(&binding_type, self.is_inline) {
                     *n = Expr::Member(MemberExpr {
                         span: ident_expr.span,
                         obj: Box::new(Expr::Ident(Ident {
