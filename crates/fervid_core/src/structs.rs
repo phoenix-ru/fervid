@@ -23,10 +23,10 @@
 /// `CommentNode` is the vanilla HTML comment, which looks like this: `<-- this is comment -->`
 #[derive(Debug, Clone)]
 pub enum Node<'a> {
-  ElementNode(ElementNode<'a>),
-  TextNode(&'a str),
-  DynamicExpression { value: &'a str, template_scope: u32 },
-  CommentNode(&'a str)
+    ElementNode(ElementNode<'a>),
+    TextNode(&'a str),
+    DynamicExpression { value: &'a str, template_scope: u32 },
+    CommentNode(&'a str),
 }
 
 /// Element node is a classic HTML node with some added functionality:
@@ -36,101 +36,132 @@ pub enum Node<'a> {
 ///    for the correct compilation of dynamic bindings and expressions.
 #[derive(Debug, Clone)]
 pub struct ElementNode<'a> {
-  pub starting_tag: StartingTag<'a>,
-  pub children: Vec<Node<'a>>,
-  pub template_scope: u32
+    pub starting_tag: StartingTag<'a>,
+    pub children: Vec<Node<'a>>,
+    pub template_scope: u32,
 }
 
 /// Starting tag represents [`ElementNode`]'s tag name and attributes
 #[derive(Debug, Clone)]
 pub struct StartingTag<'a> {
-  pub tag_name: &'a str,
-  pub attributes: Vec<HtmlAttribute<'a>>
+    pub tag_name: &'a str,
+    pub attributes: Vec<HtmlAttribute<'a>>,
 }
 
 /// Attribute may either be `Regular` (static) or a `VDirective` (application-specific)
 #[derive(Debug, Clone)]
-pub enum HtmlAttribute <'a> {
-  Regular {
-    name: &'a str,
-    value: &'a str
-  },
-  VDirective(VDirective<'a>)
+pub enum HtmlAttribute<'a> {
+    Regular { name: &'a str, value: &'a str },
+    VDirective(VDirective<'a>),
 }
 
 #[derive(Clone, Debug)]
 pub enum VDirective<'a> {
-  Bind(VBindDirective<'a>),
-  Cloak,
-  Custom(VCustomDirective<'a>),
-  Else,
-  ElseIf(&'a str),
-  For(VForDirective<'a>),
-  Html(&'a str),
-  If(&'a str),
-  Memo(&'a str),
-  Model(VModelDirective<'a>),
-  On(VOnDirective<'a>),
-  Once,
-  Pre,
-  Show(&'a str),
-  Slot(VSlotDirective<'a>),
-  Text(&'a str),
+    Bind(VBindDirective<'a>),
+    Cloak,
+    Custom(VCustomDirective<'a>),
+    Else,
+    ElseIf(&'a str),
+    For(VForDirective<'a>),
+    Html(&'a str),
+    If(&'a str),
+    Memo(&'a str),
+    Model(VModelDirective<'a>),
+    On(VOnDirective<'a>),
+    Once,
+    Pre,
+    Show(&'a str),
+    Slot(VSlotDirective<'a>),
+    Text(&'a str),
 }
 
 #[derive(Clone, Debug)]
 pub struct VForDirective<'a> {
-  pub iterable: &'a str,
-  pub iterator: &'a str
+    pub iterable: &'a str,
+    pub iterator: &'a str,
 }
 
 #[derive(Clone, Debug)]
 pub struct VOnDirective<'a> {
-  /// What event to listen to. If None, that is equal to `v-on="smth"`. Also, see `is_dynamic_event`.
-  pub event: Option<&'a str>,
-  /// What is the handler to use. If None, `modifiers` must not be empty.
-  pub handler: Option<&'a str>,
-  /// If the event itself is dynamic, e.g. `v-on:[event]` or `@[event]`
-  pub is_dynamic_event: bool,
-  /// A list of modifiers after the dot, e.g. `stop` and `prevent` in `@click.stop.prevent="handleClick"`
-  pub modifiers: Vec<&'a str>
+    /// What event to listen to. If None, that is equal to `v-on="smth"`. Also, see `is_dynamic_event`.
+    pub event: Option<&'a str>,
+    /// What is the handler to use. If None, `modifiers` must not be empty.
+    pub handler: Option<&'a str>,
+    /// If the event itself is dynamic, e.g. `v-on:[event]` or `@[event]`
+    pub is_dynamic_event: bool,
+    /// A list of modifiers after the dot, e.g. `stop` and `prevent` in `@click.stop.prevent="handleClick"`
+    pub modifiers: Vec<&'a str>,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct VBindDirective<'a> {
-  /// Attribute name to bind. If None, it is equivalent to `v-bind="smth"`. Also, see `is_dynamic_attr`.
-  pub argument: Option<&'a str>,
-  /// Attribute value, e.g. `smth` in `:attr="smth"`
-  pub value: &'a str,
-  /// `:[dynamic]`
-  pub is_dynamic_attr: bool,
-  /// .camel modifier
-  pub is_camel: bool,
-  /// .prop modifier
-  pub is_prop: bool,
-  /// .attr modifier
-  pub is_attr: bool
+    /// Attribute name to bind. If None, it is equivalent to `v-bind="smth"`. Also, see `is_dynamic_attr`.
+    pub argument: Option<&'a str>,
+    /// Attribute value, e.g. `smth` in `:attr="smth"`
+    pub value: &'a str,
+    /// `:[dynamic]`
+    pub is_dynamic_attr: bool,
+    /// .camel modifier
+    pub is_camel: bool,
+    /// .prop modifier
+    pub is_prop: bool,
+    /// .attr modifier
+    pub is_attr: bool,
 }
 
 #[derive(Clone, Debug)]
 pub struct VModelDirective<'a> {
-  /// What to apply v-model to, e.g. `first-name` in `v-model:first-name="first"`
-  pub argument: Option<&'a str>,
-  pub value: &'a str,
-  pub modifiers: Vec<&'a str>
+    /// What to apply v-model to, e.g. `first-name` in `v-model:first-name="first"`
+    pub argument: Option<&'a str>,
+    pub value: &'a str,
+    pub modifiers: Vec<&'a str>,
 }
 
 #[derive(Clone, Debug)]
 pub struct VSlotDirective<'a> {
-  pub slot_name: Option<&'a str>,
-  pub value: Option<&'a str>,
-  pub is_dynamic_slot: bool
+    pub slot_name: Option<&'a str>,
+    pub value: Option<&'a str>,
+    pub is_dynamic_slot: bool,
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct VCustomDirective<'a> {
-  pub name: &'a str,
-  pub argument: Option<&'a str>,
-  pub modifiers: Vec<&'a str>,
-  pub value: Option<&'a str>
+    pub name: &'a str,
+    pub argument: Option<&'a str>,
+    pub modifiers: Vec<&'a str>,
+    pub value: Option<&'a str>,
+}
+
+/// https://github.com/vuejs/core/blob/020851e57d9a9f727c6ea07e9c1575430af02b73/packages/compiler-core/src/options.ts#L76
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BindingTypes {
+    /// returned from data()
+    Data,
+    /// declared as a prop
+    Props,
+    /// a local alias of a `<script setup>` destructured prop.
+    /// the original is stored in __propsAliases of the bindingMetadata object.
+    PropsAliased,
+    /// a let binding (may or may not be a ref)
+    SetupLet,
+    /// a const binding that can never be a ref.
+    /// these bindings don't need `unref()` calls when processed in inlined
+    /// template expressions.
+    SetupConst,
+    /// a const binding that does not need `unref()`, but may be mutated.
+    SetupReactiveConst,
+    /// a const binding that may be a ref
+    SetupMaybeRef,
+    /// bindings that are guaranteed to be refs
+    SetupRef,
+    /// declared by other options, e.g. computed, inject
+    Options,
+    /// a literal constant, e.g. 'foo', 1, true
+    LiteralConst,
+    /// a variable from the template
+    TemplateLocal,
+    /// a variable in the global Javascript context, e.g. `Array` or `undefined`
+    JsGlobal,
+    /// a non-resolved variable, presumably from the global Vue context
+    Unresolved
 }

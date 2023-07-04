@@ -1,8 +1,9 @@
+use fervid_core::BindingTypes;
 use swc_core::ecma::ast::{ExportDecl, ExportSpecifier, ModuleExportName, NamedExport};
 
 use crate::{
     setup_analyzer,
-    structs::{BindingTypes, SetupBinding, VueResolvedImports},
+    structs::{SetupBinding, VueResolvedImports},
 };
 
 /// Collects exports from e.g. `export { foo, bar as baz } from 'qux'`

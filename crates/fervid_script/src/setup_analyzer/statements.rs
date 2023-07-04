@@ -1,10 +1,11 @@
+use fervid_core::BindingTypes;
 use swc_core::ecma::ast::{
     Callee, ClassDecl, Decl, Expr, FnDecl, Pat, Stmt, VarDecl, VarDeclKind, VarDeclarator, ObjectPatProp, RestPat,
 };
 
 use crate::{
     common::utils::unroll_paren_seq,
-    structs::{BindingTypes, SetupBinding, VueResolvedImports},
+    structs::{SetupBinding, VueResolvedImports},
 };
 
 /// Analyzes the statement in `script setup` context.

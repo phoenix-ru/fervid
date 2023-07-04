@@ -6,9 +6,9 @@ use swc_core::{
     ecma::{
         ast::{
             ArrayLit, ArrowExpr, BlockStmtOrExpr, CallExpr, Callee, Expr, ExprOrSpread, Ident,
-            KeyValueProp, Lit, Null, Number, ObjectLit, Pat, Prop, PropName, PropOrSpread,
+            KeyValueProp, Lit, Null, Number, ObjectLit, Pat, Prop, PropOrSpread,
         },
-        atoms::{js_word, JsWord},
+        atoms::JsWord,
     },
 };
 

@@ -16,7 +16,7 @@ use swc_core::{
 use crate::{
     context::CodegenContext,
     imports::VueImports,
-    transform::{transform_scoped, MockScopeHelper},
+    transform::transform_scoped,
     utils::{str_to_propname, to_pascalcase},
 };
 
@@ -168,7 +168,7 @@ impl CodegenContext {
 
                             // Transform the raw expression
                             let (transformed, was_transformed) =
-                                transform_scoped(&value, &MockScopeHelper, template_scope_id)
+                                transform_scoped(&value, &self.scope_helper, template_scope_id)
                                     .unwrap_or_else(|| {
                                         (Box::new(Expr::Invalid(Invalid { span })), false)
                                     });
@@ -179,7 +179,7 @@ impl CodegenContext {
                             let key = if *is_dynamic_attr {
                                 // For dynamic attributes, keys are in form `[_ctx.dynamic || ""]`
                                 let (key_transformed, was_key_transformed) =
-                                    transform_scoped(&value, &MockScopeHelper, template_scope_id)
+                                    transform_scoped(&value, &self.scope_helper, template_scope_id)
                                         .unwrap_or_else(|| {
                                             (Box::new(Expr::Invalid(Invalid { span })), false)
                                         });
@@ -223,7 +223,7 @@ impl CodegenContext {
                             // The patch flag does not apply to v-on
                             let (transformed, _was_transformed) = handler
                                 .and_then(|handler| {
-                                    transform_scoped(handler, &MockScopeHelper, template_scope_id)
+                                    transform_scoped(handler, &self.scope_helper, template_scope_id)
                                 })
                                 .unwrap_or_else(|| (Box::new(empty_arrow_expr(span)), false));
 
@@ -350,7 +350,7 @@ impl CodegenContext {
 
                 // 3. Transform the bound value
                 let (transformed, was_transformed) =
-                    transform_scoped(bound_value, &MockScopeHelper, scope_to_use).unwrap_or_else(
+                    transform_scoped(bound_value, &self.scope_helper, scope_to_use).unwrap_or_else(
                         || (Box::new(Expr::Invalid(Invalid { span: bound_span })), false),
                     );
 
@@ -390,7 +390,7 @@ impl CodegenContext {
             // Just bound `:class`
             (None, Some((bound_value, span))) => {
                 let (transformed, was_transformed) =
-                    transform_scoped(bound_value, &MockScopeHelper, scope_to_use)
+                    transform_scoped(bound_value, &self.scope_helper, scope_to_use)
                         .unwrap_or_else(|| (Box::new(Expr::Invalid(Invalid { span })), false));
 
                 // `normalizeClass(boundClasses)`
@@ -462,7 +462,7 @@ impl CodegenContext {
                 }));
 
                 // 4. Transform the bound value
-                let (transformed, was_transformed) = transform_scoped(bound_value, &MockScopeHelper, scope_to_use)
+                let (transformed, was_transformed) = transform_scoped(bound_value, &self.scope_helper, scope_to_use)
                     .unwrap_or_else(|| (Box::new(Expr::Invalid(Invalid { span: bound_span })), false));
 
                 // 5. [{ regular: "styles as an object" }, boundStyles]
@@ -496,7 +496,7 @@ impl CodegenContext {
 
             // `:style`
             (None, Some((bound_value, span))) => {
-                let (transformed, was_transformed) = transform_scoped(bound_value, &MockScopeHelper, scope_to_use)
+                let (transformed, was_transformed) = transform_scoped(bound_value, &self.scope_helper, scope_to_use)
                     .unwrap_or_else(|| (Box::new(Expr::Invalid(Invalid { span })), false));
 
                 // `normalizeStyle(boundStyles)`

@@ -12,7 +12,7 @@ use swc_core::{
 
 use crate::{
     context::CodegenContext,
-    transform::{transform_scoped, MockScopeHelper},
+    transform::transform_scoped,
     utils::{str_to_propname, to_camelcase},
 };
 
@@ -100,7 +100,7 @@ impl CodegenContext {
         span: Span,
     ) -> (Box<Expr>, bool) {
         // TODO Implement the correct transformation based on BindingTypes
-        transform_scoped(value, &MockScopeHelper, scope_to_use)
+        transform_scoped(value, &self.scope_helper, scope_to_use)
             .unwrap_or_else(|| (Box::new(Expr::Invalid(Invalid { span })), false))
     }
 

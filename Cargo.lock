@@ -534,6 +534,7 @@ name = "fervid_codegen"
 version = "0.1.0"
 dependencies = [
  "fervid_core",
+ "fervid_script",
  "flagset",
  "fxhash",
  "lazy_static",
@@ -562,6 +563,7 @@ dependencies = [
 name = "fervid_script"
 version = "0.1.0"
 dependencies = [
+ "fervid_core",
  "lazy_static",
  "swc_core",
  "swc_ecma_codegen",

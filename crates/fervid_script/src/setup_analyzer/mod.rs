@@ -9,8 +9,9 @@ mod tests {
     use crate::{
         parser::*,
         setup_analyzer,
-        structs::{SetupBinding, VueResolvedImports, BindingTypes},
+        structs::{SetupBinding, VueResolvedImports},
     };
+    use fervid_core::BindingTypes;
     use swc_core::{
         common::SyntaxContext,
         ecma::{

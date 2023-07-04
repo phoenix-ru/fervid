@@ -1,50 +1,29 @@
-use swc_core::{ecma::{visit::{VisitMut, VisitMutWith}, ast::{PropOrSpread, Prop, KeyValueProp, PropName, Expr, MemberExpr, Ident, MemberProp}, atoms::JsWord}, common::BytePos};
-use swc_ecma_parser::{lexer::Lexer, Syntax, StringInput, Parser};
+use swc_core::{
+    common::BytePos,
+    ecma::{
+        ast::{Expr, Ident, KeyValueProp, MemberExpr, MemberProp, Prop, PropName, PropOrSpread},
+        visit::{VisitMut, VisitMutWith},
+    },
+};
+use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
 
-// use crate::analyzer::scope::ScopeHelper;
+use crate::context::{get_prefix, ScopeHelper};
 
-#[derive(Debug, Default)]
-pub struct MockScopeHelper;
-pub enum MockScope {
-    Yes,
-    No
-}
-
-/// Dummy scope helper implementation. Delete when real implementation is done
-impl MockScopeHelper {
-    fn find_scope_of_variable(&self, _current_scope: u32, symbol: &JsWord) -> MockScope {
-        match symbol.as_ref() {
-            "console" | "undefined" => MockScope::No,
-            _ => MockScope::Yes
-        }
-    }
-}
-
-impl MockScope {
-    fn get_prefix(&self) -> Option<JsWord> {
-        match self {
-            MockScope::Yes => Some(JsWord::from("_ctx")),
-            MockScope::No => None,
-        }
-    }
-}
-
-pub type ScopeHelper = MockScopeHelper;
-
-pub fn transform_scoped(expr: &str, scope_helper: &ScopeHelper, scope_to_use: u32) -> Option<(Box<Expr>, bool)> {
+pub fn transform_scoped(
+    expr: &str,
+    scope_helper: &ScopeHelper,
+    scope_to_use: u32,
+) -> Option<(Box<Expr>, bool)> {
     let lexer = Lexer::new(
         // We want to parse ecmascript
         Syntax::Es(Default::default()),
         // EsVersion defaults to es5
         Default::default(),
         StringInput::new(expr, BytePos(0), BytePos(1000)),
-        None
+        None,
     );
 
     let mut parser = Parser::new_from(lexer);
-
-    // TODO The use of `parse_expr` vs `parse_stmt` matters
-    // For v-for it may be best to use `parse_stmt`, but for `v-slot` you need to use `parse_expr`
 
     let Ok(mut parsed) = parser.parse_expr() else { return None };
 
@@ -52,28 +31,35 @@ pub fn transform_scoped(expr: &str, scope_helper: &ScopeHelper, scope_to_use: u3
     let mut visitor = TransformVisitor {
         current_scope: scope_to_use,
         scope_helper,
-        has_js_bindings: false
+        has_js_bindings: false,
+        is_inline: scope_helper.is_inline
     };
     parsed.visit_mut_with(&mut visitor);
 
     Some((parsed, visitor.has_js_bindings))
 }
 
-struct TransformVisitor <'s> {
+struct TransformVisitor<'s> {
     current_scope: u32,
     scope_helper: &'s ScopeHelper,
-    has_js_bindings: bool
+    has_js_bindings: bool,
+    is_inline: bool,
 }
 
-impl <'s> VisitMut for TransformVisitor <'s> {
+impl<'s> VisitMut for TransformVisitor<'s> {
     fn visit_mut_expr(&mut self, n: &mut Expr) {
         match n {
             Expr::Ident(ident_expr) => {
                 let symbol = &ident_expr.sym;
-                let scope = self.scope_helper.find_scope_of_variable(self.current_scope, symbol);
+                let scope = self
+                    .scope_helper
+                    .find_scope_of_variable(self.current_scope, symbol);
+
+                // TODO The logic for setup variables actually differs quite significantly
+                // https://play.vuejs.org/#eNp9UU1rwzAM/SvCl25QEkZvIRTa0cN22Mq6oy8hUVJ3iW380QWC//tkh2Y7jN6k956kJ2liO62zq0dWsNLWRmgHFp3XWy7FoJVxMMEOArRGDbDK8v2KywZbIfFolLYPE5cArVIFnJwRsuMyPHJZ5nMv6kKJw0H3lUPKAMrz03aaYgmEQAE1D2VOYKxalGzNnK2VbEWXXaySZC9N4qxWgxY9mnfthJKWswISE7mq79X3a8Kc8bi+4fUZ669/8IsdI8bZ0aBFc0XOFs5VpkM304fTG44UL+SgGt+T+g75gVb1PnqcZXsvG7L9R5fcvqQj0+E+7WF0KO1tqWg0KkPSc0Y/er6z+q/dTbZJdfQJFn4A+DKelw==
 
                 // Get the prefix which fits the scope (e.g. `_ctx.` for unknown scopes, `$setup.` for setup scope)
-                if let Some(prefix) = scope.get_prefix() {
+                if let Some(prefix) = get_prefix(&scope, self.is_inline) {
                     *n = Expr::Member(MemberExpr {
                         span: ident_expr.span,
                         obj: Box::new(Expr::Ident(Ident {
@@ -87,7 +73,7 @@ impl <'s> VisitMut for TransformVisitor <'s> {
                 }
             }
 
-            _ => n.visit_mut_children_with(self)
+            _ => n.visit_mut_children_with(self),
         }
     }
 
@@ -125,13 +111,14 @@ impl <'s> VisitMut for TransformVisitor <'s> {
 
                         *prop = Prop::KeyValue(KeyValueProp {
                             key: prop_name,
-                            value: Box::new(value_expr)
-                        }).into();
+                            value: Box::new(value_expr),
+                        })
+                        .into();
                         self.has_js_bindings = true;
                     } else if let Some(keyvalue) = prop.as_mut_key_value() {
                         keyvalue.value.visit_mut_with(self);
                     }
-                },
+                }
 
                 PropOrSpread::Spread(ref mut spread) => {
                     spread.visit_mut_with(self);

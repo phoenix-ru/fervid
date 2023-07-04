@@ -67,8 +67,9 @@ mod tests {
     use super::*;
     use crate::{
         parser::*,
-        structs::{BindingTypes, SetupBinding},
+        structs::SetupBinding,
     };
+    use fervid_core::BindingTypes;
     use swc_core::{ecma::atoms::JsWord, common::SyntaxContext};
 
     fn analyze_js(input: &str, opts: AnalyzeOptions) -> ScriptLegacyVars {
