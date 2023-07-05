@@ -433,7 +433,7 @@ mod tests {
                 ],
                 template_scope: 0,
             },
-            r#"_createElementVNode("div",null,[_createTextVNode("hello from div "+_toDisplayString(true),1),_createElementVNode("span",null,"bye!")])"#,
+            r#"_createElementVNode("div",null,[_createTextVNode("hello from div "+_toDisplayString(true)),_createElementVNode("span",null,"bye!")])"#,
             false,
         )
     }

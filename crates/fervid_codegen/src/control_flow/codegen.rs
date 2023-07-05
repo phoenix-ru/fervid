@@ -58,6 +58,7 @@ impl CodegenContext {
         // Buffer for concatenating text nodes. Will be reused multiple times
         let mut text_nodes = TextNodesConcatenationVec::new();
         let mut text_nodes_span = [BytePos(0), BytePos(0)];
+        let mut patch_flag_text = false;
 
         macro_rules! maybe_concatenate_text_nodes {
             () => {
@@ -72,6 +73,7 @@ impl CodegenContext {
                             hi: text_nodes_span[1],
                             ctxt: SyntaxContext::empty(),
                         },
+                        patch_flag_text
                     );
                     out.push(concatenation);
 
@@ -91,6 +93,7 @@ impl CodegenContext {
         while let Some(node) = iter.next() {
             let (generated, has_js) = self.generate_node(node, false);
             let is_text_node = matches!(node, Node::Text(_) | Node::DynamicExpression { .. });
+            patch_flag_text = has_js;
 
             if is_text_node {
                 text_nodes.push(generated);
@@ -113,7 +116,7 @@ impl CodegenContext {
         maybe_concatenate_text_nodes!()
     }
 
-    pub fn is_component(self: &Self, starting_tag: &StartingTag) -> bool {
+    pub fn is_component(&self, starting_tag: &StartingTag) -> bool {
         // todo use analyzed components? (fields of `components: {}`)
 
         let tag_name = starting_tag.tag_name;
@@ -194,24 +197,18 @@ impl CodegenContext {
         text_nodes_concatenation: &mut TextNodesConcatenationVec,
         inline: bool,
         span: Span,
+        patch_flag_text: bool
     ) -> Expr {
-        let text_nodes_len = text_nodes_concatenation.len();
-
         let concatenation: Expr = join_exprs_to_concatenation(text_nodes_concatenation, span);
 
         // In `inline` mode, just return concatenation as-is
+        // Otherwise surround with `createTextVNode()`
         if inline {
             return concatenation;
         }
 
-        // TODO Really, this depends on variable usage from `transform_scoped`
-        // If inlining is off, surround with `createTextVNode()`
-        // When concatenation is longer than 1 element, that means
-        // there were some `Node::DynamicExpression`s
-        let has_patch_flag = text_nodes_len > 1;
-
         // `concatenation`
-        let mut create_text_vnode_args = Vec::with_capacity(if has_patch_flag { 2 } else { 1 });
+        let mut create_text_vnode_args = Vec::with_capacity(if patch_flag_text { 2 } else { 1 });
         create_text_vnode_args.push(ExprOrSpread {
             spread: None,
             expr: Box::new(concatenation),
@@ -219,7 +216,7 @@ impl CodegenContext {
 
         // Add patch flag
         // `concatenation, 1`
-        if has_patch_flag {
+        if patch_flag_text {
             create_text_vnode_args.push(ExprOrSpread {
                 spread: None,
                 expr: Box::new(Expr::Lit(Lit::Num(Number {
