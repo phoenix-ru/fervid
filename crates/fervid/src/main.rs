@@ -90,7 +90,7 @@ fn test_synthetic_compilation() {
     let blocks = vec![
         SfcBlock::Template(fervid::SfcTemplateBlock {
             lang: "html",
-            roots: vec![Node::ElementNode(ElementNode {
+            roots: vec![Node::Element(ElementNode {
                 starting_tag: StartingTag {
                     tag_name: "span",
                     attributes: vec![HtmlAttribute::Regular {
@@ -99,20 +99,20 @@ fn test_synthetic_compilation() {
                     }]
                 },
                 children: vec![
-                    Node::TextNode("Hello world"),
+                    Node::Text("Hello world"),
                     Node::DynamicExpression {
                         value: "testRef",
                         template_scope: 0,
                     },
-                    Node::TextNode("yes yes"),
+                    Node::Text("yes yes"),
                     // Just element
-                    Node::ElementNode(ElementNode {
+                    Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "i",
                             attributes: vec![]
                         },
                         children: vec![
-                            Node::TextNode("italics, mm"),
+                            Node::Text("italics, mm"),
                             Node::DynamicExpression {
                                 value: "hey",
                                 template_scope: 0,
@@ -121,13 +121,13 @@ fn test_synthetic_compilation() {
                         template_scope: 0,
                     }),
                     // Component
-                    Node::ElementNode(ElementNode {
+                    Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "CustomComponent",
                             attributes: vec![]
                         },
                         children: vec![
-                            Node::TextNode("italics, mm"),
+                            Node::Text("italics, mm"),
                             Node::DynamicExpression {
                                 value: "hey",
                                 template_scope: 0,
@@ -135,7 +135,7 @@ fn test_synthetic_compilation() {
                         ],
                         template_scope: 0,
                     }),
-                    Node::TextNode("end of span node"),
+                    Node::Text("end of span node"),
                 ],
                 template_scope: 0,
             })],

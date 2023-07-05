@@ -131,7 +131,7 @@ pub fn filter_nodes_with_conditional_directives<'r>(
         .iter()
         .enumerate()
         .filter_map(|(index, node)| match node {
-            Node::ElementNode(element_node) => element_node
+            Node::Element(element_node) => element_node
                 .starting_tag
                 .attributes
                 .iter()

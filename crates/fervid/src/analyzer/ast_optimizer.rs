@@ -8,7 +8,7 @@ pub fn optimize_template<'a>(template: &'a mut SfcTemplateBlock) -> &'a SfcTempl
     // Only retain `ElementNode`s as template roots
     template
         .roots
-        .retain(|root| matches!(root, Node::ElementNode(_)));
+        .retain(|root| matches!(root, Node::Element(_)));
 
     let ast = &mut template.roots;
     let mut iter = ast.iter_mut();
@@ -42,13 +42,13 @@ impl<'a> Visitor for AstOptimizer {
 
         // Filter out whitespace text nodes at the beginning and end of ElementNode
         match element_node.children.first() {
-            Some(Node::TextNode(v)) if v.trim().len() == 0 => {
+            Some(Node::Text(v)) if v.trim().len() == 0 => {
                 discard_mask |= 1 << 0;
             }
             _ => {}
         }
         match element_node.children.last() {
-            Some(Node::TextNode(v)) if v.trim().len() == 0 => {
+            Some(Node::Text(v)) if v.trim().len() == 0 => {
                 discard_mask |= 1 << (children_len - 1);
             }
             _ => {}
@@ -57,7 +57,7 @@ impl<'a> Visitor for AstOptimizer {
         // For removing the middle whitespace text nodes, we need sliding windows of three nodes
         for (index, window) in element_node.children.windows(3).enumerate() {
             match window {
-                [Node::ElementNode(_) | Node::CommentNode(_), Node::TextNode(middle), Node::ElementNode(_) | Node::CommentNode(_)]
+                [Node::Element(_) | Node::Comment(_), Node::Text(middle), Node::Element(_) | Node::Comment(_)]
                     if middle.trim().len() == 0 =>
                 {
                     discard_mask |= 1 << (index + 1);
@@ -98,7 +98,7 @@ impl AstOptimizer {
 impl VisitMut for Node<'_> {
     fn visit_mut_with(&mut self, visitor: &mut impl Visitor) {
         match self {
-            Node::ElementNode(el) => el.visit_mut_with(visitor),
+            Node::Element(el) => el.visit_mut_with(visitor),
             _ => {}
         }
     }
@@ -119,7 +119,7 @@ impl VisitMutChildren for ElementNode<'_> {
 }
 
 fn is_from_default_slot(node: &Node) -> bool {
-    let Node::ElementNode(ElementNode { starting_tag, .. }) = node else {
+    let Node::Element(ElementNode { starting_tag, .. }) = node else {
         return true;
     };
 

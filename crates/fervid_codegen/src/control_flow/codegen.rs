@@ -16,13 +16,14 @@ impl CodegenContext {
     /// Returns `true` when node generation involved some Js variables
     pub fn generate_node(&mut self, node: &Node, wrap_in_block: bool) -> (Expr, bool) {
         match node {
-            Node::TextNode(contents) => (self.generate_text_node(contents, DUMMY_SP), false),
+            Node::Text(contents) => (self.generate_text_node(contents, DUMMY_SP), false),
+
             Node::DynamicExpression {
                 value,
                 template_scope,
             } => self.generate_dynamic_expression(value, *template_scope, DUMMY_SP),
 
-            Node::ElementNode(element_node) => {
+            Node::Element(element_node) => {
                 if self.is_component(&element_node.starting_tag) {
                     // TODO
                     (self.generate_component_vnode(element_node, wrap_in_block), false)
@@ -33,7 +34,9 @@ impl CodegenContext {
                 // todo builtins as well
             }
 
-            Node::CommentNode(comment) => (self.generate_comment_vnode(comment, DUMMY_SP), false),
+            Node::Comment(comment) => (self.generate_comment_vnode(comment, DUMMY_SP), false),
+
+            Node::ConditionalSeq(_) => todo!("Implement conditional node unwrapping"),
         }
     }
 
@@ -87,7 +90,7 @@ impl CodegenContext {
 
         while let Some(node) = iter.next() {
             let (generated, has_js) = self.generate_node(node, false);
-            let is_text_node = matches!(node, Node::TextNode(_) | Node::DynamicExpression { .. });
+            let is_text_node = matches!(node, Node::Text(_) | Node::DynamicExpression { .. });
 
             if is_text_node {
                 text_nodes.push(generated);

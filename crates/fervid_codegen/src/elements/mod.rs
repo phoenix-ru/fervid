@@ -301,7 +301,7 @@ mod tests {
                         })),
                     ],
                 },
-                children: vec![Node::TextNode("hello from div")],
+                children: vec![Node::Text("hello from div")],
                 template_scope: 0,
             },
             r#"_createElementVNode("div",{foo:"bar",baz:_ctx.qux,readonly:true,onClick:_ctx.handleClick},"hello from div")"#,
@@ -318,7 +318,7 @@ mod tests {
                     tag_name: "div",
                     attributes: vec![],
                 },
-                children: vec![Node::TextNode("hello from div")],
+                children: vec![Node::Text("hello from div")],
                 template_scope: 0,
             },
             r#"_createElementVNode("div",null,"hello from div")"#,
@@ -393,12 +393,12 @@ mod tests {
                     attributes: vec![],
                 },
                 children: vec![
-                    Node::TextNode("hello from div "),
+                    Node::Text("hello from div "),
                     Node::DynamicExpression {
                         value: "true",
                         template_scope: 0,
                     },
-                    Node::TextNode(" bye!"),
+                    Node::Text(" bye!"),
                 ],
                 template_scope: 0,
             },
@@ -417,17 +417,17 @@ mod tests {
                     attributes: vec![],
                 },
                 children: vec![
-                    Node::TextNode("hello from div "),
+                    Node::Text("hello from div "),
                     Node::DynamicExpression {
                         value: "true",
                         template_scope: 0,
                     },
-                    Node::ElementNode(ElementNode {
+                    Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "span",
                             attributes: vec![],
                         },
-                        children: vec![Node::TextNode("bye!")],
+                        children: vec![Node::Text("bye!")],
                         template_scope: 0,
                     }),
                 ],

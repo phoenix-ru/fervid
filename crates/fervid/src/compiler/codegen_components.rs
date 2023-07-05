@@ -218,7 +218,7 @@ impl<'a> CodegenContext<'a> {
         // `<template v-slot:some-slot>` is not a default slot
         // TODO Move to common/core, because analyzer also uses it
         let is_from_default_slot = |node: &Node| match node {
-            Node::ElementNode(ElementNode { starting_tag, .. }) => {
+            Node::Element(ElementNode { starting_tag, .. }) => {
                 if starting_tag.tag_name != "template" {
                     return true;
                 }
@@ -241,7 +241,7 @@ impl<'a> CodegenContext<'a> {
             }
 
             // explicit just in case I decide to change node types and forget about this place
-            Node::DynamicExpression { .. } | Node::TextNode(_) | Node::CommentNode(_) => true,
+            Node::DynamicExpression { .. } | Node::Text(_) | Node::Comment(_) | Node::ConditionalSeq(_) => true,
         };
 
         // Start a Js object
@@ -260,7 +260,7 @@ impl<'a> CodegenContext<'a> {
                 self.code_helper.comma_newline(buf);
             }
 
-            let Node::ElementNode(ElementNode { starting_tag, children, template_scope }) = template else {
+            let Node::Element(ElementNode { starting_tag, children, template_scope }) = template else {
                 unreachable!("This should be impossible")
             };
 

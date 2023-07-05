@@ -1,32 +1,30 @@
 /// A Node represents a part of the Abstract Syntax Tree (AST).
-/// There are several possible Node types:
-///
-/// ### `ElementNode`
-/// It means that the node is a basic HTML tag node.
-///
-/// `ElementNode` has a starting `<tag>` with attributes,
-///   zero or more children and a closing `</tag>` unless this node is self-closed `<tag />`.
-///   The parser does not add any meaning to the discovered tag name,
-///   as this logic is application-specific.
-///
-/// ### `TextNode`
-/// These nodes are the basic HTML text leaf nodes
-///   which can only contain static text.
-///
-/// ### `DynamicExpression`
-/// Dynamic expression is a special syntax for Vue templates.
-///
-/// It looks like this: `{{ some + js - expression }}`,
-/// where the content inside `{{` and `}}` delimiters is arbitrary.
-///
-/// ### `CommentNode`
-/// `CommentNode` is the vanilla HTML comment, which looks like this: `<-- this is comment -->`
 #[derive(Debug, Clone)]
 pub enum Node<'a> {
-    ElementNode(ElementNode<'a>),
-    TextNode(&'a str),
+    /// `Element` means that the node is a basic HTML tag node.
+    ///
+    /// `Element` has a starting `<tag>` with attributes,
+    ///   zero or more children and a closing `</tag>` unless this node is self-closed `<tag />`.
+    ///   The parser does not add any meaning to the discovered tag name,
+    ///   as this logic is application-specific.
+    Element(ElementNode<'a>),
+
+    /// These nodes are the basic HTML text leaf nodes
+    /// which can only contain static text.
+    Text(&'a str),
+
+    /// Dynamic expression is a special syntax for Vue templates.
+    ///
+    /// It looks like this: `{{ some + js - expression }}`,
+    /// where the content inside `{{` and `}}` delimiters is arbitrary.
     DynamicExpression { value: &'a str, template_scope: u32 },
-    CommentNode(&'a str),
+
+    /// `Comment` is the vanilla HTML comment, which looks like this: `<-- this is comment -->`
+    Comment(&'a str),
+
+    /// `ConditionalSeq` is a representation of `v-if`/`v-else-if`/`v-else` node sequence.
+    /// Its children are the other `Node`s, this node is just a wrapper.
+    ConditionalSeq(ConditionalNodeSequence<'a>)
 }
 
 /// Element node is a classic HTML node with some added functionality:
@@ -39,6 +37,13 @@ pub struct ElementNode<'a> {
     pub starting_tag: StartingTag<'a>,
     pub children: Vec<Node<'a>>,
     pub template_scope: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConditionalNodeSequence<'a> {
+    pub if_node: (&'a str, Box<Node<'a>>),
+    pub else_if_nodes: Vec<(&'a str, Node<'a>)>,
+    pub else_node: Option<Box<Node<'a>>>
 }
 
 /// Starting tag represents [`ElementNode`]'s tag name and attributes

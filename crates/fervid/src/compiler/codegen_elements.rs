@@ -137,7 +137,7 @@ impl <'a> CodegenContext <'a> {
       let mut end_of_range: Option<usize> = None;
       for (index, child) in children.iter().enumerate() {
         match child {
-          Node::DynamicExpression { .. } | Node::TextNode(_) => {
+          Node::DynamicExpression { .. } | Node::Text(_) => {
             if let None = start_of_range  {
               start_of_range = Some(index);
             }
@@ -242,7 +242,7 @@ impl <'a> CodegenContext <'a> {
       }
 
       // This must never be the case!
-      if let Node::TextNode(_) | Node::DynamicExpression { .. } = child {
+      if let Node::Text(_) | Node::DynamicExpression { .. } = child {
         unreachable!("TextNode or DynamicExpression handled outside text_node_ranges");
       }
 
@@ -291,7 +291,7 @@ impl <'a> CodegenContext <'a> {
          * All the start and end whitespace would be trimmed and replaced by a single regular space ` `
          * All double quotes in the string are escaped with `\"`
          */
-        Node::TextNode(v) => {
+        Node::Text(v) => {
           let escaped_text = v.replace('"', "\\\"");
           let has_start_whitespace = escaped_text.starts_with(char::is_whitespace);
           let has_end_whitespace = escaped_text.ends_with(char::is_whitespace);
@@ -330,7 +330,7 @@ impl <'a> CodegenContext <'a> {
           had_first_el = true;
         },
 
-        Node::ElementNode { .. } | Node::CommentNode(_) => {
+        Node::Element { .. } | Node::Comment(_) | Node::ConditionalSeq(_) => {
           // ????
         }
       }

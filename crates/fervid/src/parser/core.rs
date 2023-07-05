@@ -44,7 +44,7 @@ fn parse_root_block<'a>(input: &'a str) -> IResult<&'a str, SfcBlock<'a>> {
         parse_text_node(input).map_or_else(
             move |_| (input, ""),
             move |v| {
-                let Node::TextNode(content) = v.1 else {
+                let Node::Text(content) = v.1 else {
                     unreachable!("parse_text_node always returns a Node::TextNode")
                 };
                 (v.0, content)
@@ -245,7 +245,7 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
     if early_return {
         return Ok((
             input,
-            Node::ElementNode(ElementNode {
+            Node::Element(ElementNode {
                 starting_tag,
                 children: vec![],
                 template_scope: 0,
@@ -269,7 +269,7 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
 
     Ok((
         input,
-        Node::ElementNode(ElementNode {
+        Node::Element(ElementNode {
             starting_tag,
             children,
             template_scope: 0,
@@ -304,13 +304,13 @@ fn parse_text_node(input: &str) -> IResult<&str, Node> {
 
     let (text, input) = input.split_at(bytes_taken);
 
-    Ok((input, Node::TextNode(text)))
+    Ok((input, Node::Text(text)))
 }
 
 fn parse_comment_node(input: &str) -> IResult<&str, Node> {
     let (input, comment) = delimited(tag("<!--"), take_until("-->"), tag("-->"))(input)?;
 
-    Ok((input, Node::CommentNode(comment)))
+    Ok((input, Node::Comment(comment)))
 }
 
 fn parse_node_children(input: &str) -> IResult<&str, Vec<Node>> {

@@ -103,7 +103,7 @@ impl<'n> SlottedIterator<'n> {
 
 fn is_from_default_slot(node: &Node) -> bool {
     match node {
-        Node::ElementNode(ElementNode { starting_tag, .. }) => {
+        Node::Element(ElementNode { starting_tag, .. }) => {
             if starting_tag.tag_name != "template" {
                 return true;
             }
@@ -127,7 +127,7 @@ fn is_from_default_slot(node: &Node) -> bool {
         }
 
         // explicit just in case I decide to change node types and forget about this place
-        Node::DynamicExpression { .. } | Node::TextNode(_) | Node::CommentNode(_) => true,
+        Node::DynamicExpression { .. } | Node::Text(_) | Node::Comment(_) | Node::ConditionalSeq(_) => true,
     }
 }
 
@@ -225,19 +225,19 @@ mod tests {
 
     /// <h1>This is an h1</h1>
     fn get_default_item1() -> Node<'static> {
-        Node::ElementNode(ElementNode {
+        Node::Element(ElementNode {
             starting_tag: StartingTag {
                 tag_name: "h1",
                 attributes: vec![],
             },
-            children: vec![Node::TextNode("This is an h1")],
+            children: vec![Node::Text("This is an h1")],
             template_scope: 0,
         })
     }
 
     /// <div class="regular" :disabled="true" />
     fn get_default_item2() -> Node<'static> {
-        Node::ElementNode(ElementNode {
+        Node::Element(ElementNode {
             starting_tag: StartingTag {
                 tag_name: "div",
                 attributes: vec![
@@ -262,7 +262,7 @@ mod tests {
 
     /// <test-component :foo="bar" @event="baz">This is a component</test-component>
     fn get_default_item3() -> Node<'static> {
-        Node::ElementNode(ElementNode {
+        Node::Element(ElementNode {
             starting_tag: StartingTag {
                 tag_name: "h1",
                 attributes: vec![
@@ -282,26 +282,26 @@ mod tests {
                     })),
                 ],
             },
-            children: vec![Node::TextNode("This is a component")],
+            children: vec![Node::Text("This is a component")],
             template_scope: 0,
         })
     }
 
     /// <template>This is just a template</template>
     fn get_default_item4() -> Node<'static> {
-        Node::ElementNode(ElementNode {
+        Node::Element(ElementNode {
             starting_tag: StartingTag {
                 tag_name: "template",
                 attributes: vec![],
             },
-            children: vec![Node::TextNode("This is just a template")],
+            children: vec![Node::Text("This is just a template")],
             template_scope: 0,
         })
     }
 
     /// <template v-slot:default>This is a default template</template>
     fn get_default_item5() -> Node<'static> {
-        Node::ElementNode(ElementNode {
+        Node::Element(ElementNode {
             starting_tag: StartingTag {
                 tag_name: "template",
                 attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
@@ -312,14 +312,14 @@ mod tests {
                     },
                 ))],
             },
-            children: vec![Node::TextNode("This is a default template")],
+            children: vec![Node::Text("This is a default template")],
             template_scope: 0,
         })
     }
 
     /// <template v-slot:named>This is a default template</template>
     fn get_named_item1() -> Node<'static> {
-        Node::ElementNode(ElementNode {
+        Node::Element(ElementNode {
             starting_tag: StartingTag {
                 tag_name: "template",
                 attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
@@ -330,7 +330,7 @@ mod tests {
                     },
                 ))],
             },
-            children: vec![Node::TextNode("This is a named template")],
+            children: vec![Node::Text("This is a named template")],
             template_scope: 0,
         })
     }

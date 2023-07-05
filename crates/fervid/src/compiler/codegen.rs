@@ -171,7 +171,7 @@ impl <'a> CodegenContext <'a> {
   pub fn compile_node(&mut self, buf: &mut String, node: &Node, wrap_in_block: bool) {
     // todo add the code for `openBlock`, `createElementBlock` and Fragments when needed
     match node {
-      Node::ElementNode(element_node) => {
+      Node::Element(element_node) => {
         if self.is_component(&element_node.starting_tag) {
           self.create_component_vnode(buf, element_node, wrap_in_block);
         } else if let Some(builtin_type) = Self::is_builtin(element_node) {
@@ -181,7 +181,7 @@ impl <'a> CodegenContext <'a> {
         }
       },
 
-      Node::CommentNode(comment) => {
+      Node::Comment(comment) => {
         self.create_comment_vnode(buf, &comment)
       },
 

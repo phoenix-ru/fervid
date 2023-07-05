@@ -124,7 +124,7 @@ impl ScopeHelper {
 
     fn walk_ast_node(&mut self, node: &mut Node, current_scope_identifier: u32) {
         match node {
-            Node::ElementNode(element_node) => {
+            Node::Element(element_node) => {
                 // Finds a `v-for` or `v-slot` directive when in ElementNode
                 let scoping_directive =
                     element_node

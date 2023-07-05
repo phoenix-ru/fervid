@@ -275,7 +275,7 @@ impl CodegenContext {
                 }
 
                 // Check if this is a `<template>` or not
-                let Node::ElementNode(
+                let Node::Element(
                     ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
@@ -314,7 +314,7 @@ impl CodegenContext {
                     continue;
                 };
 
-                let Node::ElementNode(slotted_node) = slotted_node else {
+                let Node::Element(slotted_node) = slotted_node else {
                     unreachable!("Only element node can be slotted")
                 };
 
@@ -612,13 +612,13 @@ mod tests {
                     attributes: vec![],
                 },
                 children: vec![
-                    Node::TextNode("hello from component"),
-                    Node::ElementNode(ElementNode {
+                    Node::Text("hello from component"),
+                    Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "div",
                             attributes: vec![],
                         },
-                        children: vec![Node::TextNode("hello from div")],
+                        children: vec![Node::Text("hello from div")],
                         template_scope: 0,
                     }),
                 ],
@@ -637,7 +637,7 @@ mod tests {
                     tag_name: "test-component",
                     attributes: vec![],
                 },
-                children: vec![Node::ElementNode(ElementNode {
+                children: vec![Node::Element(ElementNode {
                     starting_tag: StartingTag {
                         tag_name: "template",
                         attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
@@ -649,13 +649,13 @@ mod tests {
                         ))],
                     },
                     children: vec![
-                        Node::TextNode("hello from component"),
-                        Node::ElementNode(ElementNode {
+                        Node::Text("hello from component"),
+                        Node::Element(ElementNode {
                             starting_tag: StartingTag {
                                 tag_name: "div",
                                 attributes: vec![],
                             },
-                            children: vec![Node::TextNode("hello from div")],
+                            children: vec![Node::Text("hello from div")],
                             template_scope: 0,
                         }),
                     ],
@@ -679,7 +679,7 @@ mod tests {
                     tag_name: "test-component",
                     attributes: vec![],
                 },
-                children: vec![Node::ElementNode(ElementNode {
+                children: vec![Node::Element(ElementNode {
                     starting_tag: StartingTag {
                         tag_name: "template",
                         attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
@@ -691,13 +691,13 @@ mod tests {
                         ))],
                     },
                     children: vec![
-                        Node::TextNode("hello from component"),
-                        Node::ElementNode(ElementNode {
+                        Node::Text("hello from component"),
+                        Node::Element(ElementNode {
                             starting_tag: StartingTag {
                                 tag_name: "div",
                                 attributes: vec![],
                             },
-                            children: vec![Node::TextNode("hello from div")],
+                            children: vec![Node::Text("hello from div")],
                             template_scope: 0,
                         }),
                     ],
@@ -723,7 +723,7 @@ mod tests {
                     attributes: vec![],
                 },
                 children: vec![
-                    Node::ElementNode(ElementNode {
+                    Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
                             attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
@@ -735,7 +735,7 @@ mod tests {
                             ))],
                         },
                         children: vec![
-                            Node::TextNode("hello from slot "),
+                            Node::Text("hello from slot "),
                             Node::DynamicExpression {
                                 value: "one",
                                 template_scope: 0,
@@ -743,7 +743,7 @@ mod tests {
                         ],
                         template_scope: 0,
                     }),
-                    Node::ElementNode(ElementNode {
+                    Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
                             attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
@@ -755,13 +755,13 @@ mod tests {
                             ))],
                         },
                         children: vec![
-                            Node::TextNode("hello from slot "),
-                            Node::ElementNode(ElementNode {
+                            Node::Text("hello from slot "),
+                            Node::Element(ElementNode {
                                 starting_tag: StartingTag {
                                     tag_name: "b",
                                     attributes: vec![],
                                 },
-                                children: vec![Node::TextNode("two")],
+                                children: vec![Node::Text("two")],
                                 template_scope: 0,
                             }),
                         ],
@@ -788,16 +788,16 @@ mod tests {
                     attributes: vec![],
                 },
                 children: vec![
-                    Node::TextNode("hello from component"),
-                    Node::ElementNode(ElementNode {
+                    Node::Text("hello from component"),
+                    Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "div",
                             attributes: vec![],
                         },
-                        children: vec![Node::TextNode("hello from div")],
+                        children: vec![Node::Text("hello from div")],
                         template_scope: 0,
                     }),
-                    Node::ElementNode(ElementNode {
+                    Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
                             attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
@@ -808,7 +808,7 @@ mod tests {
                                 },
                             ))],
                         },
-                        children: vec![Node::TextNode("hello from slot")],
+                        children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
                     }),
                 ],
@@ -829,7 +829,7 @@ mod tests {
                     attributes: vec![],
                 },
                 children: vec![
-                    Node::ElementNode(ElementNode {
+                    Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
                             attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
@@ -841,19 +841,19 @@ mod tests {
                             ))],
                         },
                         children: vec![
-                            Node::TextNode("hello from default"),
-                            Node::ElementNode(ElementNode {
+                            Node::Text("hello from default"),
+                            Node::Element(ElementNode {
                                 starting_tag: StartingTag {
                                     tag_name: "div",
                                     attributes: vec![],
                                 },
-                                children: vec![Node::TextNode("hello from div")],
+                                children: vec![Node::Text("hello from div")],
                                 template_scope: 0,
                             }),
                         ],
                         template_scope: 0,
                     }),
-                    Node::ElementNode(ElementNode {
+                    Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
                             attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
@@ -864,7 +864,7 @@ mod tests {
                                 },
                             ))],
                         },
-                        children: vec![Node::TextNode("hello from slot")],
+                        children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
                     }),
                 ],
@@ -885,7 +885,7 @@ mod tests {
                     attributes: vec![],
                 },
                 children: vec![
-                    Node::ElementNode(ElementNode {
+                    Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
                             attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
@@ -896,16 +896,16 @@ mod tests {
                                 },
                             ))],
                         },
-                        children: vec![Node::TextNode("hello from slot")],
+                        children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
                     }),
-                    Node::TextNode("hello from component"),
-                    Node::ElementNode(ElementNode {
+                    Node::Text("hello from component"),
+                    Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "div",
                             attributes: vec![],
                         },
-                        children: vec![Node::TextNode("hello from div")],
+                        children: vec![Node::Text("hello from div")],
                         template_scope: 0,
                     }),
                 ],
@@ -930,7 +930,7 @@ mod tests {
                     attributes: vec![],
                 },
                 children: vec![
-                    Node::ElementNode(ElementNode {
+                    Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
                             attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
@@ -941,10 +941,10 @@ mod tests {
                                 },
                             ))],
                         },
-                        children: vec![Node::TextNode("hello from slot")],
+                        children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
                     }),
-                    Node::ElementNode(ElementNode {
+                    Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
                             attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
@@ -956,19 +956,19 @@ mod tests {
                             ))],
                         },
                         children: vec![
-                            Node::TextNode("hello from default"),
-                            Node::ElementNode(ElementNode {
+                            Node::Text("hello from default"),
+                            Node::Element(ElementNode {
                                 starting_tag: StartingTag {
                                     tag_name: "div",
                                     attributes: vec![],
                                 },
-                                children: vec![Node::TextNode("hello from div")],
+                                children: vec![Node::Text("hello from div")],
                                 template_scope: 0,
                             }),
                         ],
                         template_scope: 0,
                     }),
-                    Node::ElementNode(ElementNode {
+                    Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
                             attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
@@ -979,7 +979,7 @@ mod tests {
                                 },
                             ))],
                         },
-                        children: vec![Node::TextNode("hello from baz")],
+                        children: vec![Node::Text("hello from baz")],
                         template_scope: 0,
                     }),
                 ],
