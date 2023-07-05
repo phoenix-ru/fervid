@@ -126,8 +126,12 @@ fn is_from_default_slot(node: &Node) -> bool {
             })
         }
 
+        // TODO: <template v-if="true" v-slot:foo>
+        // https://play.vuejs.org/#eNp9UT1PwzAQ/SvWzW0YukWABKgDDICA0UuUXlIXx7Z85xCpyn/HdvqpVp3sex+n93RbeHKu6ANCCfeMndMV46M0QsSJeF7bzuUxAxMt+rlqHiSwDyghTqQtl421O6EQ8b/z3J3tPF+CmtJz4V6rq+Y0HhOdkDADptqaRrXFhqyJVbbJICFplUb/4VhZQxJKkZnEVVrbv7eMpSKzPV6vsf69gm9oSJiET4+Evo/VDxxXvkWe6OX3Ow7xfyA7uwo6qm+QX0hWh5Rxkj0Hs4qxT3Q57WvnrGdl2h9aDoyG9qXyJaJyzHoJ8Z4vN6of4y6KRfZJM8L4D55mqXA=
+        Node::ConditionalSeq(_) => true,
+
         // explicit just in case I decide to change node types and forget about this place
-        Node::DynamicExpression { .. } | Node::Text(_) | Node::Comment(_) | Node::ConditionalSeq(_) => true,
+        Node::DynamicExpression { .. } | Node::Text(_) | Node::Comment(_) => true,
     }
 }
 

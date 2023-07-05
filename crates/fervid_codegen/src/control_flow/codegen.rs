@@ -23,21 +23,23 @@ impl CodegenContext {
                 template_scope,
             } => self.generate_dynamic_expression(value, *template_scope, DUMMY_SP),
 
-            Node::Element(element_node) => {
-                if self.is_component(&element_node.starting_tag) {
-                    // TODO
-                    (self.generate_component_vnode(element_node, wrap_in_block), false)
-                } else {
-                    // TODO
-                    (self.generate_element_vnode(element_node, wrap_in_block), false)
-                }
-                // todo builtins as well
-            }
+            Node::Element(element_node) => self.generate_element_or_component(element_node, wrap_in_block),
 
             Node::Comment(comment) => (self.generate_comment_vnode(comment, DUMMY_SP), false),
 
-            Node::ConditionalSeq(_) => todo!("Implement conditional node unwrapping"),
+            Node::ConditionalSeq(conditional_seq) => (self.generate_conditional_seq(conditional_seq), false),
         }
+    }
+
+    pub fn generate_element_or_component(&mut self, element_node: &ElementNode, wrap_in_block: bool) -> (Expr, bool) {
+        if self.is_component(&element_node.starting_tag) {
+            // TODO
+            (self.generate_component_vnode(element_node, wrap_in_block), false)
+        } else {
+            // TODO
+            (self.generate_element_vnode(element_node, wrap_in_block), false)
+        }
+        // todo builtins as well
     }
 
     /// Generates a sequence of nodes taken from an iterator.

@@ -39,11 +39,17 @@ pub struct ElementNode<'a> {
     pub template_scope: u32,
 }
 
+/// This is a synthetic node type only available after AST optimizations.
+/// Its purpose is to make conditional code generation trivial.\
+/// The `ConditionalNodeSequence` consists of:
+/// - exactly one `v-if` `ElementNode`;
+/// - 0 or more `v-else-if` `ElementNode`s;
+/// - 0 or 1 `v-else` `ElementNode`.
 #[derive(Debug, Clone)]
 pub struct ConditionalNodeSequence<'a> {
-    pub if_node: (&'a str, Box<Node<'a>>),
-    pub else_if_nodes: Vec<(&'a str, Node<'a>)>,
-    pub else_node: Option<Box<Node<'a>>>
+    pub if_node: (&'a str, Box<ElementNode<'a>>),
+    pub else_if_nodes: Vec<(&'a str, ElementNode<'a>)>,
+    pub else_node: Option<Box<ElementNode<'a>>>
 }
 
 /// Starting tag represents [`ElementNode`]'s tag name and attributes
