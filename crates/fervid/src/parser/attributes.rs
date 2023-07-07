@@ -1,18 +1,107 @@
 use fervid_core::{
-    HtmlAttribute, VBindDirective, VCustomDirective, VDirective, VForDirective, VModelDirective,
-    VOnDirective, VSlotDirective,
+    AttributeOrBinding, VBindDirective, VCustomDirective, VForDirective, VModelDirective,
+    VOnDirective, VSlotDirective, VueDirectives,
 };
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_till},
     character::complete::char,
     combinator::fail,
+    error::{ErrorKind, ParseError},
     multi::many0,
     sequence::{delimited, preceded},
-    IResult,
+    Err, IResult,
 };
 
-use crate::parser::html_utils::{html_name, space1};
+use crate::parser::html_utils::html_name;
+
+pub fn parse_attributes(
+    input: &str,
+) -> IResult<&str, (Vec<AttributeOrBinding>, Option<Box<VueDirectives>>)> {
+    let mut directives = None;
+    let mut attrs = Vec::new();
+    let mut input = input;
+
+    loop {
+        let len = input.len();
+
+        // Skip whitespace
+        input = input.trim_start();
+
+        // Try parsing a directive first
+        let directive_result = parse_directive(input, &mut attrs, &mut directives);
+        match directive_result {
+            // Err(Err::Error(_)) => return Ok((input, (attrs, directives))),
+            // Err(e) => return Err(e),
+            Ok((new_input, _)) => {
+                // infinite loop check: the parser must always consume
+                if new_input.len() == len {
+                    return Err(Err::Error(ParseError::from_error_kind(
+                        input,
+                        ErrorKind::Many0,
+                    )));
+                }
+
+                input = new_input;
+            }
+
+            Err(_) => {
+                // Try parsing a regular attribute
+                let attribute_result = parse_vanilla_attr(input, &mut attrs);
+
+                match attribute_result {
+                    Err(Err::Error(_)) => return Ok((input, (attrs, directives))),
+                    Err(e) => return Err(e),
+                    Ok((new_input, _)) => {
+                        // infinite loop check: the parser must always consume
+                        if new_input.len() == len {
+                            return Err(Err::Error(ParseError::from_error_kind(
+                                input,
+                                ErrorKind::Many0,
+                            )));
+                        }
+
+                        input = new_input;
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn parse_vanilla_attr<'i>(
+    input: &'i str,
+    out: &mut Vec<AttributeOrBinding<'i>>,
+) -> IResult<&'i str, ()> {
+    let (input, attr_name) = html_name(input)?;
+
+    /* Support omitting a `=` char */
+    let eq: Result<(&str, char), nom::Err<nom::error::Error<_>>> = char('=')(input);
+    match eq {
+        // consider omitted attribute as attribute name itself (as current Vue compiler does)
+        Err(_) => {
+            out.push(AttributeOrBinding::RegularAttribute {
+                name: attr_name,
+                value: &attr_name,
+            });
+            Ok((input, ()))
+        }
+
+        Ok((input, _)) => {
+            let (input, attr_value) = parse_attr_value(input)?;
+
+            #[cfg(dbg_print)]
+            println!("Dynamic attr: value = {:?}", attr_value);
+
+            out.push(AttributeOrBinding::RegularAttribute {
+                name: attr_name,
+                value: attr_value,
+            });
+
+            Ok((input, ()))
+        }
+    }
+}
 
 fn parse_attr_value(input: &str) -> IResult<&str, &str> {
     delimited(char('"'), take_till(|c| c == '"'), char('"'))(input)
@@ -21,7 +110,11 @@ fn parse_attr_value(input: &str) -> IResult<&str, &str> {
 /// Parses a directive in form of `v-directive-name:directive-attribute.modifier1.modifier2`
 ///
 /// Allows for shortcuts like `@` (same as `v-on`), `:` (`v-bind`) and `#` (`v-slot`)
-fn parse_directive(input: &str) -> IResult<&str, HtmlAttribute> {
+fn parse_directive<'i>(
+    input: &'i str,
+    attributes: &mut Vec<AttributeOrBinding<'i>>,
+    directives: &mut Option<Box<VueDirectives<'i>>>,
+) -> IResult<&'i str, ()> {
     let (input, prefix) = alt((tag("v-"), tag("@"), tag("#"), tag(":"), tag(".")))(input)?;
 
     // https://vuejs.org/api/built-in-directives.html#v-bind
@@ -126,8 +219,21 @@ fn parse_directive(input: &str) -> IResult<&str, HtmlAttribute> {
         };
     }
 
+    macro_rules! get_directives {
+        () => {
+            directives.get_or_insert_with(|| Box::new(VueDirectives::default()))
+        };
+    }
+
+    macro_rules! push_directive {
+        ($key: ident, $value: expr) => {
+            let directives = get_directives!();
+            directives.$key = Some($value);
+        };
+    }
+
     // Type the directive
-    let directive = match directive_name {
+    match directive_name {
         // Directives arranged by estimated usage frequency
         "bind" => {
             // Get flags
@@ -145,30 +251,32 @@ fn parse_directive(input: &str) -> IResult<&str, HtmlAttribute> {
 
             let value = expect_value!();
 
-            VDirective::Bind(VBindDirective {
+            attributes.push(AttributeOrBinding::VBind(VBindDirective {
                 argument,
                 value,
                 is_dynamic_attr: is_dynamic,
                 is_camel,
                 is_prop,
                 is_attr,
-            })
+            }));
         }
-        "on" => VDirective::On(VOnDirective {
+        "on" => attributes.push(AttributeOrBinding::VOn(VOnDirective {
             event: argument,
             handler: value,
             is_dynamic_event: is_dynamic,
             modifiers,
-        }),
+        })),
         "if" => {
             let value = expect_value!();
-            VDirective::If(value)
+            push_directive!(v_if, value);
         }
         "else-if" => {
             let value = expect_value!();
-            VDirective::ElseIf(value)
+            push_directive!(v_else_if, value);
         }
-        "else" => VDirective::Else,
+        "else" => {
+            push_directive!(v_else, ());
+        }
         "for" => {
             let value = expect_value!();
 
@@ -176,52 +284,66 @@ fn parse_directive(input: &str) -> IResult<&str, HtmlAttribute> {
                 fail!();
             };
 
-            VDirective::For(VForDirective { iterable, iterator })
+            push_directive!(v_for, VForDirective { iterable, iterator });
         }
         "model" => {
             let value = expect_value!();
-
-            VDirective::Model(VModelDirective {
+            let directives = get_directives!();
+            directives.v_model.push(VModelDirective {
                 argument,
                 value,
                 modifiers,
-            })
+            });
         }
-        "slot" => VDirective::Slot(VSlotDirective {
-            slot_name: argument,
-            value,
-            is_dynamic_slot: is_dynamic
-        }),
+        "slot" => {
+            push_directive!(
+                v_slot,
+                VSlotDirective {
+                    slot_name: argument,
+                    value,
+                    is_dynamic_slot: is_dynamic
+                }
+            );
+        }
         "show" => {
             let value = expect_value!();
-            VDirective::Show(value)
+            push_directive!(v_show, value);
         }
         "html" => {
             let value = expect_value!();
-            VDirective::Html(value)
+            push_directive!(v_html, value);
         }
         "text" => {
             let value = expect_value!();
-            VDirective::Text(value)
+            push_directive!(v_text, value);
         }
-        "once" => VDirective::Once,
-        "pre" => VDirective::Pre,
+        "once" => {
+            push_directive!(v_once, ());
+        }
+        "pre" => {
+            push_directive!(v_pre, ());
+        }
         "memo" => {
             let value = expect_value!();
-            VDirective::Memo(value)
+            push_directive!(v_memo, value);
         }
-        "cloak" => VDirective::Cloak,
+        "cloak" => {
+            push_directive!(v_cloak, ());
+        }
 
         // Custom
-        _ => VDirective::Custom(VCustomDirective {
-            name: directive_name,
-            argument,
-            modifiers,
-            value,
-        }),
+        _ => {
+            let directives = get_directives!();
+            directives.custom.push(VCustomDirective {
+                name: directive_name,
+                argument,
+                modifiers,
+                value,
+            });
+        }
     };
 
-    Ok((input, HtmlAttribute::VDirective(directive)))
+    Ok((input, ()))
 }
 
 // fn parse_dynamic_attr(input: &str) -> IResult<&str, HtmlAttribute> {
@@ -256,54 +378,6 @@ fn parse_directive(input: &str) -> IResult<&str, HtmlAttribute> {
 //         })),
 //     }
 // }
-
-fn parse_vanilla_attr(input: &str) -> IResult<&str, HtmlAttribute> {
-    let (input, attr_name) = html_name(input)?;
-
-    /* Support omitting a `=` char */
-    let eq: Result<(&str, char), nom::Err<nom::error::Error<_>>> = char('=')(input);
-    match eq {
-        // consider omitted attribute as attribute name itself (as current Vue compiler does)
-        Err(_) => Ok((
-            input,
-            HtmlAttribute::Regular {
-                name: attr_name,
-                value: &attr_name,
-            },
-        )),
-
-        Ok((input, _)) => {
-            let (input, attr_value) = parse_attr_value(input)?;
-
-            #[cfg(dbg_print)]
-            println!("Dynamic attr: value = {:?}", attr_value);
-
-            Ok((
-                input,
-                HtmlAttribute::Regular {
-                    name: attr_name,
-                    value: attr_value,
-                },
-            ))
-        }
-    }
-}
-
-fn parse_attr(input: &str) -> IResult<&str, HtmlAttribute> {
-    let (input, attr) = alt((parse_directive, parse_vanilla_attr))(input)?;
-
-    #[cfg(dbg_print)]
-    {
-        println!("Attribute: {:?}", attr);
-        println!("Remaining input: {:?}", input);
-    }
-
-    Ok((input, attr))
-}
-
-pub fn parse_attributes(input: &str) -> IResult<&str, Vec<HtmlAttribute>> {
-    many0(preceded(space1, parse_attr))(input)
-}
 
 fn split_itervar_and_iterable<'a>(raw: &'a str) -> Option<(&'a str, &'a str)> {
     // Try guessing: `item in iterable`

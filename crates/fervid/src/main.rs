@@ -4,7 +4,7 @@ extern crate swc_ecma_parser;
 use std::time::Instant;
 
 use fervid::{compile_sfc, SfcBlock, SfcScriptBlock};
-use fervid_core::{ElementNode, HtmlAttribute, Node, StartingTag};
+use fervid_core::{ElementNode, AttributeOrBinding, Node, StartingTag};
 
 use fervid::analyzer::ast_optimizer;
 use fervid::analyzer::scope::ScopeHelper;
@@ -93,10 +93,11 @@ fn test_synthetic_compilation() {
             roots: vec![Node::Element(ElementNode {
                 starting_tag: StartingTag {
                     tag_name: "span",
-                    attributes: vec![HtmlAttribute::Regular {
+                    attributes: vec![AttributeOrBinding::RegularAttribute {
                         name: "class",
                         value: "yes",
-                    }]
+                    }],
+                    directives: None
                 },
                 children: vec![
                     Node::Text("Hello world"),
@@ -109,7 +110,8 @@ fn test_synthetic_compilation() {
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "i",
-                            attributes: vec![]
+                            attributes: vec![],
+                            directives: None
                         },
                         children: vec![
                             Node::Text("italics, mm"),
@@ -124,7 +126,8 @@ fn test_synthetic_compilation() {
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "CustomComponent",
-                            attributes: vec![]
+                            attributes: vec![],
+                            directives: None
                         },
                         children: vec![
                             Node::Text("italics, mm"),

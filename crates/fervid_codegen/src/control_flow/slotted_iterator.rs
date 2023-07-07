@@ -1,4 +1,4 @@
-use fervid_core::{ElementNode, HtmlAttribute, Node, VDirective};
+use fervid_core::{ElementNode, Node};
 
 #[derive(PartialEq)]
 pub enum SlottedIteratorMode {
@@ -113,17 +113,16 @@ fn is_from_default_slot(node: &Node) -> bool {
             // `v-slot:default` is default
             // `v-slot:custom` is not default
             // `v-slot:[default]` is not default
-            !starting_tag.attributes.iter().any(|attr| match attr {
-                HtmlAttribute::VDirective(VDirective::Slot(v_slot)) => {
-                    v_slot.is_dynamic_slot
-                        || match v_slot.slot_name {
-                            None | Some("default") => false,
-                            Some(_) => true,
-                        }
-                }
+            let Some(ref directives) = starting_tag.directives else { return true; };
+            let Some(ref v_slot) = directives.v_slot else { return true; };
+            if v_slot.is_dynamic_slot {
+                return false;
+            }
 
-                _ => false,
-            })
+            match v_slot.slot_name {
+                None | Some("default") => true,
+                Some(_) => false,
+            }
         }
 
         // TODO: <template v-if="true" v-slot:foo>
@@ -137,7 +136,7 @@ fn is_from_default_slot(node: &Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{StartingTag, VBindDirective, VOnDirective, VSlotDirective};
+    use fervid_core::{StartingTag, VBindDirective, VOnDirective, VSlotDirective, VueDirectives, AttributeOrBinding};
 
     use super::*;
 
@@ -233,6 +232,7 @@ mod tests {
             starting_tag: StartingTag {
                 tag_name: "h1",
                 attributes: vec![],
+                directives: None
             },
             children: vec![Node::Text("This is an h1")],
             template_scope: 0,
@@ -245,19 +245,20 @@ mod tests {
             starting_tag: StartingTag {
                 tag_name: "div",
                 attributes: vec![
-                    HtmlAttribute::Regular {
+                    AttributeOrBinding::RegularAttribute {
                         name: "class",
                         value: "regular",
                     },
-                    HtmlAttribute::VDirective(VDirective::Bind(fervid_core::VBindDirective {
+                    AttributeOrBinding::VBind(fervid_core::VBindDirective {
                         argument: Some("disabled"),
                         value: "true",
                         is_dynamic_attr: false,
                         is_camel: false,
                         is_prop: false,
                         is_attr: false,
-                    })),
+                    }),
                 ],
+                directives: None
             },
             children: vec![],
             template_scope: 0,
@@ -270,21 +271,22 @@ mod tests {
             starting_tag: StartingTag {
                 tag_name: "h1",
                 attributes: vec![
-                    HtmlAttribute::VDirective(VDirective::Bind(VBindDirective {
+                    AttributeOrBinding::VBind(VBindDirective {
                         argument: Some("disabled"),
                         value: "true",
                         is_dynamic_attr: false,
                         is_camel: false,
                         is_prop: false,
                         is_attr: false,
-                    })),
-                    HtmlAttribute::VDirective(VDirective::On(VOnDirective {
+                    }),
+                    AttributeOrBinding::VOn(VOnDirective {
                         event: Some("event"),
                         handler: Some("baz"),
                         is_dynamic_event: false,
                         modifiers: vec![],
-                    })),
+                    }),
                 ],
+                directives: None
             },
             children: vec![Node::Text("This is a component")],
             template_scope: 0,
@@ -297,6 +299,7 @@ mod tests {
             starting_tag: StartingTag {
                 tag_name: "template",
                 attributes: vec![],
+                directives: None
             },
             children: vec![Node::Text("This is just a template")],
             template_scope: 0,
@@ -308,13 +311,15 @@ mod tests {
         Node::Element(ElementNode {
             starting_tag: StartingTag {
                 tag_name: "template",
-                attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
-                    VSlotDirective {
+                attributes: vec![],
+                directives: Some(Box::new(VueDirectives {
+                    v_slot: Some(VSlotDirective {
                         slot_name: Some("default"),
                         value: None,
                         is_dynamic_slot: false,
-                    },
-                ))],
+                    }),
+                    ..Default::default()
+                }))
             },
             children: vec![Node::Text("This is a default template")],
             template_scope: 0,
@@ -326,13 +331,15 @@ mod tests {
         Node::Element(ElementNode {
             starting_tag: StartingTag {
                 tag_name: "template",
-                attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
-                    VSlotDirective {
+                attributes: vec![],
+                directives: Some(Box::new(VueDirectives {
+                    v_slot: Some(VSlotDirective {
                         slot_name: Some("named"),
                         value: None,
                         is_dynamic_slot: false,
-                    },
-                ))],
+                    }),
+                    ..Default::default()
+                }))
             },
             children: vec![Node::Text("This is a named template")],
             template_scope: 0,

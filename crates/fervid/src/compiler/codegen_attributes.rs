@@ -1,4 +1,4 @@
-use fervid_core::{HtmlAttribute, VDirective, VBindDirective, VOnDirective};
+use fervid_core::{AttributeOrBinding, VBindDirective, VOnDirective};
 use lazy_static::lazy_static;
 use regex::Regex;
 use crate::analyzer::scope::ScopeHelper;
@@ -19,7 +19,7 @@ impl CodegenContext <'_> {
   pub fn generate_attributes<'a>(
     &mut self,
     buf: &mut String,
-    attributes: impl Iterator<Item = &'a HtmlAttribute<'a>> + Clone,
+    attributes: impl Iterator<Item = &'a AttributeOrBinding<'a>> + Clone,
     generate_obj_shell: bool,
     template_scope_id: u32
   ) -> bool {
@@ -52,27 +52,27 @@ impl CodegenContext <'_> {
       match attribute {
         // First, we check the special case: `class` and `style` attributes
         // class
-        HtmlAttribute::Regular { name: "class", value } => {
+        AttributeOrBinding::RegularAttribute { name: "class", value } => {
           class_regular = Some(*value);
         },
 
         // :class
-        HtmlAttribute::VDirective(VDirective::Bind(VBindDirective { argument: Some("class"), value, .. })) => {
+        AttributeOrBinding::VBind(VBindDirective { argument: Some("class"), value, .. }) => {
           class_bind = Some(*value);
         },
 
         // style
-        HtmlAttribute::Regular { name: "style", value } => {
+        AttributeOrBinding::RegularAttribute { name: "style", value } => {
           style_regular = Some(*value);
         },
 
         // :style
-        HtmlAttribute::VDirective(VDirective::Bind(VBindDirective { argument: Some("style"), value, .. })) => {
+        AttributeOrBinding::VBind(VBindDirective { argument: Some("style"), value, .. }) => {
           style_bind = Some(*value);
         },
 
         // Any regular attribute
-        HtmlAttribute::Regular { name, value } => {
+        AttributeOrBinding::RegularAttribute { name, value } => {
           if has_first_element {
             self.code_helper.comma_newline(buf);
           }
@@ -92,7 +92,7 @@ impl CodegenContext <'_> {
         },
 
         // v-bind directive, shortcut `:`, e.g. `:custom-prop="value"`
-        HtmlAttribute::VDirective(VDirective::Bind(v_bind)) => {
+        AttributeOrBinding::VBind(v_bind) => {
           if has_first_element {
             self.code_helper.comma_newline(buf);
           }
@@ -103,7 +103,7 @@ impl CodegenContext <'_> {
         }
 
         // v-on directive, shortcut `@`, e.g. `@custom-event.modifier="value"`
-        HtmlAttribute::VDirective(VDirective::On(v_on)) => {
+        AttributeOrBinding::VOn(v_on) => {
           if has_first_element {
             self.code_helper.comma_newline(buf);
           }
@@ -112,9 +112,7 @@ impl CodegenContext <'_> {
 
           has_used_modifiers_import |= v_on.modifiers.len() > 0;
           has_first_element = true
-        },
-
-        _ => {}
+        }
       }
     }
 
@@ -253,13 +251,9 @@ impl CodegenContext <'_> {
 
 /// Check if there is work regarding attributes generation
 /// Work is not needed if we don't have any Regular attributes, v-on/v-bind directives
-pub fn has_attributes_work<'a>(mut attributes_iter: impl Iterator<Item = &'a HtmlAttribute<'a>>) -> bool {
-  attributes_iter
-    .any(|it| match it {
-      HtmlAttribute::Regular { .. } |
-      HtmlAttribute::VDirective (VDirective::Bind(_) | VDirective::On(_)) => true,
-      _ => false
-    })
+pub fn has_attributes_work<'a>(mut attributes_iter: impl Iterator<Item = &'a AttributeOrBinding<'a>>) -> bool {
+  // todo this is not needed
+  attributes_iter.next().is_some()
 }
 
 fn generate_regular_style(buf: &mut String, style: &str) {

@@ -1,4 +1,4 @@
-use fervid_core::{HtmlAttribute, StartingTag, VDirective};
+use fervid_core::StartingTag;
 
 /// Function for determining whether a given element/component
 /// needs to be wrapped in `_withDirectives(<node code>, <directives code>)`
@@ -7,14 +7,11 @@ use fervid_core::{HtmlAttribute, StartingTag, VDirective};
 /// 2. `is_component = false` and element has any directive other than 'on', 'bind' and 'slot'.
 
 pub fn needs_directive_wrapper(starting_tag: &StartingTag, is_component: bool) -> bool {
-    starting_tag.attributes.iter().any(|attr| match attr {
-        HtmlAttribute::VDirective(directive) => match directive {
-            VDirective::Model(_) if !is_component => true,
-            VDirective::Custom(_) => true,
-            VDirective::Show(_) => true,
-            _ => false
-        },
+    let Some(ref directives) = starting_tag.directives else {
+        return false;
+    };
 
-        _ => false,
-    })
+    (!is_component && directives.v_model.len() != 0)
+        || directives.v_show.is_some()
+        || directives.custom.len() != 0
 }

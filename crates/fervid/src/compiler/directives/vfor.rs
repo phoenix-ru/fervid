@@ -1,6 +1,6 @@
-use fervid_core::{StartingTag, HtmlAttribute, VDirective, VBindDirective};
+use fervid_core::{StartingTag, AttributeOrBinding, VBindDirective};
 
-use crate::{compiler::{codegen::CodegenContext, imports::VueImports, helper::CodeHelper}};
+use crate::compiler::{codegen::CodegenContext, imports::VueImports, helper::CodeHelper};
 
 impl CodegenContext<'_> {
   /// Generates `(openBlock(true), createElementBlock(Fragment, null, renderList(<list>, (<item>) => { return`
@@ -9,58 +9,51 @@ impl CodegenContext<'_> {
     buf: &mut String,
     starting_tag: &StartingTag
   ) -> bool {
-    let v_for = starting_tag
-      .attributes
-      .iter()
-      .find_map(|attr| match attr {
-        HtmlAttribute::VDirective(VDirective::For(v_for)) => Some(v_for),
-        _ => None
-      });
+    let Some(ref directives) = starting_tag.directives else {
+      return false;
+    };
+    let Some(ref v_for) = directives.v_for else {
+      return false;
+    };
 
-    match v_for {
-      Some(directive) => {
-        // `(openBlock(true), `
-        CodeHelper::open_paren(buf);
-        buf.push_str(self.get_and_add_import_str(VueImports::OpenBlock));
-        buf.push_str("(true), ");
+    // `(openBlock(true), `
+    CodeHelper::open_paren(buf);
+    buf.push_str(self.get_and_add_import_str(VueImports::OpenBlock));
+    buf.push_str("(true), ");
 
-        // `createElementBlock(Fragment, null, renderList(`
-        buf.push_str(self.get_and_add_import_str(VueImports::CreateElementBlock));
-        CodeHelper::open_paren(buf);
-        buf.push_str(self.get_and_add_import_str(VueImports::Fragment));
-        buf.push_str(", null, ");
-        buf.push_str(self.get_and_add_import_str(VueImports::RenderList));
-        CodeHelper::open_paren(buf);
+    // `createElementBlock(Fragment, null, renderList(`
+    buf.push_str(self.get_and_add_import_str(VueImports::CreateElementBlock));
+    CodeHelper::open_paren(buf);
+    buf.push_str(self.get_and_add_import_str(VueImports::Fragment));
+    buf.push_str(", null, ");
+    buf.push_str(self.get_and_add_import_str(VueImports::RenderList));
+    CodeHelper::open_paren(buf);
 
-        let itervar = directive.iterator;
-        let iterable = directive.iterable;
+    let itervar = v_for.iterator;
+    let iterable = v_for.iterable;
 
-        // Add iterable
-        // TODO Contextual compile
-        buf.push_str(iterable);
-        CodeHelper::comma(buf);
+    // Add iterable
+    // TODO Contextual compile
+    buf.push_str(iterable);
+    CodeHelper::comma(buf);
 
-        // Add iterator variables
-        let needs_paren = !itervar.starts_with('(');
-        if needs_paren {
-          CodeHelper::open_paren(buf);
-        }
-        buf.push_str(itervar);
-        if needs_paren {
-          CodeHelper::close_paren(buf);
-        }
-
-        // Add arrow function with return
-        // Here, I replaced `=> { return` to `=> (` because it's the same
-        buf.push_str(" => (");
-        self.code_helper.indent();
-        self.code_helper.newline(buf);
-
-        true
-      },
-
-      None => false
+    // Add iterator variables
+    let needs_paren = !itervar.starts_with('(');
+    if needs_paren {
+      CodeHelper::open_paren(buf);
     }
+    buf.push_str(itervar);
+    if needs_paren {
+      CodeHelper::close_paren(buf);
+    }
+
+    // Add arrow function with return
+    // Here, I replaced `=> { return` to `=> (` because it's the same
+    buf.push_str(" => (");
+    self.code_helper.indent();
+    self.code_helper.newline(buf);
+
+    true
   }
 
   /// Function to close the `v-for` code generation.
@@ -70,7 +63,7 @@ impl CodegenContext<'_> {
     let has_key = starting_tag.attributes
       .iter()
       .any(|attr| match attr {
-        HtmlAttribute::VDirective(VDirective::Bind(VBindDirective { argument: Some("key"), .. })) => true,
+        AttributeOrBinding::VBind(VBindDirective { argument: Some("key"), .. }) => true,
         _ => false
       });
 

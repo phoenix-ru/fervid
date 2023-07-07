@@ -10,7 +10,7 @@ use std::str;
 use super::attributes::parse_attributes;
 use super::html_utils::{classify_element_kind, html_name, space0, ElementKind};
 use fervid_core::{
-    ElementNode, HtmlAttribute, Node, SfcBlock, SfcCustomBlock, SfcScriptBlock, SfcStyleBlock,
+    AttributeOrBinding, ElementNode, Node, SfcBlock, SfcCustomBlock, SfcScriptBlock, SfcStyleBlock,
     SfcTemplateBlock, StartingTag,
 };
 
@@ -80,7 +80,7 @@ fn parse_root_block<'a>(input: &'a str) -> IResult<&'a str, SfcBlock<'a>> {
 
     // Get `lang` attribute, which is common for all the Vue root blocks
     let lang = starting_tag.attributes.iter().find_map(|attr| match attr {
-        HtmlAttribute::Regular {
+        AttributeOrBinding::RegularAttribute {
             name: "lang",
             value,
         } => Some(*value),
@@ -123,10 +123,12 @@ fn parse_root_block<'a>(input: &'a str) -> IResult<&'a str, SfcBlock<'a>> {
     if is_script {
         let lang = lang.unwrap_or("js");
 
-        let is_setup = starting_tag
-            .attributes
-            .iter()
-            .any(|attr| matches!(attr, HtmlAttribute::Regular { name: "setup", .. }));
+        let is_setup = starting_tag.attributes.iter().any(|attr| {
+            matches!(
+                attr,
+                AttributeOrBinding::RegularAttribute { name: "setup", .. }
+            )
+        });
 
         // Check self-closing
         if is_self_closing {
@@ -157,10 +159,12 @@ fn parse_root_block<'a>(input: &'a str) -> IResult<&'a str, SfcBlock<'a>> {
     // Read style (basically same as script, but attributes are different)
     let lang = lang.unwrap_or("css");
 
-    let is_scoped = starting_tag
-        .attributes
-        .iter()
-        .any(|attr| matches!(attr, HtmlAttribute::Regular { name: "scoped", .. }));
+    let is_scoped = starting_tag.attributes.iter().any(|attr| {
+        matches!(
+            attr,
+            AttributeOrBinding::RegularAttribute { name: "scoped", .. }
+        )
+    });
 
     // Check self-closing
     if is_self_closing {
@@ -189,7 +193,7 @@ fn parse_root_block<'a>(input: &'a str) -> IResult<&'a str, SfcBlock<'a>> {
 }
 
 fn parse_element_starting_tag(input: &str) -> IResult<&str, (StartingTag, bool)> {
-    let (input, (_, tag_name, attributes, _, ending_bracket)) = tuple((
+    let (input, (_, tag_name, (attributes, directives), _, ending_bracket)) = tuple((
         tag("<"),
         html_name,
         parse_attributes,
@@ -209,6 +213,7 @@ fn parse_element_starting_tag(input: &str) -> IResult<&str, (StartingTag, bool)>
             StartingTag {
                 tag_name,
                 attributes,
+                directives,
             },
             // is_self_closing
             ending_bracket == "/>",

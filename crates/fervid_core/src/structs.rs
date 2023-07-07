@@ -56,34 +56,40 @@ pub struct ConditionalNodeSequence<'a> {
 #[derive(Debug, Clone)]
 pub struct StartingTag<'a> {
     pub tag_name: &'a str,
-    pub attributes: Vec<HtmlAttribute<'a>>,
+    pub attributes: Vec<AttributeOrBinding<'a>>,
+    pub directives: Option<Box<VueDirectives<'a>>>
 }
 
-/// Attribute may either be `Regular` (static) or a `VDirective` (application-specific)
+/// Denotes the basic attributes or bindings of a DOM element
+/// As of directives, this only covers `v-bind` and `v-on`,
+/// because they bind something to DOM.
+/// `v-model` is not covered here because its code generation is not as trivial.
 #[derive(Debug, Clone)]
-pub enum HtmlAttribute<'a> {
-    Regular { name: &'a str, value: &'a str },
-    VDirective(VDirective<'a>),
+pub enum AttributeOrBinding<'a> {
+    /// `RegularAttribute` is a plain HTML attribute without any associated logic
+    RegularAttribute { name: &'a str, value: &'a str },
+    /// `v-bind` directive
+    VBind(VBindDirective<'a>),
+    /// `v-on` directive
+    VOn(VOnDirective<'a>),
 }
 
-#[derive(Clone, Debug)]
-pub enum VDirective<'a> {
-    Bind(VBindDirective<'a>),
-    Cloak,
-    Custom(VCustomDirective<'a>),
-    Else,
-    ElseIf(&'a str),
-    For(VForDirective<'a>),
-    Html(&'a str),
-    If(&'a str),
-    Memo(&'a str),
-    Model(VModelDirective<'a>),
-    On(VOnDirective<'a>),
-    Once,
-    Pre,
-    Show(&'a str),
-    Slot(VSlotDirective<'a>),
-    Text(&'a str),
+#[derive(Clone, Debug, Default)]
+pub struct VueDirectives<'d> {
+    pub custom: Vec<VCustomDirective<'d>>,
+    pub v_cloak: Option<()>,
+    pub v_else: Option<()>,
+    pub v_else_if: Option<&'d str>,
+    pub v_for: Option<VForDirective<'d>>,
+    pub v_html: Option<&'d str>,
+    pub v_if: Option<&'d str>,
+    pub v_memo: Option<&'d str>,
+    pub v_model: Vec<VModelDirective<'d>>,
+    pub v_once: Option<()>,
+    pub v_pre: Option<()>,
+    pub v_show: Option<&'d str>,
+    pub v_slot: Option<VSlotDirective<'d>>,
+    pub v_text: Option<&'d str>
 }
 
 #[derive(Clone, Debug)]

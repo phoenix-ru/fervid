@@ -1,4 +1,4 @@
-use fervid_core::{ElementNode, HtmlAttribute};
+use fervid_core::{ElementNode, AttributeOrBinding};
 
 use crate::compiler::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports};
 
@@ -16,7 +16,7 @@ impl CodegenContext<'_> {
             .attributes
             .iter()
             .find_map(|attr| match attr {
-                HtmlAttribute::Regular {
+                AttributeOrBinding::RegularAttribute {
                     name: "name",
                     value,
                 } => Some(*value),
@@ -51,7 +51,7 @@ impl CodegenContext<'_> {
                 .starting_tag
                 .attributes
                 .iter()
-                .filter(|attr| !matches!(attr, HtmlAttribute::Regular { name: "name", .. }));
+                .filter(|attr| !matches!(attr, AttributeOrBinding::RegularAttribute { name: "name", .. }));
 
             self.generate_attributes(buf, filtered_attributes, true, element_node.template_scope);
         } else if has_children {

@@ -1,4 +1,4 @@
-use fervid_core::{ElementNode, HtmlAttribute, Node, StartingTag, VDirective};
+use fervid_core::{ElementNode, Node, StartingTag, VueDirectives};
 use smallvec::SmallVec;
 use swc_core::{
     common::{BytePos, Span, SyntaxContext, DUMMY_SP},
@@ -8,7 +8,7 @@ use swc_core::{
     },
 };
 
-use crate::{attributes::DirectivesToProcess, context::CodegenContext, imports::VueImports, utils};
+use crate::{context::CodegenContext, imports::VueImports, utils};
 
 type TextNodesConcatenationVec = SmallVec<[Expr; 3]>;
 
@@ -23,21 +23,35 @@ impl CodegenContext {
                 template_scope,
             } => self.generate_dynamic_expression(value, *template_scope, DUMMY_SP),
 
-            Node::Element(element_node) => self.generate_element_or_component(element_node, wrap_in_block),
+            Node::Element(element_node) => {
+                self.generate_element_or_component(element_node, wrap_in_block)
+            }
 
             Node::Comment(comment) => (self.generate_comment_vnode(comment, DUMMY_SP), false),
 
-            Node::ConditionalSeq(conditional_seq) => (self.generate_conditional_seq(conditional_seq), false),
+            Node::ConditionalSeq(conditional_seq) => {
+                (self.generate_conditional_seq(conditional_seq), false)
+            }
         }
     }
 
-    pub fn generate_element_or_component(&mut self, element_node: &ElementNode, wrap_in_block: bool) -> (Expr, bool) {
+    pub fn generate_element_or_component(
+        &mut self,
+        element_node: &ElementNode,
+        wrap_in_block: bool,
+    ) -> (Expr, bool) {
         if self.is_component(&element_node.starting_tag) {
             // TODO
-            (self.generate_component_vnode(element_node, wrap_in_block), false)
+            (
+                self.generate_component_vnode(element_node, wrap_in_block),
+                false,
+            )
         } else {
             // TODO
-            (self.generate_element_vnode(element_node, wrap_in_block), false)
+            (
+                self.generate_element_vnode(element_node, wrap_in_block),
+                false,
+            )
         }
         // todo builtins as well
     }
@@ -75,7 +89,7 @@ impl CodegenContext {
                             hi: text_nodes_span[1],
                             ctxt: SyntaxContext::empty(),
                         },
-                        patch_flag_text
+                        patch_flag_text,
                     );
                     out.push(concatenation);
 
@@ -167,31 +181,27 @@ impl CodegenContext {
 
     pub fn generate_remaining_directives(
         &mut self,
-        expr: &mut Expr,
-        remaining_directives: &DirectivesToProcess,
+        _expr: &mut Expr,
+        _directives: &VueDirectives
     ) {
-        if remaining_directives.len() != 0 {
+        // if remaining_directives.len() != 0 {
             todo!("Remaining directives are not implemented yet")
-        }
+        // }
     }
 
     /// Special case: `<template>` with `v-if`/`v-else-if`/`v-else`/`v-for`
     #[inline]
     pub fn should_generate_fragment(&self, element_node: &ElementNode) -> bool {
         element_node.starting_tag.tag_name == "template"
-            && element_node
-                .starting_tag
-                .attributes
-                .iter()
-                .any(|attr| match attr {
-                    HtmlAttribute::VDirective(
-                        VDirective::If(_)
-                        | VDirective::ElseIf(_)
-                        | VDirective::Else
-                        | VDirective::For(_),
-                    ) => true,
-                    _ => false,
-                })
+            && match element_node.starting_tag.directives {
+                Some(ref directives) => {
+                    directives.v_if.is_some()
+                        || directives.v_else_if.is_some()
+                        || directives.v_else.is_some()
+                        || directives.v_for.is_some()
+                }
+                None => false,
+            }
     }
 
     fn concatenate_text_nodes(
@@ -199,7 +209,7 @@ impl CodegenContext {
         text_nodes_concatenation: &mut TextNodesConcatenationVec,
         inline: bool,
         span: Span,
-        patch_flag_text: bool
+        patch_flag_text: bool,
     ) -> Expr {
         let concatenation: Expr = join_exprs_to_concatenation(text_nodes_concatenation, span);
 

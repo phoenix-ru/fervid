@@ -1,4 +1,4 @@
-use fervid_core::{ElementNode, HtmlAttribute, Node, SfcTemplateBlock, StartingTag, VDirective};
+use fervid_core::{ElementNode, Node, SfcTemplateBlock, StartingTag};
 
 use crate::compiler::all_html_tags;
 
@@ -131,15 +131,14 @@ fn is_from_default_slot(node: &Node) -> bool {
     // `v-slot` is default
     // `v-slot:default` is default
     // `v-slot:custom` is not default
-    !starting_tag.attributes.iter().any(|attr| match attr {
-        HtmlAttribute::VDirective(VDirective::Slot(v_slot)) => {
-            v_slot.is_dynamic_slot
-                || match v_slot.slot_name {
-                    None | Some("default") => false,
-                    Some(_) => true,
-                }
+    let Some(ref directives) = starting_tag.directives else { return true; };
+    let Some(ref v_slot) = directives.v_slot else { return true; };
+    if v_slot.is_dynamic_slot {
+        return false;
         }
 
-        _ => false,
-    })
+    match v_slot.slot_name {
+        None | Some("default") => true,
+        Some(_) => false,
+    }
 }

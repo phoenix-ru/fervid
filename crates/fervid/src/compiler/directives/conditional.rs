@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use fervid_core::{HtmlAttribute, Node, VDirective};
+use fervid_core::Node;
 
 use crate::compiler::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports};
 
@@ -131,24 +131,33 @@ pub fn filter_nodes_with_conditional_directives<'r>(
         .iter()
         .enumerate()
         .filter_map(|(index, node)| match node {
-            Node::Element(element_node) => element_node
-                .starting_tag
-                .attributes
-                .iter()
-                .find_map(|attr| match attr {
-                    HtmlAttribute::VDirective(VDirective::If(condition)) => {
-                        Some((index, ConditionalNode::VIf { node, condition }))
-                    }
-                    HtmlAttribute::VDirective(VDirective::ElseIf(condition)) => {
-                        Some((index, ConditionalNode::VElseIf { node, condition }))
-                    }
-                    HtmlAttribute::VDirective(VDirective::Else) => {
-                        Some((index, ConditionalNode::VElse(node)))
-                    }
+            Node::Element(element_node) => {
+                let Some(ref directives) = element_node.starting_tag.directives else {
+                    return None;
+                };
 
-                    _ => None,
-                }),
-
+                if let Some(v_if) = directives.v_if {
+                    Some((
+                        index,
+                        ConditionalNode::VIf {
+                            node,
+                            condition: v_if,
+                        },
+                    ))
+                } else if let Some(v_else_if) = directives.v_else_if {
+                    Some((
+                        index,
+                        ConditionalNode::VElseIf {
+                            node,
+                            condition: v_else_if,
+                        },
+                    ))
+                } else if let Some(_) = directives.v_else {
+                    Some((index, ConditionalNode::VElse(node)))
+                } else {
+                    None
+                }
+            }
             _ => None,
         })
 }

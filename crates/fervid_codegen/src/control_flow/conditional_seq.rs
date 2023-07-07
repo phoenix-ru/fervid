@@ -87,6 +87,7 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "h1",
                             attributes: vec![],
+                            directives: None
                         },
                         children: vec![Node::Text("hello")],
                         template_scope: 0,
@@ -111,6 +112,7 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "h1",
                             attributes: vec![],
+                            directives: None
                         },
                         children: vec![Node::Text("hello")],
                         template_scope: 0,
@@ -121,6 +123,7 @@ mod tests {
                     starting_tag: StartingTag {
                         tag_name: "h2",
                         attributes: vec![],
+                        directives: None
                     },
                     children: vec![Node::Text("bye")],
                     template_scope: 0,
@@ -143,6 +146,7 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "h1",
                             attributes: vec![],
+                            directives: None
                         },
                         children: vec![Node::Text("hello")],
                         template_scope: 0,
@@ -155,6 +159,7 @@ mod tests {
                             starting_tag: StartingTag {
                                 tag_name: "h2",
                                 attributes: vec![],
+                                directives: None
                             },
                             children: vec![Node::Text("hi")],
                             template_scope: 0,
@@ -166,6 +171,7 @@ mod tests {
                             starting_tag: StartingTag {
                                 tag_name: "h3",
                                 attributes: vec![],
+                                directives: None
                             },
                             children: vec![Node::Text("bye")],
                             template_scope: 0,
@@ -192,6 +198,7 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "h1",
                             attributes: vec![],
+                            directives: None
                         },
                         children: vec![Node::Text("hello")],
                         template_scope: 0,
@@ -204,6 +211,7 @@ mod tests {
                             starting_tag: StartingTag {
                                 tag_name: "h2",
                                 attributes: vec![],
+                                directives: None
                             },
                             children: vec![Node::Text("hi")],
                             template_scope: 0,
@@ -215,6 +223,7 @@ mod tests {
                             starting_tag: StartingTag {
                                 tag_name: "h3",
                                 attributes: vec![],
+                                directives: None
                             },
                             children: vec![Node::Text("good morning")],
                             template_scope: 0,
@@ -225,6 +234,7 @@ mod tests {
                     starting_tag: StartingTag {
                         tag_name: "h4",
                         attributes: vec![],
+                        directives: None
                     },
                     children: vec![Node::Text("bye")],
                     template_scope: 0,

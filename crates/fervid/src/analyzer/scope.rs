@@ -1,4 +1,4 @@
-use fervid_core::{HtmlAttribute, Node, VDirective, VSlotDirective};
+use fervid_core::{Node, VSlotDirective};
 use lazy_static::lazy_static;
 use swc_core::common::BytePos;
 use swc_core::ecma::{
@@ -125,40 +125,36 @@ impl ScopeHelper {
     fn walk_ast_node(&mut self, node: &mut Node, current_scope_identifier: u32) {
         match node {
             Node::Element(element_node) => {
-                // Finds a `v-for` or `v-slot` directive when in ElementNode
-                let scoping_directive =
-                    element_node
-                        .starting_tag
-                        .attributes
-                        .iter()
-                        .find_map(|attr| match attr {
-                            HtmlAttribute::VDirective(directive)
-                                if matches!(
-                                    directive,
-                                    VDirective::For(_) | VDirective::Slot(_)
-                                ) =>
-                            {
-                                Some(directive)
-                            }
-
-                            _ => None,
-                        });
-
                 // A scope to use for both the current node and its children (as a parent)
                 let mut scope_to_use = current_scope_identifier;
 
-                // Create a new scope
-                if let Some(directive) = scoping_directive {
-                    // New scope will have ID equal to length
-                    scope_to_use = self.template_scopes.len() as u32;
-                    self.template_scopes.push(Scope {
-                        variables: vec![],
-                        parent: current_scope_identifier,
-                    });
+                // Finds a `v-for` or `v-slot` directive when in ElementNode
+                if let Some(ref directives) = element_node.starting_tag.directives {
+                    let v_for = directives.v_for.as_ref();
+                    let v_slot = directives.v_slot.as_ref();
 
-                    // TODO Fail somehow if directive value is invalid?
+                    // Create a new scope
+                    if v_for.is_some() || v_slot.is_some() {
+                        // New scope will have ID equal to length
+                        scope_to_use = self.template_scopes.len() as u32;
+                        self.template_scopes.push(Scope {
+                            variables: vec![],
+                            parent: current_scope_identifier,
+                        });
+                    }
 
-                    self.extract_directive_variables(directive, scope_to_use);
+                    if let Some(v_for) = v_for {
+                        // We only care of the left hand side variables
+                        let introduced_variables = v_for.iterator;
+
+                        // Get the needed scope and collect variables to it
+                        let mut scope = &mut self.template_scopes[scope_to_use as usize];
+                        Self::collect_variables(introduced_variables, &mut scope);
+                    } else if let Some(VSlotDirective { value: Some(v_slot_value), .. }) = v_slot {
+                        // Get the needed scope and collect variables to it
+                        let mut scope = &mut self.template_scopes[scope_to_use as usize];
+                        Self::collect_variables(&v_slot_value, &mut scope);
+                    }
                 }
 
                 // Update Node's scope
@@ -173,32 +169,6 @@ impl ScopeHelper {
             // For dynamic expression, just update the scope
             Node::DynamicExpression { template_scope, .. } => {
                 *template_scope = current_scope_identifier;
-            }
-
-            _ => {}
-        }
-    }
-
-    /// Extracts the variables introduced by `v-for` or `v-slot`
-    #[inline]
-    fn extract_directive_variables(&mut self, directive: &VDirective, scope_to_use: u32) {
-        match directive {
-            VDirective::For(v_for) => {
-                // We only care of the left hand side variables
-                let introduced_variables = v_for.iterator;
-
-                // Get the needed scope and collect variables to it
-                let mut scope = &mut self.template_scopes[scope_to_use as usize];
-                Self::collect_variables(introduced_variables, &mut scope);
-            }
-
-            VDirective::Slot(VSlotDirective {
-                value: Some(v_slot_value),
-                ..
-            }) => {
-                // Get the needed scope and collect variables to it
-                let mut scope = &mut self.template_scopes[scope_to_use as usize];
-                Self::collect_variables(&v_slot_value, &mut scope);
             }
 
             _ => {}

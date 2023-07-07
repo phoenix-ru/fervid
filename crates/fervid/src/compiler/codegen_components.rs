@@ -1,4 +1,4 @@
-use fervid_core::{ElementNode, HtmlAttribute, Node, StartingTag, VDirective, VModelDirective};
+use fervid_core::{ElementNode, Node, StartingTag, VModelDirective};
 use std::fmt::Write;
 
 use crate::compiler::directives::needs_directive_wrapper;
@@ -228,16 +228,16 @@ impl<'a> CodegenContext<'a> {
                 // `v-slot:default` is default
                 // `v-slot:custom` is not default
                 // `v-slot:[default]` is not default
-                !starting_tag.attributes.iter().any(|attr| match attr {
-                    HtmlAttribute::VDirective(VDirective::Slot(v_slot)) => {
-                        v_slot.is_dynamic_slot || match v_slot.slot_name {
-                            None | Some("default") => false,
-                            Some(_) => true
-                        }
-                    }
+                let Some(ref directives) = starting_tag.directives else { return true; };
+                let Some(ref v_slot) = directives.v_slot else { return true; };
+                if v_slot.is_dynamic_slot {
+                    return false;
+                }
 
-                    _ => false,
-                })
+                match v_slot.slot_name {
+                    None | Some("default") => true,
+                    Some(_) => false,
+                }
             }
 
             // explicit just in case I decide to change node types and forget about this place
@@ -265,36 +265,31 @@ impl<'a> CodegenContext<'a> {
             };
 
             // Find needed attribute and generate the header (slot name + ctx)
-            for attr in starting_tag.attributes.iter() {
-                let HtmlAttribute::VDirective(VDirective::Slot(v_slot_directive)) = attr else {
-                    continue;
-                };
+            let Some(ref directives) = starting_tag.directives else { unreachable!() };
+            let Some(ref v_slot_directive) = directives.v_slot else { unreachable!() };
 
-                let slot_name = v_slot_directive.slot_name.unwrap_or("default");
+            let slot_name = v_slot_directive.slot_name.unwrap_or("default");
 
-                // let HtmlAttribute::VDirective (VDirective { name: "slot", argument, value, is_dynamic_slot, .. }) = attr else {
-                //     continue;
-                // };
+            // let HtmlAttribute::VDirective (VDirective { name: "slot", argument, value, is_dynamic_slot, .. }) = attr else {
+            //     continue;
+            // };
 
-                // For dynamic slots, generate a dynamic slot name `[_ctx.slotName]
-                // todo support Scope (what if the slot name comes from the template scope??)
-                if v_slot_directive.is_dynamic_slot {
-                    buf.push_str("[_ctx.");
-                    buf.push_str(slot_name);
-                    buf.push(']');
-                } else {
-                    CodeHelper::quoted(buf, slot_name);
-                }
-
-                // Context. Generates `: _withCtx(() =>` or `: _withCtx((ctx) =>`
-                buf.push_str(": ");
-                buf.push_str(self.get_and_add_import_str(VueImports::WithCtx));
-                CodeHelper::open_paren(buf);
-                CodeHelper::parens_option(buf, v_slot_directive.value);
-                buf.push_str(" => ");
-
-                break;
+            // For dynamic slots, generate a dynamic slot name `[_ctx.slotName]
+            // todo support Scope (what if the slot name comes from the template scope??)
+            if v_slot_directive.is_dynamic_slot {
+                buf.push_str("[_ctx.");
+                buf.push_str(slot_name);
+                buf.push(']');
+            } else {
+                CodeHelper::quoted(buf, slot_name);
             }
+
+            // Context. Generates `: _withCtx(() =>` or `: _withCtx((ctx) =>`
+            buf.push_str(": ");
+            buf.push_str(self.get_and_add_import_str(VueImports::WithCtx));
+            CodeHelper::open_paren(buf);
+            CodeHelper::parens_option(buf, v_slot_directive.value);
+            buf.push_str(" => ");
 
             // Children
             let had_children_work =
@@ -418,11 +413,8 @@ impl<'a> CodegenContext<'a> {
 
 /// Gets all the v-model's of a tag
 fn get_vmodels<'a>(starting_tag: &'a StartingTag) -> impl Iterator<Item = &'a VModelDirective<'a>> {
-    starting_tag
-        .attributes
-        .iter()
-        .filter_map(|attr| match attr {
-            HtmlAttribute::VDirective(VDirective::Model(v_model)) => Some(v_model),
-            _ => None,
-        })
+    let Some(ref directives) = starting_tag.directives else {
+        return [].iter();
+    };
+    directives.v_model.iter()
 }

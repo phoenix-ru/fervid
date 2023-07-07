@@ -1,4 +1,4 @@
-use fervid_core::ElementNode;
+use fervid_core::{ElementNode, VueDirectives};
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
@@ -11,7 +11,7 @@ use swc_core::{
 };
 
 use crate::{
-    attributes::DirectivesToProcess, context::CodegenContext, control_flow::SlottedIterator,
+    context::CodegenContext, control_flow::SlottedIterator,
     imports::VueImports,
 };
 
@@ -27,7 +27,7 @@ impl CodegenContext {
         let starting_tag = &element_node.starting_tag;
 
         // Generate attributes
-        let (attributes, remaining_directives) = self.generate_element_attributes(element_node);
+        let attributes = self.generate_element_attributes(element_node);
         let attributes_expr = if attributes.len() != 0 {
             Some(Expr::Object(ObjectLit {
                 span,
@@ -180,10 +180,10 @@ impl CodegenContext {
         };
 
         // Process remaining directives
-        if remaining_directives.len() != 0 {
+        if let Some(ref directives) = element_node.starting_tag.directives {
             self.generate_remaining_element_directives(
                 &mut create_element_expr,
-                &remaining_directives,
+                &directives,
             );
         }
 
@@ -193,18 +193,16 @@ impl CodegenContext {
     fn generate_element_attributes<'e>(
         &mut self,
         element_node: &'e ElementNode,
-    ) -> (Vec<PropOrSpread>, DirectivesToProcess<'e>) {
+    ) -> Vec<PropOrSpread> {
         let mut result_props = Vec::new();
-        let mut remaining_directives = DirectivesToProcess::new();
 
         self.generate_attributes(
             &element_node.starting_tag.attributes,
             &mut result_props,
-            &mut remaining_directives,
             element_node.template_scope,
         );
 
-        (result_props, remaining_directives)
+        result_props
     }
 
     fn generate_element_children(
@@ -247,16 +245,16 @@ impl CodegenContext {
     fn generate_remaining_element_directives(
         &mut self,
         create_element_expr: &mut Expr,
-        remaining_directives: &DirectivesToProcess,
+        directives: &VueDirectives
     ) {
         // TODO for v-models in elements `withDirectives` needs a bit more information
-        self.generate_remaining_directives(create_element_expr, remaining_directives)
+        self.generate_remaining_directives(create_element_expr, directives)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{HtmlAttribute, Node, StartingTag, VBindDirective, VDirective, VOnDirective};
+    use fervid_core::{AttributeOrBinding, Node, StartingTag, VBindDirective, VOnDirective};
 
     use super::*;
 
@@ -273,33 +271,34 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "div",
                     attributes: vec![
-                        HtmlAttribute::Regular {
+                        AttributeOrBinding::RegularAttribute {
                             name: "foo",
                             value: "bar",
                         },
-                        HtmlAttribute::VDirective(VDirective::Bind(VBindDirective {
+                        AttributeOrBinding::VBind(VBindDirective {
                             argument: Some("baz"),
                             value: "qux",
                             is_dynamic_attr: false,
                             is_camel: false,
                             is_prop: false,
                             is_attr: false,
-                        })),
-                        HtmlAttribute::VDirective(VDirective::Bind(VBindDirective {
+                        }),
+                        AttributeOrBinding::VBind(VBindDirective {
                             argument: Some("readonly"),
                             value: "true",
                             is_dynamic_attr: false,
                             is_camel: false,
                             is_prop: false,
                             is_attr: false,
-                        })),
-                        HtmlAttribute::VDirective(VDirective::On(VOnDirective {
+                        }),
+                        AttributeOrBinding::VOn(VOnDirective {
                             event: Some("click"),
                             handler: Some("handleClick"),
                             is_dynamic_event: false,
                             modifiers: vec![],
-                        })),
+                        }),
                     ],
+                    directives: None
                 },
                 children: vec![Node::Text("hello from div")],
                 template_scope: 0,
@@ -317,6 +316,7 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "div",
                     attributes: vec![],
+                    directives: None
                 },
                 children: vec![Node::Text("hello from div")],
                 template_scope: 0,
@@ -334,19 +334,20 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "div",
                     attributes: vec![
-                        HtmlAttribute::Regular {
+                        AttributeOrBinding::RegularAttribute {
                             name: "foo",
                             value: "bar",
                         },
-                        HtmlAttribute::VDirective(VDirective::Bind(VBindDirective {
+                        AttributeOrBinding::VBind(VBindDirective {
                             argument: Some("some-baz"),
                             value: "qux",
                             is_dynamic_attr: false,
                             is_camel: false,
                             is_prop: false,
                             is_attr: false,
-                        })),
+                        }),
                     ],
+                    directives: None
                 },
                 children: vec![],
                 template_scope: 0,
@@ -361,19 +362,20 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "div",
                     attributes: vec![
-                        HtmlAttribute::Regular {
+                        AttributeOrBinding::RegularAttribute {
                             name: "foo",
                             value: "bar",
                         },
-                        HtmlAttribute::VDirective(VDirective::Bind(VBindDirective {
+                        AttributeOrBinding::VBind(VBindDirective {
                             argument: Some("some-baz"),
                             value: "qux",
                             is_dynamic_attr: false,
                             is_camel: false,
                             is_prop: false,
                             is_attr: false,
-                        })),
+                        }),
                     ],
+                    directives: None
                 },
                 children: vec![],
                 template_scope: 0,
@@ -391,6 +393,7 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "div",
                     attributes: vec![],
+                    directives: None
                 },
                 children: vec![
                     Node::Text("hello from div "),
@@ -415,6 +418,7 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "div",
                     attributes: vec![],
+                    directives: None
                 },
                 children: vec![
                     Node::Text("hello from div "),
@@ -426,6 +430,7 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "span",
                             attributes: vec![],
+                            directives: None
                         },
                         children: vec![Node::Text("bye!")],
                         template_scope: 0,

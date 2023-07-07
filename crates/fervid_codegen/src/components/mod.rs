@@ -1,6 +1,4 @@
-use fervid_core::{
-    ElementNode, HtmlAttribute, Node, StartingTag, VDirective, VForDirective, VSlotDirective,
-};
+use fervid_core::{ElementNode, Node, StartingTag, VForDirective, VSlotDirective, VueDirectives};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
@@ -13,8 +11,8 @@ use swc_core::{
 };
 
 use crate::{
-    attributes::DirectivesToProcess, context::CodegenContext, control_flow::SlottedIterator,
-    imports::VueImports, utils::str_to_propname,
+    context::CodegenContext, control_flow::SlottedIterator, imports::VueImports,
+    utils::str_to_propname,
 };
 
 /// Describes the `v-slot`, `v-for`, `v-if`,
@@ -39,8 +37,7 @@ impl CodegenContext {
         // todo should it be span of the whole component or only of its starting tag?
         let span = DUMMY_SP;
 
-        let (attributes_obj, remaining_directives) =
-            self.generate_component_attributes(component_node);
+        let attributes_obj = self.generate_component_attributes(component_node);
 
         // TODO Apply all the directives and modifications
         let attributes_expr = if attributes_obj.props.len() != 0 {
@@ -150,43 +147,32 @@ impl CodegenContext {
         };
 
         // Process remaining directives
-        if remaining_directives.len() != 0 {
-            self.generate_remaining_component_directives(
-                &mut create_component_expr,
-                &remaining_directives,
-            );
+        if let Some(ref directives) = component_node.starting_tag.directives {
+            self.generate_remaining_component_directives(&mut create_component_expr, &directives);
         }
 
         create_component_expr
     }
 
-    fn generate_component_attributes<'e>(
-        &mut self,
-        component_node: &'e ElementNode,
-    ) -> (ObjectLit, DirectivesToProcess<'e>) {
+    fn generate_component_attributes<'e>(&mut self, component_node: &'e ElementNode) -> ObjectLit {
         let mut result_props = Vec::new();
-        let mut remaining_directives = DirectivesToProcess::new();
 
         self.generate_attributes(
             &component_node.starting_tag.attributes,
             &mut result_props,
-            &mut remaining_directives,
             component_node.template_scope,
         );
 
         // Process v-models
-        remaining_directives.retain(|directive| match directive {
-            VDirective::Model(v_model) => {
+        if let Some(ref directives) = component_node.starting_tag.directives {
+            for v_model in directives.v_model.iter() {
                 self.generate_v_model_for_component(
                     v_model,
                     &mut result_props,
                     component_node.template_scope,
                 );
-                false
             }
-
-            _ => true,
-        });
+        }
 
         // TODO Take the remaining_directives and call a forwarding function
         // Process directives and hints wrt the createVNode
@@ -196,7 +182,7 @@ impl CodegenContext {
             props: result_props,
         };
 
-        (result, remaining_directives)
+        result
     }
 
     fn generate_component_children(&mut self, component_node: &ElementNode) -> Option<Expr> {
@@ -211,7 +197,6 @@ impl CodegenContext {
         // Prepare the necessities.
         let component_span = DUMMY_SP; // todo
         let mut default_slot_children: Vec<Expr> = Vec::new();
-        let with_ctx_ident = self.get_and_add_import_ident(VueImports::WithCtx);
 
         // `SlottedIterator` will iterate over sequences of default or named slots,
         // and it will stop yielding elements unless [`SlottedIterator::toggle_mode`] is called.
@@ -279,7 +264,7 @@ impl CodegenContext {
                     ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
-                            attributes,
+                            directives: Some(directives),
                             ..
                         },
                         children,
@@ -288,11 +273,8 @@ impl CodegenContext {
                     not_in_a_template_v_slot!();
                 };
 
-                // Find all the supported directives
-                let supported_directives = find_template_supported_directives(attributes);
-
                 // Check `v-slot` existence
-                let Some(v_slot_directive) = supported_directives.v_slot else {
+                let Some(ref v_slot_directive) = directives.v_slot else {
                     not_in_a_template_v_slot!();
                 };
 
@@ -301,7 +283,7 @@ impl CodegenContext {
                 self.generate_named_slot(
                     v_slot_directive,
                     &children,
-                    &supported_directives,
+                    &directives,
                     &mut result_static_slots,
                 );
 
@@ -318,11 +300,11 @@ impl CodegenContext {
                     unreachable!("Only element node can be slotted")
                 };
 
-                let supported_directives =
-                    find_template_supported_directives(&slotted_node.starting_tag.attributes);
-
-                // Check `v-slot` existence
-                let Some(v_slot_directive) = supported_directives.v_slot else {
+                // Get `v-slot`
+                let Some(ref directives) = slotted_node.starting_tag.directives else {
+                    unreachable!("Slotted node should have a v-slot directive");
+                };
+                let Some(ref v_slot_directive) = directives.v_slot else {
                     unreachable!("Slotted node should have a v-slot directive");
                 };
 
@@ -331,7 +313,7 @@ impl CodegenContext {
                 self.generate_named_slot(
                     v_slot_directive,
                     &slotted_node.children,
-                    &supported_directives,
+                    &directives,
                     &mut result_static_slots,
                 );
             }
@@ -369,14 +351,14 @@ impl CodegenContext {
         &mut self,
         v_slot: &VSlotDirective,
         slot_children: &[Node],
-        template_directives: &TemplateDirectives,
+        directives: &VueDirectives,
         out_static_slots: &mut Vec<PropOrSpread>,
     ) {
         // Extra logic is needed if this is more than just `<template v-slot>`
-        let is_complex = template_directives.v_if.is_some()
-            || template_directives.v_else_if.is_some()
-            || template_directives.v_else.is_some()
-            || template_directives.v_for.is_some();
+        let is_complex = directives.v_if.is_some()
+            || directives.v_else_if.is_some()
+            || directives.v_else.is_some()
+            || directives.v_for.is_some();
 
         if is_complex {
             todo!("createSlots is not supported yet");
@@ -448,9 +430,9 @@ impl CodegenContext {
     fn generate_remaining_component_directives(
         &mut self,
         create_component_expr: &mut Expr,
-        remaining_directives: &DirectivesToProcess,
+        directives: &VueDirectives,
     ) {
-        self.generate_remaining_directives(create_component_expr, remaining_directives)
+        self.generate_remaining_directives(create_component_expr, directives)
     }
 
     /// Generates `_slotName_: withCtx((_maybeCtx_) => [slot, children])`
@@ -515,29 +497,9 @@ impl CodegenContext {
     }
 }
 
-/// Finds the `v-slot`, `v-for`, `v-if`, `v-else-if`, `v-else` directives
-fn find_template_supported_directives<'e>(
-    attributes: &'e [HtmlAttribute],
-) -> TemplateDirectives<'e> {
-    let mut result = TemplateDirectives::default();
-
-    for attr in attributes.iter() {
-        match attr {
-            HtmlAttribute::VDirective(VDirective::If(cond)) => result.v_if = Some(&cond),
-            HtmlAttribute::VDirective(VDirective::ElseIf(cond)) => result.v_else_if = Some(&cond),
-            HtmlAttribute::VDirective(VDirective::Else) => result.v_else = Some(()),
-            HtmlAttribute::VDirective(VDirective::For(v_for)) => result.v_for = Some(v_for),
-            HtmlAttribute::VDirective(VDirective::Slot(v_slot)) => result.v_slot = Some(v_slot),
-            _ => {}
-        }
-    }
-
-    result
-}
-
 #[cfg(test)]
 mod tests {
-    use fervid_core::{HtmlAttribute, Node, StartingTag};
+    use fervid_core::{AttributeOrBinding, Node, StartingTag, VBindDirective};
 
     use super::*;
 
@@ -549,6 +511,7 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
+                    directives: None,
                 },
                 children: vec![],
                 template_scope: 0,
@@ -563,6 +526,7 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
+                    directives: None,
                 },
                 children: vec![],
                 template_scope: 0,
@@ -580,19 +544,20 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![
-                        HtmlAttribute::Regular {
+                        AttributeOrBinding::RegularAttribute {
                             name: "foo",
                             value: "bar",
                         },
-                        HtmlAttribute::VDirective(VDirective::Bind(fervid_core::VBindDirective {
+                        AttributeOrBinding::VBind(VBindDirective {
                             argument: Some("some-baz"),
                             value: "qux",
                             is_dynamic_attr: false,
                             is_camel: false,
                             is_prop: false,
                             is_attr: false,
-                        })),
+                        }),
                     ],
+                    directives: None,
                 },
                 children: vec![],
                 template_scope: 0,
@@ -610,6 +575,7 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
+                    directives: None,
                 },
                 children: vec![
                     Node::Text("hello from component"),
@@ -617,6 +583,7 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "div",
                             attributes: vec![],
+                            directives: None,
                         },
                         children: vec![Node::Text("hello from div")],
                         template_scope: 0,
@@ -636,17 +603,20 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
+                    directives: None,
                 },
                 children: vec![Node::Element(ElementNode {
                     starting_tag: StartingTag {
                         tag_name: "template",
-                        attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
-                            VSlotDirective {
+                        attributes: vec![],
+                        directives: Some(Box::new(VueDirectives {
+                            v_slot: Some(VSlotDirective {
                                 slot_name: Some("default"),
                                 value: None,
                                 is_dynamic_slot: false,
-                            },
-                        ))],
+                            }),
+                            ..Default::default()
+                        })),
                     },
                     children: vec![
                         Node::Text("hello from component"),
@@ -654,6 +624,7 @@ mod tests {
                             starting_tag: StartingTag {
                                 tag_name: "div",
                                 attributes: vec![],
+                                directives: None,
                             },
                             children: vec![Node::Text("hello from div")],
                             template_scope: 0,
@@ -678,17 +649,20 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
+                    directives: None,
                 },
                 children: vec![Node::Element(ElementNode {
                     starting_tag: StartingTag {
                         tag_name: "template",
-                        attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
-                            VSlotDirective {
+                        attributes: vec![],
+                        directives: Some(Box::new(VueDirectives {
+                            v_slot: Some(VSlotDirective {
                                 slot_name: Some("foo-bar"),
                                 value: None,
                                 is_dynamic_slot: false,
-                            },
-                        ))],
+                            }),
+                            ..Default::default()
+                        })),
                     },
                     children: vec![
                         Node::Text("hello from component"),
@@ -696,6 +670,7 @@ mod tests {
                             starting_tag: StartingTag {
                                 tag_name: "div",
                                 attributes: vec![],
+                                directives: None,
                             },
                             children: vec![Node::Text("hello from div")],
                             template_scope: 0,
@@ -721,18 +696,21 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
+                    directives: None,
                 },
                 children: vec![
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
-                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
-                                VSlotDirective {
+                            attributes: vec![],
+                            directives: Some(Box::new(VueDirectives {
+                                v_slot: Some(VSlotDirective {
                                     slot_name: Some("foo-bar"),
                                     value: None,
                                     is_dynamic_slot: false,
-                                },
-                            ))],
+                                }),
+                                ..Default::default()
+                            })),
                         },
                         children: vec![
                             Node::Text("hello from slot "),
@@ -746,13 +724,15 @@ mod tests {
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
-                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
-                                VSlotDirective {
+                            attributes: vec![],
+                            directives: Some(Box::new(VueDirectives {
+                                v_slot: Some(VSlotDirective {
                                     slot_name: Some("baz"),
                                     value: None,
                                     is_dynamic_slot: false,
-                                },
-                            ))],
+                                }),
+                                ..Default::default()
+                            })),
                         },
                         children: vec![
                             Node::Text("hello from slot "),
@@ -760,6 +740,7 @@ mod tests {
                                 starting_tag: StartingTag {
                                     tag_name: "b",
                                     attributes: vec![],
+                                    directives: None,
                                 },
                                 children: vec![Node::Text("two")],
                                 template_scope: 0,
@@ -786,6 +767,7 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
+                    directives: None,
                 },
                 children: vec![
                     Node::Text("hello from component"),
@@ -793,6 +775,7 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "div",
                             attributes: vec![],
+                            directives: None,
                         },
                         children: vec![Node::Text("hello from div")],
                         template_scope: 0,
@@ -800,13 +783,15 @@ mod tests {
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
-                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
-                                VSlotDirective {
+                            attributes: vec![],
+                            directives: Some(Box::new(VueDirectives {
+                                v_slot: Some(VSlotDirective {
                                     slot_name: Some("foo-bar"),
                                     value: None,
                                     is_dynamic_slot: false,
-                                },
-                            ))],
+                                }),
+                                ..Default::default()
+                            })),
                         },
                         children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
@@ -827,18 +812,21 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
+                    directives: None,
                 },
                 children: vec![
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
-                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
-                                VSlotDirective {
+                            attributes: vec![],
+                            directives: Some(Box::new(VueDirectives {
+                                v_slot: Some(VSlotDirective {
                                     slot_name: None,
                                     value: None,
                                     is_dynamic_slot: false,
-                                },
-                            ))],
+                                }),
+                                ..Default::default()
+                            })),
                         },
                         children: vec![
                             Node::Text("hello from default"),
@@ -846,6 +834,7 @@ mod tests {
                                 starting_tag: StartingTag {
                                     tag_name: "div",
                                     attributes: vec![],
+                                    directives: None,
                                 },
                                 children: vec![Node::Text("hello from div")],
                                 template_scope: 0,
@@ -856,13 +845,15 @@ mod tests {
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
-                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
-                                VSlotDirective {
+                            attributes: vec![],
+                            directives: Some(Box::new(VueDirectives {
+                                v_slot: Some(VSlotDirective {
                                     slot_name: Some("foo-bar"),
                                     value: None,
                                     is_dynamic_slot: false,
-                                },
-                            ))],
+                                }),
+                                ..Default::default()
+                            })),
                         },
                         children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
@@ -883,18 +874,21 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
+                    directives: None,
                 },
                 children: vec![
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
-                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
-                                VSlotDirective {
+                            attributes: vec![],
+                            directives: Some(Box::new(VueDirectives {
+                                v_slot: Some(VSlotDirective {
                                     slot_name: Some("foo-bar"),
                                     value: None,
                                     is_dynamic_slot: false,
-                                },
-                            ))],
+                                }),
+                                ..Default::default()
+                            })),
                         },
                         children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
@@ -904,6 +898,7 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "div",
                             attributes: vec![],
+                            directives: None,
                         },
                         children: vec![Node::Text("hello from div")],
                         template_scope: 0,
@@ -928,18 +923,21 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component",
                     attributes: vec![],
+                    directives: None,
                 },
                 children: vec![
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
-                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
-                                VSlotDirective {
+                            attributes: vec![],
+                            directives: Some(Box::new(VueDirectives {
+                                v_slot: Some(VSlotDirective {
                                     slot_name: Some("foo-bar"),
                                     value: None,
                                     is_dynamic_slot: false,
-                                },
-                            ))],
+                                }),
+                                ..Default::default()
+                            })),
                         },
                         children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
@@ -947,13 +945,15 @@ mod tests {
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
-                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
-                                VSlotDirective {
+                            attributes: vec![],
+                            directives: Some(Box::new(VueDirectives {
+                                v_slot: Some(VSlotDirective {
                                     slot_name: None,
                                     value: None,
                                     is_dynamic_slot: false,
-                                },
-                            ))],
+                                }),
+                                ..Default::default()
+                            })),
                         },
                         children: vec![
                             Node::Text("hello from default"),
@@ -961,6 +961,7 @@ mod tests {
                                 starting_tag: StartingTag {
                                     tag_name: "div",
                                     attributes: vec![],
+                                    directives: None,
                                 },
                                 children: vec![Node::Text("hello from div")],
                                 template_scope: 0,
@@ -971,13 +972,15 @@ mod tests {
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "template",
-                            attributes: vec![HtmlAttribute::VDirective(VDirective::Slot(
-                                VSlotDirective {
+                            attributes: vec![],
+                            directives: Some(Box::new(VueDirectives {
+                                v_slot: Some(VSlotDirective {
                                     slot_name: Some("baz"),
                                     value: None,
                                     is_dynamic_slot: false,
-                                },
-                            ))],
+                                }),
+                                ..Default::default()
+                            })),
                         },
                         children: vec![Node::Text("hello from baz")],
                         template_scope: 0,

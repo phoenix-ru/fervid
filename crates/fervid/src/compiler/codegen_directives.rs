@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use fervid_core::{HtmlAttribute, VDirective, StartingTag, VCustomDirective, VModelDirective};
+use fervid_core::{AttributeOrBinding, StartingTag};
 
 use super::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports, transform::swc::transform_scoped};
 
@@ -25,32 +25,28 @@ impl<'a> CodegenContext<'a> {
     // Do a more complex multi-step algorithm (e.g. `v-once` must be the last)
     // https://play.vuejs.org/#eNqdUktugzAUvMqrNyRSUtRtlEStuukNuihdEDDBqv2MwKapEHfvGEgU2i6iSgj7/WbGHnfiqaruWy/FRmybrFaVo0Y6X5FO+bhLhGsSsU9YmcrWjjqqZUE9FbU1FGEsSjjhzHLjyDRH2oX6InqRWlt6tbXO76Jlwtt4hAYQgolmTjBifJapk62sARSVCuDyNPDmski9Bn/CRHnq0sVy3BMIna/5HFGQ0WxolACAkOrDgh++uRInTaXBiIhoWz7su26Yp74nbC9q+n4bozp0Ka68o3ZtbC419KN/OABKuTfma52haBkVnCgRCA6Kc4QH6zkPmcdMq+wDmWkOk2ch6G60dZvpvFOZqFRTYzyXHE+UE79qAaCKcKu1lwO5kcYifns/R4HDcjYuQT9So04nTw4JcAmKgXhFJlbi2ZqfD2XuINHlkUC+YhkmLEt2vx7MX65yaiR8KwffVqHrBqcx8E+Pb/L0+gb6b717Dtg=
 
-    for attr in &starting_tag.attributes {
-      let HtmlAttribute::VDirective (directive) = attr else { continue };
+    let Some(ref directives) = starting_tag.directives else {
+      return;
+    };
 
-      // Try to fit the old VDirective interface
-      let empty_vec = vec![];
-      let (name, argument, value, modifiers) = match directive {
-        VDirective::Model(VModelDirective { argument, value, modifiers })
-        if !is_component => (
-          "model",
-          *argument,
-          Some(*value),
-          modifiers
-        ),
+    // Polyfill to the old generation method
+    let to_generate_len = if !is_component { directives.v_model.len() } else { 0 } + directives.v_show.map_or(0, |_| 1) + directives.custom.len();
+    let mut to_generate = Vec::with_capacity(to_generate_len);
 
-        VDirective::Show(condition) => ("show", None, Some(*condition), &empty_vec),
+    if !is_component {
+      for v_model in directives.v_model.iter() {
+        to_generate.push(("model", v_model.argument, Some(v_model.value), &v_model.modifiers));  
+      }
+    }
+    let empty_vec = vec![];
+    if let Some(v_show) = directives.v_show {
+      to_generate.push(("show", None, Some(v_show), &empty_vec));
+    }
+    for custom in directives.custom.iter() {
+      to_generate.push((custom.name, custom.argument, custom.value, &custom.modifiers));
+    }
 
-        VDirective::Custom(VCustomDirective { name, argument, modifiers, value }) => (
-          *name,
-          *argument,
-          *value,
-          modifiers
-        ),
-
-        _ => continue
-      };
-
+    for (name, argument, value, modifiers) in to_generate {
       self.code_helper.indent();
       self.code_helper.newline(buf);
 
@@ -192,7 +188,7 @@ impl<'a> CodegenContext<'a> {
           .iter()
           .find_map(|input_attr| {
             match input_attr {
-              HtmlAttribute::Regular { name: "type", value } => Some(*value),
+              AttributeOrBinding::RegularAttribute { name: "type", value } => Some(*value),
               _ => None
             }
           })

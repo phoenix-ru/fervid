@@ -1,4 +1,4 @@
-use fervid_core::{ElementNode, VDirective, HtmlAttribute, Node};
+use fervid_core::{ElementNode, Node};
 
 use super::codegen::CodegenContext;
 use super::directives::conditional::filter_nodes_with_conditional_directives;
@@ -38,13 +38,14 @@ impl <'a> CodegenContext <'a> {
     // There is a special case here: `<template>` with `v-if`/`v-else-if`/`v-else`/`v-for`
     let should_generate_fragment_instead = starting_tag.tag_name == "template" && {
       had_v_for ||
-      starting_tag
-        .attributes
-        .iter()
-        .any(|attr| match attr {
-          HtmlAttribute::VDirective(VDirective::If(_) | VDirective::ElseIf(_) | VDirective::Else) => true,
-          _ => false
-        })
+      match starting_tag.directives {
+        Some(ref directives) => {
+          directives.v_if.is_some()
+          || directives.v_else_if.is_some()
+          || directives.v_else.is_some()
+        },
+        None => false
+      }
     };
 
     // Tag name.
