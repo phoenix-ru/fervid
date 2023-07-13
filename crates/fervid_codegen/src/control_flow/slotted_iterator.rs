@@ -138,6 +138,8 @@ fn is_from_default_slot(node: &Node) -> bool {
 mod tests {
     use fervid_core::{StartingTag, VBindDirective, VOnDirective, VSlotDirective, VueDirectives, AttributeOrBinding};
 
+    use crate::test_utils::js;
+
     use super::*;
 
     #[test]
@@ -251,7 +253,7 @@ mod tests {
                     },
                     AttributeOrBinding::VBind(fervid_core::VBindDirective {
                         argument: Some("disabled"),
-                        value: "true",
+                        value: js("true"),
                         is_dynamic_attr: false,
                         is_camel: false,
                         is_prop: false,
@@ -273,7 +275,7 @@ mod tests {
                 attributes: vec![
                     AttributeOrBinding::VBind(VBindDirective {
                         argument: Some("disabled"),
-                        value: "true",
+                        value: js("true"),
                         is_dynamic_attr: false,
                         is_camel: false,
                         is_prop: false,
@@ -281,7 +283,7 @@ mod tests {
                     }),
                     AttributeOrBinding::VOn(VOnDirective {
                         event: Some("event"),
-                        handler: Some("baz"),
+                        handler: Some(js("baz")),
                         is_dynamic_event: false,
                         modifiers: vec![],
                     }),

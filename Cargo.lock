@@ -549,6 +549,9 @@ dependencies = [
 [[package]]
 name = "fervid_core"
 version = "0.0.1"
+dependencies = [
+ "swc_core",
+]
 
 [[package]]
 name = "fervid_css"

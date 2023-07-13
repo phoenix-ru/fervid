@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use fervid_core::{AttributeOrBinding, StartingTag};
 
-use super::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports, transform::swc::transform_scoped};
+use super::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports};
 
 impl<'a> CodegenContext<'a> {
   /// Generates directives array for `withDirectives` function call
@@ -86,11 +86,11 @@ impl<'a> CodegenContext<'a> {
         }
 
         // Transform the directive value
-        let transformed = transform_scoped(directive_value, &self.scope_helper, scope_to_use);
-        buf.push_str(match transformed {
-          Some(ref v) => &v,
-          None => "void 0"
-        });
+        // let transformed = transform_scoped(directive_value, &self.scope_helper, scope_to_use);
+        // buf.push_str(match transformed {
+        //   Some(ref v) => &v,
+        //   None => "void 0"
+        // });
       } else if has_arg_or_modifiers {
         self.code_helper.comma_newline(buf);
         buf.push_str("void 0")

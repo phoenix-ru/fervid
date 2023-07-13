@@ -13,7 +13,7 @@ use nom::{
     Err, IResult,
 };
 
-use crate::parser::html_utils::html_name;
+use crate::parser::{html_utils::html_name, ecma::parse_js};
 
 pub fn parse_attributes(
     input: &str,
@@ -251,9 +251,14 @@ fn parse_directive<'i>(
 
             let value = expect_value!();
 
+            // TODO span
+            let Ok(parsed_expr) = parse_js(value, 0, 0) else {
+                fail!();
+            };
+
             attributes.push(AttributeOrBinding::VBind(VBindDirective {
                 argument,
-                value,
+                value: parsed_expr,
                 is_dynamic_attr: is_dynamic,
                 is_camel,
                 is_prop,
@@ -262,7 +267,14 @@ fn parse_directive<'i>(
         }
         "on" => attributes.push(AttributeOrBinding::VOn(VOnDirective {
             event: argument,
-            handler: value,
+            handler: value.and_then(|value| {
+                // TODO span
+                let parse_result = parse_js(value, 0, 0);
+                match parse_result {
+                    Ok(parsed_expr) => Some(parsed_expr),
+                    Err(_) => None,
+                }
+            }),
             is_dynamic_event: is_dynamic,
             modifiers,
         })),

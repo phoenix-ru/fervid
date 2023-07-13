@@ -13,7 +13,7 @@ use swc_core::{
 use crate::{
     context::CodegenContext,
     transform::transform_scoped,
-    utils::{str_to_propname, to_camelcase},
+    utils::{str_to_propname, to_camelcase, parse_js},
 };
 
 impl CodegenContext {
@@ -97,11 +97,17 @@ impl CodegenContext {
         &self,
         value: &str,
         scope_to_use: u32,
-        span: Span,
+        _span: Span,
     ) -> (Box<Expr>, bool) {
+        // Polyfill
+        let Ok(mut expr) = parse_js(value) else {
+            return (Box::new(Expr::Invalid(Invalid { span: DUMMY_SP })), false);
+        };
+
         // TODO Implement the correct transformation based on BindingTypes
-        transform_scoped(value, &self.scope_helper, scope_to_use)
-            .unwrap_or_else(|| (Box::new(Expr::Invalid(Invalid { span })), false))
+        let has_js = transform_scoped(&mut expr, &self.scope_helper, scope_to_use);
+
+        (expr, has_js)
     }
 
     /// Generates the update code for the `v-model`.
@@ -110,7 +116,7 @@ impl CodegenContext {
         // TODO Actual implementation
 
         // todo maybe re-use the previously generated expression from generate_v_model_for_component?
-        let (transformed_v_model, was_transformed) =
+        let (transformed_v_model, _was_transformed) =
             self.transform_v_model_value(value, scope_to_use, span);
 
         // $event => ((_ctx.modelValue) = $event)

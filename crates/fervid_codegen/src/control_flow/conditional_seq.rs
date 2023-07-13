@@ -4,7 +4,7 @@ use swc_core::{
     ecma::ast::{CondExpr, Expr, Invalid},
 };
 
-use crate::{context::CodegenContext, transform::transform_scoped};
+use crate::{context::CodegenContext, transform::transform_scoped, utils::parse_js};
 
 impl CodegenContext {
     pub fn generate_conditional_seq(&mut self, conditional_seq: &ConditionalNodeSequence) -> Expr {
@@ -13,9 +13,11 @@ impl CodegenContext {
         let mut conditional_exprs = Vec::new();
 
         // First, push the `if` node
-        let Some((if_expr, _has_js)) = transform_scoped(if_cond, &self.scope_helper, if_element_node.template_scope) else {
+        // Polyfill
+        let Ok(mut if_expr) = parse_js(if_cond) else {
             return Expr::Invalid(Invalid { span: DUMMY_SP });
         };
+        let _has_js = transform_scoped(&mut if_expr, &self.scope_helper, if_element_node.template_scope);
         conditional_exprs.push(if_expr);
         conditional_exprs.push(Box::new(
             self.generate_element_or_component(if_element_node, false).0,
@@ -23,10 +25,12 @@ impl CodegenContext {
 
         // Then, push all the `else-if` nodes
         for (else_if_cond, else_if_node) in conditional_seq.else_if_nodes.iter() {
-            let Some((if_expr, _has_js)) = transform_scoped(else_if_cond, &self.scope_helper, else_if_node.template_scope) else {
+            // Polyfill
+            let Ok(mut else_if_expr) = parse_js(else_if_cond) else {
                 continue;
             };
-            conditional_exprs.push(if_expr);
+            let _has_js = transform_scoped(&mut else_if_expr, &self.scope_helper, else_if_node.template_scope);
+            conditional_exprs.push(else_if_expr);
             conditional_exprs.push(Box::new(
                 self.generate_element_or_component(else_if_node, false).0,
             ));

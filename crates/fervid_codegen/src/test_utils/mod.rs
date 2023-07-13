@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
-use swc_core::common::SourceMap;
+use swc_core::{common::SourceMap, ecma::ast::Expr};
 use swc_ecma_codegen::{Node, text_writer::JsWriter, Emitter};
+
+use crate::utils::parse_js;
 
 pub fn to_str(swc_node: impl Node) -> String {
     // Emitting the result requires some setup with SWC
@@ -24,4 +26,8 @@ pub fn to_str(swc_node: impl Node) -> String {
     let _ = swc_node.emit_with(&mut emitter);
 
     String::from_utf8(buff).unwrap()
+}
+
+pub fn js(raw: &str) -> Box<Expr> {
+    parse_js(raw).unwrap()
 }

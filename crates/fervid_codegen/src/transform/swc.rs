@@ -1,42 +1,21 @@
-use swc_core::{
-    common::BytePos,
-    ecma::{
-        ast::{Expr, Ident, KeyValueProp, MemberExpr, MemberProp, Prop, PropName, PropOrSpread},
-        visit::{VisitMut, VisitMutWith},
-    },
+use swc_core::ecma::{
+    ast::{Expr, Ident, KeyValueProp, MemberExpr, MemberProp, Prop, PropName, PropOrSpread},
+    visit::{VisitMut, VisitMutWith},
 };
-use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
 
 use crate::context::{get_prefix, ScopeHelper};
 
-pub fn transform_scoped(
-    expr: &str,
-    scope_helper: &ScopeHelper,
-    scope_to_use: u32,
-) -> Option<(Box<Expr>, bool)> {
-    let lexer = Lexer::new(
-        // We want to parse ecmascript
-        Syntax::Es(Default::default()),
-        // EsVersion defaults to es5
-        Default::default(),
-        StringInput::new(expr, BytePos(0), BytePos(1000)),
-        None,
-    );
-
-    let mut parser = Parser::new_from(lexer);
-
-    let Ok(mut parsed) = parser.parse_expr() else { return None };
-
+pub fn transform_scoped(expr: &mut Expr, scope_helper: &ScopeHelper, scope_to_use: u32) -> bool {
     // Create and invoke the visitor
     let mut visitor = TransformVisitor {
         current_scope: scope_to_use,
         scope_helper,
         has_js_bindings: false,
-        is_inline: scope_helper.is_inline
+        is_inline: scope_helper.is_inline,
     };
-    parsed.visit_mut_with(&mut visitor);
+    expr.visit_mut_with(&mut visitor);
 
-    Some((parsed, visitor.has_js_bindings))
+    visitor.has_js_bindings
 }
 
 struct TransformVisitor<'s> {

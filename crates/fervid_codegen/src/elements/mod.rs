@@ -257,6 +257,7 @@ mod tests {
     use fervid_core::{AttributeOrBinding, Node, StartingTag, VBindDirective, VOnDirective};
 
     use super::*;
+    use crate::test_utils::js;
 
     #[test]
     fn it_generates_basic_usage() {
@@ -277,7 +278,7 @@ mod tests {
                         },
                         AttributeOrBinding::VBind(VBindDirective {
                             argument: Some("baz"),
-                            value: "qux",
+                            value: js("qux"),
                             is_dynamic_attr: false,
                             is_camel: false,
                             is_prop: false,
@@ -285,7 +286,7 @@ mod tests {
                         }),
                         AttributeOrBinding::VBind(VBindDirective {
                             argument: Some("readonly"),
-                            value: "true",
+                            value: js("true"),
                             is_dynamic_attr: false,
                             is_camel: false,
                             is_prop: false,
@@ -293,7 +294,7 @@ mod tests {
                         }),
                         AttributeOrBinding::VOn(VOnDirective {
                             event: Some("click"),
-                            handler: Some("handleClick"),
+                            handler: Some(js("handleClick")),
                             is_dynamic_event: false,
                             modifiers: vec![],
                         }),
@@ -340,7 +341,7 @@ mod tests {
                         },
                         AttributeOrBinding::VBind(VBindDirective {
                             argument: Some("some-baz"),
-                            value: "qux",
+                            value: js("qux"),
                             is_dynamic_attr: false,
                             is_camel: false,
                             is_prop: false,
@@ -368,7 +369,7 @@ mod tests {
                         },
                         AttributeOrBinding::VBind(VBindDirective {
                             argument: Some("some-baz"),
-                            value: "qux",
+                            value: js("qux"),
                             is_dynamic_attr: false,
                             is_camel: false,
                             is_prop: false,

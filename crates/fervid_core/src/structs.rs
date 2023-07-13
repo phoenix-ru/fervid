@@ -1,3 +1,5 @@
+use swc_core::ecma::ast::Expr;
+
 /// A Node represents a part of the Abstract Syntax Tree (AST).
 #[derive(Debug, Clone)]
 pub enum Node<'a> {
@@ -24,7 +26,7 @@ pub enum Node<'a> {
 
     /// `ConditionalSeq` is a representation of `v-if`/`v-else-if`/`v-else` node sequence.
     /// Its children are the other `Node`s, this node is just a wrapper.
-    ConditionalSeq(ConditionalNodeSequence<'a>)
+    ConditionalSeq(ConditionalNodeSequence<'a>),
 }
 
 /// Element node is a classic HTML node with some added functionality:
@@ -49,7 +51,7 @@ pub struct ElementNode<'a> {
 pub struct ConditionalNodeSequence<'a> {
     pub if_node: (&'a str, Box<ElementNode<'a>>),
     pub else_if_nodes: Vec<(&'a str, ElementNode<'a>)>,
-    pub else_node: Option<Box<ElementNode<'a>>>
+    pub else_node: Option<Box<ElementNode<'a>>>,
 }
 
 /// Starting tag represents [`ElementNode`]'s tag name and attributes
@@ -57,7 +59,7 @@ pub struct ConditionalNodeSequence<'a> {
 pub struct StartingTag<'a> {
     pub tag_name: &'a str,
     pub attributes: Vec<AttributeOrBinding<'a>>,
-    pub directives: Option<Box<VueDirectives<'a>>>
+    pub directives: Option<Box<VueDirectives<'a>>>,
 }
 
 /// Denotes the basic attributes or bindings of a DOM element
@@ -89,7 +91,7 @@ pub struct VueDirectives<'d> {
     pub v_pre: Option<()>,
     pub v_show: Option<&'d str>,
     pub v_slot: Option<VSlotDirective<'d>>,
-    pub v_text: Option<&'d str>
+    pub v_text: Option<&'d str>,
 }
 
 #[derive(Clone, Debug)]
@@ -100,22 +102,23 @@ pub struct VForDirective<'a> {
 
 #[derive(Clone, Debug)]
 pub struct VOnDirective<'a> {
-    /// What event to listen to. If None, that is equal to `v-on="smth"`. Also, see `is_dynamic_event`.
+    /// What event to listen to. If None, that is equal to `v-on="..."`. Also, see `is_dynamic_event`.
     pub event: Option<&'a str>,
     /// What is the handler to use. If None, `modifiers` must not be empty.
-    pub handler: Option<&'a str>,
+    pub handler: Option<Box<Expr>>,
     /// If the event itself is dynamic, e.g. `v-on:[event]` or `@[event]`
     pub is_dynamic_event: bool,
     /// A list of modifiers after the dot, e.g. `stop` and `prevent` in `@click.stop.prevent="handleClick"`
     pub modifiers: Vec<&'a str>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct VBindDirective<'a> {
     /// Attribute name to bind. If None, it is equivalent to `v-bind="smth"`. Also, see `is_dynamic_attr`.
     pub argument: Option<&'a str>,
     /// Attribute value, e.g. `smth` in `:attr="smth"`
-    pub value: &'a str,
+    // pub value: &'a str,
+    pub value: Box<Expr>,
     /// `:[dynamic]`
     pub is_dynamic_attr: bool,
     /// .camel modifier
@@ -180,5 +183,5 @@ pub enum BindingTypes {
     /// a variable in the global Javascript context, e.g. `Array` or `undefined`
     JsGlobal,
     /// a non-resolved variable, presumably from the global Vue context
-    Unresolved
+    Unresolved,
 }

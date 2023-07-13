@@ -1,38 +1,21 @@
 use std::sync::Arc;
 
-use swc_core::{ecma::{visit::{VisitMut, VisitMutWith}, ast::{PropOrSpread, Prop, KeyValueProp, PropName, Expr}}, common::{BytePos, SourceMap}};
+use swc_core::{ecma::{visit::{VisitMut, VisitMutWith}, ast::{PropOrSpread, Prop, KeyValueProp, PropName, Expr}}, common::SourceMap};
 use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
-use swc_ecma_parser::{lexer::Lexer, Syntax, StringInput, Parser};
 
 use crate::analyzer::scope::ScopeHelper;
 
-pub fn transform_scoped(expr: &str, scope_helper: &ScopeHelper, scope_to_use: u32) -> Option<String> {
-    let lexer = Lexer::new(
-        // We want to parse ecmascript
-        Syntax::Es(Default::default()),
-        // EsVersion defaults to es5
-        Default::default(),
-        StringInput::new(expr, BytePos(0), BytePos(1000)),
-        None
-    );
-
-    let mut parser = Parser::new_from(lexer);
-
-    // TODO The use of `parse_expr` vs `parse_stmt` matters
-    // For v-for it may be best to use `parse_stmt`, but for `v-slot` you need to use `parse_expr`
-
-    let Ok(mut parsed) = parser.parse_expr() else { return None };
-
+pub fn transform_scoped(expr: &mut Expr, scope_helper: &ScopeHelper, scope_to_use: u32) -> Option<String> {
     // Create and invoke the visitor
     let mut visitor = TransformVisitor {
         current_scope: scope_to_use,
         scope_helper
     };
-    parsed.visit_mut_with(&mut visitor);
+    expr.visit_mut_with(&mut visitor);
 
     // Emitting the result requires some setup with SWC
     let cm: Arc<SourceMap> = Default::default();
-    let mut buff: Vec<u8> = Vec::with_capacity(expr.len() * 2);
+    let mut buff: Vec<u8> = Vec::new();
     let writer: JsWriter<&mut Vec<u8>> = JsWriter::new(cm.clone(), "\n", &mut buff, None);
 
     let mut emitter = Emitter {
@@ -47,7 +30,7 @@ pub fn transform_scoped(expr: &str, scope_helper: &ScopeHelper, scope_to_use: u3
         cm
     };
 
-    let _ = parsed.emit_with(&mut emitter);
+    let _ = expr.emit_with(&mut emitter);
 
     Some(String::from_utf8(buff).unwrap())
 }

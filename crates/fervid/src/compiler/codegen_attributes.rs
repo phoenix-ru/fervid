@@ -5,7 +5,7 @@ use crate::analyzer::scope::ScopeHelper;
 use super::codegen::CodegenContext;
 use super::helper::CodeHelper;
 use super::imports::VueImports;
-use super::transform::swc::transform_scoped;
+// use super::transform::swc::transform_scoped;
 
 lazy_static! {
   static ref CSS_RE: Regex = Regex::new(r"(?U)([a-zA-Z_-][a-zA-Z_0-9-]*):\s*(.+)(?:;|$)").unwrap();
@@ -58,7 +58,7 @@ impl CodegenContext <'_> {
 
         // :class
         AttributeOrBinding::VBind(VBindDirective { argument: Some("class"), value, .. }) => {
-          class_bind = Some(*value);
+          class_bind = Some(value);
         },
 
         // style
@@ -68,7 +68,7 @@ impl CodegenContext <'_> {
 
         // :style
         AttributeOrBinding::VBind(VBindDirective { argument: Some("style"), value, .. }) => {
-          style_bind = Some(*value);
+          style_bind = Some(value);
         },
 
         // Any regular attribute
@@ -138,14 +138,14 @@ impl CodegenContext <'_> {
         // First, include the content of a regular class
         CodeHelper::quoted(buf, regular_value);
 
-        transform_scoped(
-          bound_value,
-          &self.scope_helper,
-          template_scope_id
-        ).map(|transformed| {
-          CodeHelper::comma(buf);
-          buf.push_str(&transformed);
-        });
+        // transform_scoped(
+        //   bound_value,
+        //   &self.scope_helper,
+        //   template_scope_id
+        // ).map(|transformed| {
+        //   CodeHelper::comma(buf);
+        //   buf.push_str(&transformed);
+        // });
 
         CodeHelper::close_sq_bracket(buf);
         CodeHelper::close_paren(buf);
@@ -161,13 +161,13 @@ impl CodegenContext <'_> {
         buf.push_str(self.get_and_add_import_str(VueImports::NormalizeClass));
         CodeHelper::open_paren(buf);
 
-        transform_scoped(
-          bound_value,
-          &self.scope_helper,
-        template_scope_id
-        ).map(|transformed| {
-          buf.push_str(&transformed);
-        });
+        // transform_scoped(
+        //   bound_value,
+        //   &self.scope_helper,
+        // template_scope_id
+        // ).map(|transformed| {
+        //   buf.push_str(&transformed);
+        // });
 
         CodeHelper::close_paren(buf);
       },
@@ -196,14 +196,14 @@ impl CodegenContext <'_> {
         generate_regular_style(buf, regular_value);
 
         // Then bound
-        transform_scoped(
-          bound_value,
-          &self.scope_helper,
-          template_scope_id
-        ).map(|it| {
-          CodeHelper::comma(buf);
-          buf.push_str(&it)
-        });
+        // transform_scoped(
+        //   bound_value,
+        //   &self.scope_helper,
+        //   template_scope_id
+        // ).map(|it| {
+        //   CodeHelper::comma(buf);
+        //   buf.push_str(&it)
+        // });
 
         CodeHelper::close_paren(buf);
         CodeHelper::close_sq_bracket(buf);
@@ -219,13 +219,13 @@ impl CodegenContext <'_> {
         buf.push_str(self.get_and_add_import_str(VueImports::NormalizeStyle));
         CodeHelper::open_paren(buf);
 
-        transform_scoped(
-          bound_value,
-          &self.scope_helper,
-          template_scope_id
-        ).map(|it| {
-          buf.push_str(&it)
-        });
+        // transform_scoped(
+        //   bound_value,
+        //   &self.scope_helper,
+        //   template_scope_id
+        // ).map(|it| {
+        //   buf.push_str(&it)
+        // });
 
         CodeHelper::close_paren(buf);
       },
@@ -281,7 +281,7 @@ fn generate_v_bind_attr(
   // current js SFC compiler just discards the second appearance of the same attribute name (except for class)
 
   // Do not generate empty values?
-  let value_expression = v_bind.value;
+  let value_expression = &v_bind.value;
 
   // IN:
   // v-on="ons" v-bind="bounds" @click=""
@@ -307,11 +307,11 @@ fn generate_v_bind_attr(
 
   // Transformed attr_expression
   // TODO Handle SWC failure
-  let transform_result = transform_scoped(value_expression, scope_helper, scope_to_use);
-  match transform_result {
-    Some(transformed) => buf.push_str(&transformed),
-    None => buf.push_str(r#""""#)
-  }
+  // let transform_result = transform_scoped(value_expression, scope_helper, scope_to_use);
+  // match transform_result {
+  //   Some(transformed) => buf.push_str(&transformed),
+  //   None => buf.push_str(r#""""#)
+  // }
 }
 
 /// Generates the code for a v-on listener
@@ -362,14 +362,14 @@ fn generate_v_on_attr(
 
   // Try compiling the expression
   // TODO Handle SWC failure
-  let transformed_expr = v_on.handler
-    .and_then(|expr| transform_scoped(expr, scope_helper, scope_to_use));
+  // let transformed_expr = v_on.handler
+  //   .and_then(|expr| transform_scoped(expr, scope_helper, scope_to_use));
 
-  // Value may be absent, e.g. `@click.stop`
-  buf.push_str(match transformed_expr {
-    Some(ref v) => v,
-    None => "() => {}" // todo use _cache
-  });
+  // // Value may be absent, e.g. `@click.stop`
+  // buf.push_str(match transformed_expr {
+  //   Some(ref v) => v,
+  //   None => "() => {}" // todo use _cache
+  // });
 
   // Modifiers present: add them in a Js array of strings
   if v_on.modifiers.len() > 0 {

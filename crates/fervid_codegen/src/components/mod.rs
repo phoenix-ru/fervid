@@ -501,6 +501,8 @@ impl CodegenContext {
 mod tests {
     use fervid_core::{AttributeOrBinding, Node, StartingTag, VBindDirective};
 
+    use crate::test_utils::js;
+
     use super::*;
 
     #[test]
@@ -550,7 +552,7 @@ mod tests {
                         },
                         AttributeOrBinding::VBind(VBindDirective {
                             argument: Some("some-baz"),
-                            value: "qux",
+                            value: js("qux"),
                             is_dynamic_attr: false,
                             is_camel: false,
                             is_prop: false,

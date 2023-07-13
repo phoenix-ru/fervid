@@ -5,8 +5,8 @@ use swc_core::{
     ecma::{
         ast::{
             ArrayLit, ArrowExpr, BinExpr, BinaryOp, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
-            ComputedPropName, Expr, ExprOrSpread, Ident, Invalid, KeyValueProp, Lit, ObjectLit,
-            Prop, PropName, PropOrSpread, Str,
+            ComputedPropName, Expr, ExprOrSpread, Ident, KeyValueProp, Lit, ObjectLit,
+            Prop, PropName, PropOrSpread, Str, Invalid,
         },
         atoms::{js_word, Atom, JsWord},
     },
@@ -16,7 +16,7 @@ use crate::{
     context::CodegenContext,
     imports::VueImports,
     transform::transform_scoped,
-    utils::{str_to_propname, to_pascalcase},
+    utils::{str_to_propname, to_pascalcase, parse_js},
 };
 
 lazy_static! {
@@ -62,10 +62,10 @@ impl CodegenContext {
     ) -> GenerateAttributesResultHints<'attr> {
         // Special generation for `class` and `style` attributes,
         // as they can have both Regular and VDirective variants
-        let mut class_regular_attr = None;
-        let mut class_bound = None;
-        let mut style_regular_attr = None;
-        let mut style_bound = None;
+        let mut class_regular_attr: Option<(&str, Span)> = None;
+        let mut class_bound: Option<(Box<Expr>, Span)> = None;
+        let mut style_regular_attr: Option<(&str, Span)> = None;
+        let mut style_bound: Option<(Box<Expr>, Span)> = None;
 
         // Hints on what was processed and what to do next
         let mut result_hints = GenerateAttributesResultHints::default();
@@ -117,7 +117,7 @@ impl CodegenContext {
                     value,
                     ..
                 }) => {
-                    class_bound = Some((*value, span));
+                    class_bound = Some((value.to_owned(), span));
                 }
 
                 // :style
@@ -126,7 +126,7 @@ impl CodegenContext {
                     value,
                     ..
                 }) => {
-                    style_bound = Some((*value, span));
+                    style_bound = Some((value.to_owned(), span));
                 }
 
                 // `v-bind` directive without argument needs its own processing
@@ -153,32 +153,32 @@ impl CodegenContext {
                     is_dynamic_attr,
                     ..
                 }) => {
-                    // Skip empty `v-bind`s. They should be reported in AST analyzer
-                    if value.len() == 0 {
-                        continue;
-                    }
-
                     // Dynamic prop needs a `_normalizeProps` call
                     if *is_dynamic_attr {
                         result_hints.needs_normalize_props = true;
                     }
 
+                    // Clone the expression
+                    let mut value = value.to_owned();
+
                     // Transform the raw expression
-                    let (transformed, was_transformed) =
-                        transform_scoped(&value, &self.scope_helper, template_scope_id)
-                            .unwrap_or_else(|| (Box::new(Expr::Invalid(Invalid { span })), false));
+                    let was_transformed =
+                        transform_scoped(&mut value, &self.scope_helper, template_scope_id);
 
                     // Add the PROPS patch flag
                     result_hints.props_patch_flag =
                         result_hints.props_patch_flag || was_transformed;
 
                     let key = if *is_dynamic_attr {
+                        // Polyfill
+                        let mut key_expr = parse_js(argument)
+                            .unwrap_or_else(|_| {
+                                Box::new(Expr::Invalid(Invalid { span: DUMMY_SP }))
+                            });
+
                         // For dynamic attributes, keys are in form `[_ctx.dynamic || ""]`
-                        let (key_transformed, was_key_transformed) =
-                            transform_scoped(&value, &self.scope_helper, template_scope_id)
-                                .unwrap_or_else(|| {
-                                    (Box::new(Expr::Invalid(Invalid { span })), false)
-                                });
+                        let _was_key_transformed =
+                            transform_scoped(&mut key_expr, &self.scope_helper, template_scope_id);
 
                         // `[key_transformed || ""]`
                         PropName::Computed(ComputedPropName {
@@ -186,7 +186,7 @@ impl CodegenContext {
                             expr: Box::from(Expr::Bin(BinExpr {
                                 span,
                                 op: BinaryOp::LogicalOr,
-                                left: Box::from(key_transformed),
+                                left: value.clone(), // ?
                                 right: Box::from(Expr::Lit(Lit::Str(Str {
                                     span,
                                     value: JsWord::from(""),
@@ -201,7 +201,7 @@ impl CodegenContext {
                     out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                         KeyValueProp {
                             key,
-                            value: transformed,
+                            value: value.to_owned(), // ?
                         },
                     ))));
                 }
@@ -218,8 +218,15 @@ impl CodegenContext {
                     // Transform or default to () => {}
                     // The patch flag does not apply to v-on
                     let (transformed, _was_transformed) = handler
+                        .as_ref()
                         .and_then(|handler| {
-                            transform_scoped(handler, &self.scope_helper, template_scope_id)
+                            let mut handler = handler.to_owned();
+                            let was_transformed = transform_scoped(
+                                &mut handler,
+                                &self.scope_helper,
+                                template_scope_id,
+                            );
+                            Some((handler, was_transformed))
                         })
                         .unwrap_or_else(|| (Box::new(empty_arrow_expr(span)), false));
 
@@ -252,7 +259,7 @@ impl CodegenContext {
                             }))),
                             args: vec![
                                 ExprOrSpread {
-                                    expr: Box::from(transformed),
+                                    expr: transformed,
                                     spread: None,
                                 },
                                 ExprOrSpread {
@@ -297,9 +304,9 @@ impl CodegenContext {
                             value: handler_expr,
                         },
                     ))));
-                },
+                }
 
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         }
 
@@ -316,7 +323,7 @@ impl CodegenContext {
     fn generate_class_bindings(
         &mut self,
         class_regular_attr: Option<(&str, Span)>,
-        class_bound: Option<(&str, Span)>,
+        class_bound: Option<(Box<Expr>, Span)>,
         out: &mut Vec<PropOrSpread>,
         scope_to_use: u32,
     ) -> bool {
@@ -325,7 +332,7 @@ impl CodegenContext {
 
         match (class_regular_attr, class_bound) {
             // Both regular `class` and bound `:class`
-            (Some((regular_value, regular_span)), Some((bound_value, bound_span))) => {
+            (Some((regular_value, regular_span)), Some((mut bound_value, bound_span))) => {
                 // 1. []
                 // Normalize class with both `class` and `:class` needs an array
                 let mut normalize_array = ArrayLit {
@@ -345,15 +352,13 @@ impl CodegenContext {
                 }));
 
                 // 3. Transform the bound value
-                let (transformed, was_transformed) =
-                    transform_scoped(bound_value, &self.scope_helper, scope_to_use).unwrap_or_else(
-                        || (Box::new(Expr::Invalid(Invalid { span: bound_span })), false),
-                    );
+                let was_transformed =
+                    transform_scoped(&mut bound_value, &self.scope_helper, scope_to_use);
 
                 // 4. ["regular classes", boundClasses]
                 normalize_array.elems.push(Some(ExprOrSpread {
                     spread: None,
-                    expr: transformed,
+                    expr: bound_value,
                 }));
 
                 // `normalizeClass(["regular classes", boundClasses])`
@@ -384,10 +389,9 @@ impl CodegenContext {
             }
 
             // Just bound `:class`
-            (None, Some((bound_value, span))) => {
-                let (transformed, was_transformed) =
-                    transform_scoped(bound_value, &self.scope_helper, scope_to_use)
-                        .unwrap_or_else(|| (Box::new(Expr::Invalid(Invalid { span })), false));
+            (None, Some((mut bound_value, span))) => {
+                let was_transformed =
+                    transform_scoped(&mut bound_value, &self.scope_helper, scope_to_use);
 
                 // `normalizeClass(boundClasses)`
                 expr = Some(Expr::Call(CallExpr {
@@ -399,7 +403,7 @@ impl CodegenContext {
                     }))),
                     args: vec![ExprOrSpread {
                         spread: None,
-                        expr: transformed,
+                        expr: bound_value,
                     }],
                     type_args: None,
                 }));
@@ -429,7 +433,7 @@ impl CodegenContext {
     fn generate_style_bindings(
         &mut self,
         style_regular_attr: Option<(&str, Span)>,
-        style_bound: Option<(&str, Span)>,
+        style_bound: Option<(Box<Expr>, Span)>,
         out: &mut Vec<PropOrSpread>,
         scope_to_use: u32,
     ) -> bool {
@@ -438,7 +442,7 @@ impl CodegenContext {
 
         match (style_regular_attr, style_bound) {
             // Both `style` and `:style`
-            (Some((regular_value, regular_span)), Some((bound_value, bound_span))) => {
+            (Some((regular_value, regular_span)), Some((mut bound_value, bound_span))) => {
                 // 1. []
                 // normalizeStyle with both `style` and `:style` needs an array
                 let mut normalize_array = ArrayLit {
@@ -458,15 +462,13 @@ impl CodegenContext {
                 }));
 
                 // 4. Transform the bound value
-                let (transformed, was_transformed) =
-                    transform_scoped(bound_value, &self.scope_helper, scope_to_use).unwrap_or_else(
-                        || (Box::new(Expr::Invalid(Invalid { span: bound_span })), false),
-                    );
+                let was_transformed =
+                    transform_scoped(&mut bound_value, &self.scope_helper, scope_to_use);
 
                 // 5. [{ regular: "styles as an object" }, boundStyles]
                 normalize_array.elems.push(Some(ExprOrSpread {
                     spread: None,
-                    expr: transformed,
+                    expr: bound_value, // ?
                 }));
 
                 // `normalizeClass([{ regular: "styles as an object" }, boundStyles])`
@@ -493,10 +495,9 @@ impl CodegenContext {
             }
 
             // `:style`
-            (None, Some((bound_value, span))) => {
-                let (transformed, was_transformed) =
-                    transform_scoped(bound_value, &self.scope_helper, scope_to_use)
-                        .unwrap_or_else(|| (Box::new(Expr::Invalid(Invalid { span })), false));
+            (None, Some((mut bound_value, span))) => {
+                let was_transformed =
+                    transform_scoped(&mut bound_value, &self.scope_helper, scope_to_use);
 
                 // `normalizeStyle(boundStyles)`
                 expr = Some(Expr::Call(CallExpr {
@@ -508,7 +509,7 @@ impl CodegenContext {
                     }))),
                     args: vec![ExprOrSpread {
                         spread: None,
-                        expr: transformed,
+                        expr: bound_value
                     }],
                     type_args: None,
                 }));
@@ -601,7 +602,23 @@ mod tests {
     use fervid_core::{AttributeOrBinding, VBindDirective, VOnDirective};
     use swc_core::{common::DUMMY_SP, ecma::ast::ObjectLit};
 
-    use crate::context::CodegenContext;
+    use crate::{context::CodegenContext, test_utils::js};
+
+    macro_rules! v_bind {
+        {
+            argument: $argument: expr,
+            value: $value: expr
+        } => {
+            VBindDirective {
+                argument: $argument,
+                value: $value,
+                is_dynamic_attr: Default::default(),
+                is_camel: Default::default(),
+                is_prop: Default::default(),
+                is_attr: Default::default(),
+            }
+        };
+    }
 
     #[test]
     fn it_generates_class_regular() {
@@ -617,10 +634,9 @@ mod tests {
     #[test]
     fn it_generates_class_bound() {
         test_out(
-            vec![AttributeOrBinding::VBind(VBindDirective {
+            vec![AttributeOrBinding::VBind(v_bind! {
                 argument: Some("class"),
-                value: "[item2, index]",
-                ..Default::default()
+                value: js("[item2, index]")
             })],
             r#"{class:_normalizeClass([_ctx.item2,_ctx.index])}"#,
         );
@@ -634,10 +650,9 @@ mod tests {
                     name: "class",
                     value: "both regular and bound",
                 },
-                AttributeOrBinding::VBind(VBindDirective {
+                AttributeOrBinding::VBind(v_bind! {
                     argument: Some("class"),
-                    value: "[item2, index]",
-                    ..Default::default()
+                    value: js("[item2, index]")
                 }),
             ],
             r#"{class:_normalizeClass(["both regular and bound",[_ctx.item2,_ctx.index]])}"#,
@@ -659,10 +674,9 @@ mod tests {
     fn it_generates_style_bound() {
         // `:style="{ backgroundColor: v ? 'yellow' : undefined }"`
         test_out(
-            vec![AttributeOrBinding::VBind(VBindDirective {
+            vec![AttributeOrBinding::VBind(v_bind! {
                 argument: Some("style"),
-                value: "{ backgroundColor: v ? 'yellow' : undefined }",
-                ..Default::default()
+                value: js("{ backgroundColor: v ? 'yellow' : undefined }")
             })],
             r#"{style:_normalizeStyle({backgroundColor:_ctx.v?"yellow":undefined})}"#,
         );
@@ -676,10 +690,9 @@ mod tests {
                     name: "style",
                     value: "margin: 0px; background-color: magenta",
                 },
-                AttributeOrBinding::VBind(VBindDirective {
+                AttributeOrBinding::VBind(v_bind! {
                     argument: Some("style"),
-                    value: "{ backgroundColor: v ? 'yellow' : undefined }",
-                    ..Default::default()
+                    value: js("{ backgroundColor: v ? 'yellow' : undefined }")
                 }),
             ],
             r#"{style:_normalizeStyle([{margin:"0px","background-color":"magenta"},{backgroundColor:_ctx.v?"yellow":undefined}])}"#,
@@ -690,30 +703,27 @@ mod tests {
     fn it_generates_v_bind() {
         // :disabled="true"
         test_out(
-            vec![AttributeOrBinding::VBind(VBindDirective {
+            vec![AttributeOrBinding::VBind(v_bind! {
                 argument: Some("disabled"),
-                value: "true",
-                ..Default::default()
+                value: js("true")
             })],
             "{disabled:true}",
         );
 
         // :multi-word-binding="true"
         test_out(
-            vec![AttributeOrBinding::VBind(VBindDirective {
+            vec![AttributeOrBinding::VBind(v_bind! {
                 argument: Some("multi-word-binding"),
-                value: "true",
-                ..Default::default()
+                value: js("true")
             })],
             r#"{"multi-word-binding":true}"#,
         );
 
         // :disabled="some && expression || maybe !== not"
         test_out(
-            vec![AttributeOrBinding::VBind(VBindDirective {
+            vec![AttributeOrBinding::VBind(v_bind! {
                 argument: Some("disabled"),
-                value: "some && expression || maybe !== not",
-                ..Default::default()
+                value: js("some && expression || maybe !== not")
             })],
             "{disabled:_ctx.some&&_ctx.expression||_ctx.maybe!==_ctx.not}",
         );
@@ -747,7 +757,7 @@ mod tests {
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
                 event: Some("click"),
-                handler: Some("handleClick"),
+                handler: Some(js("handleClick")),
                 is_dynamic_event: false,
                 modifiers: vec![],
             })],
@@ -770,7 +780,7 @@ mod tests {
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
                 event: Some("click"),
-                handler: Some("() => console.log('hello')"),
+                handler: Some(js("() => console.log('hello')")),
                 is_dynamic_event: false,
                 modifiers: vec![],
             })],
@@ -781,7 +791,7 @@ mod tests {
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
                 event: Some("click"),
-                handler: Some("$event => handleClick($event, foo, bar)"),
+                handler: Some(js("$event => handleClick($event, foo, bar)")),
                 is_dynamic_event: false,
                 modifiers: vec![],
             })],
@@ -805,7 +815,7 @@ mod tests {
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
                 event: Some("click"),
-                handler: Some("$event => handleClick($event, foo, bar)"),
+                handler: Some(js("$event => handleClick($event, foo, bar)")),
                 is_dynamic_event: false,
                 modifiers: vec!["stop"],
             })],

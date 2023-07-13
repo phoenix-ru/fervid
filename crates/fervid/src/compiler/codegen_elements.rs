@@ -320,11 +320,11 @@ impl <'a> CodegenContext <'a> {
           CodeHelper::open_paren(buf);
 
           // TODO Handle possible SWC failure?
-          let transformed_expr = transform_scoped(&value, &self.scope_helper, scope_to_use);
-          buf.push_str(match transformed_expr {
-            Some(ref expr) => &expr,
-            None => "''"
-          });
+          // let transformed_expr = transform_scoped(&value, &self.scope_helper, scope_to_use);
+          // buf.push_str(match transformed_expr {
+          //   Some(ref expr) => &expr,
+          //   None => "''"
+          // });
 
           CodeHelper::close_paren(buf);
 

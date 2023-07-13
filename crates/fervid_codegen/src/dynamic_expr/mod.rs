@@ -6,7 +6,7 @@ use swc_core::{
     },
 };
 
-use crate::{context::CodegenContext, imports::VueImports, transform::transform_scoped};
+use crate::{context::CodegenContext, imports::VueImports, transform::transform_scoped, utils::parse_js};
 
 impl CodegenContext {
     pub fn generate_dynamic_expression(
@@ -14,19 +14,25 @@ impl CodegenContext {
         value: &str,
         scope_to_use: u32,
         span: Span,
-    ) -> (Expr, bool) {
+    ) -> (Expr, bool) {    
         // This is using a string with value if transformation failed
         let (transformed, has_js_bindings) =
-            transform_scoped(value, &self.scope_helper, scope_to_use).unwrap_or_else(|| {
-                (
-                    Box::new(Expr::Lit(Lit::Str(Str {
-                        span,
-                        value: JsWord::from(value),
-                        raw: Some(Atom::from(value)),
-                    }))),
-                    false,
-                )
-            });
+            // Polyfill
+            parse_js(value)
+                .and_then(|mut expr| {
+                    let has_js = transform_scoped(&mut expr, &self.scope_helper, scope_to_use);
+                    Ok((expr, has_js))
+                })
+                .unwrap_or_else(|_| {
+                    (
+                        Box::new(Expr::Lit(Lit::Str(Str {
+                            span,
+                            value: JsWord::from(value),
+                            raw: Some(Atom::from(value)),
+                        }))),
+                        false,
+                    )
+                });
 
         // toDisplayString(transformed)
         (
