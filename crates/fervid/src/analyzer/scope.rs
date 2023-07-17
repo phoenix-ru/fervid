@@ -1,11 +1,9 @@
 use fervid_core::{Node, VSlotDirective};
 use lazy_static::lazy_static;
-use swc_core::common::BytePos;
 use swc_core::ecma::{
     atoms::JsWord,
     visit::{Visit, VisitWith},
 };
-use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax};
 
 lazy_static! {
     static ref JS_BUILTINS: [JsWord; 7] =
@@ -145,7 +143,7 @@ impl ScopeHelper {
 
                     if let Some(v_for) = v_for {
                         // We only care of the left hand side variables
-                        let introduced_variables = v_for.iterator;
+                        let introduced_variables = &v_for.itervar;
 
                         // Get the needed scope and collect variables to it
                         let mut scope = &mut self.template_scopes[scope_to_use as usize];
@@ -153,7 +151,7 @@ impl ScopeHelper {
                     } else if let Some(VSlotDirective { value: Some(v_slot_value), .. }) = v_slot {
                         // Get the needed scope and collect variables to it
                         let mut scope = &mut self.template_scopes[scope_to_use as usize];
-                        Self::collect_variables(&v_slot_value, &mut scope);
+                        Self::collect_variables(v_slot_value, &mut scope);
                     }
                 }
 
@@ -167,39 +165,22 @@ impl ScopeHelper {
             }
 
             // For dynamic expression, just update the scope
-            Node::DynamicExpression { template_scope, .. } => {
-                *template_scope = current_scope_identifier;
+            Node::Interpolation(interpolation) => {
+                interpolation.template_scope = current_scope_identifier;
             }
 
             _ => {}
         }
     }
 
-    fn collect_variables(input: &str, scope: &mut Scope) {
-        let lexer = Lexer::new(
-            // We want to parse ecmascript
-            Syntax::Es(Default::default()),
-            // EsVersion defaults to es5
-            Default::default(),
-            StringInput::new(input, BytePos(0), BytePos(1000)),
-            None,
-        );
+    fn collect_variables(expr: &impl VisitWith<IdentifierVisitor>, scope: &mut Scope) {
+        let mut visitor = IdentifierVisitor { collected: vec![] };
 
-        let mut parser = Parser::new_from(lexer);
+        expr.visit_with(&mut visitor);
 
-        match parser.parse_expr() {
-            Ok(expr) => {
-                let mut visitor = IdentifierVisitor { collected: vec![] };
-
-                expr.visit_with(&mut visitor);
-
-                scope.variables.reserve(visitor.collected.len());
-                for collected in visitor.collected {
-                    scope.variables.push(collected.sym)
-                }
-            }
-
-            _ => {}
+        scope.variables.reserve(visitor.collected.len());
+        for collected in visitor.collected {
+            scope.variables.push(collected.sym)
         }
     }
 }

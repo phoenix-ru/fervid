@@ -1,4 +1,4 @@
-use swc_core::ecma::ast::Expr;
+use swc_core::ecma::ast::{Expr, Pat};
 
 /// A Node represents a part of the Abstract Syntax Tree (AST).
 #[derive(Debug, Clone)]
@@ -15,11 +15,11 @@ pub enum Node<'a> {
     /// which can only contain static text.
     Text(&'a str),
 
-    /// Dynamic expression is a special syntax for Vue templates.
+    /// Interpolation is a special syntax for Vue templates.
     ///
     /// It looks like this: `{{ some + js - expression }}`,
     /// where the content inside `{{` and `}}` delimiters is arbitrary.
-    DynamicExpression { value: &'a str, template_scope: u32 },
+    Interpolation(Interpolation),
 
     /// `Comment` is the vanilla HTML comment, which looks like this: `<-- this is comment -->`
     Comment(&'a str),
@@ -49,9 +49,21 @@ pub struct ElementNode<'a> {
 /// - 0 or 1 `v-else` `ElementNode`.
 #[derive(Debug, Clone)]
 pub struct ConditionalNodeSequence<'a> {
-    pub if_node: (&'a str, Box<ElementNode<'a>>),
-    pub else_if_nodes: Vec<(&'a str, ElementNode<'a>)>,
+    pub if_node: Box<Conditional<'a>>,
+    pub else_if_nodes: Vec<Conditional<'a>>,
     pub else_node: Option<Box<ElementNode<'a>>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Conditional<'e> {
+    pub condition: Expr,
+    pub node: ElementNode<'e>
+}
+
+#[derive(Debug, Clone)]
+pub struct Interpolation {
+    pub value: Box<Expr>,
+    pub template_scope: u32
 }
 
 /// Starting tag represents [`ElementNode`]'s tag name and attributes
@@ -76,51 +88,65 @@ pub enum AttributeOrBinding<'a> {
     VOn(VOnDirective<'a>),
 }
 
+/// Describes a type which can be either a static &str or a js Expr.
+/// This is mostly usable for dynamic binding scenarios.
+/// ## Example
+/// - `:foo="bar"` yields `StrOrExpr::Str("foo")`;
+/// - `:[baz]="qux"` yields `StrOrExpr::Expr(Box::new(Expr::Lit(Lit::Str(Str { value: "baz".into(), .. }))))`
+#[derive(Debug, Clone)]
+pub enum StrOrExpr<'s> {
+    Str(&'s str),
+    Expr(Box<Expr>)
+}
+
+impl <'s> From<&'s str> for StrOrExpr<'s> {
+    fn from(value: &'s str) -> StrOrExpr<'s> {
+        StrOrExpr::Str(value)
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct VueDirectives<'d> {
     pub custom: Vec<VCustomDirective<'d>>,
     pub v_cloak: Option<()>,
     pub v_else: Option<()>,
-    pub v_else_if: Option<&'d str>,
-    pub v_for: Option<VForDirective<'d>>,
-    pub v_html: Option<&'d str>,
-    pub v_if: Option<&'d str>,
-    pub v_memo: Option<&'d str>,
+    pub v_else_if: Option<Box<Expr>>,
+    pub v_for: Option<VForDirective>,
+    pub v_html: Option<Box<Expr>>,
+    pub v_if: Option<Box<Expr>>,
+    pub v_memo: Option<Box<Expr>>,
     pub v_model: Vec<VModelDirective<'d>>,
     pub v_once: Option<()>,
     pub v_pre: Option<()>,
-    pub v_show: Option<&'d str>,
+    pub v_show: Option<Box<Expr>>,
     pub v_slot: Option<VSlotDirective<'d>>,
-    pub v_text: Option<&'d str>,
+    pub v_text: Option<Box<Expr>>,
 }
 
 #[derive(Clone, Debug)]
-pub struct VForDirective<'a> {
-    pub iterable: &'a str,
-    pub iterator: &'a str,
+pub struct VForDirective {
+    /// `bar` in `v-for="foo in bar"`
+    pub iterable: Box<Expr>,
+    /// `foo` in `v-for="foo in bar"`
+    pub itervar: Box<Pat>,
 }
 
 #[derive(Clone, Debug)]
 pub struct VOnDirective<'a> {
-    /// What event to listen to. If None, that is equal to `v-on="..."`. Also, see `is_dynamic_event`.
-    pub event: Option<&'a str>,
+    /// What event to listen to. If None, it is equivalent to `v-on="..."`.
+    pub event: Option<StrOrExpr<'a>>,
     /// What is the handler to use. If None, `modifiers` must not be empty.
     pub handler: Option<Box<Expr>>,
-    /// If the event itself is dynamic, e.g. `v-on:[event]` or `@[event]`
-    pub is_dynamic_event: bool,
     /// A list of modifiers after the dot, e.g. `stop` and `prevent` in `@click.stop.prevent="handleClick"`
     pub modifiers: Vec<&'a str>,
 }
 
 #[derive(Clone, Debug)]
 pub struct VBindDirective<'a> {
-    /// Attribute name to bind. If None, it is equivalent to `v-bind="smth"`. Also, see `is_dynamic_attr`.
-    pub argument: Option<&'a str>,
+    /// Attribute name to bind. If None, it is equivalent to `v-bind="..."`.
+    pub argument: Option<StrOrExpr<'a>>,
     /// Attribute value, e.g. `smth` in `:attr="smth"`
-    // pub value: &'a str,
     pub value: Box<Expr>,
-    /// `:[dynamic]`
-    pub is_dynamic_attr: bool,
     /// .camel modifier
     pub is_camel: bool,
     /// .prop modifier
@@ -133,23 +159,29 @@ pub struct VBindDirective<'a> {
 pub struct VModelDirective<'a> {
     /// What to apply v-model to, e.g. `first-name` in `v-model:first-name="first"`
     pub argument: Option<&'a str>,
-    pub value: &'a str,
+    /// The binding of a `v-model`, e.g. `userInput` in `v-model="userInput"`
+    pub value: Expr,
+    /// `lazy` and `trim` in `v-model.lazy.trim`
     pub modifiers: Vec<&'a str>,
 }
 
 #[derive(Clone, Debug)]
 pub struct VSlotDirective<'a> {
     pub slot_name: Option<&'a str>,
-    pub value: Option<&'a str>,
+    pub value: Option<Box<Expr>>,
     pub is_dynamic_slot: bool,
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct VCustomDirective<'a> {
+    /// `foo` in `v-foo`
     pub name: &'a str,
+    /// `bar` in `v-foo:bar`
     pub argument: Option<&'a str>,
+    /// `baz` and `qux` in `v-foo:bar.baz.qux`
     pub modifiers: Vec<&'a str>,
-    pub value: Option<&'a str>,
+    /// `loremIpsum` in `v-foo="loremIpsum"`
+    pub value: Option<Box<Expr>>,
 }
 
 /// https://github.com/vuejs/core/blob/020851e57d9a9f727c6ea07e9c1575430af02b73/packages/compiler-core/src/options.ts#L76

@@ -1,10 +1,23 @@
 use fervid_core::{
-    Conditional, ConditionalNodeSequence, ElementNode, Node, SfcTemplateBlock, StartingTag,
+    is_from_default_slot, is_html_tag, AttributeOrBinding, Conditional, ConditionalNodeSequence,
+    ElementNode, Interpolation, Node, SfcTemplateBlock, StartingTag, VOnDirective, VSlotDirective,
+};
+use smallvec::SmallVec;
+
+use super::{
+    collect_vars::collect_variables,
+    structs::{ScopeHelper, TemplateScope},
 };
 
-use crate::compiler::all_html_tags;
+struct TemplateVisitor<'s> {
+    scope_helper: &'s mut ScopeHelper,
+    current_scope: u32,
+}
 
-pub fn optimize_template<'a>(template: &'a mut SfcTemplateBlock) -> &'a SfcTemplateBlock<'a> {
+pub fn transform_and_record_template(
+    template: &mut SfcTemplateBlock,
+    scope_helper: &mut ScopeHelper,
+) {
     // Only retain `ElementNode`s as template roots
     template
         .roots
@@ -15,19 +28,21 @@ pub fn optimize_template<'a>(template: &'a mut SfcTemplateBlock) -> &'a SfcTempl
 
     // Todo merge 1+ children into a separate `<template>` element so that Fragment gets generated
 
+    let mut template_visitor = TemplateVisitor {
+        scope_helper,
+        current_scope: 0,
+    };
+
     // Optimize each root node separately
-    let mut ast_optimizer = AstOptimizer;
     let ast = &mut template.roots;
     let mut iter = ast.iter_mut();
     while let Some(ref mut node) = iter.next() {
-        node.visit_mut_with(&mut ast_optimizer);
+        node.visit_mut_with(&mut template_visitor);
     }
-
-    template
 }
 
 /// Optimizes the children by removing whitespace in between `ElementNode`s,
-///
+/// as well as folding `v-if`/`v-else-if`/`v-else` sequences into a `ConditionalNodeSequence`
 fn optimize_children(children: &mut Vec<Node>, is_component: bool) {
     let children_len = children.len();
 
@@ -176,91 +191,146 @@ fn optimize_children(children: &mut Vec<Node>, is_component: bool) {
     }
 }
 
-struct AstOptimizer;
-
 trait Visitor {
     fn visit_element_node(&mut self, element_node: &mut ElementNode);
+    fn visit_conditional_node(&mut self, conditional_node: &mut ConditionalNodeSequence);
+    fn visit_interpolation(&mut self, interpolation: &mut Interpolation);
 }
 
 trait VisitMut {
     fn visit_mut_with(&mut self, visitor: &mut impl Visitor);
 }
 
-trait VisitMutChildren {
-    fn visit_mut_children_with(&mut self, visitor: &mut impl Visitor);
-}
-
-impl<'a> Visitor for AstOptimizer {
+impl<'a> Visitor for TemplateVisitor<'_> {
     fn visit_element_node(&mut self, element_node: &mut ElementNode) {
+        let parent_scope = self.current_scope;
+        let mut scope_to_use = parent_scope;
+
+        // Check if there is a scoping directive
+        // Finds a `v-for` or `v-slot` directive when in ElementNode
+        // and collects their variables into the new template scope
+        if let Some(ref directives) = element_node.starting_tag.directives {
+            let v_for = directives.v_for.as_ref();
+            let v_slot = directives.v_slot.as_ref();
+
+            // Create a new scope
+            if v_for.is_some() || v_slot.is_some() {
+                // New scope will have ID equal to length
+                scope_to_use = self.scope_helper.template_scopes.len() as u32;
+                self.scope_helper.template_scopes.push(TemplateScope {
+                    variables: SmallVec::new(),
+                    parent: parent_scope,
+                });
+            }
+
+            if let Some(v_for) = v_for {
+                // We only care of the left hand side variables
+                let introduced_variables = &v_for.itervar;
+
+                // Get the needed scope and collect variables to it
+                let mut scope = &mut self.scope_helper.template_scopes[scope_to_use as usize];
+                collect_variables(introduced_variables, &mut scope);
+            } else if let Some(VSlotDirective {
+                value: Some(v_slot_value),
+                ..
+            }) = v_slot
+            {
+                // Get the needed scope and collect variables to it
+                let mut scope = &mut self.scope_helper.template_scopes[scope_to_use as usize];
+                collect_variables(v_slot_value, &mut scope);
+            }
+        }
+
+        // Update the element's scope and the Visitor's current scope
+        element_node.template_scope = scope_to_use;
+        self.current_scope = scope_to_use;
+
+        // Transform the VBind and VOn attributes
+        for attr in element_node.starting_tag.attributes.iter_mut() {
+            match attr {
+                AttributeOrBinding::VBind(v_bind) => {
+                    self.scope_helper
+                        .transform_expr(&mut v_bind.value, scope_to_use);
+                }
+                AttributeOrBinding::VOn(VOnDirective {
+                    handler: Some(ref mut handler),
+                    ..
+                }) => {
+                    self.scope_helper.transform_expr(handler, scope_to_use);
+                }
+                _ => {}
+            }
+        }
+
+        // Transform the directives
+        if let Some(ref mut directives) = element_node.starting_tag.directives {
+            // todo
+            // directives.
+        }
+
+        // Merge conditional nodes and clean up whitespace
         optimize_children(
             &mut element_node.children,
             self.is_component(&element_node.starting_tag),
         );
-        element_node.visit_mut_children_with(self);
+
+        // Recursively visit children
+        for child in element_node.children.iter_mut() {
+            child.visit_mut_with(self)
+        }
+
+        // Restore the parent scope
+        self.current_scope = parent_scope;
+    }
+
+    fn visit_conditional_node(&mut self, conditional_node: &mut ConditionalNodeSequence) {
+        self.visit_element_node(&mut conditional_node.if_node.node);
+
+        for else_if_node in conditional_node.else_if_nodes.iter_mut() {
+            self.visit_element_node(&mut else_if_node.node);
+        }
+
+        if let Some(ref mut else_node) = conditional_node.else_node {
+            self.visit_element_node(else_node);
+        }
+    }
+
+    fn visit_interpolation(&mut self, interpolation: &mut Interpolation) {
+        interpolation.template_scope = self.current_scope;
+
+        self.scope_helper
+            .transform_expr(&mut interpolation.value, self.current_scope);
     }
 }
 
-impl AstOptimizer {
+impl TemplateVisitor<'_> {
     fn is_component(&self, starting_tag: &StartingTag) -> bool {
         // TODO Use is_custom_element as well
-        !all_html_tags::is_html_tag(starting_tag.tag_name)
+        !is_html_tag(starting_tag.tag_name)
     }
 }
 
 impl VisitMut for Node<'_> {
     fn visit_mut_with(&mut self, visitor: &mut impl Visitor) {
         match self {
-            Node::Element(el) => el.visit_mut_with(visitor),
+            Node::Element(el) => visitor.visit_element_node(el),
+            Node::ConditionalSeq(cond) => visitor.visit_conditional_node(cond),
+            Node::Interpolation(interpolation) => visitor.visit_interpolation(interpolation),
             _ => {}
         }
-    }
-}
-
-impl VisitMut for ElementNode<'_> {
-    fn visit_mut_with(&mut self, visitor: &mut impl Visitor) {
-        visitor.visit_element_node(self);
-    }
-}
-
-impl VisitMutChildren for ElementNode<'_> {
-    fn visit_mut_children_with(&mut self, visitor: &mut impl Visitor) {
-        for child in &mut self.children {
-            child.visit_mut_with(visitor)
-        }
-    }
-}
-
-fn is_from_default_slot(node: &Node) -> bool {
-    let Node::Element(ElementNode { starting_tag, .. }) = node else {
-        return true;
-    };
-
-    if starting_tag.tag_name != "template" {
-        return true;
-    }
-
-    // Slot is not default if its `v-slot` has an argument which is not "" or "default"
-    // `v-slot` is default
-    // `v-slot:default` is default
-    // `v-slot:custom` is not default
-    let Some(ref directives) = starting_tag.directives else { return true; };
-    let Some(ref v_slot) = directives.v_slot else { return true; };
-    if v_slot.is_dynamic_slot {
-        return false;
-    }
-
-    match v_slot.slot_name {
-        None | Some("default") => true,
-        Some(_) => false,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use fervid_core::{Node, VueDirectives};
-    use swc_core::ecma::ast::Expr;
-
-    use crate::parser::ecma::parse_js;
+    use swc_core::{
+        common::DUMMY_SP,
+        ecma::{
+            ast::{Bool, Expr, Ident, Lit},
+            atoms::JsWord,
+        },
+    };
 
     use super::*;
 
@@ -285,7 +355,7 @@ mod tests {
             })],
         };
 
-        optimize_template(&mut sfc_template);
+        transform_and_record_template(&mut sfc_template, &mut Default::default());
 
         // Template roots: one div
         assert_eq!(1, sfc_template.roots.len());
@@ -323,7 +393,7 @@ mod tests {
             roots: vec![if_node(), else_if_node(), else_node()],
         };
 
-        optimize_template(&mut sfc_template);
+        transform_and_record_template(&mut sfc_template, &mut Default::default());
 
         // Template roots: one conditional sequence
         assert_eq!(1, sfc_template.roots.len());
@@ -353,7 +423,7 @@ mod tests {
             roots: vec![if_node(), if_node()],
         };
 
-        optimize_template(&mut sfc_template);
+        transform_and_record_template(&mut sfc_template, &mut Default::default());
 
         // Template roots: two conditional sequences
         assert_eq!(2, sfc_template.roots.len());
@@ -383,7 +453,7 @@ mod tests {
             roots: vec![if_node(), else_if_node(), if_node(), else_if_node()],
         };
 
-        optimize_template(&mut sfc_template);
+        transform_and_record_template(&mut sfc_template, &mut Default::default());
 
         // Template roots: two conditional sequences
         assert_eq!(2, sfc_template.roots.len());
@@ -411,7 +481,7 @@ mod tests {
             roots: vec![else_if_node(), else_node()],
         };
 
-        optimize_template(&mut sfc_template);
+        transform_and_record_template(&mut sfc_template, &mut Default::default());
 
         // Template roots: still two
         assert_eq!(2, sfc_template.roots.len());
@@ -453,7 +523,7 @@ mod tests {
             })],
         };
 
-        optimize_template(&mut sfc_template);
+        transform_and_record_template(&mut sfc_template, &mut Default::default());
 
         // Template roots: one div
         assert_eq!(1, sfc_template.roots.len());
@@ -502,7 +572,7 @@ mod tests {
             roots: vec![no_directives1, no_directives2],
         };
 
-        optimize_template(&mut sfc_template);
+        transform_and_record_template(&mut sfc_template, &mut Default::default());
 
         // Template roots: both nodes are still present
         assert_eq!(2, sfc_template.roots.len());
@@ -599,7 +669,20 @@ mod tests {
         ));
     }
 
+    #[inline]
+    /// Stupidly converts from a string to an expression without actually parsing
     fn js(raw: &str) -> Box<Expr> {
-        parse_js(raw, 0, 0).unwrap()
+        if raw == "true" || raw == "false" {
+            return Box::new(Expr::Lit(Lit::Bool(Bool {
+                span: DUMMY_SP,
+                value: raw == "true",
+            })));
+        }
+
+        return Box::new(Expr::Ident(Ident {
+            span: DUMMY_SP,
+            sym: JsWord::from("raw"),
+            optional: false,
+        }));
     }
 }

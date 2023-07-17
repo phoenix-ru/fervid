@@ -1,6 +1,7 @@
 use std::iter::Peekable;
 
 use fervid_core::Node;
+use swc_core::ecma::ast::Expr;
 
 use crate::compiler::{codegen::CodegenContext, helper::CodeHelper, imports::VueImports};
 
@@ -85,11 +86,11 @@ impl CodegenContext<'_> {
     }
 
     /// Generates a prefix block for `v-if` and `v-else-if`
-    fn generate_if_node(&mut self, buf: &mut String, node: &Node, condition: &str) {
+    fn generate_if_node(&mut self, buf: &mut String, node: &Node, condition: &Box<Expr>) {
         // TODO use context-scope based compilation
 
         // Write condition
-        buf.push_str(condition);
+        // buf.push_str(condition);
 
         // Write a question mark (`true` branch)
         self.code_helper.indent();
@@ -112,11 +113,11 @@ impl CodegenContext<'_> {
 pub enum ConditionalNode<'a> {
     VIf {
         node: &'a Node<'a>,
-        condition: &'a str,
+        condition: &'a Box<Expr>,
     },
     VElseIf {
         node: &'a Node<'a>,
-        condition: &'a str,
+        condition: &'a Box<Expr>,
     },
     VElse(&'a Node<'a>),
 }
@@ -136,7 +137,7 @@ pub fn filter_nodes_with_conditional_directives<'r>(
                     return None;
                 };
 
-                if let Some(v_if) = directives.v_if {
+                if let Some(ref v_if) = directives.v_if {
                     Some((
                         index,
                         ConditionalNode::VIf {
@@ -144,7 +145,7 @@ pub fn filter_nodes_with_conditional_directives<'r>(
                             condition: v_if,
                         },
                     ))
-                } else if let Some(v_else_if) = directives.v_else_if {
+                } else if let Some(ref v_else_if) = directives.v_else_if {
                     Some((
                         index,
                         ConditionalNode::VElseIf {

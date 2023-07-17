@@ -138,7 +138,7 @@ impl <'a> CodegenContext <'a> {
       let mut end_of_range: Option<usize> = None;
       for (index, child) in children.iter().enumerate() {
         match child {
-          Node::DynamicExpression { .. } | Node::Text(_) => {
+          Node::Interpolation { .. } | Node::Text(_) => {
             if let None = start_of_range  {
               start_of_range = Some(index);
             }
@@ -243,7 +243,7 @@ impl <'a> CodegenContext <'a> {
       }
 
       // This must never be the case!
-      if let Node::Text(_) | Node::DynamicExpression { .. } = child {
+      if let Node::Text(_) | Node::Interpolation { .. } = child {
         unreachable!("TextNode or DynamicExpression handled outside text_node_ranges");
       }
 
@@ -315,7 +315,7 @@ impl <'a> CodegenContext <'a> {
          * Transforms a dynamic expression into a `toDisplayString` call
          * Adds context to the variables from component scope
          */
-        Node::DynamicExpression { value, .. } => {
+        Node::Interpolation(interpolation) => {
           buf.push_str(self.get_and_add_import_str(VueImports::ToDisplayString));
           CodeHelper::open_paren(buf);
 

@@ -1,4 +1,4 @@
-use fervid_core::{AttributeOrBinding, VBindDirective, VOnDirective};
+use fervid_core::{AttributeOrBinding, VBindDirective, VOnDirective, StrOrExpr};
 use lazy_static::lazy_static;
 use regex::Regex;
 use crate::analyzer::scope::ScopeHelper;
@@ -57,7 +57,7 @@ impl CodegenContext <'_> {
         },
 
         // :class
-        AttributeOrBinding::VBind(VBindDirective { argument: Some("class"), value, .. }) => {
+        AttributeOrBinding::VBind(VBindDirective { argument: Some(StrOrExpr::Str("class")), value, .. }) => {
           class_bind = Some(value);
         },
 
@@ -67,7 +67,7 @@ impl CodegenContext <'_> {
         },
 
         // :style
-        AttributeOrBinding::VBind(VBindDirective { argument: Some("style"), value, .. }) => {
+        AttributeOrBinding::VBind(VBindDirective { argument: Some(StrOrExpr::Str("style")), value, .. }) => {
           style_bind = Some(value);
         },
 
@@ -290,7 +290,7 @@ fn generate_v_bind_attr(
   // _mergeProps(_toHandlers(_ctx.ons), _ctx.bounds, {
   //   onClick: _cache[1] || (_cache[1] = () => {})
   // })
-  let Some(argument) = v_bind.argument else {
+  let Some(StrOrExpr::Str(argument)) = v_bind.argument else {
     todo!("v-bind without argument is not implemented yet")
   };
 
@@ -335,7 +335,7 @@ fn generate_v_on_attr(
   // _mergeProps(_toHandlers(_ctx.ons), _ctx.bounds, {
   //   onClick: _cache[1] || (_cache[1] = () => {})
   // })
-  let Some(event_name) = v_on.event else {
+  let Some(StrOrExpr::Str(event_name)) = v_on.event else {
     todo!("v-on without argument is not implemented yet")
   };
 

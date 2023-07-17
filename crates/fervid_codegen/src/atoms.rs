@@ -1,4 +1,4 @@
-use swc_core::ecma::atoms::{JsWord, js_word};
+// use swc_core::ecma::atoms::{JsWord, js_word};
 
 lazy_static! {
     // pub static ref VUE: JsWord = JsWord::from("vue");

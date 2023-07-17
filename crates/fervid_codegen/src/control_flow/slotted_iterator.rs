@@ -130,7 +130,7 @@ fn is_from_default_slot(node: &Node) -> bool {
         Node::ConditionalSeq(_) => true,
 
         // explicit just in case I decide to change node types and forget about this place
-        Node::DynamicExpression { .. } | Node::Text(_) | Node::Comment(_) => true,
+        Node::Interpolation { .. } | Node::Text(_) | Node::Comment(_) => true,
     }
 }
 
@@ -252,9 +252,8 @@ mod tests {
                         value: "regular",
                     },
                     AttributeOrBinding::VBind(fervid_core::VBindDirective {
-                        argument: Some("disabled"),
+                        argument: Some("disabled".into()),
                         value: js("true"),
-                        is_dynamic_attr: false,
                         is_camel: false,
                         is_prop: false,
                         is_attr: false,
@@ -274,17 +273,15 @@ mod tests {
                 tag_name: "h1",
                 attributes: vec![
                     AttributeOrBinding::VBind(VBindDirective {
-                        argument: Some("disabled"),
+                        argument: Some("disabled".into()),
                         value: js("true"),
-                        is_dynamic_attr: false,
                         is_camel: false,
                         is_prop: false,
                         is_attr: false,
                     }),
                     AttributeOrBinding::VOn(VOnDirective {
-                        event: Some("event"),
+                        event: Some("event".into()),
                         handler: Some(js("baz")),
-                        is_dynamic_event: false,
                         modifiers: vec![],
                     }),
                 ],

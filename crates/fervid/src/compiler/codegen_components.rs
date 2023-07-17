@@ -241,7 +241,7 @@ impl<'a> CodegenContext<'a> {
             }
 
             // explicit just in case I decide to change node types and forget about this place
-            Node::DynamicExpression { .. } | Node::Text(_) | Node::Comment(_) | Node::ConditionalSeq(_) => true,
+            Node::Interpolation { .. } | Node::Text(_) | Node::Comment(_) | Node::ConditionalSeq(_) => true,
         };
 
         // Start a Js object
@@ -288,7 +288,7 @@ impl<'a> CodegenContext<'a> {
             buf.push_str(": ");
             buf.push_str(self.get_and_add_import_str(VueImports::WithCtx));
             CodeHelper::open_paren(buf);
-            CodeHelper::parens_option(buf, v_slot_directive.value);
+            // CodeHelper::parens_option(buf, v_slot_directive.value);
             buf.push_str(" => ");
 
             // Children
@@ -340,10 +340,6 @@ impl<'a> CodegenContext<'a> {
         for (index, directive) in directives.enumerate() {
             // todo throw away garbage values in v-model during analyzer pass (e.g. v-model="foo - bar" or v-model="")
             // yes, it will break commas when there are 2 v-models and the first is discarded
-            let directive_value = directive.value;
-            if directive_value == "" {
-                continue;
-            }
 
             if index != 0 {
                 self.code_helper.comma_newline(buf)
@@ -362,7 +358,7 @@ impl<'a> CodegenContext<'a> {
             CodeHelper::colon(buf);
             // todo context-aware codegen (scope checking)
             buf.push_str("_ctx.");
-            buf.push_str(directive_value);
+            // buf.push_str(directive_value);
             self.code_helper.comma_newline(buf);
 
             // Second, generate "onUpdate:modelValue" or "onUpdate:usersArgument"
@@ -376,8 +372,8 @@ impl<'a> CodegenContext<'a> {
             // For example, `$event => ((_ctx.modelValue) = $event)`
             // todo generate cache around it
             // todo context
-            write!(buf, "$event => ((_ctx.{}) = $event)", directive_value)
-                .expect("writing to buf failed");
+            // write!(buf, "$event => ((_ctx.{}) = $event)", directive_value)
+            //     .expect("writing to buf failed");
 
             // Optionally generate modifiers. Early exit if no work is needed
             if directive.modifiers.len() == 0 {

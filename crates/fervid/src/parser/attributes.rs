@@ -1,6 +1,6 @@
 use fervid_core::{
-    AttributeOrBinding, VBindDirective, VCustomDirective, VForDirective, VModelDirective,
-    VOnDirective, VSlotDirective, VueDirectives,
+    AttributeOrBinding, StrOrExpr, VBindDirective, VCustomDirective, VForDirective,
+    VModelDirective, VOnDirective, VSlotDirective, VueDirectives,
 };
 use nom::{
     branch::alt,
@@ -13,7 +13,10 @@ use nom::{
     Err, IResult,
 };
 
-use crate::parser::{html_utils::html_name, ecma::parse_js};
+use crate::parser::{
+    ecma::{parse_js, parse_js_pat},
+    html_utils::html_name,
+};
 
 pub fn parse_attributes(
     input: &str,
@@ -232,6 +235,19 @@ fn parse_directive<'i>(
         };
     }
 
+    macro_rules! push_directive_js {
+        ($key: ident, $value: expr) => {
+            // TODO span
+            match parse_js($value, 0, 0) {
+                Ok(parsed) => {
+                    let directives = get_directives!();
+                    directives.$key = Some(parsed);
+                }
+                Result::Err(_) => {}
+            }
+        };
+    }
+
     // Type the directive
     match directive_name {
         // Directives arranged by estimated usage frequency
@@ -256,35 +272,54 @@ fn parse_directive<'i>(
                 fail!();
             };
 
+            // TODO don't fail the directive but skip it instead
+            let argument = convert_argument(argument, is_dynamic, input)?;
+
             attributes.push(AttributeOrBinding::VBind(VBindDirective {
                 argument,
                 value: parsed_expr,
-                is_dynamic_attr: is_dynamic,
                 is_camel,
                 is_prop,
                 is_attr,
             }));
         }
-        "on" => attributes.push(AttributeOrBinding::VOn(VOnDirective {
-            event: argument,
-            handler: value.and_then(|value| {
-                // TODO span
-                let parse_result = parse_js(value, 0, 0);
-                match parse_result {
-                    Ok(parsed_expr) => Some(parsed_expr),
-                    Err(_) => None,
-                }
-            }),
-            is_dynamic_event: is_dynamic,
-            modifiers,
-        })),
+        "on" => {
+            let argument = convert_argument(argument, is_dynamic, input)?;
+
+            attributes.push(AttributeOrBinding::VOn(VOnDirective {
+                event: argument,
+                handler: value.and_then(|value| {
+                    // TODO span
+                    let parse_result = parse_js(value, 0, 0);
+                    match parse_result {
+                        Ok(parsed_expr) => Some(parsed_expr),
+                        Err(_) => None,
+                    }
+                }),
+                modifiers,
+            }));
+        }
         "if" => {
             let value = expect_value!();
-            push_directive!(v_if, value);
+
+            // TODO Span
+            match parse_js(value, 0, 0) {
+                Ok(condition) => {
+                    push_directive!(v_if, condition);
+                }
+                Result::Err(_) => {}
+            }
         }
         "else-if" => {
             let value = expect_value!();
-            push_directive!(v_else_if, value);
+
+            // TODO Span
+            match parse_js(value, 0, 0) {
+                Ok(condition) => {
+                    push_directive!(v_else_if, condition);
+                }
+                Result::Err(_) => {}
+            }
         }
         "else" => {
             push_directive!(v_else, ());
@@ -292,22 +327,51 @@ fn parse_directive<'i>(
         "for" => {
             let value = expect_value!();
 
-            let Some((iterator, iterable)) = split_itervar_and_iterable(value) else {
+            let Some((itervar, iterable)) = split_itervar_and_iterable(value) else {
                 fail!();
             };
 
-            push_directive!(v_for, VForDirective { iterable, iterator });
+            // TODO Span
+            match parse_js_pat(itervar, 0, 0) {
+                Ok(itervar) => match parse_js(iterable, 0, 0) {
+                    Ok(iterable) => {
+                        push_directive!(
+                            v_for,
+                            VForDirective {
+                                iterable,
+                                itervar: Box::new(itervar)
+                            }
+                        );
+                    }
+                    Result::Err(_) => {}
+                },
+                Result::Err(_) => {}
+            };
         }
         "model" => {
             let value = expect_value!();
-            let directives = get_directives!();
-            directives.v_model.push(VModelDirective {
-                argument,
-                value,
-                modifiers,
-            });
+
+            // TODO Span
+            match parse_js(value, 0, 0) {
+                Ok(model_binding) => {
+                    let directives = get_directives!();
+                    directives.v_model.push(VModelDirective {
+                        argument,
+                        value: *model_binding,
+                        modifiers,
+                    });
+                }
+                Result::Err(_) => {}
+            }
         }
         "slot" => {
+            let value = value.and_then(|v| {
+                // TODO Span
+                match parse_js(v, 0, 0) {
+                    Ok(value) => Some(value),
+                    Result::Err(_) => None,
+                }
+            });
             push_directive!(
                 v_slot,
                 VSlotDirective {
@@ -319,15 +383,15 @@ fn parse_directive<'i>(
         }
         "show" => {
             let value = expect_value!();
-            push_directive!(v_show, value);
+            push_directive_js!(v_show, value);
         }
         "html" => {
             let value = expect_value!();
-            push_directive!(v_html, value);
+            push_directive_js!(v_html, value);
         }
         "text" => {
             let value = expect_value!();
-            push_directive!(v_text, value);
+            push_directive_js!(v_text, value);
         }
         "once" => {
             push_directive!(v_once, ());
@@ -337,25 +401,68 @@ fn parse_directive<'i>(
         }
         "memo" => {
             let value = expect_value!();
-            push_directive!(v_memo, value);
+            push_directive_js!(v_memo, value);
         }
         "cloak" => {
             push_directive!(v_cloak, ());
         }
 
         // Custom
-        _ => {
-            let directives = get_directives!();
-            directives.custom.push(VCustomDirective {
-                name: directive_name,
-                argument,
-                modifiers,
-                value,
-            });
+        _ => 'custom: {
+            // If no value, include as is
+            let Some(value) = value else {
+                let directives = get_directives!();
+                directives.custom.push(VCustomDirective {
+                    name: directive_name,
+                    argument,
+                    modifiers,
+                    value: None,
+                });
+                break 'custom;
+            };
+
+            // If there is a value, try parsing it and only include the successfully parsed values
+            match parse_js(value, 0, 0) {
+                Ok(parsed) => {
+                    let directives = get_directives!();
+                    directives.custom.push(VCustomDirective {
+                        name: directive_name,
+                        argument,
+                        modifiers,
+                        value: Some(parsed),
+                    });
+                }
+                Result::Err(_) => {}
+            }
         }
     };
 
     Ok((input, ()))
+}
+
+/// Converts a raw Option<&str> argument to an argument
+/// which value is either a string or a js expression.
+/// If parsing Js fails, returns Err.
+fn convert_argument<'s>(
+    argument: Option<&'s str>,
+    is_dynamic: bool,
+    input: &'s str
+) -> Result<Option<StrOrExpr<'s>>, nom::Err<nom::error::Error<&'s str>>> {
+    match argument {
+        Some(raw_arg) => {
+            if is_dynamic {
+                // TODO Span & better error
+                let Ok(dynamic_argument) = parse_js(raw_arg, 0, 0) else {
+                    return Err(nom::Err::Error(nom::error::Error::from_error_kind(input, ErrorKind::Fail)));
+                };
+
+                Ok(Some(StrOrExpr::Expr(dynamic_argument)))
+            } else {
+                Ok(Some(StrOrExpr::Str(raw_arg)))
+            }
+        }
+        None => Ok(None),
+    }
 }
 
 // fn parse_dynamic_attr(input: &str) -> IResult<&str, HtmlAttribute> {

@@ -4,7 +4,7 @@ use swc_core::{
     ecma::{
         ast::{
             ArrowExpr, AssignExpr, AssignOp, BindingIdent, BlockStmtOrExpr, Bool, Expr, Ident,
-            Invalid, KeyValueProp, Lit, ObjectLit, ParenExpr, Pat, PatOrExpr, Prop, PropOrSpread,
+            KeyValueProp, Lit, ObjectLit, ParenExpr, Pat, PatOrExpr, Prop, PropOrSpread,
         },
         atoms::JsWord,
     },
@@ -12,8 +12,7 @@ use swc_core::{
 
 use crate::{
     context::CodegenContext,
-    transform::transform_scoped,
-    utils::{str_to_propname, to_camelcase, parse_js},
+    utils::{str_to_propname, to_camelcase},
 };
 
 impl CodegenContext {
@@ -27,24 +26,19 @@ impl CodegenContext {
         // TODO Spans
         let span = DUMMY_SP;
 
-        // Empty v-models are skipped.
-        // They should be reported in the analyzer
-        if v_model.value == "" {
-            return false;
-        }
-
         // `v-model="smth"` is same as `v-model:modelValue="smth"`
         let bound_attribute = v_model.argument.unwrap_or("modelValue");
 
         // 1. Transform the binding
-        let (transformed, has_js_bindings) =
-            self.transform_v_model_value(v_model.value, scope_to_use, span);
+        // let (transformed, has_js_bindings) =
+        //     self.transform_v_model_value(v_model.value, scope_to_use, span);
+        let has_js_bindings = true; // TODO
 
         // 2. Push model attribute and its binding,
         // e.g. `v-model="smth"` -> `modelValue: _ctx.smth`
         out.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
             key: str_to_propname(bound_attribute, span),
-            value: transformed,
+            value: Box::new(v_model.value.to_owned()),
         }))));
 
         // 3. Generate event name, e.g. `onUpdate:modelValue` or `onUpdate:usersArgument`
@@ -56,7 +50,7 @@ impl CodegenContext {
         // e.g. `v-model="smth"` -> `"onUpdate:modelValue": $event => ((_ctx.smth) = $event)`
         out.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
             key: str_to_propname(&event_listener, span),
-            value: self.generate_v_model_update_fn(v_model.value, scope_to_use, span),
+            value: self.generate_v_model_update_fn(&v_model.value, scope_to_use, span),
         }))));
 
         // 5. Optionally generate modifiers
@@ -95,24 +89,20 @@ impl CodegenContext {
     /// transformed expression may also differ a lot.
     fn transform_v_model_value(
         &self,
-        value: &str,
+        value: &Expr,
         scope_to_use: u32,
         _span: Span,
     ) -> (Box<Expr>, bool) {
         // Polyfill
-        let Ok(mut expr) = parse_js(value) else {
-            return (Box::new(Expr::Invalid(Invalid { span: DUMMY_SP })), false);
-        };
 
         // TODO Implement the correct transformation based on BindingTypes
-        let has_js = transform_scoped(&mut expr, &self.scope_helper, scope_to_use);
-
-        (expr, has_js)
+        // let has_js = transform_scoped(&mut expr, &self.scope_helper, scope_to_use);
+        (Box::new(value.to_owned()), true)
     }
 
     /// Generates the update code for the `v-model`.
     /// Same as [`transform_v_model_value`], logic may differ a lot.
-    fn generate_v_model_update_fn(&self, value: &str, scope_to_use: u32, span: Span) -> Box<Expr> {
+    fn generate_v_model_update_fn(&self, value: &Expr, scope_to_use: u32, span: Span) -> Box<Expr> {
         // TODO Actual implementation
 
         // todo maybe re-use the previously generated expression from generate_v_model_for_component?
@@ -173,6 +163,8 @@ fn generate_v_model_modifiers(modifiers: &[&str], span: Span) -> ObjectLit {
 mod tests {
     use swc_core::ecma::ast::ObjectLit;
 
+    use crate::test_utils::js;
+
     use super::*;
 
     #[test]
@@ -181,7 +173,7 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: None,
-                value: "foo",
+                value: *js("foo"),
                 modifiers: Vec::new(),
             }],
             r#"{modelValue:_ctx.foo,"onUpdate:modelValue":$event=>((_ctx.foo)=$event)}"#,
@@ -194,7 +186,7 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: Some("simple"),
-                value: "foo",
+                value: *js("foo"),
                 modifiers: Vec::new(),
             }],
             r#"{simple:_ctx.foo,"onUpdate:simple":$event=>((_ctx.foo)=$event)}"#,
@@ -204,7 +196,7 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: Some("modelValue"),
-                value: "bar",
+                value: *js("bar"),
                 modifiers: Vec::new(),
             }],
             r#"{modelValue:_ctx.bar,"onUpdate:modelValue":$event=>((_ctx.bar)=$event)}"#,
@@ -214,7 +206,7 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: Some("model-value"),
-                value: "baz",
+                value: *js("baz"),
                 modifiers: Vec::new(),
             }],
             r#"{"model-value":_ctx.baz,"onUpdate:modelValue":$event=>((_ctx.baz)=$event)}"#,
@@ -227,7 +219,7 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: None,
-                value: "foo",
+                value: *js("foo"),
                 modifiers: vec!["lazy", "trim"],
             }],
             r#"{modelValue:_ctx.foo,"onUpdate:modelValue":$event=>((_ctx.foo)=$event),modelModifiers:{lazy:true,trim:true}}"#,
@@ -237,7 +229,7 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: None,
-                value: "foo",
+                value: *js("foo"),
                 modifiers: vec!["custom-modifier"],
             }],
             r#"{modelValue:_ctx.foo,"onUpdate:modelValue":$event=>((_ctx.foo)=$event),modelModifiers:{"custom-modifier":true}}"#,
@@ -247,7 +239,7 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: Some("foo-bar"),
-                value: "bazQux",
+                value: *js("bazQux"),
                 modifiers: vec!["custom-modifier"],
             }],
             r#"{"foo-bar":_ctx.bazQux,"onUpdate:fooBar":$event=>((_ctx.bazQux)=$event),"foo-barModifiers":{"custom-modifier":true}}"#,

@@ -30,20 +30,20 @@ impl<'a> CodegenContext<'a> {
     };
 
     // Polyfill to the old generation method
-    let to_generate_len = if !is_component { directives.v_model.len() } else { 0 } + directives.v_show.map_or(0, |_| 1) + directives.custom.len();
+    let to_generate_len = if !is_component { directives.v_model.len() } else { 0 } + directives.v_show.as_ref().map_or(0, |_| 1) + directives.custom.len();
     let mut to_generate = Vec::with_capacity(to_generate_len);
 
     if !is_component {
       for v_model in directives.v_model.iter() {
-        to_generate.push(("model", v_model.argument, Some(v_model.value), &v_model.modifiers));  
+        to_generate.push(("model", v_model.argument, Some(&v_model.value), &v_model.modifiers));  
       }
     }
     let empty_vec = vec![];
-    if let Some(v_show) = directives.v_show {
+    if let Some(ref v_show) = directives.v_show {
       to_generate.push(("show", None, Some(v_show), &empty_vec));
     }
     for custom in directives.custom.iter() {
-      to_generate.push((custom.name, custom.argument, custom.value, &custom.modifiers));
+      to_generate.push((custom.name, custom.argument, custom.value.as_ref().map(|v| &**v), &custom.modifiers));
     }
 
     for (name, argument, value, modifiers) in to_generate {

@@ -10,10 +10,7 @@ use swc_core::{
     },
 };
 
-use crate::{
-    context::CodegenContext, control_flow::SlottedIterator,
-    imports::VueImports,
-};
+use crate::{context::CodegenContext, control_flow::SlottedIterator, imports::VueImports};
 
 impl CodegenContext {
     pub fn generate_element_vnode(
@@ -181,10 +178,7 @@ impl CodegenContext {
 
         // Process remaining directives
         if let Some(ref directives) = element_node.starting_tag.directives {
-            self.generate_remaining_element_directives(
-                &mut create_element_expr,
-                &directives,
-            );
+            self.generate_remaining_element_directives(&mut create_element_expr, &directives);
         }
 
         create_element_expr
@@ -196,11 +190,7 @@ impl CodegenContext {
     ) -> Vec<PropOrSpread> {
         let mut result_props = Vec::new();
 
-        self.generate_attributes(
-            &element_node.starting_tag.attributes,
-            &mut result_props,
-            element_node.template_scope,
-        );
+        self.generate_attributes(&element_node.starting_tag.attributes, &mut result_props);
 
         result_props
     }
@@ -245,7 +235,7 @@ impl CodegenContext {
     fn generate_remaining_element_directives(
         &mut self,
         create_element_expr: &mut Expr,
-        directives: &VueDirectives
+        directives: &VueDirectives,
     ) {
         // TODO for v-models in elements `withDirectives` needs a bit more information
         self.generate_remaining_directives(create_element_expr, directives)
@@ -254,7 +244,9 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{AttributeOrBinding, Node, StartingTag, VBindDirective, VOnDirective};
+    use fervid_core::{
+        AttributeOrBinding, Interpolation, Node, StartingTag, VBindDirective, VOnDirective,
+    };
 
     use super::*;
     use crate::test_utils::js;
@@ -277,29 +269,26 @@ mod tests {
                             value: "bar",
                         },
                         AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some("baz"),
+                            argument: Some("baz".into()),
                             value: js("qux"),
-                            is_dynamic_attr: false,
                             is_camel: false,
                             is_prop: false,
                             is_attr: false,
                         }),
                         AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some("readonly"),
+                            argument: Some("readonly".into()),
                             value: js("true"),
-                            is_dynamic_attr: false,
                             is_camel: false,
                             is_prop: false,
                             is_attr: false,
                         }),
                         AttributeOrBinding::VOn(VOnDirective {
-                            event: Some("click"),
+                            event: Some("click".into()),
                             handler: Some(js("handleClick")),
-                            is_dynamic_event: false,
                             modifiers: vec![],
                         }),
                     ],
-                    directives: None
+                    directives: None,
                 },
                 children: vec![Node::Text("hello from div")],
                 template_scope: 0,
@@ -317,7 +306,7 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "div",
                     attributes: vec![],
-                    directives: None
+                    directives: None,
                 },
                 children: vec![Node::Text("hello from div")],
                 template_scope: 0,
@@ -340,15 +329,14 @@ mod tests {
                             value: "bar",
                         },
                         AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some("some-baz"),
+                            argument: Some("some-baz".into()),
                             value: js("qux"),
-                            is_dynamic_attr: false,
                             is_camel: false,
                             is_prop: false,
                             is_attr: false,
                         }),
                     ],
-                    directives: None
+                    directives: None,
                 },
                 children: vec![],
                 template_scope: 0,
@@ -368,15 +356,14 @@ mod tests {
                             value: "bar",
                         },
                         AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some("some-baz"),
+                            argument: Some("some-baz".into()),
                             value: js("qux"),
-                            is_dynamic_attr: false,
                             is_camel: false,
                             is_prop: false,
                             is_attr: false,
                         }),
                     ],
-                    directives: None
+                    directives: None,
                 },
                 children: vec![],
                 template_scope: 0,
@@ -394,14 +381,14 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "div",
                     attributes: vec![],
-                    directives: None
+                    directives: None,
                 },
                 children: vec![
                     Node::Text("hello from div "),
-                    Node::DynamicExpression {
-                        value: "true",
+                    Node::Interpolation(Interpolation {
+                        value: js("true"),
                         template_scope: 0,
-                    },
+                    }),
                     Node::Text(" bye!"),
                 ],
                 template_scope: 0,
@@ -419,19 +406,19 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "div",
                     attributes: vec![],
-                    directives: None
+                    directives: None,
                 },
                 children: vec![
                     Node::Text("hello from div "),
-                    Node::DynamicExpression {
-                        value: "true",
+                    Node::Interpolation(Interpolation {
+                        value: js("true"),
                         template_scope: 0,
-                    },
+                    }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "span",
                             attributes: vec![],
-                            directives: None
+                            directives: None,
                         },
                         children: vec![Node::Text("bye!")],
                         template_scope: 0,

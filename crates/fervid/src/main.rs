@@ -4,7 +4,7 @@ extern crate swc_ecma_parser;
 use std::time::Instant;
 
 use fervid::{compile_sfc, SfcBlock, SfcScriptBlock};
-use fervid_core::{ElementNode, AttributeOrBinding, Node, StartingTag};
+use fervid_core::{AttributeOrBinding, ElementNode, Interpolation, Node, StartingTag};
 
 use fervid::analyzer::ast_optimizer;
 use fervid::analyzer::scope::ScopeHelper;
@@ -68,6 +68,8 @@ fn test_real_compilation() {
     let mut scope_helper = ScopeHelper::default();
     scope_helper.transform_and_record_ast(&mut template_block.roots);
 
+    // TODO Implement scope helper walking for the Expr'd nodes
+
     #[cfg(feature = "dbg_print")]
     {
         println!("Result: {:#?}", ast);
@@ -97,28 +99,36 @@ fn test_synthetic_compilation() {
                         name: "class",
                         value: "yes",
                     }],
-                    directives: None
+                    directives: None,
                 },
                 children: vec![
                     Node::Text("Hello world"),
-                    Node::DynamicExpression {
-                        value: "testRef",
+                    Node::Interpolation(Interpolation {
+                        value: Box::new(Expr::Ident(Ident {
+                            span: DUMMY_SP,
+                            sym: JsWord::from("testRef"),
+                            optional: false,
+                        })),
                         template_scope: 0,
-                    },
+                    }),
                     Node::Text("yes yes"),
                     // Just element
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "i",
                             attributes: vec![],
-                            directives: None
+                            directives: None,
                         },
                         children: vec![
                             Node::Text("italics, mm"),
-                            Node::DynamicExpression {
-                                value: "hey",
+                            Node::Interpolation(Interpolation {
+                                value: Box::new(Expr::Ident(Ident {
+                                    span: DUMMY_SP,
+                                    sym: JsWord::from("hey"),
+                                    optional: false,
+                                })),
                                 template_scope: 0,
-                            },
+                            }),
                         ],
                         template_scope: 0,
                     }),
@@ -127,14 +137,18 @@ fn test_synthetic_compilation() {
                         starting_tag: StartingTag {
                             tag_name: "CustomComponent",
                             attributes: vec![],
-                            directives: None
+                            directives: None,
                         },
                         children: vec![
                             Node::Text("italics, mm"),
-                            Node::DynamicExpression {
-                                value: "hey",
+                            Node::Interpolation(Interpolation {
+                                value: Box::new(Expr::Ident(Ident {
+                                    span: DUMMY_SP,
+                                    sym: JsWord::from("hey"),
+                                    optional: false,
+                                })),
                                 template_scope: 0,
-                            },
+                            }),
                         ],
                         template_scope: 0,
                     }),

@@ -1,5 +1,5 @@
 [package]
-name = "fervid_codegen"
+name = "fervid_transform"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,14 +7,7 @@ edition = "2021"
 
 [dependencies]
 fervid_core = { path="../fervid_core" }
-fervid_script = { path = "../fervid_script" }
-lazy_static = "1.4.0"
+fervid_script = { path="../fervid_script" }
+phf = { version = "0.11", features = ["macros"] }
 swc_core = { version = "0.75.*", features = ["common_plugin_transform", "ecma_ast"] }
-swc_ecma_codegen = "0.138.*"
-fxhash = "0.2.1"
 smallvec = "1.10.0"
-regex = "1"
-flagset = "0.4.3"
-
-[dev-dependencies]
-swc_ecma_parser = "0.133.*"

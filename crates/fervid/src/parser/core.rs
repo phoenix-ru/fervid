@@ -8,10 +8,11 @@ use nom::{bytes::complete::tag, sequence::tuple, IResult};
 use std::str;
 
 use super::attributes::parse_attributes;
+use super::ecma::parse_js;
 use super::html_utils::{classify_element_kind, html_name, space0, ElementKind};
 use fervid_core::{
     AttributeOrBinding, ElementNode, Node, SfcBlock, SfcCustomBlock, SfcScriptBlock, SfcStyleBlock,
-    SfcTemplateBlock, StartingTag,
+    SfcTemplateBlock, StartingTag, Interpolation,
 };
 
 /// Parses the Vue Single-File Component
@@ -226,14 +227,21 @@ fn parse_element_end_tag(input: &str) -> IResult<&str, &str> {
     delimited(tag("</"), html_name, preceded(space0, tag(">")))(input)
 }
 
-fn parse_dynamic_expression_node(input: &str) -> IResult<&str, Node> {
-    let (input, expression_content) = parse_dynamic_expression(input)?;
+fn parse_interpolation_node(input: &str) -> IResult<&str, Node> {
+    let (input, raw_expression) = parse_dynamic_expression(input)?;
+
+    // TODO Span
+    let parsed = match parse_js(raw_expression, 0, 0) {
+        Ok(parsed) => parsed,
+        Err(_) => return fail(input), // this ignores the bad interpolation (unconfirmed)
+    };
+
     Ok((
         input,
-        Node::DynamicExpression {
-            value: expression_content.trim(),
+        Node::Interpolation(Interpolation {
+            value: parsed,
             template_scope: 0,
-        },
+        })
     ))
 }
 
@@ -320,7 +328,7 @@ fn parse_comment_node(input: &str) -> IResult<&str, Node> {
 
 fn parse_node_children(input: &str) -> IResult<&str, Vec<Node>> {
     many0(alt((
-        parse_dynamic_expression_node,
+        parse_interpolation_node,
         parse_comment_node,
         parse_element_node,
         parse_text_node,

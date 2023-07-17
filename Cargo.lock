@@ -538,7 +538,6 @@ dependencies = [
  "flagset",
  "fxhash",
  "lazy_static",
- "phf 0.11.1",
  "regex",
  "smallvec",
  "swc_core",
@@ -550,6 +549,7 @@ dependencies = [
 name = "fervid_core"
 version = "0.0.1"
 dependencies = [
+ "phf 0.11.1",
  "swc_core",
 ]
 
@@ -571,6 +571,17 @@ dependencies = [
  "swc_core",
  "swc_ecma_codegen",
  "swc_ecma_parser",
+]
+
+[[package]]
+name = "fervid_transform"
+version = "0.1.0"
+dependencies = [
+ "fervid_core",
+ "fervid_script",
+ "phf 0.11.1",
+ "smallvec",
+ "swc_core",
 ]
 
 [[package]]

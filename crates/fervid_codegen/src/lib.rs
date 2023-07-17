@@ -8,11 +8,10 @@ mod components;
 mod context;
 mod control_flow;
 mod directives;
-mod dynamic_expr;
+mod interpolation;
 mod elements;
 mod imports;
 mod text;
-mod transform;
 mod utils;
 
 #[cfg(test)]

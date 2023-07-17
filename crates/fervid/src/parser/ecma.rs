@@ -1,4 +1,4 @@
-use swc_core::{ecma::ast::Expr, common::BytePos};
+use swc_core::{ecma::ast::{Expr, Pat}, common::BytePos};
 use swc_ecma_parser::{PResult, lexer::Lexer, Syntax, StringInput, Parser};
 
 pub fn parse_js(raw: &str, span_start: u32, span_end: u32) -> PResult<Box<Expr>> {
@@ -14,4 +14,19 @@ pub fn parse_js(raw: &str, span_start: u32, span_end: u32) -> PResult<Box<Expr>>
     let mut parser = Parser::new_from(lexer);
 
     parser.parse_expr()
+}
+
+pub fn parse_js_pat(raw: &str, span_start: u32, span_end: u32) -> PResult<Pat> {
+    let lexer = Lexer::new(
+        // We want to parse ecmascript
+        Syntax::Es(Default::default()),
+        // EsVersion defaults to es5
+        Default::default(),
+        StringInput::new(raw, BytePos(span_start), BytePos(span_end)),
+        None,
+    );
+
+    let mut parser = Parser::new_from(lexer);
+
+    parser.parse_pat()
 }

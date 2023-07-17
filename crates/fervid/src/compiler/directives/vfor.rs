@@ -1,4 +1,4 @@
-use fervid_core::{StartingTag, AttributeOrBinding, VBindDirective};
+use fervid_core::{StartingTag, AttributeOrBinding, VBindDirective, StrOrExpr};
 
 use crate::compiler::{codegen::CodegenContext, imports::VueImports, helper::CodeHelper};
 
@@ -29,23 +29,23 @@ impl CodegenContext<'_> {
     buf.push_str(self.get_and_add_import_str(VueImports::RenderList));
     CodeHelper::open_paren(buf);
 
-    let itervar = v_for.iterator;
-    let iterable = v_for.iterable;
+    // let itervar = &v_for.itervar;
+    // let iterable = v_for.iterable;
 
     // Add iterable
     // TODO Contextual compile
-    buf.push_str(iterable);
+    // buf.push_str(iterable);
     CodeHelper::comma(buf);
 
     // Add iterator variables
-    let needs_paren = !itervar.starts_with('(');
-    if needs_paren {
-      CodeHelper::open_paren(buf);
-    }
-    buf.push_str(itervar);
-    if needs_paren {
-      CodeHelper::close_paren(buf);
-    }
+    // let needs_paren = !itervar.starts_with('(');
+    // if needs_paren {
+    //   CodeHelper::open_paren(buf);
+    // }
+    // buf.push_str(itervar);
+    // if needs_paren {
+    //   CodeHelper::close_paren(buf);
+    // }
 
     // Add arrow function with return
     // Here, I replaced `=> { return` to `=> (` because it's the same
@@ -63,7 +63,7 @@ impl CodegenContext<'_> {
     let has_key = starting_tag.attributes
       .iter()
       .any(|attr| match attr {
-        AttributeOrBinding::VBind(VBindDirective { argument: Some("key"), .. }) => true,
+        AttributeOrBinding::VBind(VBindDirective { argument: Some(StrOrExpr::Str("key")), .. }) => true,
         _ => false
       });
 

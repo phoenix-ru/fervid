@@ -1,4 +1,4 @@
-use fervid_core::{ElementNode, Node, StartingTag, VForDirective, VSlotDirective, VueDirectives};
+use fervid_core::{ElementNode, Node, StartingTag, VSlotDirective, VueDirectives};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
@@ -14,17 +14,6 @@ use crate::{
     context::CodegenContext, control_flow::SlottedIterator, imports::VueImports,
     utils::str_to_propname,
 };
-
-/// Describes the `v-slot`, `v-for`, `v-if`,
-/// `v-else-if`, `v-else` directives supported by <template>
-#[derive(Default)]
-struct TemplateDirectives<'d> {
-    v_slot: Option<&'d VSlotDirective<'d>>,
-    v_for: Option<&'d VForDirective<'d>>,
-    v_if: Option<&'d str>,
-    v_else_if: Option<&'d str>,
-    v_else: Option<()>,
-}
 
 impl CodegenContext {
     pub fn generate_component_vnode(
@@ -157,11 +146,7 @@ impl CodegenContext {
     fn generate_component_attributes<'e>(&mut self, component_node: &'e ElementNode) -> ObjectLit {
         let mut result_props = Vec::new();
 
-        self.generate_attributes(
-            &component_node.starting_tag.attributes,
-            &mut result_props,
-            component_node.template_scope,
-        );
+        self.generate_attributes(&component_node.starting_tag.attributes, &mut result_props);
 
         // Process v-models
         if let Some(ref directives) = component_node.starting_tag.directives {
@@ -499,7 +484,7 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{AttributeOrBinding, Node, StartingTag, VBindDirective};
+    use fervid_core::{AttributeOrBinding, Interpolation, Node, StartingTag, VBindDirective};
 
     use crate::test_utils::js;
 
@@ -551,9 +536,8 @@ mod tests {
                             value: "bar",
                         },
                         AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some("some-baz"),
+                            argument: Some("some-baz".into()),
                             value: js("qux"),
-                            is_dynamic_attr: false,
                             is_camel: false,
                             is_prop: false,
                             is_attr: false,
@@ -716,10 +700,10 @@ mod tests {
                         },
                         children: vec![
                             Node::Text("hello from slot "),
-                            Node::DynamicExpression {
-                                value: "one",
+                            Node::Interpolation(Interpolation {
+                                value: js("one"),
                                 template_scope: 0,
-                            },
+                            }),
                         ],
                         template_scope: 0,
                     }),

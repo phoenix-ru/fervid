@@ -1,4 +1,4 @@
-use fervid_core::{ElementNode, Node, StartingTag, VueDirectives};
+use fervid_core::{is_html_tag, ElementNode, Node, StartingTag, VueDirectives};
 use smallvec::SmallVec;
 use swc_core::{
     common::{BytePos, Span, SyntaxContext, DUMMY_SP},
@@ -8,7 +8,7 @@ use swc_core::{
     },
 };
 
-use crate::{context::CodegenContext, imports::VueImports, utils};
+use crate::{context::CodegenContext, imports::VueImports};
 
 type TextNodesConcatenationVec = SmallVec<[Expr; 3]>;
 
@@ -18,10 +18,7 @@ impl CodegenContext {
         match node {
             Node::Text(contents) => (self.generate_text_node(contents, DUMMY_SP), false),
 
-            Node::DynamicExpression {
-                value,
-                template_scope,
-            } => self.generate_dynamic_expression(value, *template_scope, DUMMY_SP),
+            Node::Interpolation(interpolation) => self.generate_interpolation(interpolation),
 
             Node::Element(element_node) => {
                 self.generate_element_or_component(element_node, wrap_in_block)
@@ -108,7 +105,7 @@ impl CodegenContext {
 
         while let Some(node) = iter.next() {
             let (generated, has_js) = self.generate_node(node, false);
-            let is_text_node = matches!(node, Node::Text(_) | Node::DynamicExpression { .. });
+            let is_text_node = matches!(node, Node::Text(_) | Node::Interpolation { .. });
             patch_flag_text = has_js;
 
             if is_text_node {
@@ -137,7 +134,7 @@ impl CodegenContext {
 
         let tag_name = starting_tag.tag_name;
 
-        let is_html_tag = utils::is_html_tag(tag_name);
+        let is_html_tag = is_html_tag(tag_name);
         // if is_html_tag {
         //     return false;
         // }
@@ -179,13 +176,9 @@ impl CodegenContext {
         })
     }
 
-    pub fn generate_remaining_directives(
-        &mut self,
-        _expr: &mut Expr,
-        _directives: &VueDirectives
-    ) {
+    pub fn generate_remaining_directives(&mut self, _expr: &mut Expr, _directives: &VueDirectives) {
         // if remaining_directives.len() != 0 {
-            todo!("Remaining directives are not implemented yet")
+        todo!("Remaining directives are not implemented yet")
         // }
     }
 
