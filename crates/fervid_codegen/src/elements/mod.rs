@@ -388,6 +388,7 @@ mod tests {
                     Node::Interpolation(Interpolation {
                         value: js("true"),
                         template_scope: 0,
+                        patch_flag: false
                     }),
                     Node::Text(" bye!"),
                 ],
@@ -413,6 +414,7 @@ mod tests {
                     Node::Interpolation(Interpolation {
                         value: js("true"),
                         template_scope: 0,
+                        patch_flag: false
                     }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {

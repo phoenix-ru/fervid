@@ -703,6 +703,7 @@ mod tests {
                             Node::Interpolation(Interpolation {
                                 value: js("one"),
                                 template_scope: 0,
+                                patch_flag: true
                             }),
                         ],
                         template_scope: 0,

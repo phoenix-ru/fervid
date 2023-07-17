@@ -9,6 +9,7 @@ use fervid_core::{AttributeOrBinding, ElementNode, Interpolation, Node, Starting
 use fervid::analyzer::ast_optimizer;
 use fervid::analyzer::scope::ScopeHelper;
 use fervid::parser;
+use swc_core::{ecma::{ast::{Expr, Ident}, atoms::JsWord}, common::DUMMY_SP};
 
 fn main() {
     let n = Instant::now();
@@ -110,6 +111,7 @@ fn test_synthetic_compilation() {
                             optional: false,
                         })),
                         template_scope: 0,
+                        patch_flag: true
                     }),
                     Node::Text("yes yes"),
                     // Just element
@@ -128,6 +130,7 @@ fn test_synthetic_compilation() {
                                     optional: false,
                                 })),
                                 template_scope: 0,
+                                patch_flag: true
                             }),
                         ],
                         template_scope: 0,
@@ -148,6 +151,7 @@ fn test_synthetic_compilation() {
                                     optional: false,
                                 })),
                                 template_scope: 0,
+                                patch_flag: true
                             }),
                         ],
                         template_scope: 0,

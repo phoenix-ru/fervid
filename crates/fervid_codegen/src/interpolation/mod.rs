@@ -48,8 +48,7 @@ impl CodegenContext {
                 }],
                 type_args: None,
             }),
-            // has_js_bindings,
-            false
+            interpolation.patch_flag
         )
     }
 }

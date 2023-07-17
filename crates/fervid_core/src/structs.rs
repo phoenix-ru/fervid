@@ -63,7 +63,8 @@ pub struct Conditional<'e> {
 #[derive(Debug, Clone)]
 pub struct Interpolation {
     pub value: Box<Expr>,
-    pub template_scope: u32
+    pub template_scope: u32,
+    pub patch_flag: bool
 }
 
 /// Starting tag represents [`ElementNode`]'s tag name and attributes

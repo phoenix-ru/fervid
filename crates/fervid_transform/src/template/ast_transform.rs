@@ -298,8 +298,10 @@ impl<'a> Visitor for TemplateVisitor<'_> {
     fn visit_interpolation(&mut self, interpolation: &mut Interpolation) {
         interpolation.template_scope = self.current_scope;
 
-        self.scope_helper
+        let has_js = self.scope_helper
             .transform_expr(&mut interpolation.value, self.current_scope);
+
+        interpolation.patch_flag = has_js;
     }
 }
 

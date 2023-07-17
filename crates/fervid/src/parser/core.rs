@@ -241,6 +241,7 @@ fn parse_interpolation_node(input: &str) -> IResult<&str, Node> {
         Node::Interpolation(Interpolation {
             value: parsed,
             template_scope: 0,
+            patch_flag: false
         })
     ))
 }
