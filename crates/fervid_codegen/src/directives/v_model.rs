@@ -176,7 +176,7 @@ mod tests {
                 value: *js("foo"),
                 modifiers: Vec::new(),
             }],
-            r#"{modelValue:_ctx.foo,"onUpdate:modelValue":$event=>((_ctx.foo)=$event)}"#,
+            r#"{modelValue:foo,"onUpdate:modelValue":$event=>((foo)=$event)}"#,
         );
     }
 
@@ -189,7 +189,7 @@ mod tests {
                 value: *js("foo"),
                 modifiers: Vec::new(),
             }],
-            r#"{simple:_ctx.foo,"onUpdate:simple":$event=>((_ctx.foo)=$event)}"#,
+            r#"{simple:foo,"onUpdate:simple":$event=>((foo)=$event)}"#,
         );
 
         // v-model:modelValue="bar"
@@ -199,7 +199,7 @@ mod tests {
                 value: *js("bar"),
                 modifiers: Vec::new(),
             }],
-            r#"{modelValue:_ctx.bar,"onUpdate:modelValue":$event=>((_ctx.bar)=$event)}"#,
+            r#"{modelValue:bar,"onUpdate:modelValue":$event=>((bar)=$event)}"#,
         );
 
         // v-model:model-value="baz"
@@ -209,7 +209,7 @@ mod tests {
                 value: *js("baz"),
                 modifiers: Vec::new(),
             }],
-            r#"{"model-value":_ctx.baz,"onUpdate:modelValue":$event=>((_ctx.baz)=$event)}"#,
+            r#"{"model-value":baz,"onUpdate:modelValue":$event=>((baz)=$event)}"#,
         );
     }
 
@@ -222,7 +222,7 @@ mod tests {
                 value: *js("foo"),
                 modifiers: vec!["lazy", "trim"],
             }],
-            r#"{modelValue:_ctx.foo,"onUpdate:modelValue":$event=>((_ctx.foo)=$event),modelModifiers:{lazy:true,trim:true}}"#,
+            r#"{modelValue:foo,"onUpdate:modelValue":$event=>((foo)=$event),modelModifiers:{lazy:true,trim:true}}"#,
         );
 
         // v-model.custom-modifier="foo"
@@ -232,7 +232,7 @@ mod tests {
                 value: *js("foo"),
                 modifiers: vec!["custom-modifier"],
             }],
-            r#"{modelValue:_ctx.foo,"onUpdate:modelValue":$event=>((_ctx.foo)=$event),modelModifiers:{"custom-modifier":true}}"#,
+            r#"{modelValue:foo,"onUpdate:modelValue":$event=>((foo)=$event),modelModifiers:{"custom-modifier":true}}"#,
         );
 
         // v-model:foo-bar.custom-modifier="bazQux"
@@ -242,7 +242,7 @@ mod tests {
                 value: *js("bazQux"),
                 modifiers: vec!["custom-modifier"],
             }],
-            r#"{"foo-bar":_ctx.bazQux,"onUpdate:fooBar":$event=>((_ctx.bazQux)=$event),"foo-barModifiers":{"custom-modifier":true}}"#,
+            r#"{"foo-bar":bazQux,"onUpdate:fooBar":$event=>((bazQux)=$event),"foo-barModifiers":{"custom-modifier":true}}"#,
         );
     }
 

@@ -98,7 +98,7 @@ mod tests {
                 else_if_nodes: vec![],
                 else_node: None,
             },
-            r#"_ctx.foo||true?_createElementVNode("h1",null,"hello"):_createCommentVNode("v-if")"#,
+            r#"foo||true?_createElementVNode("h1",null,"hello"):_createCommentVNode("v-if")"#,
         )
     }
 
@@ -131,7 +131,7 @@ mod tests {
                     template_scope: 0,
                 })),
             },
-            r#"_ctx.foo||true?_createElementVNode("h1",null,"hello"):_createElementVNode("h2",null,"bye")"#,
+            r#"foo||true?_createElementVNode("h1",null,"hello"):_createElementVNode("h2",null,"bye")"#,
         )
     }
 
@@ -143,7 +143,7 @@ mod tests {
         test_out(
             ConditionalNodeSequence {
                 if_node: Box::new(Conditional {
-                    condition: *js("foo || true"),
+                    condition: *js("foo"),
                     node: ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "h1",
@@ -182,7 +182,7 @@ mod tests {
                 ],
                 else_node: None,
             },
-            r#"_ctx.foo?_createElementVNode("h1",null,"hello"):true?_createElementVNode("h2",null,"hi"):undefined?_createElementVNode("h3",null,"bye"):_createCommentVNode("v-if")"#,
+            r#"foo?_createElementVNode("h1",null,"hello"):true?_createElementVNode("h2",null,"hi"):undefined?_createElementVNode("h3",null,"bye"):_createCommentVNode("v-if")"#,
         )
     }
 
@@ -242,7 +242,7 @@ mod tests {
                     template_scope: 0,
                 })),
             },
-            r#"_ctx.foo?_createElementVNode("h1",null,"hello"):true?_createElementVNode("h2",null,"hi"):undefined?_createElementVNode("h3",null,"good morning"):_createElementVNode("h4",null,"bye")"#,
+            r#"foo?_createElementVNode("h1",null,"hello"):true?_createElementVNode("h2",null,"hi"):undefined?_createElementVNode("h3",null,"good morning"):_createElementVNode("h4",null,"bye")"#,
         )
     }
 

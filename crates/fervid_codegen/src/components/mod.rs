@@ -548,7 +548,7 @@ mod tests {
                 children: vec![],
                 template_scope: 0,
             },
-            r#"_createVNode(_component_test_component,{foo:"bar","some-baz":_ctx.qux})"#,
+            r#"_createVNode(_component_test_component,{foo:"bar","some-baz":qux})"#,
             false,
         );
     }
@@ -737,7 +737,7 @@ mod tests {
                 ],
                 template_scope: 0,
             },
-            r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot "+_toDisplayString(_ctx.one),1)]),baz:_withCtx(()=>[_createTextVNode("hello from slot "),_createElementVNode("b",null,"two")])})"#,
+            r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot "+_toDisplayString(one),1)]),baz:_withCtx(()=>[_createTextVNode("hello from slot "),_createElementVNode("b",null,"two")])})"#,
             false,
         );
     }

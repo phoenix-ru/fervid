@@ -177,7 +177,7 @@ impl CodegenContext {
                                 expr: Box::from(Expr::Bin(BinExpr {
                                     span,
                                     op: BinaryOp::LogicalOr,
-                                    left: value.clone(), // ?
+                                    left: expr.to_owned(), // ?
                                     right: Box::from(Expr::Lit(Lit::Str(Str {
                                         span,
                                         value: JsWord::from(""),
@@ -594,7 +594,7 @@ fn empty_arrow_expr(span: Span) -> Expr {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{AttributeOrBinding, VBindDirective, VOnDirective, StrOrExpr};
+    use fervid_core::{AttributeOrBinding, VBindDirective, VOnDirective};
     use swc_core::{common::DUMMY_SP, ecma::ast::ObjectLit};
 
     use crate::{context::CodegenContext, test_utils::js};
@@ -632,7 +632,7 @@ mod tests {
                 argument: Some("class".into()),
                 value: js("[item2, index]")
             })],
-            r#"{class:_normalizeClass([_ctx.item2,_ctx.index])}"#,
+            r#"{class:_normalizeClass([item2,index])}"#,
         );
     }
 
@@ -649,7 +649,7 @@ mod tests {
                     value: js("[item2, index]")
                 }),
             ],
-            r#"{class:_normalizeClass(["both regular and bound",[_ctx.item2,_ctx.index]])}"#,
+            r#"{class:_normalizeClass(["both regular and bound",[item2,index]])}"#,
         );
     }
 
@@ -672,7 +672,7 @@ mod tests {
                 argument: Some("style".into()),
                 value: js("{ backgroundColor: v ? 'yellow' : undefined }")
             })],
-            r#"{style:_normalizeStyle({backgroundColor:_ctx.v?"yellow":undefined})}"#,
+            r#"{style:_normalizeStyle({backgroundColor:v?"yellow":undefined})}"#,
         );
     }
 
@@ -689,7 +689,7 @@ mod tests {
                     value: js("{ backgroundColor: v ? 'yellow' : undefined }")
                 }),
             ],
-            r#"{style:_normalizeStyle([{margin:"0px","background-color":"magenta"},{backgroundColor:_ctx.v?"yellow":undefined}])}"#,
+            r#"{style:_normalizeStyle([{margin:"0px","background-color":"magenta"},{backgroundColor:v?"yellow":undefined}])}"#,
         );
     }
 
@@ -719,7 +719,7 @@ mod tests {
                 argument: Some("disabled".into()),
                 value: js("some && expression || maybe !== not")
             })],
-            "{disabled:_ctx.some&&_ctx.expression||_ctx.maybe!==_ctx.not}",
+            "{disabled:some&&expression||maybe!==not}",
         );
     }
 
@@ -752,16 +752,15 @@ mod tests {
                 handler: Some(js("handleClick")),
                 modifiers: vec![],
             })],
-            r"{onClick:_ctx.handleClick}",
+            r"{onClick:handleClick}",
         );
 
         // TODO
         // @click="console.log('hello')"
         // test_out(
-        //     vec![HtmlAttribute::VOn(VOnDirective {
-        //         event: Some("click"),
-        //         handler: Some("() => console.log('hello')"),
-        //         is_dynamic_event: false,
+        //     vec![AttributeOrBinding::VOn(VOnDirective {
+        //         event: Some("click".into()),
+        //         handler: Some(js("() => console.log('hello')")),
         //         modifiers: vec![],
         //     })],
         //     r"{onClick:()=>console.log('hello')}"
@@ -784,9 +783,7 @@ mod tests {
                 handler: Some(js("$event => handleClick($event, foo, bar)")),
                 modifiers: vec![],
             })],
-            // TODO Fix arrow function params transformation
-            // r"{onClick:$event=>_ctx.handleClick($event,_ctx.foo,_ctx.bar)}"
-            r"{onClick:$event=>_ctx.handleClick(_ctx.$event,_ctx.foo,_ctx.bar)}",
+            r"{onClick:$event=>handleClick($event,foo,bar)}",
         );
 
         // @click.stop.prevent.self
@@ -806,8 +803,7 @@ mod tests {
                 handler: Some(js("$event => handleClick($event, foo, bar)")),
                 modifiers: vec!["stop"],
             })],
-            // r#"{onClick:_withModifiers($event=>_ctx.handleClick($event,_ctx.foo,_ctx.bar),["stop"])}"#
-            r#"{onClick:_withModifiers($event=>_ctx.handleClick(_ctx.$event,_ctx.foo,_ctx.bar),["stop"])}"#,
+            r#"{onClick:_withModifiers($event=>handleClick($event,foo,bar),["stop"])}"#,
         );
     }
 

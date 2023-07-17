@@ -293,7 +293,7 @@ mod tests {
                 children: vec![Node::Text("hello from div")],
                 template_scope: 0,
             },
-            r#"_createElementVNode("div",{foo:"bar",baz:_ctx.qux,readonly:true,onClick:_ctx.handleClick},"hello from div")"#,
+            r#"_createElementVNode("div",{foo:"bar",baz:qux,readonly:true,onClick:handleClick},"hello from div")"#,
             false,
         )
     }
@@ -341,7 +341,7 @@ mod tests {
                 children: vec![],
                 template_scope: 0,
             },
-            r#"_createElementVNode("div",{foo:"bar","some-baz":_ctx.qux})"#,
+            r#"_createElementVNode("div",{foo:"bar","some-baz":qux})"#,
             false,
         );
 
@@ -368,7 +368,7 @@ mod tests {
                 children: vec![],
                 template_scope: 0,
             },
-            r#"_createElementVNode("div",{foo:"bar","some-baz":_ctx.qux})"#,
+            r#"_createElementVNode("div",{foo:"bar","some-baz":qux})"#,
             false,
         )
     }
