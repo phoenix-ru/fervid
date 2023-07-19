@@ -17,7 +17,7 @@ impl CodegenContext {
         // let _has_js = transform_scoped(&mut if_expr, &self.scope_helper, if_element_node.template_scope);
         conditional_exprs.push(Box::new(if_expr.to_owned()));
         conditional_exprs.push(Box::new(
-            self.generate_element_or_component(if_element_node, false).0,
+            self.generate_element_or_component(if_element_node, true).0,
         ));
 
         // Then, push all the `else-if` nodes
@@ -28,13 +28,13 @@ impl CodegenContext {
             // let _has_js = transform_scoped(&mut else_if_expr, &self.scope_helper, else_if_node.template_scope);
             conditional_exprs.push(Box::new(else_if_expr.to_owned()));
             conditional_exprs.push(Box::new(
-                self.generate_element_or_component(else_if_node, false).0,
+                self.generate_element_or_component(else_if_node, true).0,
             ));
         }
 
         // Push either `else` or a comment node
         let else_expr = if let Some(ref else_node) = conditional_seq.else_node {
-            self.generate_element_or_component(else_node, false).0
+            self.generate_element_or_component(else_node, true).0
         } else {
             self.generate_comment_vnode("v-if", DUMMY_SP)
         };

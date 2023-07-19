@@ -35,7 +35,9 @@ impl CodegenContext {
         };
 
         // There is a special case here: `<template>` with `v-if`/`v-else-if`/`v-else`/`v-for`
-        let should_generate_fragment_instead = self.should_generate_fragment(element_node);
+        let should_generate_fragment_instead = (wrap_in_block
+            && element_node.starting_tag.tag_name == "template")
+            || self.should_generate_fragment(element_node);
 
         // Generate children
         // Inlining is forbidden if we changed from `<template>` to `Fragment`
@@ -178,7 +180,7 @@ impl CodegenContext {
 
         // Process remaining directives
         if let Some(ref directives) = element_node.starting_tag.directives {
-            self.generate_remaining_element_directives(&mut create_element_expr, &directives);
+            create_element_expr = self.generate_element_directives(create_element_expr, directives);
         }
 
         create_element_expr
@@ -232,13 +234,17 @@ impl CodegenContext {
         (out, was_inlined)
     }
 
-    fn generate_remaining_element_directives(
+    fn generate_element_directives(
         &mut self,
-        create_element_expr: &mut Expr,
+        create_element_expr: Expr,
         directives: &VueDirectives,
-    ) {
+    ) -> Expr {
+        let mut out = Vec::new();
+
         // TODO for v-models in elements `withDirectives` needs a bit more information
-        self.generate_remaining_directives(create_element_expr, directives)
+
+        self.generate_directives_to_array(directives, &mut out);
+        self.maybe_generate_with_directives(create_element_expr, out)
     }
 }
 
@@ -388,7 +394,7 @@ mod tests {
                     Node::Interpolation(Interpolation {
                         value: js("true"),
                         template_scope: 0,
-                        patch_flag: false
+                        patch_flag: false,
                     }),
                     Node::Text(" bye!"),
                 ],
@@ -414,7 +420,7 @@ mod tests {
                     Node::Interpolation(Interpolation {
                         value: js("true"),
                         template_scope: 0,
-                        patch_flag: false
+                        patch_flag: false,
                     }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
