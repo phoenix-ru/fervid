@@ -1,4 +1,6 @@
-use fervid_core::{ElementNode, VueDirectives};
+use fervid_core::{
+    AttributeOrBinding, ElementNode, StartingTag, StrOrExpr, VBindDirective, VueDirectives,
+};
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
@@ -178,10 +180,8 @@ impl CodegenContext {
             create_element_fn_call
         };
 
-        // Process remaining directives
-        if let Some(ref directives) = element_node.starting_tag.directives {
-            create_element_expr = self.generate_element_directives(create_element_expr, directives);
-        }
+        // Process directives
+        create_element_expr = self.generate_element_directives(create_element_expr, element_node);
 
         create_element_expr
     }
@@ -237,14 +237,89 @@ impl CodegenContext {
     fn generate_element_directives(
         &mut self,
         create_element_expr: Expr,
-        directives: &VueDirectives,
+        element_node: &ElementNode,
     ) -> Expr {
-        let mut out = Vec::new();
+        // Guard because we need the whole `ElementNode`, not just `VueDirectives`
+        let Some(ref directives) = element_node.starting_tag.directives else {
+            return create_element_expr;
+        };
 
-        // TODO for v-models in elements `withDirectives` needs a bit more information
+        // Output array for `withDirectives` call.
+        // If this stays empty at the end, no processing to `create_element_expr` would be done
+        let mut out: Vec<Option<ExprOrSpread>> = Vec::new();
+
+        // Element `v-model` needs a special processing compared to a component one
+        if directives.v_model.len() != 0 {
+            let span = DUMMY_SP; // TODO Span
+            let v_model_ident = Ident {
+                span,
+                sym: self.get_element_vmodel_directive_name(&element_node.starting_tag),
+                optional: false,
+            };
+
+            for v_model in directives.v_model.iter() {
+                out.push(Some(ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(self.generate_directive_from_parts(
+                        v_model_ident.clone(),
+                        Some(&v_model.value),
+                        v_model.argument,
+                        &v_model.modifiers,
+                        DUMMY_SP,
+                    )),
+                }));
+            }
+        }
 
         self.generate_directives_to_array(directives, &mut out);
         self.maybe_generate_with_directives(create_element_expr, out)
+    }
+
+    fn get_element_vmodel_directive_name(&mut self, starting_tag: &StartingTag) -> JsWord {
+        // These cases need special handling of v-model
+        // input type=* -> vModelText
+        // input type="radio" -> vModelRadio
+        // input type="checkbox" -> vModelCheckbox
+        // input :type=* -> vModelDynamic
+        // select -> vModelSelect
+        // textarea -> vModelText
+        match starting_tag.tag_name {
+            "input" => {
+                // Find `type` attribute
+                for attr in starting_tag.attributes.iter() {
+                    match attr {
+                        // type="smth"
+                        AttributeOrBinding::RegularAttribute {
+                            name: "type",
+                            value,
+                        } => match *value {
+                            "checkbox" => {
+                                return self.get_and_add_import_ident(VueImports::VModelCheckbox)
+                            }
+                            "radio" => {
+                                return self.get_and_add_import_ident(VueImports::VModelRadio)
+                            }
+                            _ => return self.get_and_add_import_ident(VueImports::VModelText),
+                        },
+
+                        // :type="smth"
+                        AttributeOrBinding::VBind(VBindDirective {
+                            argument: Some(StrOrExpr::Str("type")),
+                            ..
+                        }) => return self.get_and_add_import_ident(VueImports::VModelDynamic),
+
+                        _ => continue,
+                    }
+                }
+
+                self.get_and_add_import_ident(VueImports::VModelText)
+            }
+
+            "select" => self.get_and_add_import_ident(VueImports::VModelSelect),
+
+            // TODO Clean up such usage (except "textarea")? Or just use `VModelText`?
+            _ => self.get_and_add_import_ident(VueImports::VModelText),
+        }
     }
 }
 

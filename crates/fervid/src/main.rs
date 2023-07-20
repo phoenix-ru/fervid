@@ -6,9 +6,8 @@ use std::time::Instant;
 use fervid::{compile_sfc, SfcBlock, SfcScriptBlock};
 use fervid_core::{AttributeOrBinding, ElementNode, Interpolation, Node, StartingTag};
 
-use fervid::analyzer::ast_optimizer;
-use fervid::analyzer::scope::ScopeHelper;
 use fervid::parser;
+use fervid_transform::template::transform_and_record_template;
 use swc_core::{ecma::{ast::{Expr, Ident}, atoms::JsWord}, common::DUMMY_SP};
 
 fn main() {
@@ -62,14 +61,17 @@ fn test_real_compilation() {
         panic!("Test component has no template block");
     };
 
-    // Optimize
-    ast_optimizer::optimize_template(template_block);
+    let mut scope_helper = fervid_transform::template::ScopeHelper::default();
+    transform_and_record_template(template_block, &mut scope_helper);
 
-    // Analyze scopes
-    let mut scope_helper = ScopeHelper::default();
-    scope_helper.transform_and_record_ast(&mut template_block.roots);
+    let mut ctx = fervid_codegen::CodegenContext::default();
+    let template_expr = ctx.generate_sfc_template(&template_block);
 
-    // TODO Implement scope helper walking for the Expr'd nodes
+    // TODO
+    let script = swc_core::ecma::ast::Module { span: DUMMY_SP, body: vec![], shebang: None };
+    let sfc_module = ctx.generate_module(template_expr, script);
+
+    let compiled_code = fervid_codegen::CodegenContext::stringify(&sfc_module, false);
 
     #[cfg(feature = "dbg_print")]
     {
@@ -85,7 +87,8 @@ fn test_real_compilation() {
 
     // Real codegen
     println!("\n[Real File Compile Result]");
-    println!("{}", compile_sfc(sfc_blocks, scope_helper).unwrap());
+    println!("{compiled_code}");
+    // println!("{}", compile_sfc(sfc_blocks, scope_helper).unwrap());
 }
 
 #[allow(dead_code)]

@@ -16,3 +16,5 @@ mod utils;
 
 #[cfg(test)]
 mod test_utils;
+
+pub use context::CodegenContext;

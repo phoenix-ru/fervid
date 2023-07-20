@@ -209,8 +209,8 @@ impl<'a> Visitor for TemplateVisitor<'_> {
         // Check if there is a scoping directive
         // Finds a `v-for` or `v-slot` directive when in ElementNode
         // and collects their variables into the new template scope
-        if let Some(ref directives) = element_node.starting_tag.directives {
-            let v_for = directives.v_for.as_ref();
+        if let Some(ref mut directives) = element_node.starting_tag.directives {
+            let v_for = directives.v_for.as_mut();
             let v_slot = directives.v_slot.as_ref();
 
             // Create a new scope
@@ -224,20 +224,23 @@ impl<'a> Visitor for TemplateVisitor<'_> {
             }
 
             if let Some(v_for) = v_for {
-                // We only care of the left hand side variables
-                let introduced_variables = &v_for.itervar;
-
-                // Get the needed scope and collect variables to it
+                // Get the iterator variable and collect its variables
                 let mut scope = &mut self.scope_helper.template_scopes[scope_to_use as usize];
-                collect_variables(introduced_variables, &mut scope);
-            } else if let Some(VSlotDirective {
+                collect_variables(&v_for.itervar, &mut scope);
+
+                // Transform the iterable
+                self.scope_helper.transform_expr(&mut v_for.iterable, scope_to_use);
+            }
+
+            if let Some(VSlotDirective {
                 value: Some(v_slot_value),
                 ..
             }) = v_slot
             {
-                // Get the needed scope and collect variables to it
+                // Collect slot bindings
                 let mut scope = &mut self.scope_helper.template_scopes[scope_to_use as usize];
                 collect_variables(v_slot_value, &mut scope);
+                // TODO transform slot?
             }
         }
 
@@ -264,8 +267,20 @@ impl<'a> Visitor for TemplateVisitor<'_> {
 
         // Transform the directives
         if let Some(ref mut directives) = element_node.starting_tag.directives {
-            // todo
-            // directives.
+            macro_rules! maybe_transform {
+                ($key: ident) => {
+                    match directives.$key.as_mut() {
+                        Some(expr) => {
+                            self.scope_helper.transform_expr(expr, scope_to_use)
+                        }
+                        None => false
+                    }
+                };
+            }
+            maybe_transform!(v_html);
+            maybe_transform!(v_memo);
+            maybe_transform!(v_show);
+            maybe_transform!(v_text);
         }
 
         // Merge conditional nodes and clean up whitespace
@@ -284,9 +299,17 @@ impl<'a> Visitor for TemplateVisitor<'_> {
     }
 
     fn visit_conditional_node(&mut self, conditional_node: &mut ConditionalNodeSequence) {
+        // In this function, conditions are transformed first
+        // without updating the template scope and collecting its variables.
+        // I believe this is a correct way of doing it, because in VDOM the condition
+        // wraps around the node (`condition ? if_node : else_node`).
+        // However, I am not too sure about the `v-if` & `v-slot` combined usage.
+
+        self.scope_helper.transform_expr(&mut conditional_node.if_node.condition, self.current_scope);
         self.visit_element_node(&mut conditional_node.if_node.node);
 
         for else_if_node in conditional_node.else_if_nodes.iter_mut() {
+            self.scope_helper.transform_expr(&mut else_if_node.condition, self.current_scope);
             self.visit_element_node(&mut else_if_node.node);
         }
 

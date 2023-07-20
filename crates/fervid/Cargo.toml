@@ -14,7 +14,10 @@ dbg_print = []
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+fervid_codegen = { path="../fervid_codegen" }
 fervid_core = { path="../fervid_core" }
+fervid_css = { path="../fervid_css" }
+fervid_transform = { path="../fervid_transform" }
 nom = "7"
 regex = "1"
 phf = { version = "0.11", features = ["macros"] }

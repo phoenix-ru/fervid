@@ -14,7 +14,7 @@ use nom::{
 };
 
 use crate::parser::{
-    ecma::{parse_js, parse_js_pat},
+    ecma::parse_js,
     html_utils::html_name,
 };
 
@@ -332,14 +332,14 @@ fn parse_directive<'i>(
             };
 
             // TODO Span
-            match parse_js_pat(itervar, 0, 0) {
+            match parse_js(itervar, 0, 0) {
                 Ok(itervar) => match parse_js(iterable, 0, 0) {
                     Ok(iterable) => {
                         push_directive!(
                             v_for,
                             VForDirective {
                                 iterable,
-                                itervar: Box::new(itervar)
+                                itervar
                             }
                         );
                     }

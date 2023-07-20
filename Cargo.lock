@@ -517,8 +517,10 @@ name = "fervid"
 version = "0.0.2"
 dependencies = [
  "criterion",
+ "fervid_codegen",
  "fervid_core",
  "fervid_css",
+ "fervid_transform",
  "fxhash",
  "lazy_static",
  "nom",

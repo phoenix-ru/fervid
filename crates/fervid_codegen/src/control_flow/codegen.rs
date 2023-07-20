@@ -176,12 +176,6 @@ impl CodegenContext {
         })
     }
 
-    pub fn generate_remaining_directives(&mut self, _expr: &mut Expr, _directives: &VueDirectives) {
-        // if remaining_directives.len() != 0 {
-        todo!("Remaining directives are not implemented yet")
-        // }
-    }
-
     /// Special case: `<template>` with `v-if`/`v-else-if`/`v-else`/`v-for`
     #[inline]
     pub fn should_generate_fragment(&self, element_node: &ElementNode) -> bool {

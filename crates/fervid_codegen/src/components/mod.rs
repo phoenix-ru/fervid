@@ -135,10 +135,8 @@ impl CodegenContext {
             create_component_fn_call
         };
 
-        // Process remaining directives
-        if let Some(ref directives) = component_node.starting_tag.directives {
-            self.generate_remaining_component_directives(&mut create_component_expr, &directives);
-        }
+        // Process directives
+        create_component_expr = self.generate_component_directives(create_component_expr, component_node);
 
         create_component_expr
     }
@@ -412,12 +410,22 @@ impl CodegenContext {
     }
 
     // Generates `withDirectives(expr, [directives])`
-    fn generate_remaining_component_directives(
+    fn generate_component_directives(
         &mut self,
-        create_component_expr: &mut Expr,
-        directives: &VueDirectives,
-    ) {
-        self.generate_remaining_directives(create_component_expr, directives)
+        create_component_expr: Expr,
+        component_node: &ElementNode
+    ) -> Expr {
+        // Guard because we need the whole `ElementNode`, not just `VueDirectives`
+        let Some(ref directives) = component_node.starting_tag.directives else {
+            return create_component_expr;
+        };
+
+        // Output array for `withDirectives` call.
+        // If this stays empty at the end, no processing to `create_element_expr` would be done
+        let mut out: Vec<Option<ExprOrSpread>> = Vec::new();
+
+        self.generate_directives_to_array(directives, &mut out);
+        self.maybe_generate_with_directives(create_component_expr, out)
     }
 
     /// Generates `_slotName_: withCtx((_maybeCtx_) => [slot, children])`

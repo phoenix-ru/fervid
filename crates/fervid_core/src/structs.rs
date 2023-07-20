@@ -129,7 +129,7 @@ pub struct VForDirective {
     /// `bar` in `v-for="foo in bar"`
     pub iterable: Box<Expr>,
     /// `foo` in `v-for="foo in bar"`
-    pub itervar: Box<Pat>,
+    pub itervar: Box<Expr>,
 }
 
 #[derive(Clone, Debug)]
