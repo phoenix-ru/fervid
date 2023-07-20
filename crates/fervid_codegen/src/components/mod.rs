@@ -382,7 +382,7 @@ impl CodegenContext {
             out_static_slots.push(self.generate_slot_shell(
                 slot_name,
                 slotted_children_results,
-                None,
+                v_slot.value.as_deref(),
                 span,
             ));
         }
@@ -433,7 +433,7 @@ impl CodegenContext {
         &mut self,
         slot_name: &str,
         slot_children: Vec<Expr>,
-        slot_binding: Option<Pat>,
+        slot_binding: Option<&Pat>,
         span: Span,
     ) -> PropOrSpread {
         // e.g. child1, child2, child3
@@ -456,7 +456,7 @@ impl CodegenContext {
         // Params to arrow function.
         // `withCtx(() => /*...*/)` or `withCtx(({ maybe: destructure }) => /*...*/)`
         let params = if let Some(slot_binding) = slot_binding {
-            vec![slot_binding]
+            vec![slot_binding.to_owned()]
         } else {
             Vec::new()
         };

@@ -14,7 +14,7 @@ use nom::{
 };
 
 use crate::parser::{
-    ecma::parse_js,
+    ecma::{parse_js, parse_js_pat},
     html_utils::html_name,
 };
 
@@ -367,8 +367,8 @@ fn parse_directive<'i>(
         "slot" => {
             let value = value.and_then(|v| {
                 // TODO Span
-                match parse_js(v, 0, 0) {
-                    Ok(value) => Some(value),
+                match parse_js_pat(v, 0, 0) {
+                    Ok(value) => Some(Box::new(value)),
                     Result::Err(_) => None,
                 }
             });

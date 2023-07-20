@@ -32,11 +32,11 @@
       test {{ value }} {{ renamed }}
     </template>
 
-    <template #custom-slot="{ prop }">
+    <template #custom-slot="prop">
       <span class="span-class">
         Span text
       </span>
-      {{ prop }}
+      {{ prop.nested }}
     </template>
 
     <input v-model="inputModel" v-directive:foo.bar.buzz="baz">

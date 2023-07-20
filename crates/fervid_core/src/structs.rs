@@ -169,7 +169,8 @@ pub struct VModelDirective<'a> {
 #[derive(Clone, Debug)]
 pub struct VSlotDirective<'a> {
     pub slot_name: Option<&'a str>,
-    pub value: Option<Box<Expr>>,
+    /// What bindings are provided to slot children, e.g. `value` in `v-slot="{ value }"`
+    pub value: Option<Box<Pat>>,
     pub is_dynamic_slot: bool,
 }
 
