@@ -7,7 +7,7 @@ All-In-One Vue compiler written in Rust.
 
 Currently in early development, and the closest goal is to reach feature-parity with the current [Vue SFC compiler](https://sfc.vuejs.org).
 
-## Progress till MVP ![](https://geps.dev/progress/48)
+## Progress till MVP ![](https://geps.dev/progress/52)
 A minimal target of this project includes:
 - Vue 3 code generation;
 - [unplugin](https://github.com/unjs/unplugin) integration;
@@ -18,7 +18,7 @@ A minimal target of this project includes:
 
 ## Is it correct?
 This project uses [Vue SFC playground](https://sfc.vuejs.org) as its reference to compare the output. As of April 2023, fervid is capable of producing the DEV code almost identical to the official compiler, except for:
-- Context variables. This includes usages like `{{ foo + bar.buzz }}` or `<div v-if="isShown">`.
+- [WIP] Context variables. This includes usages like `{{ foo + bar.buzz }}` or `<div v-if="isShown">`.
   These usages require a JavaScript parser and transformer like SWC and support for them in fervid is currently ongoing.
 - Patch flags. These are used to help Vue runtime when diffing the VNodes. If a VNode only has one prop which is dynamic, and all the other props and text are static, this needs to be conveyed to Vue for fast updates. I am currently researching how they are originally implemented.
 
@@ -53,6 +53,9 @@ Handles `<script>` and `<script setup>` analysis and transformations, along with
 
 ### `fervid_core` ![wip](https://badgen.net/badge/Status/In%20progress/blue)
 The core structures and functionality shared across crates.
+
+### `fervid_transform` ![wip](https://badgen.net/badge/Status/In%20progress/blue)
+This crate is responsible for AST transformation.
 
 ### `fervid_parser` ![future](https://badgen.net/badge/Status/Planned/orange)
 Parser for Vue SFC based on [Servo html5ever](https://github.com/servo/html5ever), the industry-grade HTML parser.
@@ -98,7 +101,13 @@ Code generator
     - [x] v-show
     - [x] v-slot
     - [x] v-model
-    - [x] Other directives (less priority)
+    - [ ] v_cloak
+    - [ ] v_html
+    - [ ] v_memo
+    - [ ] v_once
+    - [ ] v_pre
+    - [ ] v_text
+    - [x] Custom directives
   - [ ] Built-in components
     - [ ] keep-alive
     - [ ] component
@@ -112,6 +121,12 @@ Code generator
 
 - [x] Processing `<style scoped>`
 - [ ] `<script setup>` support
+  - [x] Bindings collection;
+  - [ ] defineProps
+  - [ ] defineEmits
+  - [ ] defineExpose
+  - [ ] defineOptions
+  - [ ] defineSlots
 - [ ] Vue 2.7 support
 - [ ] SSR with inline critical CSS support
 - [ ] Eager pre-compilation of Vue imports (avoid unneccessary bundler->compiler calls)
