@@ -1,4 +1,4 @@
-use fervid_core::{is_html_tag, ElementNode, Node, StartingTag, VueDirectives};
+use fervid_core::{is_html_tag, ElementNode, Node, StartingTag};
 use smallvec::SmallVec;
 use swc_core::{
     common::{BytePos, Span, SyntaxContext, DUMMY_SP},
@@ -106,7 +106,7 @@ impl CodegenContext {
         while let Some(node) = iter.next() {
             let (generated, has_js) = self.generate_node(node, false);
             let is_text_node = matches!(node, Node::Text(_) | Node::Interpolation { .. });
-            patch_flag_text = has_js;
+            patch_flag_text |= has_js;
 
             if is_text_node {
                 text_nodes.push(generated);
@@ -120,6 +120,7 @@ impl CodegenContext {
             } else {
                 // Process the text nodes from before
                 maybe_concatenate_text_nodes!();
+                patch_flag_text = false;
 
                 out.push(generated);
             }
