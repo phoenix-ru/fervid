@@ -1,6 +1,6 @@
 use fervid_core::{
     is_from_default_slot, is_html_tag, AttributeOrBinding, Conditional, ConditionalNodeSequence,
-    ElementNode, Interpolation, Node, SfcTemplateBlock, StartingTag, VOnDirective, VSlotDirective,
+    ElementNode, Interpolation, Node, SfcTemplateBlock, StartingTag, VOnDirective, VSlotDirective, ElementKind, VUE_BUILTINS,
 };
 use smallvec::SmallVec;
 
@@ -24,7 +24,7 @@ pub fn transform_and_record_template(
         .retain(|root| matches!(root, Node::Element(_)));
 
     // Optimize conditional sequences within template root
-    optimize_children(&mut template.roots, false);
+    optimize_children(&mut template.roots, ElementKind::Element);
 
     // Todo merge 1+ children into a separate `<template>` element so that Fragment gets generated
 
@@ -43,7 +43,7 @@ pub fn transform_and_record_template(
 
 /// Optimizes the children by removing whitespace in between `ElementNode`s,
 /// as well as folding `v-if`/`v-else-if`/`v-else` sequences into a `ConditionalNodeSequence`
-fn optimize_children(children: &mut Vec<Node>, is_component: bool) {
+fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
     let children_len = children.len();
 
     // Discard children mask, limited to 128 children. 0 means to preserve the node, 1 to discard
@@ -84,7 +84,7 @@ fn optimize_children(children: &mut Vec<Node>, is_component: bool) {
     });
 
     // For components, reorder children so that named slots come first
-    if is_component && children.len() > 0 {
+    if matches!(element_kind, ElementKind::Component) && children.len() > 0 {
         children.sort_by(|a, b| {
             let a_is_from_default = is_from_default_slot(a);
             let b_is_from_default = is_from_default_slot(b);
@@ -283,10 +283,14 @@ impl<'a> Visitor for TemplateVisitor<'_> {
             maybe_transform!(v_text);
         }
 
+        // Mark the node with a correct type (element, component or built-in)
+        let element_kind = self.recognize_element_kind(&element_node.starting_tag);
+        element_node.kind = element_kind;
+
         // Merge conditional nodes and clean up whitespace
         optimize_children(
             &mut element_node.children,
-            self.is_component(&element_node.starting_tag),
+            element_kind,
         );
 
         // Recursively visit children
@@ -329,9 +333,20 @@ impl<'a> Visitor for TemplateVisitor<'_> {
 }
 
 impl TemplateVisitor<'_> {
-    fn is_component(&self, starting_tag: &StartingTag) -> bool {
-        // TODO Use is_custom_element as well
-        !is_html_tag(starting_tag.tag_name)
+    fn recognize_element_kind(&self, starting_tag: &StartingTag) -> ElementKind {
+        let tag_name = starting_tag.tag_name;
+
+        // First, check for a built-in
+        if let Some(builtin_type) = VUE_BUILTINS.get(tag_name) {
+            return ElementKind::Builtin(*builtin_type);
+        }
+
+        // Then check if this is an HTML tag
+        if is_html_tag(starting_tag.tag_name) {
+            ElementKind::Element
+        } else {
+            ElementKind::Component
+        }
     }
 }
 

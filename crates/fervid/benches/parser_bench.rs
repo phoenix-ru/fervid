@@ -1,11 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
-fn swc_benchmark(c: &mut Criterion) {
-    c.bench_function("swc transform", |b| {
-        b.iter(|| fervid::test_swc_transform(black_box("foo.bar.baz[test.keks]")))
-    });
-}
-
 fn parser_benchmark(c: &mut Criterion) {
     let inputs = vec![
         ("input.vue", include_str!("./fixtures/input.vue")),
@@ -22,5 +16,5 @@ fn parser_benchmark(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, swc_benchmark, parser_benchmark);
+criterion_group!(benches, parser_benchmark);
 criterion_main!(benches);

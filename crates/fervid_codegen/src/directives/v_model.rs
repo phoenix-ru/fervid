@@ -95,6 +95,12 @@ impl CodegenContext {
     ) -> (Box<Expr>, bool) {
         // Polyfill
 
+        // TODO Maybe transform the `v-model` to an object in the `fervid_transform`
+        // and just unwrap the object to a props object?
+        // Or better yet, type VModelDirective value to have `Expr` and `Bindings` variants (VModelValue)
+        // `Expr` variant can be used in `withDirectives` call,
+        // while `Bindings` variant is used in component code
+
         // TODO Implement the correct transformation based on BindingTypes
         // let has_js = transform_scoped(&mut expr, &self.scope_helper, scope_to_use);
         (Box::new(value.to_owned()), true)

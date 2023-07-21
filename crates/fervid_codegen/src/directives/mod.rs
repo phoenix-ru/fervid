@@ -3,8 +3,9 @@ use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
         ast::{
-            ArrayLit, Bool, CallExpr, Callee, Expr, ExprOrSpread, Ident, KeyValueProp, Lit, Number,
-            ObjectLit, Prop, PropOrSpread, Str, UnaryExpr, UnaryOp,
+            ArrayLit, BindingIdent, Bool, CallExpr, Callee, Expr, ExprOrSpread, Ident,
+            KeyValueProp, Lit, Number, ObjectLit, Pat, Prop, PropOrSpread, Str, UnaryExpr,
+            UnaryOp, VarDeclarator,
         },
         atoms::JsWord,
     },
@@ -237,6 +238,62 @@ impl CodegenContext {
             sym: directive_ident_atom,
             optional: false,
         }
+    }
+
+    fn generate_directive_resolves(&mut self) -> Vec<VarDeclarator> {
+        let mut result = Vec::new();
+
+        if self.directives.len() == 0 {
+            return result;
+        }
+
+        let resolve_directive_ident = self.get_and_add_import_ident(VueImports::ResolveDirective);
+
+        // We need sorted entries for stable output.
+        // Entries are sorted by Js identifier (second element of tuple in hashmap entry)
+        let mut sorted_directives: Vec<(&str, &JsWord)> = self
+            .directives
+            .iter()
+            .map(|(directive_name, directive_ident)| (directive_name.as_str(), directive_ident))
+            .collect();
+
+        sorted_directives.sort_by(|a, b| a.1.cmp(b.1));
+
+        // Key is a component as used in template, value is the assigned Js identifier
+        for (directive_name, identifier) in sorted_directives.iter() {
+            // _directive_ident_name = resolveDirective("directive-template-name")
+            result.push(VarDeclarator {
+                span: DUMMY_SP,
+                name: Pat::Ident(BindingIdent {
+                    id: Ident {
+                        span: DUMMY_SP,
+                        sym: (*identifier).to_owned(),
+                        optional: false,
+                    },
+                    type_ann: None,
+                }),
+                init: Some(Box::new(Expr::Call(CallExpr {
+                    span: DUMMY_SP,
+                    callee: Callee::Expr(Box::new(Expr::Ident(Ident {
+                        span: DUMMY_SP,
+                        sym: resolve_directive_ident.to_owned(),
+                        optional: false,
+                    }))),
+                    args: vec![ExprOrSpread {
+                        spread: None,
+                        expr: Box::new(Expr::Lit(Lit::Str(Str {
+                            span: DUMMY_SP,
+                            value: JsWord::from(*directive_name),
+                            raw: None,
+                        }))),
+                    }],
+                    type_args: None,
+                }))),
+                definite: false,
+            });
+        }
+
+        result
     }
 }
 

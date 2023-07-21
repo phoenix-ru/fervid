@@ -96,6 +96,7 @@ impl<'n> SlottedIterator<'n> {
     /// Not a safe method, please avoid it in favor of `next`
     /// This is only made to work in tandem with [`SlottedIterator::peek`]
     #[inline]
+    #[allow(unused)]
     pub fn advance(&mut self) {
         self.idx += 1;
     }

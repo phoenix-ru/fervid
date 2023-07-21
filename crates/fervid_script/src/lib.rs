@@ -9,8 +9,6 @@ pub mod script_setup;
 pub mod setup_analyzer;
 pub mod structs;
 
-mod experimental_compile;
-
 // use std::sync::Arc;
 
 // use swc_core::common::{FileName, SourceMap};

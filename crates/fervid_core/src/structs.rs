@@ -36,18 +36,29 @@ pub enum Node<'a> {
 ///    for the correct compilation of dynamic bindings and expressions.
 #[derive(Debug, Clone)]
 pub struct ElementNode<'a> {
+    /// Marks the node as either an Element (HTML tag), Builtin (Vue) or Component
     pub kind: ElementKind,
     pub starting_tag: StartingTag<'a>,
     pub children: Vec<Node<'a>>,
     pub template_scope: u32,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum ElementKind {
-    Builtin,
+    Builtin(BuiltinType),
     #[default]
     Element,
     Component
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum BuiltinType {
+    KeepAlive,
+    Slot,
+    Suspense,
+    Teleport,
+    Transition,
+    TransitionGroup,
 }
 
 /// This is a synthetic node type only available after AST optimizations.

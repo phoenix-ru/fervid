@@ -1,4 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use swc_core::common::DUMMY_SP;
 
 fn codegen_benchmark(c: &mut Criterion) {
     let inputs = vec![
@@ -15,15 +16,21 @@ fn codegen_benchmark(c: &mut Criterion) {
                 fervid::SfcBlock::Template(template_block) => Some(template_block),
                 _ => None,
             });
-            let Some(mut template_block) = template_block else {
+            let Some(template_block) = template_block else {
                 panic!("Test component has no template block");
             };
-    
-            fervid::analyzer::ast_optimizer::optimize_template(&mut template_block);
-    
+
+            let mut scope_helper = fervid_transform::template::ScopeHelper::default();
+            fervid_transform::template::transform_and_record_template(template_block, &mut scope_helper);
+
             b.iter_batched(
-                || sfc_blocks.clone(),
-                |blocks| fervid::compile_sfc(blocks, Default::default()),
+                || template_block.clone(),
+                |template_block| {
+                    let mut ctx = fervid_codegen::CodegenContext::default();
+                    let template_expr = ctx.generate_sfc_template(&template_block);
+                    let script = swc_core::ecma::ast::Module { span: DUMMY_SP, body: vec![], shebang: None };
+                    ctx.generate_module(template_expr, script);
+                },
                 criterion::BatchSize::SmallInput,
             );
         });

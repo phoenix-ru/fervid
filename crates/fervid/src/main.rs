@@ -3,8 +3,8 @@ extern crate swc_ecma_codegen;
 extern crate swc_ecma_parser;
 use std::time::Instant;
 
-use fervid::{compile_sfc, SfcBlock, SfcScriptBlock};
-use fervid_core::{AttributeOrBinding, ElementNode, Interpolation, Node, StartingTag};
+use fervid::{SfcBlock, SfcScriptBlock};
+use fervid_core::{AttributeOrBinding, ElementNode, Interpolation, Node, StartingTag, ElementKind};
 
 use fervid::parser;
 use fervid_transform::template::transform_and_record_template;
@@ -18,28 +18,6 @@ fn main() {
     let n = Instant::now();
     test_synthetic_compilation();
     println!("Time took: {:?}", n.elapsed());
-
-    println!();
-
-    let n = Instant::now();
-    let swc_result = fervid::test_swc_transform("[a, b, c, { d }]");
-    println!(
-        "SWC result: {}",
-        swc_result.unwrap().trim().trim_end_matches(";")
-    );
-    println!("Time took for transform: {:?}", n.elapsed());
-
-    // println!("", swc_ecma_parser::parse_file_as_expr(fm, syntax, target, comments, recovered_errors));
-
-    // println!();
-    // let test = "<self-closing-example />";
-    // let res = parser::parse_element_node(test).unwrap();
-    // println!("Result: {:?}", res.1);
-
-    // println!();
-    // let test = "<div><template v-slot:[dynamicSlot]>hello</template></div>";
-    // let res = parser::parse_element_node(test).unwrap();
-    // println!("Result: {:?}", res.1);
 }
 
 #[allow(dead_code)]
@@ -93,7 +71,7 @@ fn test_real_compilation() {
 
 #[allow(dead_code)]
 fn test_synthetic_compilation() {
-    let blocks = vec![
+    let mut blocks = vec![
         SfcBlock::Template(fervid::SfcTemplateBlock {
             lang: "html",
             roots: vec![Node::Element(ElementNode {
@@ -174,6 +152,26 @@ fn test_synthetic_compilation() {
         }),
     ];
 
+    let template_block = blocks.iter_mut().find_map(|block| match block {
+        fervid::SfcBlock::Template(template_block) => Some(template_block),
+        _ => None,
+    });
+    let Some(template_block) = template_block else {
+        panic!("Test component has no template block");
+    };
+
+    let mut scope_helper = fervid_transform::template::ScopeHelper::default();
+    transform_and_record_template(template_block, &mut scope_helper);
+
+    let mut ctx = fervid_codegen::CodegenContext::default();
+    let template_expr = ctx.generate_sfc_template(&template_block);
+
+    // TODO
+    let script = swc_core::ecma::ast::Module { span: DUMMY_SP, body: vec![], shebang: None };
+    let sfc_module = ctx.generate_module(template_expr, script);
+
+    let compiled_code = fervid_codegen::CodegenContext::stringify(&sfc_module, false);
+
     println!("\n[Synthetic Compile Result]\n");
-    println!("{}", compile_sfc(blocks, Default::default()).unwrap());
+    println!("{compiled_code}");
 }
