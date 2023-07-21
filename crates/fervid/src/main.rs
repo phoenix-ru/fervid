@@ -137,6 +137,7 @@ fn test_synthetic_compilation() {
                             }),
                         ],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     }),
                     // Component
                     Node::Element(ElementNode {
@@ -158,10 +159,12 @@ fn test_synthetic_compilation() {
                             }),
                         ],
                         template_scope: 0,
+                        kind: ElementKind::Component
                     }),
                     Node::Text("end of span node"),
                 ],
                 template_scope: 0,
+                kind: ElementKind::Element
             })],
         }),
         SfcBlock::Script(SfcScriptBlock {

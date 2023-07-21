@@ -9,10 +9,10 @@ use std::str;
 
 use super::attributes::parse_attributes;
 use super::ecma::parse_js;
-use super::html_utils::{classify_element_kind, html_name, space0, ElementKind};
+use super::html_utils::{classify_element_kind, html_name, space0, TagKind};
 use fervid_core::{
     AttributeOrBinding, ElementNode, Node, SfcBlock, SfcCustomBlock, SfcScriptBlock, SfcStyleBlock,
-    SfcTemplateBlock, StartingTag, Interpolation,
+    SfcTemplateBlock, StartingTag, Interpolation, ElementKind,
 };
 
 /// Parses the Vue Single-File Component
@@ -254,7 +254,7 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
 
     let element_kind = classify_element_kind(starting_tag.tag_name);
 
-    let early_return = matches!(element_kind, ElementKind::Void) || is_self_closing;
+    let early_return = matches!(element_kind, TagKind::Void) || is_self_closing;
 
     if early_return {
         return Ok((
@@ -263,6 +263,7 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
                 starting_tag,
                 children: vec![],
                 template_scope: 0,
+                kind: ElementKind::Element
             }),
         ));
     }
@@ -287,6 +288,7 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
             starting_tag,
             children,
             template_scope: 0,
+            kind: ElementKind::Element
         }),
     ))
 }

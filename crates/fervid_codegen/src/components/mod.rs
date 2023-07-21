@@ -492,7 +492,7 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{AttributeOrBinding, Interpolation, Node, StartingTag, VBindDirective};
+    use fervid_core::{AttributeOrBinding, Interpolation, Node, StartingTag, VBindDirective, ElementKind};
 
     use crate::test_utils::js;
 
@@ -510,6 +510,7 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
+                kind: ElementKind::Component
             },
             r"_createVNode(_component_test_component)",
             false,
@@ -525,6 +526,7 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
+                kind: ElementKind::Component
             },
             r"_createVNode(_component_test_component)",
             false,
@@ -555,6 +557,7 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
+                kind: ElementKind::Component
             },
             r#"_createVNode(_component_test_component,{foo:"bar","some-baz":qux})"#,
             false,
@@ -581,9 +584,11 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from div")],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     }),
                 ],
                 template_scope: 0,
+                kind: ElementKind::Component
             },
             r#"_createVNode(_component_test_component,null,{"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
@@ -622,11 +627,14 @@ mod tests {
                             },
                             children: vec![Node::Text("hello from div")],
                             template_scope: 0,
+                            kind: ElementKind::Element
                         }),
                     ],
                     template_scope: 0,
+                    kind: ElementKind::Element
                 })],
                 template_scope: 0,
+                kind: ElementKind::Component
             },
             r#"_createVNode(_component_test_component,null,{"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
@@ -668,11 +676,14 @@ mod tests {
                             },
                             children: vec![Node::Text("hello from div")],
                             template_scope: 0,
+                            kind: ElementKind::Element
                         }),
                     ],
                     template_scope: 0,
+                    kind: ElementKind::Element
                 })],
                 template_scope: 0,
+                kind: ElementKind::Component
             },
             r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
@@ -715,6 +726,7 @@ mod tests {
                             }),
                         ],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
@@ -739,12 +751,15 @@ mod tests {
                                 },
                                 children: vec![Node::Text("two")],
                                 template_scope: 0,
+                                kind: ElementKind::Element
                             }),
                         ],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     }),
                 ],
                 template_scope: 0,
+                kind: ElementKind::Component
             },
             r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot "+_toDisplayString(one),1)]),baz:_withCtx(()=>[_createTextVNode("hello from slot "),_createElementVNode("b",null,"two")])})"#,
             false,
@@ -774,6 +789,7 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from div")],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
@@ -790,9 +806,11 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     }),
                 ],
                 template_scope: 0,
+                kind: ElementKind::Component
             },
             r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
@@ -833,9 +851,11 @@ mod tests {
                                 },
                                 children: vec![Node::Text("hello from div")],
                                 template_scope: 0,
+                                kind: ElementKind::Element
                             }),
                         ],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
@@ -852,9 +872,11 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     }),
                 ],
                 template_scope: 0,
+                kind: ElementKind::Component
             },
             r#"_createVNode(_component_test_component,null,{"default":_withCtx(()=>[_createTextVNode("hello from default"),_createElementVNode("div",null,"hello from div")]),"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")])})"#,
             false,
@@ -887,6 +909,7 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     }),
                     Node::Text("hello from component"),
                     Node::Element(ElementNode {
@@ -897,9 +920,11 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from div")],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     }),
                 ],
                 template_scope: 0,
+                kind: ElementKind::Component
             },
             r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
@@ -936,6 +961,7 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
@@ -960,9 +986,11 @@ mod tests {
                                 },
                                 children: vec![Node::Text("hello from div")],
                                 template_scope: 0,
+                                kind: ElementKind::Element
                             }),
                         ],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
@@ -979,9 +1007,11 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from baz")],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     }),
                 ],
                 template_scope: 0,
+                kind: ElementKind::Component
             },
             r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),"default":_withCtx(()=>[_createTextVNode("hello from default"),_createElementVNode("div",null,"hello from div")]),baz:_withCtx(()=>[_createTextVNode("hello from baz")])})"#,
             false,

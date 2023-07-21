@@ -72,7 +72,7 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{ElementNode, Node, StartingTag, Conditional};
+    use fervid_core::{ElementNode, Node, StartingTag, Conditional, ElementKind};
 
     use crate::test_utils::js;
 
@@ -93,6 +93,7 @@ mod tests {
                         },
                         children: vec![Node::Text("hello")],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     },
                 }),
                 else_if_nodes: vec![],
@@ -118,6 +119,7 @@ mod tests {
                         },
                         children: vec![Node::Text("hello")],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     },
                 }),
                 else_if_nodes: vec![],
@@ -129,6 +131,7 @@ mod tests {
                     },
                     children: vec![Node::Text("bye")],
                     template_scope: 0,
+                    kind: ElementKind::Element
                 })),
             },
             r#"foo||true?_createElementVNode("h1",null,"hello"):_createElementVNode("h2",null,"bye")"#,
@@ -152,6 +155,7 @@ mod tests {
                         },
                         children: vec![Node::Text("hello")],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     },
                 }),
                 else_if_nodes: vec![
@@ -165,6 +169,7 @@ mod tests {
                             },
                             children: vec![Node::Text("hi")],
                             template_scope: 0,
+                            kind: ElementKind::Element
                         },
                     },
                     Conditional {
@@ -177,6 +182,7 @@ mod tests {
                             },
                             children: vec![Node::Text("bye")],
                             template_scope: 0,
+                            kind: ElementKind::Element
                         },
                     },
                 ],
@@ -204,6 +210,7 @@ mod tests {
                         },
                         children: vec![Node::Text("hello")],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     },
                 }),
                 else_if_nodes: vec![
@@ -217,6 +224,7 @@ mod tests {
                             },
                             children: vec![Node::Text("hi")],
                             template_scope: 0,
+                            kind: ElementKind::Element
                         },
                     },
                     Conditional {
@@ -229,6 +237,7 @@ mod tests {
                             },
                             children: vec![Node::Text("good morning")],
                             template_scope: 0,
+                            kind: ElementKind::Element
                         },
                     },
                 ],
@@ -240,6 +249,7 @@ mod tests {
                     },
                     children: vec![Node::Text("bye")],
                     template_scope: 0,
+                    kind: ElementKind::Element
                 })),
             },
             r#"foo?_createElementVNode("h1",null,"hello"):true?_createElementVNode("h2",null,"hi"):undefined?_createElementVNode("h3",null,"good morning"):_createElementVNode("h4",null,"bye")"#,

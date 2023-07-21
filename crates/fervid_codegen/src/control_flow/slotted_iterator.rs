@@ -136,7 +136,7 @@ fn is_from_default_slot(node: &Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{StartingTag, VBindDirective, VOnDirective, VSlotDirective, VueDirectives, AttributeOrBinding};
+    use fervid_core::{StartingTag, VBindDirective, VOnDirective, VSlotDirective, VueDirectives, AttributeOrBinding, ElementKind};
 
     use crate::test_utils::js;
 
@@ -238,6 +238,7 @@ mod tests {
             },
             children: vec![Node::Text("This is an h1")],
             template_scope: 0,
+            kind: ElementKind::Element
         })
     }
 
@@ -263,6 +264,7 @@ mod tests {
             },
             children: vec![],
             template_scope: 0,
+            kind: ElementKind::Element
         })
     }
 
@@ -289,6 +291,7 @@ mod tests {
             },
             children: vec![Node::Text("This is a component")],
             template_scope: 0,
+            kind: ElementKind::Element
         })
     }
 
@@ -302,6 +305,7 @@ mod tests {
             },
             children: vec![Node::Text("This is just a template")],
             template_scope: 0,
+            kind: ElementKind::Element
         })
     }
 
@@ -322,6 +326,7 @@ mod tests {
             },
             children: vec![Node::Text("This is a default template")],
             template_scope: 0,
+            kind: ElementKind::Element
         })
     }
 
@@ -342,6 +347,7 @@ mod tests {
             },
             children: vec![Node::Text("This is a named template")],
             template_scope: 0,
+            kind: ElementKind::Element
         })
     }
 }

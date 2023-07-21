@@ -1,5 +1,5 @@
 use fervid_core::{
-    AttributeOrBinding, ElementNode, StartingTag, StrOrExpr, VBindDirective, VueDirectives,
+    AttributeOrBinding, ElementNode, StartingTag, StrOrExpr, VBindDirective,
 };
 use swc_core::{
     common::DUMMY_SP,
@@ -326,7 +326,7 @@ impl CodegenContext {
 #[cfg(test)]
 mod tests {
     use fervid_core::{
-        AttributeOrBinding, Interpolation, Node, StartingTag, VBindDirective, VOnDirective,
+        AttributeOrBinding, Interpolation, Node, StartingTag, VBindDirective, VOnDirective, ElementKind,
     };
 
     use super::*;
@@ -373,6 +373,7 @@ mod tests {
                 },
                 children: vec![Node::Text("hello from div")],
                 template_scope: 0,
+                kind: ElementKind::Element
             },
             r#"_createElementVNode("div",{foo:"bar",baz:qux,readonly:true,onClick:handleClick},"hello from div")"#,
             false,
@@ -391,6 +392,7 @@ mod tests {
                 },
                 children: vec![Node::Text("hello from div")],
                 template_scope: 0,
+                kind: ElementKind::Element
             },
             r#"_createElementVNode("div",null,"hello from div")"#,
             false,
@@ -421,6 +423,7 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
+                kind: ElementKind::Element
             },
             r#"_createElementVNode("div",{foo:"bar","some-baz":qux})"#,
             false,
@@ -448,6 +451,7 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
+                kind: ElementKind::Element
             },
             r#"_createElementVNode("div",{foo:"bar","some-baz":qux})"#,
             false,
@@ -474,6 +478,7 @@ mod tests {
                     Node::Text(" bye!"),
                 ],
                 template_scope: 0,
+                kind: ElementKind::Element
             },
             r#"_createElementVNode("div",null,"hello from div "+_toDisplayString(true)+" bye!")"#,
             false,
@@ -505,9 +510,11 @@ mod tests {
                         },
                         children: vec![Node::Text("bye!")],
                         template_scope: 0,
+                        kind: ElementKind::Element
                     }),
                 ],
                 template_scope: 0,
+                kind: ElementKind::Element
             },
             r#"_createElementVNode("div",null,[_createTextVNode("hello from div "+_toDisplayString(true)),_createElementVNode("span",null,"bye!")])"#,
             false,

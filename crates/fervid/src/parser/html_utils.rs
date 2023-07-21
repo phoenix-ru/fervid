@@ -6,7 +6,7 @@ const RAW_TEXT_ELEMENTS: [&str; 2] = ["script", "style"];
 const RCDATA_ELEMENTS: [&str; 2] = ["textarea", "title"];
 const FOREIGN_ELEMENTS: [&str; 1] = ["svg"]; // todo
 
-pub enum ElementKind {
+pub enum TagKind {
   RCData,
   Foreign,
   RawText,
@@ -14,19 +14,19 @@ pub enum ElementKind {
   Normal
 }
 
-pub fn classify_element_kind(tag_name: &str) -> ElementKind {
+pub fn classify_element_kind(tag_name: &str) -> TagKind {
   let tag_lowercase = &tag_name.to_lowercase();
   let tag_lowercase = tag_lowercase.as_str();
   if RCDATA_ELEMENTS.contains(&tag_lowercase) {
-    ElementKind::RCData
+    TagKind::RCData
   } else if FOREIGN_ELEMENTS.contains(&tag_lowercase) {
-    ElementKind::Foreign
+    TagKind::Foreign
   } else if RAW_TEXT_ELEMENTS.contains(&tag_lowercase) {
-    ElementKind::RawText
+    TagKind::RawText
   } else if VOID_TAGS.contains(&tag_lowercase) {
-    ElementKind::Void
+    TagKind::Void
   } else {
-    ElementKind::Normal
+    TagKind::Normal
   }
 }
 

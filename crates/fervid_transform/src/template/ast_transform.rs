@@ -348,7 +348,7 @@ impl VisitMut for Node<'_> {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{Node, VueDirectives};
+    use fervid_core::{Node, VueDirectives, ElementKind};
     use swc_core::{
         common::DUMMY_SP,
         ecma::{
@@ -377,6 +377,7 @@ mod tests {
                 },
                 children: vec![text_node(), if_node(), else_if_node(), else_node()],
                 template_scope: 0,
+                kind: ElementKind::Element
             })],
         };
 
@@ -545,6 +546,7 @@ mod tests {
                     else_node(),
                 ],
                 template_scope: 0,
+                kind: ElementKind::Element
             })],
         };
 
@@ -578,6 +580,7 @@ mod tests {
             },
             children: vec![],
             template_scope: 0,
+            kind: ElementKind::Element
         });
 
         let no_directives2 = Node::Element(ElementNode {
@@ -590,6 +593,7 @@ mod tests {
             },
             children: vec![Node::Text("hello")],
             template_scope: 0,
+            kind: ElementKind::Element
         });
 
         let mut sfc_template = SfcTemplateBlock {
@@ -625,6 +629,7 @@ mod tests {
             },
             children: vec![Node::Text("if")],
             template_scope: 0,
+            kind: ElementKind::Element
         })
     }
 
@@ -652,6 +657,7 @@ mod tests {
             },
             children: vec![Node::Text("else-if")],
             template_scope: 0,
+            kind: ElementKind::Element
         })
     }
 
@@ -680,6 +686,7 @@ mod tests {
             },
             children: vec![Node::Text("else")],
             template_scope: 0,
+            kind: ElementKind::Element
         })
     }
 

@@ -36,9 +36,18 @@ pub enum Node<'a> {
 ///    for the correct compilation of dynamic bindings and expressions.
 #[derive(Debug, Clone)]
 pub struct ElementNode<'a> {
+    pub kind: ElementKind,
     pub starting_tag: StartingTag<'a>,
     pub children: Vec<Node<'a>>,
     pub template_scope: u32,
+}
+
+#[derive(Debug, Clone, Default)]
+pub enum ElementKind {
+    Builtin,
+    #[default]
+    Element,
+    Component
 }
 
 /// This is a synthetic node type only available after AST optimizations.

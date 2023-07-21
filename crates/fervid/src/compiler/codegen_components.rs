@@ -16,6 +16,7 @@ impl<'a> CodegenContext<'a> {
             starting_tag,
             children,
             template_scope,
+            ..
         } = element_node;
 
         // First goes the v-for prefix: the component needs to be surrounded in a new block
@@ -260,7 +261,7 @@ impl<'a> CodegenContext<'a> {
                 self.code_helper.comma_newline(buf);
             }
 
-            let Node::Element(ElementNode { starting_tag, children, template_scope }) = template else {
+            let Node::Element(ElementNode { starting_tag, children, template_scope, .. }) = template else {
                 unreachable!("This should be impossible")
             };
 
