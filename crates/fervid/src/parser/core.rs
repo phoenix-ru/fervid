@@ -2,6 +2,7 @@ extern crate nom;
 use nom::branch::alt;
 use nom::bytes::complete::{take_until, take_until1};
 use nom::combinator::fail;
+use nom::error::{ErrorKind, ParseError};
 use nom::multi::many0;
 use nom::sequence::{delimited, preceded};
 use nom::{bytes::complete::tag, sequence::tuple, IResult};
@@ -11,8 +12,8 @@ use super::attributes::parse_attributes;
 use super::ecma::parse_js;
 use super::html_utils::{classify_element_kind, html_name, space0, TagKind};
 use fervid_core::{
-    AttributeOrBinding, ElementNode, Node, SfcBlock, SfcCustomBlock, SfcScriptBlock, SfcStyleBlock,
-    SfcTemplateBlock, StartingTag, Interpolation, ElementKind,
+    AttributeOrBinding, ElementKind, ElementNode, Interpolation, Node, SfcBlock, SfcCustomBlock,
+    SfcDescriptor, SfcScriptBlock, SfcStyleBlock, SfcTemplateBlock, StartingTag,
 };
 
 /// Parses the Vue Single-File Component
@@ -23,9 +24,42 @@ use fervid_core::{
 ///
 /// This function does not modify whitespace inside the blocks.
 ///
-/// To optimize template node, use [`crate::analyzer::ast_optimizer::optimize_ast`]
-pub fn parse_sfc(input: &str) -> IResult<&str, Vec<SfcBlock>> {
-    many0(parse_root_block)(input)
+/// To optimize template node, use the `fervid_transform` crate
+pub fn parse_sfc(mut input: &str) -> IResult<&str, SfcDescriptor> {
+    let mut result = SfcDescriptor::default();
+
+    // Adapted from Nom's `many0`
+    loop {
+        let len = input.len();
+        match parse_root_block(input) {
+            Err(nom::Err::Error(_)) => return Ok((input, result)),
+            Err(e) => return Err(e),
+            Ok((new_input, sfc_block)) => {
+                // infinite loop check: the parser must always consume
+                if new_input.len() == len {
+                    return Err(nom::Err::Error(ParseError::from_error_kind(
+                        input,
+                        ErrorKind::Many0,
+                    )));
+                }
+
+                match sfc_block {
+                    SfcBlock::Template(template_block) => result.template = Some(template_block),
+                    SfcBlock::Script(script_block) => {
+                        if script_block.is_setup {
+                            result.script_setup = Some(script_block)
+                        } else {
+                            result.script_legacy = Some(script_block)
+                        }
+                    }
+                    SfcBlock::Style(style_block) => result.styles.push(style_block),
+                    SfcBlock::Custom(custom_block) => result.custom_blocks.push(custom_block),
+                }
+
+                input = new_input;
+            }
+        }
+    }
 }
 
 fn parse_root_block<'a>(input: &'a str) -> IResult<&'a str, SfcBlock<'a>> {
@@ -241,8 +275,8 @@ fn parse_interpolation_node(input: &str) -> IResult<&str, Node> {
         Node::Interpolation(Interpolation {
             value: parsed,
             template_scope: 0,
-            patch_flag: false
-        })
+            patch_flag: false,
+        }),
     ))
 }
 
@@ -263,7 +297,7 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
                 starting_tag,
                 children: vec![],
                 template_scope: 0,
-                kind: ElementKind::Element
+                kind: ElementKind::Element,
             }),
         ));
     }
@@ -288,7 +322,7 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
             starting_tag,
             children,
             template_scope: 0,
-            kind: ElementKind::Element
+            kind: ElementKind::Element,
         }),
     ))
 }

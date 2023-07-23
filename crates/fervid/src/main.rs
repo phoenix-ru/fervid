@@ -3,12 +3,20 @@ extern crate swc_ecma_codegen;
 extern crate swc_ecma_parser;
 use std::time::Instant;
 
-use fervid::{SfcBlock, SfcScriptBlock};
-use fervid_core::{AttributeOrBinding, ElementNode, Interpolation, Node, StartingTag, ElementKind};
+use fervid::SfcScriptBlock;
+use fervid_core::{
+    AttributeOrBinding, ElementKind, ElementNode, Interpolation, Node, SfcDescriptor, StartingTag,
+};
 
 use fervid::parser;
 use fervid_transform::template::transform_and_record_template;
-use swc_core::{ecma::{ast::{Expr, Ident}, atoms::JsWord}, common::DUMMY_SP};
+use swc_core::{
+    common::DUMMY_SP,
+    ecma::{
+        ast::{Expr, Ident},
+        atoms::JsWord,
+    },
+};
 
 fn main() {
     let n = Instant::now();
@@ -30,12 +38,9 @@ fn test_real_compilation() {
     assert!(res.0.trim().len() == 0, "Input was not fully consumed");
 
     // Find template block
-    let mut sfc_blocks = res.1;
-    let template_block = sfc_blocks.iter_mut().find_map(|block| match block {
-        fervid::SfcBlock::Template(template_block) => Some(template_block),
-        _ => None,
-    });
-    let Some(template_block) = template_block else {
+    let sfc_blocks = res.1;
+    let mut template_block = sfc_blocks.template;
+    let Some(ref mut template_block) = template_block else {
         panic!("Test component has no template block");
     };
 
@@ -46,7 +51,11 @@ fn test_real_compilation() {
     let template_expr = ctx.generate_sfc_template(&template_block);
 
     // TODO
-    let script = swc_core::ecma::ast::Module { span: DUMMY_SP, body: vec![], shebang: None };
+    let script = swc_core::ecma::ast::Module {
+        span: DUMMY_SP,
+        body: vec![],
+        shebang: None,
+    };
     let sfc_module = ctx.generate_module(template_expr, script);
 
     let compiled_code = fervid_codegen::CodegenContext::stringify(&sfc_module, false);
@@ -71,8 +80,8 @@ fn test_real_compilation() {
 
 #[allow(dead_code)]
 fn test_synthetic_compilation() {
-    let mut blocks = vec![
-        SfcBlock::Template(fervid::SfcTemplateBlock {
+    let sfc = SfcDescriptor {
+        template: Some(fervid::SfcTemplateBlock {
             lang: "html",
             roots: vec![Node::Element(ElementNode {
                 starting_tag: StartingTag {
@@ -92,7 +101,7 @@ fn test_synthetic_compilation() {
                             optional: false,
                         })),
                         template_scope: 0,
-                        patch_flag: true
+                        patch_flag: true,
                     }),
                     Node::Text("yes yes"),
                     // Just element
@@ -111,11 +120,11 @@ fn test_synthetic_compilation() {
                                     optional: false,
                                 })),
                                 template_scope: 0,
-                                patch_flag: true
+                                patch_flag: true,
                             }),
                         ],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
                     }),
                     // Component
                     Node::Element(ElementNode {
@@ -133,30 +142,30 @@ fn test_synthetic_compilation() {
                                     optional: false,
                                 })),
                                 template_scope: 0,
-                                patch_flag: true
+                                patch_flag: true,
                             }),
                         ],
                         template_scope: 0,
-                        kind: ElementKind::Component
+                        kind: ElementKind::Component,
                     }),
                     Node::Text("end of span node"),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Element
+                kind: ElementKind::Element,
             })],
         }),
-        SfcBlock::Script(SfcScriptBlock {
+        script_legacy: Some(SfcScriptBlock {
             lang: "js",
             content: "export default {\n  name: 'TestComponent'\n}",
             is_setup: false,
         }),
-    ];
+        script_setup: None,
+        styles: vec![],
+        custom_blocks: vec![],
+    };
 
-    let template_block = blocks.iter_mut().find_map(|block| match block {
-        fervid::SfcBlock::Template(template_block) => Some(template_block),
-        _ => None,
-    });
-    let Some(template_block) = template_block else {
+    let mut template_block = sfc.template;
+    let Some(ref mut template_block) = template_block else {
         panic!("Test component has no template block");
     };
 
@@ -167,7 +176,11 @@ fn test_synthetic_compilation() {
     let template_expr = ctx.generate_sfc_template(&template_block);
 
     // TODO
-    let script = swc_core::ecma::ast::Module { span: DUMMY_SP, body: vec![], shebang: None };
+    let script = swc_core::ecma::ast::Module {
+        span: DUMMY_SP,
+        body: vec![],
+        shebang: None,
+    };
     let sfc_module = ctx.generate_module(template_expr, script);
 
     let compiled_code = fervid_codegen::CodegenContext::stringify(&sfc_module, false);

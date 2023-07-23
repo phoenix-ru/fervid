@@ -1,6 +1,6 @@
 use crate::{Node, StartingTag};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SfcDescriptor<'a> {
   pub template: Option<SfcTemplateBlock<'a>>,
   pub script_legacy: Option<SfcScriptBlock<'a>>,
