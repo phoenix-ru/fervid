@@ -14,11 +14,11 @@ pub struct ScopeHelper {
     pub setup_bindings: Vec<SetupBinding>,
     pub options_api_vars: Box<ScriptLegacyVars>,
     pub is_inline: bool,
-    pub transform_mode: ExprTransformMode
+    pub transform_mode: TemplateGenerationMode
 }
 
 #[derive(Debug, Default)]
-pub enum ExprTransformMode {
+pub enum TemplateGenerationMode {
     /// Applies the transformation as if the template is rendered inline
     /// and variables are directly accessible in the function scope.
     /// For example, if there is `const foo = ref(0)`, then `foo` will be transformed to `foo.value`.

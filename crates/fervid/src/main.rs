@@ -9,7 +9,7 @@ use fervid_core::{
 };
 
 use fervid::parser;
-use fervid_transform::template::transform_and_record_template;
+use fervid_transform::{template::transform_and_record_template, script::transform_and_record_scripts};
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
@@ -47,20 +47,13 @@ fn test_real_compilation() {
     };
 
     let mut scope_helper = fervid_transform::template::ScopeHelper::default();
+    let module = transform_and_record_scripts(sfc.script_setup, sfc.script_legacy, &mut scope_helper);
     transform_and_record_template(template_block, &mut scope_helper);
 
     let mut ctx = fervid_codegen::CodegenContext::default();
     let template_expr = ctx.generate_sfc_template(&template_block);
 
     // TODO
-    let module = sfc
-        .script_legacy
-        .map(|sfc_script| *sfc_script.content)
-        .unwrap_or_else(|| swc_core::ecma::ast::Module {
-            span: DUMMY_SP,
-            body: vec![],
-            shebang: None,
-        });
     let sfc_module = ctx.generate_module(template_expr, module);
 
     let compiled_code = fervid_codegen::CodegenContext::stringify(test, &sfc_module, false);
