@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use fervid_core::SfcTemplateBlock;
 use swc_core::{
-    common::{SourceMap, DUMMY_SP},
+    common::{SourceMap, DUMMY_SP, FileName},
     ecma::ast::{Expr, ExprStmt, Module, ModuleItem, Stmt},
 };
 use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
@@ -32,9 +32,10 @@ impl CodegenContext {
         script
     }
 
-    pub fn stringify(item: &impl Node, minify: bool) -> String {
+    pub fn stringify(source: &str, item: &impl Node, minify: bool) -> String {
         // Emitting the result requires some setup with SWC
         let cm: Arc<SourceMap> = Default::default();
+        cm.new_source_file(FileName::Custom("test.ts".to_owned()), source.to_owned());
         let mut buff: Vec<u8> = Vec::new();
         let writer: JsWriter<&mut Vec<u8>> = JsWriter::new(cm.clone(), "\n", &mut buff, None);
 

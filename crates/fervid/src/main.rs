@@ -3,7 +3,7 @@ extern crate swc_ecma_codegen;
 extern crate swc_ecma_parser;
 use std::time::Instant;
 
-use fervid::{SfcScriptBlock, parser::ecma::parse_js_module};
+use fervid::{parser::ecma::parse_js_module, SfcScriptBlock};
 use fervid_core::{
     AttributeOrBinding, ElementKind, ElementNode, Interpolation, Node, SfcDescriptor, StartingTag,
 };
@@ -33,13 +33,15 @@ fn test_real_compilation() {
     let test = include_str!("../benches/fixtures/input.vue");
 
     // Parse
-    let res = parser::core::parse_sfc(test).unwrap();
+    let (remaining_input, sfc) = parser::core::parse_sfc(test).unwrap();
 
-    assert!(res.0.trim().len() == 0, "Input was not fully consumed");
+    assert!(
+        remaining_input.trim().len() == 0,
+        "Input was not fully consumed"
+    );
 
     // Find template block
-    let sfc_blocks = res.1;
-    let mut template_block = sfc_blocks.template;
+    let mut template_block = sfc.template;
     let Some(ref mut template_block) = template_block else {
         panic!("Test component has no template block");
     };
@@ -51,14 +53,17 @@ fn test_real_compilation() {
     let template_expr = ctx.generate_sfc_template(&template_block);
 
     // TODO
-    let script = swc_core::ecma::ast::Module {
-        span: DUMMY_SP,
-        body: vec![],
-        shebang: None,
-    };
-    let sfc_module = ctx.generate_module(template_expr, script);
+    let module = sfc
+        .script_legacy
+        .map(|sfc_script| *sfc_script.content)
+        .unwrap_or_else(|| swc_core::ecma::ast::Module {
+            span: DUMMY_SP,
+            body: vec![],
+            shebang: None,
+        });
+    let sfc_module = ctx.generate_module(template_expr, module);
 
-    let compiled_code = fervid_codegen::CodegenContext::stringify(&sfc_module, false);
+    let compiled_code = fervid_codegen::CodegenContext::stringify(test, &sfc_module, false);
 
     #[cfg(feature = "dbg_print")]
     {
@@ -183,7 +188,7 @@ fn test_synthetic_compilation() {
     };
     let sfc_module = ctx.generate_module(template_expr, script);
 
-    let compiled_code = fervid_codegen::CodegenContext::stringify(&sfc_module, false);
+    let compiled_code = fervid_codegen::CodegenContext::stringify("", &sfc_module, false);
 
     println!("\n[Synthetic Compile Result]\n");
     println!("{compiled_code}");
