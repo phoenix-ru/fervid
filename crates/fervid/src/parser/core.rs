@@ -7,12 +7,14 @@ use nom::multi::many0;
 use nom::sequence::{delimited, preceded};
 use nom::{bytes::complete::tag, sequence::tuple, IResult};
 use std::str;
+use swc_core::common::DUMMY_SP;
+use swc_core::ecma::ast::Module;
 
 use super::attributes::parse_attributes;
-use super::ecma::parse_js;
+use super::ecma::{parse_js, parse_js_module};
 use super::html_utils::{classify_element_kind, html_name, space0, TagKind};
 use fervid_core::{
-    AttributeOrBinding, ElementKind, ElementNode, Interpolation, Node, SfcBlock, SfcCustomBlock,
+    AttributeOrBinding, ElementKind, ElementNode, Interpolation, Node, SfcCustomBlock,
     SfcDescriptor, SfcScriptBlock, SfcStyleBlock, SfcTemplateBlock, StartingTag,
 };
 
@@ -31,10 +33,10 @@ pub fn parse_sfc(mut input: &str) -> IResult<&str, SfcDescriptor> {
     // Adapted from Nom's `many0`
     loop {
         let len = input.len();
-        match parse_root_block(input) {
+        match parse_root_block(input, &mut result) {
             Err(nom::Err::Error(_)) => return Ok((input, result)),
             Err(e) => return Err(e),
-            Ok((new_input, sfc_block)) => {
+            Ok(new_input) => {
                 // infinite loop check: the parser must always consume
                 if new_input.len() == len {
                     return Err(nom::Err::Error(ParseError::from_error_kind(
@@ -43,26 +45,16 @@ pub fn parse_sfc(mut input: &str) -> IResult<&str, SfcDescriptor> {
                     )));
                 }
 
-                match sfc_block {
-                    SfcBlock::Template(template_block) => result.template = Some(template_block),
-                    SfcBlock::Script(script_block) => {
-                        if script_block.is_setup {
-                            result.script_setup = Some(script_block)
-                        } else {
-                            result.script_legacy = Some(script_block)
-                        }
-                    }
-                    SfcBlock::Style(style_block) => result.styles.push(style_block),
-                    SfcBlock::Custom(custom_block) => result.custom_blocks.push(custom_block),
-                }
-
                 input = new_input;
             }
         }
     }
 }
 
-fn parse_root_block<'a>(input: &'a str) -> IResult<&'a str, SfcBlock<'a>> {
+fn parse_root_block<'a>(
+    input: &'a str,
+    out: &mut SfcDescriptor<'a>,
+) -> Result<&'a str, nom::Err<nom::error::Error<&'a str>>> {
     // Remove leading space
     let input = input.trim_start();
 
@@ -91,26 +83,24 @@ fn parse_root_block<'a>(input: &'a str) -> IResult<&'a str, SfcBlock<'a>> {
     if !is_script && !is_template && !is_style {
         // Do not process anything if starting tag is self-closing
         if is_self_closing {
-            return Ok((
-                input,
-                SfcBlock::Custom(SfcCustomBlock {
-                    starting_tag,
-                    content: "",
-                }),
-            ));
+            out.custom_blocks.push(SfcCustomBlock {
+                starting_tag,
+                content: "",
+            });
+
+            return Ok(input);
         }
 
         // Read raw text and end tag
         let (input, content) = read_raw_text(input);
         let (input, _end_tag) = parse_element_end_tag(input)?;
 
-        return Ok((
-            input,
-            SfcBlock::Custom(SfcCustomBlock {
-                starting_tag,
-                content,
-            }),
-        ));
+        out.custom_blocks.push(SfcCustomBlock {
+            starting_tag,
+            content,
+        });
+
+        return Ok(input);
     }
 
     // Get `lang` attribute, which is common for all the Vue root blocks
@@ -129,13 +119,12 @@ fn parse_root_block<'a>(input: &'a str) -> IResult<&'a str, SfcBlock<'a>> {
 
         // Check for self-closing `<template />`. I see no reason why someone might do it, but still
         if is_self_closing {
-            return Ok((
-                input,
-                SfcBlock::Template(SfcTemplateBlock {
-                    lang,
-                    roots: Vec::new(),
-                }),
-            ));
+            out.template = Some(SfcTemplateBlock {
+                lang,
+                roots: Vec::new(),
+            });
+
+            return Ok(input);
         }
 
         // Parse children, this may Err (and is not handled yet)
@@ -145,13 +134,12 @@ fn parse_root_block<'a>(input: &'a str) -> IResult<&'a str, SfcBlock<'a>> {
         // In the future, this checks may be implemented
         let (input, _end_tag) = parse_element_end_tag(input)?;
 
-        return Ok((
-            input,
-            SfcBlock::Template(SfcTemplateBlock {
-                lang,
-                roots: children,
-            }),
-        ));
+        out.template = Some(SfcTemplateBlock {
+            lang,
+            roots: children,
+        });
+
+        return Ok(input);
     }
 
     // Read script
@@ -165,30 +153,53 @@ fn parse_root_block<'a>(input: &'a str) -> IResult<&'a str, SfcBlock<'a>> {
             )
         });
 
+        macro_rules! add_script {
+            ($content: expr) => {
+                if is_setup {
+                    out.script_setup = Some(SfcScriptBlock {
+                        lang,
+                        content: $content,
+                        is_setup,
+                    });
+                } else {
+                    out.script_legacy = Some(SfcScriptBlock {
+                        lang,
+                        content: $content,
+                        is_setup,
+                    })
+                }
+            };
+        }
+
         // Check self-closing
         if is_self_closing {
-            return Ok((
-                input,
-                SfcBlock::Script(SfcScriptBlock {
-                    lang,
-                    content: "",
-                    is_setup,
-                }),
-            ));
+            // Include the empty script. Maybe ignore them in the future?
+            add_script!(Box::new(Module {
+                span: DUMMY_SP,
+                body: vec![],
+                shebang: None,
+            }));
+            return Ok(input);
         }
 
         // Read raw text and end tag
         let (input, content) = read_raw_text(input);
         let (input, _end_tag) = parse_element_end_tag(input)?;
 
-        return Ok((
-            input,
-            SfcBlock::Script(SfcScriptBlock {
-                lang,
-                content,
-                is_setup,
-            }),
-        ));
+        // TODO Span
+        let content = parse_js_module(content, 0, 0);
+        match content {
+            Ok(content_module) => {
+                add_script!(Box::new(content_module));
+                return Ok(input);
+            }
+            Err(_) => {
+                return Err(nom::Err::Error(nom::error::Error {
+                    input,
+                    code: ErrorKind::Fail,
+                }));
+            }
+        }
     }
 
     // Read style (basically same as script, but attributes are different)
@@ -201,30 +212,22 @@ fn parse_root_block<'a>(input: &'a str) -> IResult<&'a str, SfcBlock<'a>> {
         )
     });
 
-    // Check self-closing
+    // Check self-closing, ignore such styles
     if is_self_closing {
-        return Ok((
-            input,
-            SfcBlock::Style(SfcStyleBlock {
-                lang,
-                content: "",
-                is_scoped,
-            }),
-        ));
+        return Ok(input);
     }
 
     // Read raw text and end tag (exactly like in script and custom blocks)
     let (input, content) = read_raw_text(input);
     let (input, _end_tag) = parse_element_end_tag(input)?;
 
-    Ok((
-        input,
-        SfcBlock::Style(SfcStyleBlock {
-            lang,
-            content,
-            is_scoped,
-        }),
-    ))
+    out.styles.push(SfcStyleBlock {
+        lang,
+        content,
+        is_scoped,
+    });
+
+    Ok(input)
 }
 
 fn parse_element_starting_tag(input: &str) -> IResult<&str, (StartingTag, bool)> {

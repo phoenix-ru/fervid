@@ -3,7 +3,7 @@ extern crate swc_ecma_codegen;
 extern crate swc_ecma_parser;
 use std::time::Instant;
 
-use fervid::SfcScriptBlock;
+use fervid::{SfcScriptBlock, parser::ecma::parse_js_module};
 use fervid_core::{
     AttributeOrBinding, ElementKind, ElementNode, Interpolation, Node, SfcDescriptor, StartingTag,
 };
@@ -156,7 +156,7 @@ fn test_synthetic_compilation() {
         }),
         script_legacy: Some(SfcScriptBlock {
             lang: "js",
-            content: "export default {\n  name: 'TestComponent'\n}",
+            content: js_module("export default {\n  name: 'TestComponent'\n}"),
             is_setup: false,
         }),
         script_setup: None,
@@ -187,4 +187,8 @@ fn test_synthetic_compilation() {
 
     println!("\n[Synthetic Compile Result]\n");
     println!("{compiled_code}");
+}
+
+fn js_module(raw: &str) -> Box<swc_core::ecma::ast::Module> {
+    parse_js_module(raw, 0, 0).unwrap().into()
 }
