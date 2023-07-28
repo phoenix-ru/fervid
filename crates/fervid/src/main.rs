@@ -13,7 +13,7 @@ use fervid_transform::{template::transform_and_record_template, script::transfor
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
-        ast::{Expr, Ident},
+        ast::{Expr, Ident, ObjectLit},
         atoms::JsWord,
     },
 };
@@ -54,7 +54,7 @@ fn test_real_compilation() {
     let template_expr = ctx.generate_sfc_template(&template_block);
 
     // TODO
-    let sfc_module = ctx.generate_module(template_expr, module);
+    let sfc_module = ctx.generate_module(template_expr, module.0, module.1);
 
     let compiled_code = fervid_codegen::CodegenContext::stringify(test, &sfc_module, false);
 
@@ -179,7 +179,11 @@ fn test_synthetic_compilation() {
         body: vec![],
         shebang: None,
     };
-    let sfc_module = ctx.generate_module(template_expr, script);
+    let sfc_export_obj = ObjectLit {
+        span: DUMMY_SP,
+        props: vec![],
+    };
+    let sfc_module = ctx.generate_module(template_expr, script, sfc_export_obj);
 
     let compiled_code = fervid_codegen::CodegenContext::stringify("", &sfc_module, false);
 

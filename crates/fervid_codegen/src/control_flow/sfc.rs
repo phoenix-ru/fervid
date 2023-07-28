@@ -2,8 +2,14 @@ use std::sync::Arc;
 
 use fervid_core::SfcTemplateBlock;
 use swc_core::{
-    common::{SourceMap, DUMMY_SP, FileName},
-    ecma::ast::{Expr, ExprStmt, Module, ModuleItem, Stmt},
+    common::{FileName, SourceMap, DUMMY_SP},
+    ecma::{
+        ast::{
+            BindingIdent, ExportDefaultExpr, Expr, Function, Ident, MethodProp, Module,
+            ModuleItem, ObjectLit, Param, Pat, Prop, PropName, PropOrSpread, Stmt, BlockStmt, ReturnStmt, ImportDecl, ModuleDecl, Str,
+        },
+        atoms::JsWord,
+    },
 };
 use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
 
@@ -22,12 +28,78 @@ impl CodegenContext {
         result
     }
 
-    pub fn generate_module(&mut self, template_expr: Expr, mut script: Module) -> Module {
-        // TODO Properly append the template code depending on mode, what scripts are there, etc.
-        script.body.push(ModuleItem::Stmt(Stmt::Expr(ExprStmt {
+    pub fn generate_module(
+        &mut self,
+        template_expr: Expr,
+        mut script: Module,
+        mut sfc_export_obj: ObjectLit,
+    ) -> Module {
+        // TODO Directive resolves and component resolves
+        let render_fn = Function {
+            params: vec![Param {
+                span: DUMMY_SP,
+                decorators: vec![],
+                pat: Pat::Ident(BindingIdent {
+                    id: Ident {
+                        span: DUMMY_SP,
+                        sym: JsWord::from("_ctx"),
+                        optional: false,
+                    },
+                    type_ann: None,
+                }),
+            }],
+            decorators: vec![],
             span: DUMMY_SP,
-            expr: Box::new(template_expr),
+            body: Some(BlockStmt {
+                span: DUMMY_SP,
+                stmts: vec![
+                    Stmt::Return(ReturnStmt {
+                        arg: Some(Box::new(template_expr)),
+                        span: DUMMY_SP
+                    })
+                ],
+            }),
+            is_generator: false,
+            is_async: false,
+            type_params: None,
+            return_type: None,
+        };
+
+        // TODO Properly append the template code depending on mode, what scripts are there, etc.
+        // `render(_ctx) { return template_expression }`
+        sfc_export_obj
+            .props
+            .push(PropOrSpread::Prop(Box::new(Prop::Method(MethodProp {
+                key: PropName::Ident(Ident {
+                    span: DUMMY_SP,
+                    sym: JsWord::from("render"),
+                    optional: false,
+                }),
+                function: Box::new(render_fn),
+            }))));
+
+        // Append the Vue imports
+        // TODO Smart merging with user imports?
+        let used_imports = self.generate_imports();
+        script.body.push(ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
+            span: DUMMY_SP,
+            specifiers: used_imports,
+            src: Box::new(Str {
+                span: DUMMY_SP,
+                value: JsWord::from("vue"),
+                raw: None,
+            }),
+            type_only: false,
+            asserts: None,
         })));
+
+        // Append the default export
+        script.body.push(ModuleItem::ModuleDecl(
+            ModuleDecl::ExportDefaultExpr(ExportDefaultExpr {
+                span: DUMMY_SP,
+                expr: Box::new(Expr::Object(sfc_export_obj)),
+            }),
+        ));
 
         script
     }
