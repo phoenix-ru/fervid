@@ -4,7 +4,7 @@ use swc_core::{
     ecma::{
         ast::{
             ArrayLit, ArrowExpr, BlockStmtOrExpr, CallExpr, Callee, Expr, ExprOrSpread, Ident,
-            KeyValueProp, Lit, Null, Number, ObjectLit, Pat, Prop, PropOrSpread,
+            KeyValueProp, Lit, Null, Number, ObjectLit, Pat, Prop, PropOrSpread, VarDeclarator, BindingIdent, Str,
         },
         atoms::JsWord,
     },
@@ -139,6 +139,62 @@ impl CodegenContext {
         create_component_expr = self.generate_component_directives(create_component_expr, component_node);
 
         create_component_expr
+    }
+
+    pub fn generate_component_resolves(&mut self) -> Vec<VarDeclarator> {
+        let mut result = Vec::new();
+
+        if self.components.len() == 0 {
+            return result;
+        }
+
+        let resolve_component_ident = self.get_and_add_import_ident(VueImports::ResolveComponent);
+
+        // We need sorted entries for stable output.
+        // Entries are sorted by Js identifier (second element of tuple in hashmap entry)
+        let mut sorted_components: Vec<(&str, &JsWord)> = self
+            .components
+            .iter()
+            .map(|(component_name, component_ident)| (component_name.as_str(), component_ident))
+            .collect();
+
+        sorted_components.sort_by(|a, b| a.1.cmp(b.1));
+
+        // Key is a component as used in template, value is the assigned Js identifier
+        for (component_name, identifier) in sorted_components.iter() {
+            // _component_ident_name = resolveComponent("component-name")
+            result.push(VarDeclarator {
+                span: DUMMY_SP,
+                name: Pat::Ident(BindingIdent {
+                    id: Ident {
+                        span: DUMMY_SP,
+                        sym: (*identifier).to_owned(),
+                        optional: false,
+                    },
+                    type_ann: None,
+                }),
+                init: Some(Box::new(Expr::Call(CallExpr {
+                    span: DUMMY_SP,
+                    callee: Callee::Expr(Box::new(Expr::Ident(Ident {
+                        span: DUMMY_SP,
+                        sym: resolve_component_ident.to_owned(),
+                        optional: false,
+                    }))),
+                    args: vec![ExprOrSpread {
+                        spread: None,
+                        expr: Box::new(Expr::Lit(Lit::Str(Str {
+                            span: DUMMY_SP,
+                            value: JsWord::from(*component_name),
+                            raw: None,
+                        }))),
+                    }],
+                    type_args: None,
+                }))),
+                definite: false,
+            });
+        }
+
+        result
     }
 
     fn generate_component_attributes<'e>(&mut self, component_node: &'e ElementNode) -> ObjectLit {

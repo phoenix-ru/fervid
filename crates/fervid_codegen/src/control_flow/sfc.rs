@@ -6,7 +6,7 @@ use swc_core::{
     ecma::{
         ast::{
             BindingIdent, ExportDefaultExpr, Expr, Function, Ident, MethodProp, Module,
-            ModuleItem, ObjectLit, Param, Pat, Prop, PropName, PropOrSpread, Stmt, BlockStmt, ReturnStmt, ImportDecl, ModuleDecl, Str,
+            ModuleItem, ObjectLit, Param, Pat, Prop, PropName, PropOrSpread, Stmt, BlockStmt, ReturnStmt, ImportDecl, ModuleDecl, Str, Decl, VarDecl, VarDeclKind,
         },
         atoms::JsWord,
     },
@@ -34,36 +34,8 @@ impl CodegenContext {
         mut script: Module,
         mut sfc_export_obj: ObjectLit,
     ) -> Module {
-        // TODO Directive resolves and component resolves
-        let render_fn = Function {
-            params: vec![Param {
-                span: DUMMY_SP,
-                decorators: vec![],
-                pat: Pat::Ident(BindingIdent {
-                    id: Ident {
-                        span: DUMMY_SP,
-                        sym: JsWord::from("_ctx"),
-                        optional: false,
-                    },
-                    type_ann: None,
-                }),
-            }],
-            decorators: vec![],
-            span: DUMMY_SP,
-            body: Some(BlockStmt {
-                span: DUMMY_SP,
-                stmts: vec![
-                    Stmt::Return(ReturnStmt {
-                        arg: Some(Box::new(template_expr)),
-                        span: DUMMY_SP
-                    })
-                ],
-            }),
-            is_generator: false,
-            is_async: false,
-            type_params: None,
-            return_type: None,
-        };
+        // TODO Distinguish between RenderFn and Inline
+        let render_fn = self.generate_render_fn(template_expr);
 
         // TODO Properly append the template code depending on mode, what scripts are there, etc.
         // `render(_ctx) { return template_expression }`
@@ -102,6 +74,58 @@ impl CodegenContext {
         ));
 
         script
+    }
+
+    pub fn generate_render_fn(&mut self, template_expr: Expr) -> Function {
+        let mut fn_body_stmts: Vec<Stmt> = Vec::with_capacity(3);
+
+        // Compute component and directive resolves
+        let mut component_resolves = self.generate_component_resolves();
+        let directive_resolves = self.generate_directive_resolves();
+
+        // Add them
+        if directive_resolves.len() != 0 || component_resolves.len() != 0 {
+            component_resolves.extend(directive_resolves);
+
+            fn_body_stmts.push(Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                span: DUMMY_SP,
+                kind: VarDeclKind::Const,
+                declare: false,
+                decls: component_resolves,
+            }))));
+        }
+
+        // Add template expression return
+        fn_body_stmts.push(Stmt::Return(ReturnStmt {
+            arg: Some(Box::new(template_expr)),
+            span: DUMMY_SP
+        }));
+
+        // TODO Directive resolves and component resolves
+        Function {
+            params: vec![Param {
+                span: DUMMY_SP,
+                decorators: vec![],
+                pat: Pat::Ident(BindingIdent {
+                    id: Ident {
+                        span: DUMMY_SP,
+                        sym: JsWord::from("_ctx"),
+                        optional: false,
+                    },
+                    type_ann: None,
+                }),
+            }],
+            decorators: vec![],
+            span: DUMMY_SP,
+            body: Some(BlockStmt {
+                span: DUMMY_SP,
+                stmts: fn_body_stmts,
+            }),
+            is_generator: false,
+            is_async: false,
+            type_params: None,
+            return_type: None,
+        }
     }
 
     pub fn stringify(source: &str, item: &impl Node, minify: bool) -> String {

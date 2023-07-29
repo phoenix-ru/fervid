@@ -240,7 +240,7 @@ impl CodegenContext {
         }
     }
 
-    fn generate_directive_resolves(&mut self) -> Vec<VarDeclarator> {
+    pub fn generate_directive_resolves(&mut self) -> Vec<VarDeclarator> {
         let mut result = Vec::new();
 
         if self.directives.len() == 0 {
