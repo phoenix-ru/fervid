@@ -14,7 +14,7 @@ export default {
             ]
         };
     },
-    render (_ctx) {
+    render (_ctx, _cache, $props, $setup, $data, $options) {
         const _component_abc_def = _resolveComponent("abc-def"), _component_another_element = _resolveComponent("another-element"), _directive_directive = _resolveDirective("directive"), _directive_test_directive = _resolveDirective("test-directive");
         return _withDirectives((_openBlock(), _createBlock(_component_abc_def, {
             "test-bound": _ctx.bar + _ctx.baz,

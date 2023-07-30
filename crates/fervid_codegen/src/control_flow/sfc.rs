@@ -5,8 +5,9 @@ use swc_core::{
     common::{FileName, SourceMap, DUMMY_SP},
     ecma::{
         ast::{
-            BindingIdent, ExportDefaultExpr, Expr, Function, Ident, MethodProp, Module,
-            ModuleItem, ObjectLit, Param, Pat, Prop, PropName, PropOrSpread, Stmt, BlockStmt, ReturnStmt, ImportDecl, ModuleDecl, Str, Decl, VarDecl, VarDeclKind,
+            BindingIdent, BlockStmt, Decl, ExportDefaultExpr, Expr, Function, Ident, ImportDecl,
+            MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit, Param, Pat, Prop, PropName,
+            PropOrSpread, ReturnStmt, Stmt, Str, VarDecl, VarDeclKind,
         },
         atoms::JsWord,
     },
@@ -53,25 +54,29 @@ impl CodegenContext {
         // Append the Vue imports
         // TODO Smart merging with user imports?
         let used_imports = self.generate_imports();
-        script.body.push(ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
-            span: DUMMY_SP,
-            specifiers: used_imports,
-            src: Box::new(Str {
+        script
+            .body
+            .push(ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
                 span: DUMMY_SP,
-                value: JsWord::from("vue"),
-                raw: None,
-            }),
-            type_only: false,
-            asserts: None,
-        })));
+                specifiers: used_imports,
+                src: Box::new(Str {
+                    span: DUMMY_SP,
+                    value: JsWord::from("vue"),
+                    raw: None,
+                }),
+                type_only: false,
+                asserts: None,
+            })));
 
         // Append the default export
-        script.body.push(ModuleItem::ModuleDecl(
-            ModuleDecl::ExportDefaultExpr(ExportDefaultExpr {
-                span: DUMMY_SP,
-                expr: Box::new(Expr::Object(sfc_export_obj)),
-            }),
-        ));
+        script
+            .body
+            .push(ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(
+                ExportDefaultExpr {
+                    span: DUMMY_SP,
+                    expr: Box::new(Expr::Object(sfc_export_obj)),
+                },
+            )));
 
         script
     }
@@ -98,23 +103,36 @@ impl CodegenContext {
         // Add template expression return
         fn_body_stmts.push(Stmt::Return(ReturnStmt {
             arg: Some(Box::new(template_expr)),
-            span: DUMMY_SP
+            span: DUMMY_SP,
         }));
 
-        // TODO Directive resolves and component resolves
+        macro_rules! param {
+            ($ident: expr) => {
+                Param {
+                    span: DUMMY_SP,
+                    decorators: vec![],
+                    pat: Pat::Ident(BindingIdent {
+                        id: Ident {
+                            span: DUMMY_SP,
+                            sym: JsWord::from($ident),
+                            optional: false,
+                        },
+                        type_ann: None,
+                    }),
+                }
+            };
+        }
+
         Function {
-            params: vec![Param {
-                span: DUMMY_SP,
-                decorators: vec![],
-                pat: Pat::Ident(BindingIdent {
-                    id: Ident {
-                        span: DUMMY_SP,
-                        sym: JsWord::from("_ctx"),
-                        optional: false,
-                    },
-                    type_ann: None,
-                }),
-            }],
+            // Render function params
+            params: vec![
+                param!("_ctx"),
+                param!("_cache"),
+                param!("$props"),
+                param!("$setup"),
+                param!("$data"),
+                param!("$options"),
+            ],
             decorators: vec![],
             span: DUMMY_SP,
             body: Some(BlockStmt {
