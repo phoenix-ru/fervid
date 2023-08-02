@@ -99,7 +99,7 @@ mod tests {
                 else_if_nodes: vec![],
                 else_node: None,
             },
-            r#"foo||true?_createElementVNode("h1",null,"hello"):_createCommentVNode("v-if")"#,
+            r#"foo||true?(_openBlock(),_createElementBlock("h1",null,"hello")):_createCommentVNode("v-if")"#,
         )
     }
 
@@ -134,7 +134,7 @@ mod tests {
                     kind: ElementKind::Element
                 })),
             },
-            r#"foo||true?_createElementVNode("h1",null,"hello"):_createElementVNode("h2",null,"bye")"#,
+            r#"foo||true?(_openBlock(),_createElementBlock("h1",null,"hello")):(_openBlock(),_createElementBlock("h2",null,"bye"))"#,
         )
     }
 
@@ -188,7 +188,7 @@ mod tests {
                 ],
                 else_node: None,
             },
-            r#"foo?_createElementVNode("h1",null,"hello"):true?_createElementVNode("h2",null,"hi"):undefined?_createElementVNode("h3",null,"bye"):_createCommentVNode("v-if")"#,
+            r#"foo?(_openBlock(),_createElementBlock("h1",null,"hello")):true?(_openBlock(),_createElementBlock("h2",null,"hi")):undefined?(_openBlock(),_createElementBlock("h3",null,"bye")):_createCommentVNode("v-if")"#,
         )
     }
 
@@ -252,7 +252,7 @@ mod tests {
                     kind: ElementKind::Element
                 })),
             },
-            r#"foo?_createElementVNode("h1",null,"hello"):true?_createElementVNode("h2",null,"hi"):undefined?_createElementVNode("h3",null,"good morning"):_createElementVNode("h4",null,"bye")"#,
+            r#"foo?(_openBlock(),_createElementBlock("h1",null,"hello")):true?(_openBlock(),_createElementBlock("h2",null,"hi")):undefined?(_openBlock(),_createElementBlock("h3",null,"good morning")):(_openBlock(),_createElementBlock("h4",null,"bye"))"#,
         )
     }
 

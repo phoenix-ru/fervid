@@ -1,6 +1,6 @@
 use swc_core::ecma::{ast::Ident, visit::{Visit, VisitWith}};
 
-use super::structs::TemplateScope;
+use crate::structs::TemplateScope;
 
 /// Polyfill for variable collection before the 
 pub fn collect_variables(root: &impl VisitWith<IdentifierVisitor>, scope: &mut TemplateScope) {

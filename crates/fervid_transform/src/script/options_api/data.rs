@@ -1,6 +1,6 @@
 use swc_core::ecma::ast::{BlockStmt, Expr};
 
-use crate::{script_legacy::ScriptLegacyVars, common::utils::{collect_block_stmt_return_fields, unroll_paren_seq, collect_obj_fields}};
+use crate::{structs::ScriptLegacyVars, script::utils::{collect_block_stmt_return_fields, unroll_paren_seq, collect_obj_fields}};
 
 /// Collects variables from `data`.
 /// Supports `data() {}`, `data: function() {}` and `data: () => {}`

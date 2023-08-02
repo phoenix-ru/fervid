@@ -1,6 +1,6 @@
-use swc_core::ecma::ast::Module;
+use swc_core::{ecma::ast::{Module, ObjectLit, ModuleItem, ModuleDecl, Expr, PropOrSpread, SpreadElement, ExprOrSpread, Callee}, common::DUMMY_SP};
 
-use crate::{structs::{ScriptLegacyVars, VueResolvedImports}, common::utils::find_default_export};
+use crate::structs::{ScriptLegacyVars, VueResolvedImports};
 
 mod analyzer;
 mod components;
@@ -29,17 +29,19 @@ pub struct AnalyzeOptions {
     pub collect_top_level_stmts: bool,
 }
 
-pub fn analyze_script_legacy(
-    module: &Module,
-    opts: AnalyzeOptions,
-) -> Result<ScriptLegacyVars, ()> {
-    // Default export should be either an object or `defineComponent({ /* ... */ })`
-    let maybe_default_export = find_default_export(module);
+pub struct ScriptOptionsTransformResult {
+    pub vars: Box<ScriptLegacyVars>,
+    pub resolved_vue_imports: Box<VueResolvedImports>,
+    pub default_export_obj: Option<ObjectLit>,
+}
 
-    // Sometimes we care about default export, e.g. in tests
-    if let (None, true) = (maybe_default_export, opts.require_default_export) {
-        return Err(());
-    }
+pub fn transform_and_record_script_options_api(
+    module: &mut Module,
+    opts: AnalyzeOptions,
+) -> ScriptOptionsTransformResult {
+    // Default export should be either an object or `defineComponent({ /* ... */ })`
+    // let maybe_default_export = super::utils::find_default_export(module);
+    let maybe_default_export = find_default_export_obj(module);
 
     // This is where we collect all the analyzed stuff
     let mut script_legacy_vars = ScriptLegacyVars::default();
@@ -50,59 +52,151 @@ pub fn analyze_script_legacy(
         analyzer::analyze_top_level_items(module, &mut script_legacy_vars, &mut vue_imports)
     }
 
+    // TODO The actual transformation?
     // Analyze the default export
-    if let Some(default_export) = maybe_default_export {
-        analyzer::analyze_default_export(default_export, &mut script_legacy_vars)
+    if let Some(ref default_export) = maybe_default_export {
+        analyzer::analyze_default_export(default_export, &mut script_legacy_vars);
     }
 
-    Ok(script_legacy_vars)
+    ScriptOptionsTransformResult {
+        vars: Box::new(script_legacy_vars),
+        resolved_vue_imports: Box::new(vue_imports),
+        default_export_obj: maybe_default_export,
+    }
 }
 
-pub fn transform_script_legacy(_module: &mut Module) {
-    todo!()
+/// Finds and takes ownership of the `export default` expression
+fn find_default_export_obj(module: &mut Module) -> Option<ObjectLit> {
+    let default_export_index = module
+        .body
+        .iter()
+        .position(|module_item| match module_item {
+            ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(_)) => true,
+            _ => false,
+        });
+
+    let Some(idx) = default_export_index else {
+        return None;
+    };
+
+    let item = module.body.remove(idx);
+    // TODO What to do with weird default exports?
+    let ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(expr)) = item else { unreachable!() };
+
+    // TODO Unroll paren/seq, unroll `defineComponent` as in `fervid_script`
+    let expr = unroll_default_export_expr(*expr.expr);
+
+    match expr {
+        // Object is the preferred syntax
+        // export default { /* object fields */ }
+        Expr::Object(obj_lit) => Some(obj_lit),
+
+        // Call, Member are also supported
+        // export default { ...expression }
+        Expr::Member(_) | Expr::Call(_) => Some(ObjectLit {
+            span: DUMMY_SP,
+            props: vec![PropOrSpread::Spread(SpreadElement {
+                dot3_token: DUMMY_SP,
+                expr: Box::new(expr),
+            })],
+        }),
+
+        // Those are questionable
+        // Expr::Cond(_) => todo!(),
+        // Expr::Class(_) => todo!(),
+        // Expr::Await(_) => todo!(),
+        // Expr::TsTypeAssertion(_) => todo!(),
+        // Expr::TsConstAssertion(_) => todo!(),
+        // Expr::TsNonNull(_) => todo!(),
+        // Expr::TsAs(_) => todo!(),
+        // Expr::TsInstantiation(_) => todo!(),
+        // Expr::TsSatisfies(_) => todo!(),
+
+        // Everything else is invalid and should not be generated
+        // TODO It would be better to also emit a hard error here
+        _ => None
+    }
+}
+
+fn unroll_default_export_expr(mut expr: Expr) -> Expr {
+    match expr {
+        Expr::Call(ref mut call_expr) => {
+            macro_rules! bail {
+                () => {
+                    return expr;
+                };
+            }
+
+            // We only support `defineComponent` with 1 argument which isn't a spread
+            if call_expr.args.len() != 1 {
+                bail!();
+            }
+
+            let Callee::Expr(ref callee) = call_expr.callee else {
+                bail!();
+            };
+
+            let Expr::Ident(callee_ident) = callee.as_ref() else {
+                bail!();
+            };
+
+            // Todo compare against the imported symbol
+            if &callee_ident.sym != "defineComponent" {
+                bail!();
+            }
+
+            let is_first_arg_ok = matches!(call_expr.args[0], ExprOrSpread { spread: None, .. });
+            if !is_first_arg_ok {
+                bail!();
+            }
+
+            let Some(ExprOrSpread { spread: None, expr }) = call_expr.args.pop() else {
+                unreachable!()
+            };
+
+            *expr
+        }
+
+        _ => expr,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        parser::*,
-        structs::SetupBinding,
-    };
+    use crate::{structs::SetupBinding, test_utils::parser::*};
     use fervid_core::BindingTypes;
-    use swc_core::{ecma::atoms::JsWord, common::SyntaxContext};
+    use swc_core::{common::SyntaxContext, ecma::atoms::JsWord};
 
-    fn analyze_js(input: &str, opts: AnalyzeOptions) -> ScriptLegacyVars {
-        let parsed = parse_javascript_module(input, 0, Default::default())
+    fn analyze_js(input: &str, opts: AnalyzeOptions) -> ScriptOptionsTransformResult {
+        let mut parsed = parse_javascript_module(input, 0, Default::default())
             .expect("analyze_js expects the input to be parseable")
             .0;
 
-        let analyzed = analyze_script_legacy(&parsed, opts)
-            .expect("analyze_js expects the input to be analyzed successfully");
+        let analyzed = transform_and_record_script_options_api(&mut parsed, opts);
 
         analyzed
     }
 
-    fn analyze_ts(input: &str, opts: AnalyzeOptions) -> ScriptLegacyVars {
-        let parsed = parse_typescript_module(input, 0, Default::default())
+    fn analyze_ts(input: &str, opts: AnalyzeOptions) -> ScriptOptionsTransformResult {
+        let mut parsed = parse_typescript_module(input, 0, Default::default())
             .expect("analyze_ts expects the input to be parseable")
             .0;
 
-        let analyzed = analyze_script_legacy(&parsed, opts)
-            .expect("analyze_ts expects the input to be analyzed successfully");
+        let analyzed = transform_and_record_script_options_api(&mut parsed, opts);
 
         analyzed
     }
 
     macro_rules! test_js_and_ts {
         ($input: expr, $expected: expr) => {
-            assert_eq!(analyze_js($input, Default::default()), $expected);
-            assert_eq!(analyze_ts($input, Default::default()), $expected);
+            assert_eq!(*analyze_js($input, Default::default()).vars, $expected);
+            assert_eq!(*analyze_ts($input, Default::default()).vars, $expected);
         };
 
         ($input: expr, $expected: expr, $opts: expr) => {
-            assert_eq!(analyze_js($input, $opts.clone()), $expected);
-            assert_eq!(analyze_ts($input, $opts.clone()), $expected);
+            assert_eq!(*analyze_js($input, $opts.clone()).vars, $expected);
+            assert_eq!(*analyze_ts($input, $opts.clone()).vars, $expected);
         };
     }
 
@@ -134,32 +228,32 @@ mod tests {
     fn it_errs_when_export_default_is_invalid() {
         macro_rules! should_err {
             ($input: expr) => {
-                let parsed = parse_javascript_module($input, 0, Default::default())
+                let mut parsed = parse_javascript_module($input, 0, Default::default())
                     .expect("parsing js should not err")
                     .0;
                 assert_eq!(
-                    analyze_script_legacy(
-                        &parsed,
+                    transform_and_record_script_options_api(
+                        &mut parsed,
                         AnalyzeOptions {
                             require_default_export: true,
                             ..Default::default()
                         }
-                    ),
-                    Err(())
+                    ).default_export_obj,
+                    None
                 );
 
-                let parsed = parse_typescript_module($input, 0, Default::default())
+                let mut parsed = parse_typescript_module($input, 0, Default::default())
                     .expect("parsing ts should not err")
                     .0;
                 assert_eq!(
-                    analyze_script_legacy(
-                        &parsed,
+                    transform_and_record_script_options_api(
+                        &mut parsed,
                         AnalyzeOptions {
                             require_default_export: true,
                             ..Default::default()
                         }
-                    ),
-                    Err(())
+                    ).default_export_obj,
+                    None
                 )
             };
         }
@@ -174,9 +268,12 @@ mod tests {
             export default function() { /* ... */ }
             "
         );
-        should_err!("export default defineComponent()");
-        should_err!("export default defineComponent(42)");
-        should_err!("export default wrongDefineComponent({})");
+
+        // TODO I am not too sure how these expressions should be treated.
+        // Currently they are not being analyzed, and only being added as `{ ...callExpression() }`
+        // should_err!("export default defineComponent()");
+        // should_err!("export default defineComponent(42)");
+        // should_err!("export default wrongDefineComponent({})");
     }
 
     #[test]
@@ -768,14 +865,14 @@ mod tests {
 
         // Type-only exports should be ignored
         assert_eq!(
-            analyze_ts(
+            *analyze_ts(
                 r"
                 export type * as foo from '@loremipsum/foo'
                 export type { bar } from 'mod-bar'
                 export { type default as baz, type qux } from './rest'
                 ",
                 opts
-            ),
+            ).vars,
             ScriptLegacyVars::default()
         );
     }

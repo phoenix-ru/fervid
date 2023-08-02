@@ -7,8 +7,12 @@ use swc_core::ecma::{
 };
 
 use crate::{
-    atoms::*, common::utils::get_string_tpl, script_legacy::ScriptLegacyVars, setup_analyzer,
-    structs::VueResolvedImports,
+    atoms::*,
+    script::{
+        setup::{analyze_stmt, collect_imports},
+        utils::get_string_tpl,
+    },
+    structs::{ScriptLegacyVars, VueResolvedImports},
 };
 
 use super::{
@@ -17,12 +21,12 @@ use super::{
     data::{collect_data_bindings_block_stmt, collect_data_bindings_expr},
     directives::collect_directives_object,
     emits::{collect_emits_bindings_array, collect_emits_bindings_object},
+    exports::{collect_exports_decl, collect_exports_named},
     expose::collect_expose_bindings_array,
     inject::{collect_inject_bindings_array, collect_inject_bindings_object},
     methods::collect_methods_object,
     props::{collect_prop_bindings_array, collect_prop_bindings_object},
     setup::{collect_setup_bindings_block_stmt, collect_setup_bindings_expr},
-    exports::{collect_exports_decl, collect_exports_named},
 };
 
 /// Analyzes all the fields of `export default` according to Options API.\
@@ -89,8 +93,8 @@ pub fn analyze_top_level_items(
             ModuleItem::ModuleDecl(ref module_decl) => {
                 match module_decl {
                     ModuleDecl::Import(ref import_decl) => {
-                        setup_analyzer::collect_imports(import_decl, &mut out.imports, vue_imports)
-                    },
+                        collect_imports(import_decl, &mut out.imports, vue_imports)
+                    }
 
                     ModuleDecl::ExportNamed(ref named_exports) => {
                         collect_exports_named(named_exports, &mut out.setup)
@@ -105,9 +109,7 @@ pub fn analyze_top_level_items(
                 }
             }
 
-            ModuleItem::Stmt(ref stmt) => {
-                setup_analyzer::analyze_stmt(stmt, &mut out.setup, vue_imports)
-            }
+            ModuleItem::Stmt(ref stmt) => analyze_stmt(stmt, &mut out.setup, vue_imports),
         }
     }
 }

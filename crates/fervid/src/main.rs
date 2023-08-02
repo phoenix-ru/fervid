@@ -46,7 +46,7 @@ fn test_real_compilation() {
         panic!("Test component has no template block");
     };
 
-    let mut scope_helper = fervid_transform::template::ScopeHelper::default();
+    let mut scope_helper = fervid_transform::structs::ScopeHelper::default();
     let module = transform_and_record_scripts(sfc.script_setup, sfc.script_legacy, &mut scope_helper);
     transform_and_record_template(template_block, &mut scope_helper);
 
@@ -167,7 +167,7 @@ fn test_synthetic_compilation() {
         panic!("Test component has no template block");
     };
 
-    let mut scope_helper = fervid_transform::template::ScopeHelper::default();
+    let mut scope_helper = fervid_transform::structs::ScopeHelper::default();
     transform_and_record_template(template_block, &mut scope_helper);
 
     let mut ctx = fervid_codegen::CodegenContext::default();

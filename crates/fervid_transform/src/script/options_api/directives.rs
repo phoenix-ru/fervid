@@ -1,6 +1,6 @@
 use swc_core::ecma::ast::ObjectLit;
 
-use crate::{script_legacy::ScriptLegacyVars, common::utils::collect_obj_fields};
+use crate::{structs::ScriptLegacyVars, script::utils::collect_obj_fields};
 
 /// Collects the directive bindings in form `{ foo: { /*...*/ }, bar }`
 ///

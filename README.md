@@ -48,14 +48,12 @@ The main crate. At the moment of writing, it is responsible for everything, star
 ### `fervid_css` ![wip](https://badgen.net/badge/Status/In%20progress/blue)
 Works on the `<style>` block and enables `scoped` styles, CSS Modules and Vue-specific transformations. The backbone of this crate is [lightningcss](https://github.com/parcel-bundler/lightningcss).
 
-### `fervid_script` ![wip](https://badgen.net/badge/Status/In%20progress/blue)
-Handles `<script>` and `<script setup>` analysis and transformations, along with Typescript. Based on [SWC](https://github.com/swc-project/swc) and provides fast and correct transforms without using regular expressions.
-
 ### `fervid_core` ![wip](https://badgen.net/badge/Status/In%20progress/blue)
 The core structures and functionality shared across crates.
 
 ### `fervid_transform` ![wip](https://badgen.net/badge/Status/In%20progress/blue)
 This crate is responsible for AST transformation.
+Handles `<script>` and `<script setup>` analysis and transformations, along with Typescript. Based on [SWC](https://github.com/swc-project/swc) and provides fast and correct transforms without using regular expressions.
 
 ### `fervid_parser` ![future](https://badgen.net/badge/Status/Planned/orange)
 Parser for Vue SFC based on [Servo html5ever](https://github.com/servo/html5ever), the industry-grade HTML parser.

@@ -3,10 +3,7 @@ use swc_core::ecma::ast::{
     Callee, ClassDecl, Decl, Expr, FnDecl, Pat, Stmt, VarDecl, VarDeclKind, VarDeclarator, ObjectPatProp, RestPat,
 };
 
-use crate::{
-    common::utils::unroll_paren_seq,
-    structs::{SetupBinding, VueResolvedImports},
-};
+use crate::{structs::{SetupBinding, VueResolvedImports}, script::utils::unroll_paren_seq};
 
 /// Analyzes the statement in `script setup` context.
 /// This can either be:

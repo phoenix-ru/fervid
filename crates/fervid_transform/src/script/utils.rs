@@ -220,7 +220,7 @@ pub fn get_string_tpl(tpl: &Tpl) -> Option<JsWord> {
 /// #         atoms::JsWord,
 /// #     }
 /// # };
-/// # use fervid_script::common::utils::unroll_paren_seq;
+/// # use fervid_transform::script::utils::unroll_paren_seq;
 /// let expr = Expr::Paren(ParenExpr {
 ///     span: DUMMY_SP,
 ///     expr: Expr::Seq(SeqExpr {

@@ -1,13 +1,13 @@
 use fervid_core::{
     is_from_default_slot, is_html_tag, AttributeOrBinding, Conditional, ConditionalNodeSequence,
-    ElementNode, Interpolation, Node, SfcTemplateBlock, StartingTag, VOnDirective, VSlotDirective, ElementKind, VUE_BUILTINS,
+    ElementKind, ElementNode, Interpolation, Node, SfcTemplateBlock, StartingTag, VOnDirective,
+    VSlotDirective, VUE_BUILTINS,
 };
 use smallvec::SmallVec;
 
-use super::{
-    collect_vars::collect_variables,
-    structs::{ScopeHelper, TemplateScope},
-};
+use crate::structs::{ScopeHelper, TemplateScope};
+
+use super::collect_vars::collect_variables;
 
 struct TemplateVisitor<'s> {
     scope_helper: &'s mut ScopeHelper,
@@ -229,7 +229,8 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                 collect_variables(&v_for.itervar, &mut scope);
 
                 // Transform the iterable
-                self.scope_helper.transform_expr(&mut v_for.iterable, scope_to_use);
+                self.scope_helper
+                    .transform_expr(&mut v_for.iterable, scope_to_use);
             }
 
             if let Some(VSlotDirective {
@@ -270,10 +271,8 @@ impl<'a> Visitor for TemplateVisitor<'_> {
             macro_rules! maybe_transform {
                 ($key: ident) => {
                     match directives.$key.as_mut() {
-                        Some(expr) => {
-                            self.scope_helper.transform_expr(expr, scope_to_use)
-                        }
-                        None => false
+                        Some(expr) => self.scope_helper.transform_expr(expr, scope_to_use),
+                        None => false,
                     }
                 };
             }
@@ -288,10 +287,7 @@ impl<'a> Visitor for TemplateVisitor<'_> {
         element_node.kind = element_kind;
 
         // Merge conditional nodes and clean up whitespace
-        optimize_children(
-            &mut element_node.children,
-            element_kind,
-        );
+        optimize_children(&mut element_node.children, element_kind);
 
         // Recursively visit children
         for child in element_node.children.iter_mut() {
@@ -309,11 +305,13 @@ impl<'a> Visitor for TemplateVisitor<'_> {
         // wraps around the node (`condition ? if_node : else_node`).
         // However, I am not too sure about the `v-if` & `v-slot` combined usage.
 
-        self.scope_helper.transform_expr(&mut conditional_node.if_node.condition, self.current_scope);
+        self.scope_helper
+            .transform_expr(&mut conditional_node.if_node.condition, self.current_scope);
         self.visit_element_node(&mut conditional_node.if_node.node);
 
         for else_if_node in conditional_node.else_if_nodes.iter_mut() {
-            self.scope_helper.transform_expr(&mut else_if_node.condition, self.current_scope);
+            self.scope_helper
+                .transform_expr(&mut else_if_node.condition, self.current_scope);
             self.visit_element_node(&mut else_if_node.node);
         }
 
@@ -325,7 +323,8 @@ impl<'a> Visitor for TemplateVisitor<'_> {
     fn visit_interpolation(&mut self, interpolation: &mut Interpolation) {
         interpolation.template_scope = self.current_scope;
 
-        let has_js = self.scope_helper
+        let has_js = self
+            .scope_helper
             .transform_expr(&mut interpolation.value, self.current_scope);
 
         interpolation.patch_flag = has_js;
@@ -363,14 +362,10 @@ impl VisitMut for Node<'_> {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{Node, VueDirectives, ElementKind};
-    use swc_core::{
-        common::DUMMY_SP,
-        ecma::{
-            ast::{Bool, Expr, Ident, Lit},
-            atoms::JsWord,
-        },
-    };
+    use fervid_core::{ElementKind, Node, VueDirectives};
+    use swc_core::ecma::ast::Expr;
+
+    use crate::test_utils::{parser::parse_javascript_expr, to_str};
 
     use super::*;
 
@@ -392,7 +387,7 @@ mod tests {
                 },
                 children: vec![text_node(), if_node(), else_if_node(), else_node()],
                 template_scope: 0,
-                kind: ElementKind::Element
+                kind: ElementKind::Element,
             })],
         };
 
@@ -561,7 +556,7 @@ mod tests {
                     else_node(),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Element
+                kind: ElementKind::Element,
             })],
         };
 
@@ -595,7 +590,7 @@ mod tests {
             },
             children: vec![],
             template_scope: 0,
-            kind: ElementKind::Element
+            kind: ElementKind::Element,
         });
 
         let no_directives2 = Node::Element(ElementNode {
@@ -608,7 +603,7 @@ mod tests {
             },
             children: vec![Node::Text("hello")],
             template_scope: 0,
-            kind: ElementKind::Element
+            kind: ElementKind::Element,
         });
 
         let mut sfc_template = SfcTemplateBlock {
@@ -644,12 +639,12 @@ mod tests {
             },
             children: vec![Node::Text("if")],
             template_scope: 0,
-            kind: ElementKind::Element
+            kind: ElementKind::Element,
         })
     }
 
     fn check_if_node(if_node: &Conditional) {
-        assert_eq!(*js("true"), if_node.condition);
+        assert_eq!("true", to_str(&if_node.condition));
         assert!(matches!(
             if_node.node,
             ElementNode {
@@ -672,13 +667,13 @@ mod tests {
             },
             children: vec![Node::Text("else-if")],
             template_scope: 0,
-            kind: ElementKind::Element
+            kind: ElementKind::Element,
         })
     }
 
     fn check_else_if_node(else_if_node: &Conditional) {
         // condition, then node
-        assert_eq!(*js("foo"), else_if_node.condition);
+        assert_eq!("_ctx.foo", to_str(&else_if_node.condition));
         assert!(matches!(
             else_if_node.node,
             ElementNode {
@@ -701,7 +696,7 @@ mod tests {
             },
             children: vec![Node::Text("else")],
             template_scope: 0,
-            kind: ElementKind::Element
+            kind: ElementKind::Element,
         })
     }
 
@@ -716,20 +711,7 @@ mod tests {
         ));
     }
 
-    #[inline]
-    /// Stupidly converts from a string to an expression without actually parsing
     fn js(raw: &str) -> Box<Expr> {
-        if raw == "true" || raw == "false" {
-            return Box::new(Expr::Lit(Lit::Bool(Bool {
-                span: DUMMY_SP,
-                value: raw == "true",
-            })));
-        }
-
-        return Box::new(Expr::Ident(Ident {
-            span: DUMMY_SP,
-            sym: JsWord::from("raw"),
-            optional: false,
-        }));
+        parse_javascript_expr(raw, 0, Default::default()).unwrap().0
     }
 }

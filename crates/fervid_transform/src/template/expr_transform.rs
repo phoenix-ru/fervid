@@ -5,7 +5,7 @@ use swc_core::ecma::{
     visit::{VisitMut, VisitMutWith},
 };
 
-use crate::template::{js_builtins::JS_BUILTINS, structs::ScopeHelper};
+use crate::{structs::ScopeHelper, template::js_builtins::JS_BUILTINS};
 
 struct TransformVisitor<'s> {
     current_scope: u32,
@@ -55,11 +55,12 @@ impl ScopeHelper {
         }
 
         // Check setup bindings (both `<script setup>` and `setup()`)
-        for binding in self
-            .setup_bindings
-            .iter()
-            .chain(self.options_api_vars.setup.iter())
-        {
+        let setup_bindings = self.setup_bindings.iter().chain(
+            self.options_api_vars
+                .as_ref()
+                .map_or_else(|| [].iter(), |v| v.setup.iter()),
+        );
+        for binding in setup_bindings {
             if &binding.0 == variable {
                 return binding.1;
             }
@@ -75,18 +76,19 @@ impl ScopeHelper {
         }
 
         // Check all the options API variables
-        let options_api_vars = &self.options_api_vars;
-        check_scope!(options_api_vars.data, BindingTypes::Data);
-        check_scope!(options_api_vars.props, BindingTypes::Props);
-        check_scope!(options_api_vars.computed, BindingTypes::Options);
-        check_scope!(options_api_vars.methods, BindingTypes::Options);
-        check_scope!(options_api_vars.inject, BindingTypes::Options);
+        if let Some(options_api_vars) = &self.options_api_vars {
+            check_scope!(options_api_vars.data, BindingTypes::Data);
+            check_scope!(options_api_vars.props, BindingTypes::Props);
+            check_scope!(options_api_vars.computed, BindingTypes::Options);
+            check_scope!(options_api_vars.methods, BindingTypes::Options);
+            check_scope!(options_api_vars.inject, BindingTypes::Options);
 
-        // Check options API imports.
-        // Currently it ignores the SyntaxContext (same as in js implementation)
-        for binding in options_api_vars.imports.iter() {
-            if &binding.0 == variable {
-                return BindingTypes::SetupMaybeRef;
+            // Check options API imports.
+            // Currently it ignores the SyntaxContext (same as in js implementation)
+            for binding in options_api_vars.imports.iter() {
+                if &binding.0 == variable {
+                    return BindingTypes::SetupMaybeRef;
+                }
             }
         }
 
@@ -210,7 +212,10 @@ pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<JsWord
 
 #[cfg(test)]
 mod tests {
-    use crate::template::{js_builtins::JS_BUILTINS, structs::{ScopeHelper, TemplateScope}};
+    use crate::{
+        structs::{ScopeHelper, TemplateScope},
+        template::js_builtins::JS_BUILTINS,
+    };
     use fervid_core::BindingTypes;
     use smallvec::SmallVec;
     use swc_core::ecma::atoms::JsWord;
@@ -241,7 +246,7 @@ mod tests {
         let v_root = JsWord::from("root");
         let root_scope = TemplateScope {
             parent: 0,
-            variables: SmallVec::from([v_root.to_owned()])
+            variables: SmallVec::from([v_root.to_owned()]),
         };
 
         let v_child1 = JsWord::from("child1");
