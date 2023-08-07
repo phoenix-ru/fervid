@@ -52,7 +52,7 @@ export default {
                     }),
                     _createElementVNode("slot", {
                         name: "named-slot-2",
-                        prop: _ctx.modelValue,
+                        prop: $setup.modelValue,
                         class: "ye"
                     }, [
                         _createElementVNode("div", null, " default content ")
@@ -159,7 +159,7 @@ Time took: 526.295µs
 
 import { createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createTextVNode as _createTextVNode, createVNode as _createVNode, openBlock as _openBlock, resolveComponent as _resolveComponent, toDisplayString as _toDisplayString, withCtx as _withCtx } from "vue";
 export default {
-    render (_ctx) {
+    render (_ctx, _cache, $props, $setup, $data, $options) {
         const _component_CustomComponent = _resolveComponent("CustomComponent");
         return (_openBlock(), _createElementBlock("span", {
             class: "yes"
