@@ -1,3 +1,5 @@
+//! Handles template AST transformations.
+
 mod ast_transform;
 mod collect_vars;
 mod expr_transform;

@@ -31,7 +31,7 @@ pub enum Node<'a> {
 
 /// Element node is a classic HTML node with some added functionality:
 /// 1. Its starting tag can have Vue directives as attributes;
-/// 2. It may have [`Node::DynamicExpression`] as a child;
+/// 2. It may have [`Node::Interpolation`] as a child;
 /// 3. It has a `template_scope` assigned, which is responsible
 ///    for the correct compilation of dynamic bindings and expressions.
 #[derive(Debug, Clone)]
@@ -206,7 +206,7 @@ pub struct VCustomDirective<'a> {
     pub value: Option<Box<Expr>>,
 }
 
-/// https://github.com/vuejs/core/blob/020851e57d9a9f727c6ea07e9c1575430af02b73/packages/compiler-core/src/options.ts#L76
+/// <https://github.com/vuejs/core/blob/020851e57d9a9f727c6ea07e9c1575430af02b73/packages/compiler-core/src/options.ts#L76>
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BindingTypes {
     /// returned from data()

@@ -1,3 +1,5 @@
+//! Helper module to provide commonly used Vue words as static symbols (`JsWord`)
+
 use swc_core::ecma::atoms::{JsWord, js_word};
 
 lazy_static! {

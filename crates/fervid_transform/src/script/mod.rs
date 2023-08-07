@@ -1,3 +1,5 @@
+//! Responsible for `<script>` and `<script setup>` transformations and analysis.
+
 use fervid_core::SfcScriptBlock;
 use swc_core::{
     common::DUMMY_SP,
@@ -17,6 +19,15 @@ mod options_api;
 mod setup;
 pub mod utils;
 
+/// Transforms two script modules: `<script>` and `<script setup>`.
+/// Returns a combined Module and a default export object.
+///
+/// Consumes both [`SfcScriptBlock`]s to avoid cloning.
+///
+/// It will populate the provided [`ScopeHelper`] with the analysis information, such as:
+/// - Variable bindings (from `<script setup>` and from Options API);
+/// - Import bindings;
+/// - (TODO) Imported `.vue` component bindings;
 pub fn transform_and_record_scripts(
     script_setup: Option<SfcScriptBlock>,
     script_legacy: Option<SfcScriptBlock>,

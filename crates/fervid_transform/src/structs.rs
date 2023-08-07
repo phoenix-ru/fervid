@@ -1,3 +1,5 @@
+//! Exports data structs used by the crate
+
 use fervid_core::BindingTypes;
 use swc_core::ecma::{atoms::JsWord, ast::Id};
 use smallvec::SmallVec;

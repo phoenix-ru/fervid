@@ -1,3 +1,5 @@
+//! A collection of utils for working with SWC structs
+
 use swc_core::ecma::{
     ast::{
         BlockStmt, Callee, Expr, Function, Module, ModuleDecl, ModuleItem, ObjectLit, Prop,
@@ -6,6 +8,7 @@ use swc_core::ecma::{
     atoms::JsWord,
 };
 
+#[deprecated]
 pub fn find_default_export(module: &Module) -> Option<&ObjectLit> {
     let define_component = JsWord::from("defineComponent");
 
@@ -56,6 +59,7 @@ pub fn find_default_export(module: &Module) -> Option<&ObjectLit> {
     })
 }
 
+/// Finds a function in the object by a given name
 pub fn find_function(object: &ObjectLit, name: JsWord) -> Option<&Function> {
     object.props.iter().find_map(|prop| match prop {
         PropOrSpread::Prop(prop) => {
@@ -75,14 +79,16 @@ pub fn find_function(object: &ObjectLit, name: JsWord) -> Option<&Function> {
     })
 }
 
+/// Finds the return statement in the [BlockStmt]. The search will occur from the statement end.
 pub fn find_return(block_stmt: &BlockStmt) -> Option<&ReturnStmt> {
-    block_stmt.stmts.iter().find_map(|stmt| match stmt {
+    block_stmt.stmts.iter().rev().find_map(|stmt| match stmt {
         Stmt::Return(ref return_stmt) => Some(return_stmt),
 
         _ => None,
     })
 }
 
+/// Collects all the field keys in the return object of a [BlockStmt]
 pub fn collect_block_stmt_return_fields(block_stmt: &BlockStmt, out: &mut Vec<JsWord>) {
     let Some(return_stmt) = find_return(block_stmt) else {
         return;
@@ -101,12 +107,14 @@ pub fn collect_block_stmt_return_fields(block_stmt: &BlockStmt, out: &mut Vec<Js
     collect_obj_fields(return_obj, out);
 }
 
+/// Collects all the field keys of the object
 pub fn collect_obj_fields(object: &ObjectLit, out: &mut Vec<JsWord>) {
     for prop in object.props.iter() {
         collect_obj_prop_or_spread(prop, out)
     }
 }
 
+/// Collects the single field of an object
 pub fn collect_obj_prop_or_spread(prop_or_spread: &PropOrSpread, out: &mut Vec<JsWord>) {
     let PropOrSpread::Prop(prop) = prop_or_spread else {
         return;
@@ -132,6 +140,7 @@ pub fn collect_obj_prop_or_spread(prop_or_spread: &PropOrSpread, out: &mut Vec<J
     };
 }
 
+/// Collects the property name of an object, e.g. `foo` in `{ foo: 'bar' }`
 #[inline]
 pub fn collect_obj_propname(prop_name: &PropName, out: &mut Vec<JsWord>) {
     match prop_name {
@@ -169,7 +178,7 @@ pub fn collect_string_arr(arr: &ArrayLit, out: &mut Vec<JsWord>) {
     }
 }
 
-/// Gets a `string` value from expr, either `'literal'` or from \`template string\`
+/// Gets a `string` value from expr, either `'literal'` or from <code>\`template string\`</code>
 pub fn get_string_expr(expr: &Expr) -> Option<JsWord> {
     match *expr {
         Expr::Lit(Lit::Str(ref s)) => {
@@ -186,8 +195,8 @@ pub fn get_string_expr(expr: &Expr) -> Option<JsWord> {
 }
 
 /// Gets the template string if it is simple:
-/// - \`something simple\` is trivial and returns `Some(JsWord::from("something simple"))`;
-/// - \`something ${notSoSimple}\` is not trivial and will return `None`.
+/// - <code>\`something simple\`</code> is trivial and returns `Some(JsWord::from("something simple"))`;
+/// - <code>\`something ${notSoSimple}\`</code> is not trivial and will return `None`.
 pub fn get_string_tpl(tpl: &Tpl) -> Option<JsWord> {
     // This is not a js runtime, only simple template strings are supported
     if tpl.exprs.len() > 0 || tpl.quasis.len() != 1 {

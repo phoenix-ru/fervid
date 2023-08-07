@@ -14,6 +14,12 @@ struct TemplateVisitor<'s> {
     current_scope: u32,
 }
 
+/// Transforms the AST template by using information from [`ScopeHelper`].
+///
+/// The transformations tackled:
+/// - Optimizing the tree by removing white-space nodes;
+/// - Folding the conditional nodes (`v-if`, etc.) into a single `ConditionalNode`;
+/// - Transforming Js expressions by resolving variables inside them.
 pub fn transform_and_record_template(
     template: &mut SfcTemplateBlock,
     scope_helper: &mut ScopeHelper,

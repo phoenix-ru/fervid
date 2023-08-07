@@ -22,12 +22,12 @@ This project uses [Vue SFC playground](https://sfc.vuejs.org) as its reference t
   These usages require a JavaScript parser and transformer like SWC and support for them in fervid is currently ongoing.
 - Patch flags. These are used to help Vue runtime when diffing the VNodes. If a VNode only has one prop which is dynamic, and all the other props and text are static, this needs to be conveyed to Vue for fast updates. I am currently researching how they are originally implemented.
 
-To check correctness of fervid, you can compare the [run log](run.log) to the output of playground. For doing so, go to https://sfc.vuejs.org and paste in the contents of [src/test/input.vue](./src/test/input.vue).
+To check correctness of fervid, you can compare the [run log](run.log) to the output of playground. For doing so, go to https://sfc.vuejs.org and paste in the contents of [crates/fervid/benches/fixtures/input.vue](crates/fervid/benches/fixtures/input.vue).
 
 Please note that "correctness" of output will depend on the version of Vue, as Vue team may change the output and/or behaviour of the compiler. This is a big challenge for fervid.
 
 ## Is it fast?
-Yes, it is incredibly fast. In fact, below are the parsing/compilation times benchmarked for a [test component](src/test/input.vue).
+Yes, it is incredibly fast. In fact, below are the parsing/compilation times benchmarked for a [test component](crates/fervid/benches/fixtures/input.vue).
 
 | Action                     | Mean time    |
 |----------------------------|--------------|
