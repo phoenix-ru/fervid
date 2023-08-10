@@ -533,7 +533,7 @@ dependencies = [
 
 [[package]]
 name = "fervid_codegen"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "fervid_core",
  "flagset",
@@ -565,7 +565,7 @@ dependencies = [
 
 [[package]]
 name = "fervid_transform"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "fervid_core",
  "lazy_static",
