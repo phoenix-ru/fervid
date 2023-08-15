@@ -12,5 +12,5 @@ keywords = ["vue", "css", "style", "compiler", "transformer"]
 
 [dependencies]
 cssparser = "0.29.6"
-lightningcss = { version = "1.0.0-alpha.41", git = "https://github.com/phoenix-ru/lightningcss.git", features = ["visitor"] }
-parcel_selectors = { version = "0.25.3", git = "https://github.com/phoenix-ru/lightningcss.git" }
+lightningcss = { version = "1.0.0-alpha.44", git = "https://github.com/phoenix-ru/lightningcss.git", features = ["visitor"] }
+parcel_selectors = { version = "0.26.0", git = "https://github.com/phoenix-ru/lightningcss.git" }

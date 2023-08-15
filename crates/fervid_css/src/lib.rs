@@ -20,7 +20,7 @@
 //!             firefox: Some(100 << 16),
 //!             safari: Some(16 << 16),
 //!             ..Default::default()
-//!         }),
+//!         }).into(),
 //!         ..Default::default()
 //!     }),
 //!     to_css: PrinterOptions {
@@ -77,7 +77,7 @@ mod tests {
                         firefox: Some(100 << 16),
                         safari: Some(16 << 16),
                         ..Default::default()
-                    }),
+                    }).into(),
                     ..Default::default()
                 }),
                 to_css: PrinterOptions {
