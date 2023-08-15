@@ -194,6 +194,13 @@ impl CodegenContext {
 
         self.generate_attributes(&element_node.starting_tag.attributes, &mut result_props);
 
+        // Directives
+        if let Some(ref directives) = element_node.starting_tag.directives {
+            if let Some(ref v_text) = directives.v_text {
+                self.generate_v_text(&v_text, &mut result_props);
+            }
+        }
+
         result_props
     }
 

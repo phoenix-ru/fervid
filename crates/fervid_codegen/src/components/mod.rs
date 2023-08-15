@@ -202,14 +202,20 @@ impl CodegenContext {
 
         self.generate_attributes(&component_node.starting_tag.attributes, &mut result_props);
 
-        // Process v-models
+        // Process directives
         if let Some(ref directives) = component_node.starting_tag.directives {
+            // `v-model`s
             for v_model in directives.v_model.iter() {
                 self.generate_v_model_for_component(
                     v_model,
                     &mut result_props,
                     component_node.template_scope,
                 );
+            }
+
+            // Process v-text
+            if let Some(ref v_text) = directives.v_text {
+                self.generate_v_text(v_text, &mut result_props);
             }
         }
 

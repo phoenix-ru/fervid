@@ -47,7 +47,7 @@
 
     <span v-for="i in list" :key="i">hey</span>
     <br v-show="false">
-    <another-element v-for="i in 3" :key="i" />
+    <another-element v-for="i in 3" :key="i" v-text="foo + bar" />
 
     <template v-for="([item1, item2], index) in list">
       hey
@@ -70,6 +70,7 @@
     </template>
 
     <div
+      v-text="foo + bar"
       style="background-color:red;color:#000;content: ''; grid-template-column: repeat(1fr, min(auto-fit, 100px))"
       :style="{ backgroundColor: v ? 'yellow' : undefined }"
     />

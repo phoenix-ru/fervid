@@ -87,7 +87,8 @@ export default {
                         ]
                     ]),
                     _createVNode(_component_another_element, {
-                        key: i
+                        key: i,
+                        textContent: _ctx.foo + _ctx.bar
                     }),
                     _createElementVNode(_Fragment, null, [
                         _createTextVNode(" hey "),
@@ -136,7 +137,8 @@ export default {
                             {
                                 backgroundColor: _ctx.v ? "yellow" : undefined
                             }
-                        ])
+                        ]),
+                        textContent: _ctx.foo + _ctx.bar
                     })
                 ])
         })), [

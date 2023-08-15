@@ -72,7 +72,7 @@ Parser
 - [x] Template parsing
 - [ ] W3 Spec compliance
 
-Analyzer
+Transformer
 - [x] Template scope construction
 - [ ] Error reporting
 - [ ] JS/TS imports analysis (powered by swc_ecma_parser)
@@ -104,7 +104,7 @@ Code generator
     - [ ] v_memo
     - [ ] v_once
     - [ ] v_pre
-    - [ ] v_text
+    - [x] v_text
     - [x] Custom directives
   - [ ] Built-in components
     - [ ] keep-alive

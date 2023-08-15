@@ -14,6 +14,7 @@ use swc_core::{
 use crate::{imports::VueImports, utils::str_to_propname, CodegenContext};
 
 mod v_model;
+mod v_text;
 
 impl CodegenContext {
     pub fn generate_directives_to_array(
