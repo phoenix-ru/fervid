@@ -10,19 +10,18 @@ use crate::CodegenContext;
 
 impl CodegenContext {
     /// Generates the `v-text` directive
-    /// Will write `textContent: expr` to the attributes object of a Node
     ///
     /// # Example
     /// `v-text="foo + bar"` will generate `textContent: foo + bar` (without transforms)
-    pub fn generate_v_text(&mut self, expr: &Expr, out: &mut Vec<PropOrSpread>) {
-        out.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+    pub fn generate_v_text(&self, expr: &Expr) -> PropOrSpread {
+        PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
             key: PropName::Ident(Ident {
                 span: DUMMY_SP, // TODO
                 sym: JsWord::from("textContent"),
                 optional: false,
             }),
             value: Box::new(expr.to_owned()),
-        }))));
+        })))
     }
 }
 
