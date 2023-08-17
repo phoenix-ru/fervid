@@ -199,6 +199,10 @@ impl CodegenContext {
             if let Some(ref v_text) = directives.v_text {
                 result_props.push(self.generate_v_text(&v_text));
             }
+
+            if let Some(ref v_html) = directives.v_html {
+                result_props.push(self.generate_v_html(&v_html));
+            }
         }
 
         result_props
