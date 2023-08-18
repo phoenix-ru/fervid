@@ -1,7 +1,7 @@
 
 [Real File Compile Result]
 import { defineComponent, ref } from "vue";
-import { createBlock as _createBlock, createCommentVNode as _createCommentVNode, createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createTextVNode as _createTextVNode, createVNode as _createVNode, Fragment as _Fragment, normalizeClass as _normalizeClass, normalizeStyle as _normalizeStyle, openBlock as _openBlock, resolveComponent as _resolveComponent, resolveDirective as _resolveDirective, toDisplayString as _toDisplayString, vModelText as _vModelText, vShow as _vShow, withCtx as _withCtx, withDirectives as _withDirectives, withModifiers as _withModifiers } from "vue";
+import { createBlock as _createBlock, createCommentVNode as _createCommentVNode, createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createTextVNode as _createTextVNode, createVNode as _createVNode, Fragment as _Fragment, normalizeClass as _normalizeClass, normalizeStyle as _normalizeStyle, openBlock as _openBlock, renderSlot as _renderSlot, resolveComponent as _resolveComponent, resolveDirective as _resolveDirective, toDisplayString as _toDisplayString, vModelText as _vModelText, vShow as _vShow, withCtx as _withCtx, withDirectives as _withDirectives, withModifiers as _withModifiers } from "vue";
 export default {
     setup () {
         return {
@@ -46,12 +46,9 @@ export default {
                 ]),
             "default": _withCtx(()=>[
                     _createTextVNode(" The text of the node " + _toDisplayString(_ctx.dynamicValue) + " ", 1),
-                    _createElementVNode("slot"),
-                    _createElementVNode("slot", {
-                        name: "named-slot-1"
-                    }),
-                    _createElementVNode("slot", {
-                        name: "named-slot-2",
+                    _renderSlot(_ctx.$slots, "default"),
+                    _renderSlot(_ctx.$slots, "named-slot-1"),
+                    _renderSlot(_ctx.$slots, "named-slot-2", {
                         prop: $setup.modelValue,
                         class: "ye"
                     }, [

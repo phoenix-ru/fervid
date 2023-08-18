@@ -208,7 +208,7 @@ impl CodegenContext {
         result_props
     }
 
-    fn generate_element_children(
+    pub(crate) fn generate_element_children(
         &mut self,
         element_node: &ElementNode,
         allow_inlining: bool,

@@ -1,4 +1,4 @@
-use fervid_core::{is_html_tag, ElementNode, Node, StartingTag};
+use fervid_core::{ElementNode, Node, ElementKind};
 use smallvec::SmallVec;
 use swc_core::{
     common::{BytePos, Span, SyntaxContext, DUMMY_SP},
@@ -37,20 +37,31 @@ impl CodegenContext {
         element_node: &ElementNode,
         wrap_in_block: bool,
     ) -> (Expr, bool) {
-        if self.is_component(&element_node.starting_tag) {
-            // TODO
-            (
-                self.generate_component_vnode(element_node, wrap_in_block),
-                false,
-            )
-        } else {
-            // TODO
-            (
-                self.generate_element_vnode(element_node, wrap_in_block),
-                false,
-            )
+        match element_node.kind {
+            ElementKind::Builtin(builtin_type) => {
+                // TODO
+                (
+                    self.generate_builtin(element_node, builtin_type),
+                    false,
+                )
+            }
+
+            ElementKind::Element => {
+                // TODO
+                (
+                    self.generate_element_vnode(element_node, wrap_in_block),
+                    false,
+                )
+            }
+
+            ElementKind::Component => {
+                // TODO
+                (
+                    self.generate_component_vnode(element_node, wrap_in_block),
+                    false,
+                )
+            }
         }
-        // todo builtins as well
     }
 
     /// Generates a sequence of nodes taken from an iterator.
@@ -128,28 +139,6 @@ impl CodegenContext {
 
         // Process the remaining text nodes.
         maybe_concatenate_text_nodes!()
-    }
-
-    pub fn is_component(&self, starting_tag: &StartingTag) -> bool {
-        // todo use analyzed components? (fields of `components: {}`)
-
-        let tag_name = starting_tag.tag_name;
-
-        let is_html_tag = is_html_tag(tag_name);
-        // if is_html_tag {
-        //     return false;
-        // }
-
-        !is_html_tag
-
-        // Check with isCustomElement
-        // let is_custom_element = match &self.is_custom_element {
-        //     IsCustomElementParam::String(string) => tag_name == *string,
-        //     IsCustomElementParam::Regex(re) => re.is_match(tag_name),
-        //     IsCustomElementParam::None => false,
-        // };
-
-        // !is_custom_element
     }
 
     /// Wraps the expression in openBlock construction,
