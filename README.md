@@ -99,12 +99,12 @@ Code generator
     - [x] v-show
     - [x] v-slot
     - [x] v-model
-    - [ ] v_cloak
-    - [x] v_html
-    - [ ] v_memo
-    - [ ] v_once
-    - [ ] v_pre
-    - [x] v_text
+    - [x] v-cloak
+    - [x] v-html
+    - [ ] v-memo
+    - [ ] v-once
+    - [ ] v-pre
+    - [x] v-text
     - [x] Custom directives
   - [ ] Built-in components
     - [ ] keep-alive
