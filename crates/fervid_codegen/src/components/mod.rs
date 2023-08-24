@@ -3,8 +3,9 @@ use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
         ast::{
-            ArrayLit, ArrowExpr, BlockStmtOrExpr, CallExpr, Callee, Expr, ExprOrSpread, Ident,
-            KeyValueProp, Lit, Null, Number, ObjectLit, Pat, Prop, PropOrSpread, VarDeclarator, BindingIdent, Str,
+            ArrayLit, ArrowExpr, BindingIdent, BlockStmtOrExpr, CallExpr, Callee, Expr,
+            ExprOrSpread, Ident, KeyValueProp, Lit, Null, Number, ObjectLit, Pat, Prop,
+            PropOrSpread, Str, VarDeclarator,
         },
         atoms::JsWord,
     },
@@ -21,13 +22,16 @@ impl CodegenContext {
         component_node: &ElementNode,
         wrap_in_block: bool,
     ) -> Expr {
-        // TODO how?..
-        let needs_patch_flags = false;
         // todo should it be span of the whole component or only of its starting tag?
         let span = DUMMY_SP;
 
-        let attributes_obj = self.generate_component_attributes(component_node);
+        let component_identifier = Expr::Ident(Ident {
+            span,
+            sym: self.get_component_identifier(component_node.starting_tag.tag_name),
+            optional: false,
+        });
 
+        let attributes_obj = self.generate_component_attributes(component_node);
         // TODO Apply all the directives and modifications
         let attributes_expr = if attributes_obj.props.len() != 0 {
             Some(Expr::Object(attributes_obj))
@@ -37,47 +41,67 @@ impl CodegenContext {
 
         let children_slots = self.generate_component_children(component_node);
 
+        // TODO Use the correct patch flag
+        let patch_flags = 0;
+
+        // Call the general constructor
+        let mut create_component_expr = self.generate_componentlike(
+            component_identifier,
+            attributes_expr,
+            children_slots,
+            patch_flags,
+            wrap_in_block,
+            span,
+        );
+
+        // Process directives
+        create_component_expr =
+            self.generate_component_directives(create_component_expr, component_node);
+
+        create_component_expr
+    }
+
+    // Generates a `createVNode`/`createBlock` structure
+    pub fn generate_componentlike(
+        &mut self,
+        identifier: Expr,
+        attributes: Option<Expr>,
+        children_or_slots: Option<Expr>,
+        patch_flag: i32,
+        wrap_in_block: bool,
+        span: Span,
+    ) -> Expr {
         // Wire the things together. `createVNode` args:
         // 1st - component identifier;
         // 2nd (optional) - component attributes & directives object;
         // 3rd (optional) - component slots;
         // 4th (optional) - component patch flag.
-        let expected_component_args_count = if needs_patch_flags {
+        let expected_component_args_count = if patch_flag != 0 {
             4
-        } else if children_slots.is_some() {
+        } else if children_or_slots.is_some() {
             3
-        } else if let Some(_) = attributes_expr {
+        } else if attributes.is_some() {
             2
         } else {
             1
         };
 
         // Arguments for function call
-        let mut create_component_args = Vec::with_capacity(expected_component_args_count);
-
-        /// Produces a `null` expression
-        macro_rules! null {
-            () => {
-                Box::new(Expr::Lit(Lit::Null(Null { span })))
-            };
-        }
+        let mut create_component_args: Vec<ExprOrSpread> =
+            Vec::with_capacity(expected_component_args_count);
 
         // Arg 1: component identifier
         create_component_args.push(ExprOrSpread {
             spread: None,
-            expr: Box::new(Expr::Ident(Ident {
-                span,
-                sym: self.get_component_identifier(component_node.starting_tag.tag_name),
-                optional: false,
-            })),
+            expr: Box::new(identifier),
         });
 
         // Arg 2 (optional): component attributes expression (default to null)
         if expected_component_args_count >= 2 {
-            let expr_to_push = if let Some(attributes_expr) = attributes_expr {
+            let expr_to_push = if let Some(attributes_expr) = attributes {
                 Box::new(attributes_expr)
             } else {
-                null!()
+                null(span)
             };
             create_component_args.push(ExprOrSpread {
                 spread: None,
@@ -87,7 +111,7 @@ impl CodegenContext {
 
         // Arg 3 (optional): component children expression (default to null)
         if expected_component_args_count >= 3 {
-            let expr_to_push = children_slots.map_or_else(|| null!(), |expr| Box::new(expr));
+            let expr_to_push = children_or_slots.map_or_else(|| null(span), |expr| Box::new(expr));
             create_component_args.push(ExprOrSpread {
                 spread: None,
                 expr: expr_to_push,
@@ -96,12 +120,11 @@ impl CodegenContext {
 
         // Arg 4 (optional): patch flags (default to nothing)
         if expected_component_args_count >= 4 {
-            // TODO Actual patch flag value
             create_component_args.push(ExprOrSpread {
                 spread: None,
                 expr: Box::new(Expr::Lit(Lit::Num(Number {
                     span,
-                    value: 512.0, // TODO
+                    value: patch_flag as f64,
                     raw: None,
                 }))),
             })
@@ -127,16 +150,13 @@ impl CodegenContext {
         });
 
         // When wrapping in block, we also need `openBlock()`
-        let mut create_component_expr = if wrap_in_block {
+        let create_component_expr = if wrap_in_block {
             // (openBlock(), createBlock(_component_name, {component:attrs}, {component:slots}, PATCH_FLAGS))
             self.wrap_in_open_block(create_component_fn_call, span)
         } else {
             // Just `createVNode` call
             create_component_fn_call
         };
-
-        // Process directives
-        create_component_expr = self.generate_component_directives(create_component_expr, component_node);
 
         create_component_expr
     }
@@ -480,7 +500,7 @@ impl CodegenContext {
     fn generate_component_directives(
         &mut self,
         create_component_expr: Expr,
-        component_node: &ElementNode
+        component_node: &ElementNode,
     ) -> Expr {
         // Guard because we need the whole `ElementNode`, not just `VueDirectives`
         let Some(ref directives) = component_node.starting_tag.directives else {
@@ -557,9 +577,16 @@ impl CodegenContext {
     }
 }
 
+#[inline]
+fn null(span: Span) -> Box<Expr> {
+    Box::new(Expr::Lit(Lit::Null(Null { span })))
+}
+
 #[cfg(test)]
 mod tests {
-    use fervid_core::{AttributeOrBinding, Interpolation, Node, StartingTag, VBindDirective, ElementKind};
+    use fervid_core::{
+        AttributeOrBinding, ElementKind, Interpolation, Node, StartingTag, VBindDirective,
+    };
 
     use crate::test_utils::js;
 
@@ -577,7 +604,7 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
-                kind: ElementKind::Component
+                kind: ElementKind::Component,
             },
             r"_createVNode(_component_test_component)",
             false,
@@ -593,7 +620,7 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
-                kind: ElementKind::Component
+                kind: ElementKind::Component,
             },
             r"_createVNode(_component_test_component)",
             false,
@@ -624,7 +651,7 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
-                kind: ElementKind::Component
+                kind: ElementKind::Component,
             },
             r#"_createVNode(_component_test_component,{foo:"bar","some-baz":qux})"#,
             false,
@@ -651,11 +678,11 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from div")],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
                     }),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Component
+                kind: ElementKind::Component,
             },
             r#"_createVNode(_component_test_component,null,{"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
@@ -694,14 +721,14 @@ mod tests {
                             },
                             children: vec![Node::Text("hello from div")],
                             template_scope: 0,
-                            kind: ElementKind::Element
+                            kind: ElementKind::Element,
                         }),
                     ],
                     template_scope: 0,
-                    kind: ElementKind::Element
+                    kind: ElementKind::Element,
                 })],
                 template_scope: 0,
-                kind: ElementKind::Component
+                kind: ElementKind::Component,
             },
             r#"_createVNode(_component_test_component,null,{"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
@@ -743,14 +770,14 @@ mod tests {
                             },
                             children: vec![Node::Text("hello from div")],
                             template_scope: 0,
-                            kind: ElementKind::Element
+                            kind: ElementKind::Element,
                         }),
                     ],
                     template_scope: 0,
-                    kind: ElementKind::Element
+                    kind: ElementKind::Element,
                 })],
                 template_scope: 0,
-                kind: ElementKind::Component
+                kind: ElementKind::Component,
             },
             r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
@@ -789,11 +816,11 @@ mod tests {
                             Node::Interpolation(Interpolation {
                                 value: js("one"),
                                 template_scope: 0,
-                                patch_flag: true
+                                patch_flag: true,
                             }),
                         ],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
                     }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
@@ -818,15 +845,15 @@ mod tests {
                                 },
                                 children: vec![Node::Text("two")],
                                 template_scope: 0,
-                                kind: ElementKind::Element
+                                kind: ElementKind::Element,
                             }),
                         ],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
                     }),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Component
+                kind: ElementKind::Component,
             },
             r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot "+_toDisplayString(one),1)]),baz:_withCtx(()=>[_createTextVNode("hello from slot "),_createElementVNode("b",null,"two")])})"#,
             false,
@@ -856,7 +883,7 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from div")],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
                     }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
@@ -873,11 +900,11 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
                     }),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Component
+                kind: ElementKind::Component,
             },
             r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
@@ -918,11 +945,11 @@ mod tests {
                                 },
                                 children: vec![Node::Text("hello from div")],
                                 template_scope: 0,
-                                kind: ElementKind::Element
+                                kind: ElementKind::Element,
                             }),
                         ],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
                     }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
@@ -939,11 +966,11 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
                     }),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Component
+                kind: ElementKind::Component,
             },
             r#"_createVNode(_component_test_component,null,{"default":_withCtx(()=>[_createTextVNode("hello from default"),_createElementVNode("div",null,"hello from div")]),"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")])})"#,
             false,
@@ -976,7 +1003,7 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
                     }),
                     Node::Text("hello from component"),
                     Node::Element(ElementNode {
@@ -987,11 +1014,11 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from div")],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
                     }),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Component
+                kind: ElementKind::Component,
             },
             r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
@@ -1028,7 +1055,7 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from slot")],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
                     }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
@@ -1053,11 +1080,11 @@ mod tests {
                                 },
                                 children: vec![Node::Text("hello from div")],
                                 template_scope: 0,
-                                kind: ElementKind::Element
+                                kind: ElementKind::Element,
                             }),
                         ],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
                     }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
@@ -1074,11 +1101,11 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from baz")],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
                     }),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Component
+                kind: ElementKind::Component,
             },
             r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),"default":_withCtx(()=>[_createTextVNode("hello from default"),_createElementVNode("div",null,"hello from div")]),baz:_withCtx(()=>[_createTextVNode("hello from baz")])})"#,
             false,
