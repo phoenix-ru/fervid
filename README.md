@@ -107,10 +107,10 @@ Code generator
     - [x] v-text
     - [x] Custom directives
   - [ ] Built-in components
-    - [ ] keep-alive
+    - [x] keep-alive
     - [ ] component
-    - [ ] transition
-    - [ ] transition-group
+    - [x] transition
+    - [x] transition-group
     - [ ] teleport
     - [x] slot
     - [ ] suspense

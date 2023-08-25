@@ -1,54 +1,35 @@
 use fervid_core::ElementNode;
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{ArrayLit, Expr, ExprOrSpread, Ident},
+    ecma::ast::{Expr, Ident},
 };
 
 use crate::{imports::VueImports, CodegenContext};
 
 impl CodegenContext {
-    /// Generates `(_openBlock(), _createBlock(_KeepAlive, null, [keepalive_children], 1024))`
-    pub fn generate_keepalive(&mut self, element_node: &ElementNode) -> Expr {
+    pub fn generate_transition_group(&mut self, element_node: &ElementNode) -> Expr {
         let span = DUMMY_SP; // TODO
 
-        // _KeepAlive
-        let keepalive_identifier = Expr::Ident(Ident {
+        // _TransitionGroup
+        let transition_group_identifier = Expr::Ident(Ident {
             span,
-            sym: self.get_and_add_import_ident(VueImports::KeepAlive),
+            sym: self.get_and_add_import_ident(VueImports::TransitionGroup),
             optional: false,
         });
 
-        let keepalive_attrs =
+        let transition_group_attrs =
             self.generate_builtin_attrs(&element_node.starting_tag.attributes, span);
 
-        let generated_children = self.generate_element_children(element_node, false);
-        let keepalive_children = if generated_children.0.len() != 0 {
-            Some(Expr::Array(ArrayLit {
-                span,
-                elems: generated_children
-                    .0
-                    .into_iter()
-                    .map(|c| {
-                        Some(ExprOrSpread {
-                            spread: None,
-                            expr: Box::new(c),
-                        })
-                    })
-                    .collect(),
-            }))
-        } else {
-            None
-        };
+        let transition_group_slots = self.generate_builtin_slots(element_node);
 
-        let should_wrap_in_block = keepalive_children.is_some();
-        let patch_flag = if should_wrap_in_block { 1024 } else { 0 };
+        let patch_flag = 0; // TODO This comes from the attributes
 
         self.generate_componentlike(
-            keepalive_identifier,
-            keepalive_attrs,
-            keepalive_children,
+            transition_group_identifier,
+            transition_group_attrs,
+            transition_group_slots,
             patch_flag,
-            should_wrap_in_block,
+            false,
             span,
         )
     }
@@ -56,38 +37,38 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{AttributeOrBinding, BuiltinType, ElementKind, Node, StartingTag};
+    use fervid_core::{BuiltinType, ElementKind, StartingTag, Node, AttributeOrBinding};
 
     use crate::test_utils::js;
 
     use super::*;
 
     #[test]
-    fn it_generates_empty_keepalive() {
-        // <keep-alive></keep-alive>
+    fn it_generates_empty_transition_group() {
+        // <transition-group></transition-group>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::KeepAlive),
+                kind: ElementKind::Builtin(BuiltinType::TransitionGroup),
                 starting_tag: StartingTag {
-                    tag_name: "keep-alive",
+                    tag_name: "transition-group",
                     attributes: vec![],
                     directives: None,
                 },
                 children: vec![],
                 template_scope: 0,
             },
-            r#"_createVNode(_KeepAlive)"#,
+            r#"_createVNode(_TransitionGroup)"#,
         )
     }
 
     #[test]
-    fn it_generates_keepalive_attrs() {
-        // <keep-alive foo="bar" :baz="qux"></keep-alive>
+    fn it_generates_transition_group_attrs() {
+        // <transition-group foo="bar" :baz="qux"></transition-group>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::KeepAlive),
+                kind: ElementKind::Builtin(BuiltinType::TransitionGroup),
                 starting_tag: StartingTag {
-                    tag_name: "keep-alive",
+                    tag_name: "transition-group",
                     attributes: vec![
                         AttributeOrBinding::RegularAttribute {
                             name: "foo",
@@ -106,36 +87,36 @@ mod tests {
                 children: vec![],
                 template_scope: 0,
             },
-            r#"_createVNode(_KeepAlive,{foo:"bar",baz:qux})"#,
+            r#"_createVNode(_TransitionGroup,{foo:"bar",baz:qux})"#,
         )
     }
 
     #[test]
-    fn it_generates_keepalive_children() {
-        // <keep-alive>foobar</keep-alive>
+    fn it_generates_transition_group_children() {
+        // <transition-group>foobar</transition-group>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::KeepAlive),
+                kind: ElementKind::Builtin(BuiltinType::TransitionGroup),
                 starting_tag: StartingTag {
-                    tag_name: "keep-alive",
+                    tag_name: "transition-group",
                     attributes: vec![],
                     directives: None,
                 },
                 children: vec![Node::Text("foobar")],
                 template_scope: 0,
             },
-            r#"(_openBlock(),_createBlock(_KeepAlive,null,[_createTextVNode("foobar")],1024))"#,
+            r#"_createVNode(_TransitionGroup,null,{"default":_withCtx(()=>[_createTextVNode("foobar")]),_:1})"#,
         )
     }
 
     #[test]
-    fn it_generates_full_keepalive() {
-        // <keep-alive foo="bar" :baz="qux">foobar</keep-alive>
+    fn it_generates_full_transition_group() {
+        // <transition-group foo="bar" :baz="qux">foobar</transition-group>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::KeepAlive),
+                kind: ElementKind::Builtin(BuiltinType::TransitionGroup),
                 starting_tag: StartingTag {
-                    tag_name: "keep-alive",
+                    tag_name: "transition-group",
                     attributes: vec![
                         AttributeOrBinding::RegularAttribute {
                             name: "foo",
@@ -154,13 +135,13 @@ mod tests {
                 children: vec![Node::Text("foobar")],
                 template_scope: 0,
             },
-            r#"(_openBlock(),_createBlock(_KeepAlive,{foo:"bar",baz:qux},[_createTextVNode("foobar")],1024))"#,
+            r#"_createVNode(_TransitionGroup,{foo:"bar",baz:qux},{"default":_withCtx(()=>[_createTextVNode("foobar")]),_:1})"#,
         )
     }
 
     fn test_out(input: ElementNode, expected: &str) {
         let mut ctx = CodegenContext::default();
-        let out = ctx.generate_keepalive(&input);
+        let out = ctx.generate_transition_group(&input);
         assert_eq!(crate::test_utils::to_str(out), expected)
     }
 }

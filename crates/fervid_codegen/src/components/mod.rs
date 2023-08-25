@@ -255,7 +255,7 @@ impl CodegenContext {
         result
     }
 
-    fn generate_component_children(&mut self, component_node: &ElementNode) -> Option<Expr> {
+    pub(crate) fn generate_component_children(&mut self, component_node: &ElementNode) -> Option<Expr> {
         let mut result_static_slots = Vec::new();
         let total_children = component_node.children.len();
 
