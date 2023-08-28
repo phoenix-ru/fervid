@@ -1,0 +1,156 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`should work 1`] = `
+"import { defineComponent, ref } from \\"vue\\";
+import { createBlock as _createBlock, createCommentVNode as _createCommentVNode, createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createTextVNode as _createTextVNode, createVNode as _createVNode, Fragment as _Fragment, normalizeClass as _normalizeClass, normalizeStyle as _normalizeStyle, openBlock as _openBlock, renderSlot as _renderSlot, resolveComponent as _resolveComponent, resolveDirective as _resolveDirective, toDisplayString as _toDisplayString, vModelText as _vModelText, vShow as _vShow, withCtx as _withCtx, withDirectives as _withDirectives, withModifiers as _withModifiers } from \\"vue\\";
+export default {
+    setup () {
+        return {
+            inputModel: ref(\\"\\"),
+            modelValue: ref(\\"\\"),
+            list: [
+                1,
+                2,
+                3
+            ]
+        };
+    },
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        const _component_abc_def = _resolveComponent(\\"abc-def\\"), _component_another_element = _resolveComponent(\\"another-element\\"), _directive_directive = _resolveDirective(\\"directive\\"), _directive_test_directive = _resolveDirective(\\"test-directive\\");
+        return _withDirectives((_openBlock(), _createBlock(_component_abc_def, {
+            \\"test-bound\\": _ctx.bar + _ctx.baz,
+            disabled: \\"disabled\\",
+            onClick: _withModifiers(()=>{}, [
+                \\"prevent\\"
+            ]),
+            onHello: _ctx.world,
+            class: \\"\\",
+            modelValue: modelValue,
+            \\"onUpdate:modelValue\\": ($event)=>((modelValue) = $event),
+            modelModifiers: {
+                lazy: true
+            },
+            \\"another-model-value\\": modelValue,
+            \\"onUpdate:anotherModelValue\\": ($event)=>((modelValue) = $event),
+            \\"another-model-valueModifiers\\": {
+                trim: true
+            }
+        }, {
+            \\"test-slot\\": _withCtx(({ value , another: renamed  })=>[
+                    _createTextVNode(\\" test \\" + _toDisplayString(value) + \\" \\" + _toDisplayString(renamed))
+                ]),
+            \\"custom-slot\\": _withCtx((prop)=>[
+                    _createElementVNode(\\"span\\", {
+                        class: \\"span-class\\"
+                    }, \\" Span text \\"),
+                    _createTextVNode(\\" \\" + _toDisplayString(prop.nested))
+                ]),
+            \\"default\\": _withCtx(()=>[
+                    _createTextVNode(\\" The text of the node \\" + _toDisplayString(_ctx.dynamicValue) + \\" \\", 1),
+                    _renderSlot(_ctx.$slots, \\"default\\"),
+                    _renderSlot(_ctx.$slots, \\"named-slot-1\\"),
+                    _renderSlot(_ctx.$slots, \\"named-slot-2\\", {
+                        prop: $setup.modelValue,
+                        class: \\"ye\\"
+                    }, [
+                        _createElementVNode(\\"div\\", null, \\" default content \\")
+                    ]),
+                    _createCommentVNode(\\" Comment \\"),
+                    _createVNode(_component_another_element),
+                    _createTextVNode(\\" yet another text \\"),
+                    _withDirectives(_createElementVNode(\\"input\\"), [
+                        [
+                            _vModelText,
+                            inputModel
+                        ],
+                        [
+                            _directive_directive,
+                            baz,
+                            \\"foo\\",
+                            {
+                                bar: true,
+                                buzz: true
+                            }
+                        ]
+                    ]),
+                    _createCommentVNode(\\" Todo remove space between these elements, otherwise it breaks the invariant in conditional codegen \\"),
+                    true ? (_openBlock(), _createElementBlock(\\"div\\", null, \\"if div\\")) : false ? (_openBlock(), _createElementBlock(\\"span\\", null, \\"else-if span\\")) : _createCommentVNode(\\"v-if\\"),
+                    _createElementVNode(\\"span\\", {
+                        key: i
+                    }, \\"hey\\"),
+                    _withDirectives(_createElementVNode(\\"br\\"), [
+                        [
+                            _vShow,
+                            false
+                        ]
+                    ]),
+                    _createVNode(_component_another_element, {
+                        key: i,
+                        textContent: _ctx.foo + _ctx.bar
+                    }),
+                    _createElementVNode(_Fragment, null, [
+                        _createTextVNode(\\" hey \\"),
+                        _createElementVNode(\\"span\\", {
+                            key: index
+                        }, _toDisplayString(item1) + _toDisplayString(index)),
+                        _createElementVNode(\\"div\\", {
+                            key: index,
+                            class: _normalizeClass([
+                                \\"both regular and bound\\",
+                                [
+                                    item2,
+                                    index
+                                ]
+                            ])
+                        }),
+                        _createElementVNode(\\"div\\", {
+                            key: index,
+                            class: \\"just regular class\\"
+                        }),
+                        _createElementVNode(\\"div\\", {
+                            key: index,
+                            class: _normalizeClass([
+                                _ctx.member.expr,
+                                _ctx.globalIdent,
+                                item2,
+                                index
+                            ])
+                        })
+                    ]),
+                    false ? (_openBlock(), _createElementBlock(_Fragment, null, [
+                        _createTextVNode(\\" this is a v-if template \\")
+                    ])) : true ? (_openBlock(), _createElementBlock(_Fragment, null, [
+                        _createTextVNode(\\" another v-else-if template \\")
+                    ])) : (_openBlock(), _createElementBlock(_Fragment, null, [
+                        _createTextVNode(\\" else template \\")
+                    ])),
+                    _createElementVNode(\\"div\\", {
+                        style: _normalizeStyle([
+                            {
+                                \\"background-color\\": \\"red\\",
+                                color: \\"#000\\",
+                                content: \\"''\\",
+                                \\"grid-template-column\\": \\"repeat(1fr, min(auto-fit, 100px))\\"
+                            },
+                            {
+                                backgroundColor: _ctx.v ? \\"yellow\\" : undefined
+                            }
+                        ]),
+                        textContent: _ctx.foo + _ctx.bar
+                    })
+                ])
+        })), [
+            [
+                _directive_test_directive,
+                foo - bar,
+                \\"test-argument\\",
+                {
+                    foo: true,
+                    bar: true
+                }
+            ]
+        ]);
+    }
+};
+"
+`;
