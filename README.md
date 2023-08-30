@@ -58,7 +58,7 @@ Handles `<script>` and `<script setup>` analysis and transformations, along with
 ### `fervid_parser` ![future](https://badgen.net/badge/Status/Planned/orange)
 Parser for Vue SFC based on [Servo html5ever](https://github.com/servo/html5ever), the industry-grade HTML parser.
 
-### `fervid_napi` ![future](https://badgen.net/badge/Status/Planned/orange)
+### `fervid_napi` ![wip](https://badgen.net/badge/Status/In%20progress/blue)
 NAPI-rs bindings for usage in Node.js.
 
 ### `fervid_deno` ![future](https://badgen.net/badge/Status/Planned/orange)
