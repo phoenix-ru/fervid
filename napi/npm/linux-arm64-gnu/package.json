@@ -1,5 +1,5 @@
 {
-  "name": "fervid-linux-arm64-gnu",
+  "name": "@fervid/napi-linux-arm64-gnu",
   "version": "0.1.0",
   "os": [
     "linux"
@@ -7,11 +7,11 @@
   "cpu": [
     "arm64"
   ],
-  "main": "fervid.linux-arm64-gnu.node",
+  "main": "@fervid/napi.linux-arm64-gnu.node",
   "files": [
-    "fervid.linux-arm64-gnu.node"
+    "@fervid/napi.linux-arm64-gnu.node"
   ],
-  "description": "Template project for writing node package with napi-rs",
+  "description": "All-in-One Vue compiler written in Rust",
   "keywords": [
     "napi-rs",
     "NAPI",

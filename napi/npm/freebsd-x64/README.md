@@ -1,3 +1,3 @@
-# `fervid-freebsd-x64`
+# `@fervid/napi-freebsd-x64`
 
-This is the **x86_64-unknown-freebsd** binary for `fervid`
+This is the **x86_64-unknown-freebsd** binary for `@fervid/napi`

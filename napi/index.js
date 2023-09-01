@@ -32,24 +32,24 @@ switch (platform) {
   case 'android':
     switch (arch) {
       case 'arm64':
-        localFileExisted = existsSync(join(__dirname, 'fervid.android-arm64.node'))
+        localFileExisted = existsSync(join(__dirname, '@fervid/napi.android-arm64.node'))
         try {
           if (localFileExisted) {
-            nativeBinding = require('./fervid.android-arm64.node')
+            nativeBinding = require('./@fervid/napi.android-arm64.node')
           } else {
-            nativeBinding = require('fervid-android-arm64')
+            nativeBinding = require('@fervid/napi-android-arm64')
           }
         } catch (e) {
           loadError = e
         }
         break
       case 'arm':
-        localFileExisted = existsSync(join(__dirname, 'fervid.android-arm-eabi.node'))
+        localFileExisted = existsSync(join(__dirname, '@fervid/napi.android-arm-eabi.node'))
         try {
           if (localFileExisted) {
-            nativeBinding = require('./fervid.android-arm-eabi.node')
+            nativeBinding = require('./@fervid/napi.android-arm-eabi.node')
           } else {
-            nativeBinding = require('fervid-android-arm-eabi')
+            nativeBinding = require('@fervid/napi-android-arm-eabi')
           }
         } catch (e) {
           loadError = e
@@ -62,36 +62,36 @@ switch (platform) {
   case 'win32':
     switch (arch) {
       case 'x64':
-        localFileExisted = existsSync(join(__dirname, 'fervid.win32-x64-msvc.node'))
+        localFileExisted = existsSync(join(__dirname, '@fervid/napi.win32-x64-msvc.node'))
         try {
           if (localFileExisted) {
-            nativeBinding = require('./fervid.win32-x64-msvc.node')
+            nativeBinding = require('./@fervid/napi.win32-x64-msvc.node')
           } else {
-            nativeBinding = require('fervid-win32-x64-msvc')
+            nativeBinding = require('@fervid/napi-win32-x64-msvc')
           }
         } catch (e) {
           loadError = e
         }
         break
       case 'ia32':
-        localFileExisted = existsSync(join(__dirname, 'fervid.win32-ia32-msvc.node'))
+        localFileExisted = existsSync(join(__dirname, '@fervid/napi.win32-ia32-msvc.node'))
         try {
           if (localFileExisted) {
-            nativeBinding = require('./fervid.win32-ia32-msvc.node')
+            nativeBinding = require('./@fervid/napi.win32-ia32-msvc.node')
           } else {
-            nativeBinding = require('fervid-win32-ia32-msvc')
+            nativeBinding = require('@fervid/napi-win32-ia32-msvc')
           }
         } catch (e) {
           loadError = e
         }
         break
       case 'arm64':
-        localFileExisted = existsSync(join(__dirname, 'fervid.win32-arm64-msvc.node'))
+        localFileExisted = existsSync(join(__dirname, '@fervid/napi.win32-arm64-msvc.node'))
         try {
           if (localFileExisted) {
-            nativeBinding = require('./fervid.win32-arm64-msvc.node')
+            nativeBinding = require('./@fervid/napi.win32-arm64-msvc.node')
           } else {
-            nativeBinding = require('fervid-win32-arm64-msvc')
+            nativeBinding = require('@fervid/napi-win32-arm64-msvc')
           }
         } catch (e) {
           loadError = e
@@ -102,35 +102,35 @@ switch (platform) {
     }
     break
   case 'darwin':
-    localFileExisted = existsSync(join(__dirname, 'fervid.darwin-universal.node'))
+    localFileExisted = existsSync(join(__dirname, '@fervid/napi.darwin-universal.node'))
     try {
       if (localFileExisted) {
-        nativeBinding = require('./fervid.darwin-universal.node')
+        nativeBinding = require('./@fervid/napi.darwin-universal.node')
       } else {
-        nativeBinding = require('fervid-darwin-universal')
+        nativeBinding = require('@fervid/napi-darwin-universal')
       }
       break
     } catch {}
     switch (arch) {
       case 'x64':
-        localFileExisted = existsSync(join(__dirname, 'fervid.darwin-x64.node'))
+        localFileExisted = existsSync(join(__dirname, '@fervid/napi.darwin-x64.node'))
         try {
           if (localFileExisted) {
-            nativeBinding = require('./fervid.darwin-x64.node')
+            nativeBinding = require('./@fervid/napi.darwin-x64.node')
           } else {
-            nativeBinding = require('fervid-darwin-x64')
+            nativeBinding = require('@fervid/napi-darwin-x64')
           }
         } catch (e) {
           loadError = e
         }
         break
       case 'arm64':
-        localFileExisted = existsSync(join(__dirname, 'fervid.darwin-arm64.node'))
+        localFileExisted = existsSync(join(__dirname, '@fervid/napi.darwin-arm64.node'))
         try {
           if (localFileExisted) {
-            nativeBinding = require('./fervid.darwin-arm64.node')
+            nativeBinding = require('./@fervid/napi.darwin-arm64.node')
           } else {
-            nativeBinding = require('fervid-darwin-arm64')
+            nativeBinding = require('@fervid/napi-darwin-arm64')
           }
         } catch (e) {
           loadError = e
@@ -144,12 +144,12 @@ switch (platform) {
     if (arch !== 'x64') {
       throw new Error(`Unsupported architecture on FreeBSD: ${arch}`)
     }
-    localFileExisted = existsSync(join(__dirname, 'fervid.freebsd-x64.node'))
+    localFileExisted = existsSync(join(__dirname, '@fervid/napi.freebsd-x64.node'))
     try {
       if (localFileExisted) {
-        nativeBinding = require('./fervid.freebsd-x64.node')
+        nativeBinding = require('./@fervid/napi.freebsd-x64.node')
       } else {
-        nativeBinding = require('fervid-freebsd-x64')
+        nativeBinding = require('@fervid/napi-freebsd-x64')
       }
     } catch (e) {
       loadError = e
@@ -159,23 +159,23 @@ switch (platform) {
     switch (arch) {
       case 'x64':
         if (isMusl()) {
-          localFileExisted = existsSync(join(__dirname, 'fervid.linux-x64-musl.node'))
+          localFileExisted = existsSync(join(__dirname, '@fervid/napi.linux-x64-musl.node'))
           try {
             if (localFileExisted) {
-              nativeBinding = require('./fervid.linux-x64-musl.node')
+              nativeBinding = require('./@fervid/napi.linux-x64-musl.node')
             } else {
-              nativeBinding = require('fervid-linux-x64-musl')
+              nativeBinding = require('@fervid/napi-linux-x64-musl')
             }
           } catch (e) {
             loadError = e
           }
         } else {
-          localFileExisted = existsSync(join(__dirname, 'fervid.linux-x64-gnu.node'))
+          localFileExisted = existsSync(join(__dirname, '@fervid/napi.linux-x64-gnu.node'))
           try {
             if (localFileExisted) {
-              nativeBinding = require('./fervid.linux-x64-gnu.node')
+              nativeBinding = require('./@fervid/napi.linux-x64-gnu.node')
             } else {
-              nativeBinding = require('fervid-linux-x64-gnu')
+              nativeBinding = require('@fervid/napi-linux-x64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -184,23 +184,23 @@ switch (platform) {
         break
       case 'arm64':
         if (isMusl()) {
-          localFileExisted = existsSync(join(__dirname, 'fervid.linux-arm64-musl.node'))
+          localFileExisted = existsSync(join(__dirname, '@fervid/napi.linux-arm64-musl.node'))
           try {
             if (localFileExisted) {
-              nativeBinding = require('./fervid.linux-arm64-musl.node')
+              nativeBinding = require('./@fervid/napi.linux-arm64-musl.node')
             } else {
-              nativeBinding = require('fervid-linux-arm64-musl')
+              nativeBinding = require('@fervid/napi-linux-arm64-musl')
             }
           } catch (e) {
             loadError = e
           }
         } else {
-          localFileExisted = existsSync(join(__dirname, 'fervid.linux-arm64-gnu.node'))
+          localFileExisted = existsSync(join(__dirname, '@fervid/napi.linux-arm64-gnu.node'))
           try {
             if (localFileExisted) {
-              nativeBinding = require('./fervid.linux-arm64-gnu.node')
+              nativeBinding = require('./@fervid/napi.linux-arm64-gnu.node')
             } else {
-              nativeBinding = require('fervid-linux-arm64-gnu')
+              nativeBinding = require('@fervid/napi-linux-arm64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -208,12 +208,12 @@ switch (platform) {
         }
         break
       case 'arm':
-        localFileExisted = existsSync(join(__dirname, 'fervid.linux-arm-gnueabihf.node'))
+        localFileExisted = existsSync(join(__dirname, '@fervid/napi.linux-arm-gnueabihf.node'))
         try {
           if (localFileExisted) {
-            nativeBinding = require('./fervid.linux-arm-gnueabihf.node')
+            nativeBinding = require('./@fervid/napi.linux-arm-gnueabihf.node')
           } else {
-            nativeBinding = require('fervid-linux-arm-gnueabihf')
+            nativeBinding = require('@fervid/napi-linux-arm-gnueabihf')
           }
         } catch (e) {
           loadError = e

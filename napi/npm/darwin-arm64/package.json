@@ -1,5 +1,5 @@
 {
-  "name": "fervid-darwin-arm64",
+  "name": "@fervid/napi-darwin-arm64",
   "version": "0.1.0",
   "os": [
     "darwin"
@@ -7,11 +7,11 @@
   "cpu": [
     "arm64"
   ],
-  "main": "fervid.darwin-arm64.node",
+  "main": "@fervid/napi.darwin-arm64.node",
   "files": [
-    "fervid.darwin-arm64.node"
+    "@fervid/napi.darwin-arm64.node"
   ],
-  "description": "Template project for writing node package with napi-rs",
+  "description": "All-in-One Vue compiler written in Rust",
   "keywords": [
     "napi-rs",
     "NAPI",

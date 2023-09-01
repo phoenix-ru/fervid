@@ -1,5 +1,5 @@
 {
-  "name": "fervid-linux-arm-gnueabihf",
+  "name": "@fervid/napi-linux-arm-gnueabihf",
   "version": "0.1.0",
   "os": [
     "linux"
@@ -7,11 +7,11 @@
   "cpu": [
     "arm"
   ],
-  "main": "fervid.linux-arm-gnueabihf.node",
+  "main": "@fervid/napi.linux-arm-gnueabihf.node",
   "files": [
-    "fervid.linux-arm-gnueabihf.node"
+    "@fervid/napi.linux-arm-gnueabihf.node"
   ],
-  "description": "Template project for writing node package with napi-rs",
+  "description": "All-in-One Vue compiler written in Rust",
   "keywords": [
     "napi-rs",
     "NAPI",

@@ -1,3 +1,3 @@
-# `fervid-win32-ia32-msvc`
+# `@fervid/napi-win32-ia32-msvc`
 
-This is the **i686-pc-windows-msvc** binary for `fervid`
+This is the **i686-pc-windows-msvc** binary for `@fervid/napi`

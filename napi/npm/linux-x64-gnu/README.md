@@ -1,3 +1,3 @@
-# `fervid-linux-x64-gnu`
+# `@fervid/napi-linux-x64-gnu`
 
-This is the **x86_64-unknown-linux-gnu** binary for `fervid`
+This is the **x86_64-unknown-linux-gnu** binary for `@fervid/napi`

@@ -1,3 +1,3 @@
-# `fervid-darwin-x64`
+# `@fervid/napi-darwin-x64`
 
-This is the **x86_64-apple-darwin** binary for `fervid`
+This is the **x86_64-apple-darwin** binary for `@fervid/napi`

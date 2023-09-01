@@ -1,5 +1,5 @@
 {
-  "name": "fervid-win32-ia32-msvc",
+  "name": "@fervid/napi-win32-ia32-msvc",
   "version": "0.1.0",
   "os": [
     "win32"
@@ -7,11 +7,11 @@
   "cpu": [
     "ia32"
   ],
-  "main": "fervid.win32-ia32-msvc.node",
+  "main": "@fervid/napi.win32-ia32-msvc.node",
   "files": [
-    "fervid.win32-ia32-msvc.node"
+    "@fervid/napi.win32-ia32-msvc.node"
   ],
-  "description": "Template project for writing node package with napi-rs",
+  "description": "All-in-One Vue compiler written in Rust",
   "keywords": [
     "napi-rs",
     "NAPI",

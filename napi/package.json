@@ -1,7 +1,7 @@
 {
-  "name": "fervid",
+  "name": "@fervid/napi",
   "version": "0.1.0",
-  "description": "Template project for writing node package with napi-rs",
+  "description": "All-in-One Vue compiler written in Rust",
   "main": "index.js",
   "repository": "git@github.com:phoenix-ru/fervid.git",
   "license": "MIT",
@@ -19,7 +19,7 @@
     "index.js"
   ],
   "napi": {
-    "name": "fervid",
+    "name": "@fervid/napi",
     "triples": {
       "defaults": true,
       "additional": [

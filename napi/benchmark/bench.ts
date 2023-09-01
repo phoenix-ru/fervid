@@ -22,7 +22,7 @@ async function run() {
       })
     }),
 
-    b.add('fervid-napi', () => {
+    b.add('@fervid/napi', () => {
       compileSync(input)
     }),
 

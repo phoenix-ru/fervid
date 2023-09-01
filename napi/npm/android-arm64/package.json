@@ -1,5 +1,5 @@
 {
-  "name": "fervid-android-arm64",
+  "name": "@fervid/napi-android-arm64",
   "version": "0.1.0",
   "os": [
     "android"
@@ -7,11 +7,11 @@
   "cpu": [
     "arm64"
   ],
-  "main": "fervid.android-arm64.node",
+  "main": "@fervid/napi.android-arm64.node",
   "files": [
-    "fervid.android-arm64.node"
+    "@fervid/napi.android-arm64.node"
   ],
-  "description": "Template project for writing node package with napi-rs",
+  "description": "All-in-One Vue compiler written in Rust",
   "keywords": [
     "napi-rs",
     "NAPI",
