@@ -1,0 +1,26 @@
+[package]
+name = "fervid-napi"
+edition = "2021"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["cdylib"]
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+mimalloc-rust = "0.2"
+
+[target.'cfg(all(target_os = "linux", not(all(target_env = "musl", target_arch = "aarch64"))))'.dependencies]
+mimalloc-rust = { version = "0.2", features = ["local-dynamic-tls"] }
+
+[dependencies]
+fervid = { path = "../crates/fervid" }
+fervid_codegen = { path = "../crates/fervid_codegen" }
+fervid_transform = { path = "../crates/fervid_transform" }
+
+napi = "2"
+napi-derive = "2"
+
+[build-dependencies]
+napi-build = "2"
