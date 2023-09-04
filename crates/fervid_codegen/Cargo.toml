@@ -20,4 +20,5 @@ regex = "1"
 flagset = "0.4.3"
 
 [dev-dependencies]
+panic-message = "0.3.0"
 swc_ecma_parser = "0.133.*"

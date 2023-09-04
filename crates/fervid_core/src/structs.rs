@@ -53,6 +53,7 @@ pub enum ElementKind {
 
 #[derive(Debug, Clone, Copy)]
 pub enum BuiltinType {
+    Component,
     KeepAlive,
     Slot,
     Suspense,

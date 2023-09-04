@@ -1,7 +1,7 @@
 use fervid_core::{
     is_from_default_slot, is_html_tag, AttributeOrBinding, Conditional, ConditionalNodeSequence,
     ElementKind, ElementNode, Interpolation, Node, SfcTemplateBlock, StartingTag, VOnDirective,
-    VSlotDirective, VUE_BUILTINS,
+    VSlotDirective, VUE_BUILTINS, VBindDirective, StrOrExpr,
 };
 use smallvec::SmallVec;
 
@@ -343,6 +343,27 @@ impl TemplateVisitor<'_> {
 
         // First, check for a built-in
         if let Some(builtin_type) = VUE_BUILTINS.get(tag_name) {
+            // Special case for `<component>`. If it does not have `is`, this is not a built-in
+            if tag_name == "component" {
+                let has_is = starting_tag
+                    .attributes
+                    .iter()
+                    .any(|attr| {
+                        matches!(
+                            attr,
+                            AttributeOrBinding::RegularAttribute { name: "is", .. }
+                                | AttributeOrBinding::VBind(VBindDirective {
+                                    argument: Some(StrOrExpr::Str("is")),
+                                    ..
+                                })
+                        )
+                    });
+
+                if !has_is {
+                    return ElementKind::Component;
+                }
+            }
+
             return ElementKind::Builtin(*builtin_type);
         }
 
@@ -374,6 +395,23 @@ mod tests {
     use crate::test_utils::{parser::parse_javascript_expr, to_str};
 
     use super::*;
+
+    /// Special case: `<component>` without `is` attribute is not a builtin
+    #[test]
+    fn it_distinguishes_component_builtin_and_not() {
+        let starting_tag = StartingTag {
+            tag_name: "component",
+            attributes: vec![],
+            directives: None,
+        };
+
+        let mut scope_helper = Default::default();
+        let template_visitor = TemplateVisitor {
+            scope_helper: &mut scope_helper,
+            current_scope: 0,
+        };
+        assert!(matches!(template_visitor.recognize_element_kind(&starting_tag), ElementKind::Component));
+    }
 
     #[test]
     fn it_folds_basic_seq() {

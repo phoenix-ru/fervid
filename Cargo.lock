@@ -583,6 +583,7 @@ dependencies = [
  "flagset",
  "fxhash",
  "lazy_static",
+ "panic-message",
  "regex",
  "smallvec",
  "swc_core",
@@ -1220,6 +1221,12 @@ name = "owo-colors"
 version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1b04fb49957986fdce4d6ee7a65027d55d4b6d2265e5848bbb507b58ccfdb6f"
+
+[[package]]
+name = "panic-message"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "384e52fd8fbd4cbe3c317e8216260c21a0f9134de108cea8a4dd4e7e152c472d"
 
 [[package]]
 name = "parcel_selectors"

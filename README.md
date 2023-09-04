@@ -7,7 +7,7 @@ All-In-One Vue compiler written in Rust.
 
 Currently in early development, and the closest goal is to reach feature-parity with the current [Vue SFC compiler](https://sfc.vuejs.org).
 
-## Progress till MVP ![](https://geps.dev/progress/56)
+## Progress till MVP ![](https://geps.dev/progress/64)
 A minimal target of this project includes:
 - Vue 3 code generation;
 - [unplugin](https://github.com/unjs/unplugin) integration;
@@ -76,7 +76,7 @@ Transformer
 - [x] Template scope construction
 - [ ] Error reporting
 - [ ] JS/TS imports analysis (powered by swc_ecma_parser)
-- [ ] `setup`/`data`/`props` analysis
+- [x] `setup`/`data`/`props` analysis
 
 Code generator
 - [ ] Basic Vue3 code generation
@@ -106,14 +106,14 @@ Code generator
     - [ ] v-pre
     - [x] v-text
     - [x] Custom directives
-  - [ ] Built-in components
+  - [x] Built-in components
     - [x] keep-alive
-    - [ ] component
+    - [x] component
     - [x] transition
     - [x] transition-group
-    - [ ] teleport
+    - [x] teleport
     - [x] slot
-    - [ ] suspense
+    - [x] suspense
   - [ ] Patch flags
   - [ ] Hoisting
 
@@ -131,6 +131,6 @@ Code generator
 
 Integrations
 - [ ] WASM binary (with/without WASI)
-- [ ] NAPI binary
+- [x] NAPI binary (unpublished)
 - [ ] [unplugin](https://github.com/unjs/unplugin)
 - [ ] [Turbopack](https://github.com/vercel/turbo) plugin (when plugin system is defined)
