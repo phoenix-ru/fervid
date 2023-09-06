@@ -498,7 +498,7 @@ fn convert_argument<'s>(
 //     }
 // }
 
-fn split_itervar_and_iterable<'a>(raw: &'a str) -> Option<(&'a str, &'a str)> {
+fn split_itervar_and_iterable(raw: &str) -> Option<(&str, &str)> {
     // Try guessing: `item in iterable`
     let mut split = raw.splitn(2, " in ");
     if let (Some(itervar), Some(iterable)) = (split.next(), split.next()) {

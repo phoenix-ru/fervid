@@ -17,7 +17,7 @@ use fervid_transform::{
 #[napi]
 pub fn compile_sync(source: String) -> Result<String> {
     let (_, sfc) = parse_sfc(&source).map_err(|err| {
-        return Error::from_reason(err.to_string());
+        Error::from_reason(err.to_string())
     })?;
 
     let mut template_block = sfc.template;
@@ -31,7 +31,7 @@ pub fn compile_sync(source: String) -> Result<String> {
     transform_and_record_template(template_block, &mut scope_helper);
 
     let mut ctx = CodegenContext::default();
-    let template_expr = ctx.generate_sfc_template(&template_block);
+    let template_expr = ctx.generate_sfc_template(template_block);
 
     let sfc_module = ctx.generate_module(template_expr, module.0, module.1);
 

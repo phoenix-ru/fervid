@@ -151,9 +151,7 @@ fn categorize_var_declarator(
                     // Use PartialEq on Option<Id> for convenience
                     let callee_ident_option = Some(callee_ident.to_id());
 
-                    if callee_ident_option == vue_imports.ref_import {
-                        push!(BindingTypes::SetupRef)
-                    } else if callee_ident_option == vue_imports.computed {
+                    if callee_ident_option == vue_imports.ref_import || callee_ident_option == vue_imports.computed {
                         push!(BindingTypes::SetupRef)
                     } else if callee_ident_option == vue_imports.reactive {
                         push!(BindingTypes::SetupReactiveConst)
