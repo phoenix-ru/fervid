@@ -20,14 +20,14 @@ pub fn collect_exports_named(
         match specifier {
             // export * as foo from 'src'
             ExportSpecifier::Namespace(ns_export) => {
-                collect_module_export_name(&ns_export.name, out, binding_type.clone())
+                collect_module_export_name(&ns_export.name, out, binding_type)
             }
 
             // export foo from 'mod'
             // is this supposed to work?..
             ExportSpecifier::Default(export_default) => out.push(SetupBinding(
                 export_default.exported.sym.to_owned(),
-                binding_type.clone(),
+                binding_type,
             )),
 
             // export { foo } from 'mod'
@@ -41,7 +41,7 @@ pub fn collect_exports_named(
                     .as_ref()
                     .unwrap_or(&named_export_specifier.orig);
 
-                collect_module_export_name(exported, out, binding_type.clone())
+                collect_module_export_name(exported, out, binding_type)
             }
         }
     }

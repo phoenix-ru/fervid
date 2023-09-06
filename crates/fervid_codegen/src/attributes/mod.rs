@@ -150,9 +150,6 @@ impl CodegenContext {
                     value,
                     ..
                 }) => {
-                    // Clone the expression
-                    let value = value.to_owned();
-
                     // Transform the raw expression
                     // let was_transformed =
                     //     transform_scoped(&mut value, &self.scope_helper, template_scope_id);
