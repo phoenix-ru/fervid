@@ -264,7 +264,7 @@ fn transform_cached_strategy<'i>(
                 *part = to_append!();
 
                 // Check for special case - `:deep()` without selectors inside
-                if deep_contents.len() == 0 {
+                if deep_contents.is_empty() {
                     deep_without_selector = true;
                 } else {
                     // Parse contents of `:deep` as a Selector
@@ -290,7 +290,7 @@ fn transform_cached_strategy<'i>(
                 // b) Part of other sequence is the simplest, just signify that Descendant is needed
                 if !is_deep_its_own_sequence || selector_len == 1 {
                     // c) This is also true for cases where `:deep(#bar)` is the only component
-                    if !is_deep_its_own_sequence || components.len() != 0 {
+                    if !is_deep_its_own_sequence || !components.is_empty() {
                         needs_descendant = Some(sequence_start)
                     }
                     break;

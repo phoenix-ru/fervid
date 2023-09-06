@@ -36,7 +36,7 @@ fn test_real_compilation() {
     let (remaining_input, sfc) = parser::core::parse_sfc(test).unwrap();
 
     assert!(
-        remaining_input.trim().len() == 0,
+        remaining_input.trim().is_empty(),
         "Input was not fully consumed"
     );
 

@@ -6,7 +6,7 @@ use crate::CodegenContext;
 impl CodegenContext {
     /// Generates attributes if any are present, returns `None` otherwise
     pub(crate) fn generate_builtin_attrs(&mut self, attributes: &[AttributeOrBinding], span: Span) -> Option<Expr> {
-        if attributes.len() != 0 {
+        if !attributes.is_empty() {
             let mut attrs = Vec::with_capacity(attributes.len());
             self.generate_attributes(&attributes, &mut attrs);
             Some(Expr::Object(ObjectLit { span, props: attrs }))

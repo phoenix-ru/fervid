@@ -22,7 +22,7 @@ impl CodegenContext {
             self.generate_builtin_attrs(&element_node.starting_tag.attributes, span);
 
         let generated_children = self.generate_element_children(element_node, false);
-        let teleport_children = if generated_children.0.len() != 0 {
+        let teleport_children = if !generated_children.0.is_empty() {
             Some(Expr::Array(ArrayLit {
                 span,
                 elems: generated_children

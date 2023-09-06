@@ -54,7 +54,7 @@ impl CodegenContext {
         }))));
 
         // 5. Optionally generate modifiers
-        if v_model.modifiers.len() == 0 {
+        if v_model.modifiers.is_empty() {
             return has_js_bindings;
         }
 

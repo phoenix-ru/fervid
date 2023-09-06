@@ -57,13 +57,13 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
 
     // Filter out whitespace text nodes at the beginning and end of ElementNode
     match children.first() {
-        Some(Node::Text(v)) if v.trim().len() == 0 => {
+        Some(Node::Text(v)) if v.trim().is_empty() => {
             discard_mask |= 1 << 0;
         }
         _ => {}
     }
     match children.last() {
-        Some(Node::Text(v)) if v.trim().len() == 0 => {
+        Some(Node::Text(v)) if v.trim().is_empty() => {
             discard_mask |= 1 << (children_len - 1);
         }
         _ => {}
@@ -73,7 +73,7 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
     for (index, window) in children.windows(3).enumerate() {
         match window {
             [Node::Element(_) | Node::Comment(_), Node::Text(middle), Node::Element(_) | Node::Comment(_)]
-                if middle.trim().len() == 0 =>
+                if middle.trim().is_empty() =>
             {
                 discard_mask |= 1 << (index + 1);
             }
@@ -100,7 +100,7 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
     }
 
     // Merge multiple v-if/else-if/else nodes into a ConditionalNodeSequence
-    if children.len() != 0 {
+    if !children.is_empty() {
         let mut seq: Option<ConditionalNodeSequence> = None;
         let mut new_children = Vec::with_capacity(children.len());
 

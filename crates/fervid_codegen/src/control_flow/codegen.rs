@@ -86,7 +86,7 @@ impl CodegenContext {
 
         macro_rules! maybe_concatenate_text_nodes {
             () => {
-                if text_nodes.len() != 0 {
+                if !text_nodes.is_empty() {
                     // Ignore `createTextVNode` if allowed and all the nodes are text nodes
                     let should_inline = allow_inlining && text_nodes.len() == total_nodes;
                     let concatenation = self.concatenate_text_nodes(

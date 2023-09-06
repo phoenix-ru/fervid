@@ -82,7 +82,7 @@ impl CodegenContext {
         expr: Expr,
         directives_arr: Vec<Option<ExprOrSpread>>,
     ) -> Expr {
-        if directives_arr.len() == 0 {
+        if directives_arr.is_empty() {
             return expr;
         }
 
@@ -245,7 +245,7 @@ impl CodegenContext {
     pub fn generate_directive_resolves(&mut self) -> Vec<VarDeclarator> {
         let mut result = Vec::new();
 
-        if self.directives.len() == 0 {
+        if self.directives.is_empty() {
             return result;
         }
 

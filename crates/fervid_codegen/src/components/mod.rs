@@ -33,7 +33,7 @@ impl CodegenContext {
 
         let attributes_obj = self.generate_component_attributes(component_node);
         // TODO Apply all the directives and modifications
-        let attributes_expr = if attributes_obj.props.len() != 0 {
+        let attributes_expr = if !attributes_obj.props.is_empty() {
             Some(Expr::Object(attributes_obj))
         } else {
             None
@@ -164,7 +164,7 @@ impl CodegenContext {
     pub fn generate_component_resolves(&mut self) -> Vec<VarDeclarator> {
         let mut result = Vec::new();
 
-        if self.components.len() == 0 {
+        if self.components.is_empty() {
             return result;
         }
 
@@ -398,7 +398,7 @@ impl CodegenContext {
         //   <template v-slot:default>hi</template>
         //   not hi
         // </some-component>
-        if default_slot_children.len() != 0 {
+        if !default_slot_children.is_empty() {
             // withCtx(() => [child1, child2, child3])
             result_static_slots.push(self.generate_slot_shell(
                 "default",

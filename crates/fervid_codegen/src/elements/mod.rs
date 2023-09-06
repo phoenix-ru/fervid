@@ -27,7 +27,7 @@ impl CodegenContext {
 
         // Generate attributes
         let attributes = self.generate_element_attributes(element_node);
-        let attributes_expr = if attributes.len() != 0 {
+        let attributes_expr = if !attributes.is_empty() {
             Some(Expr::Object(ObjectLit {
                 span,
                 props: attributes,
@@ -53,7 +53,7 @@ impl CodegenContext {
         // 4th (optional) - element patch flag.
         let expected_element_args_count = if needs_patch_flags {
             4
-        } else if children.len() != 0 {
+        } else if !children.is_empty() {
             3
         } else if let Some(_) = attributes_expr {
             2
@@ -113,7 +113,7 @@ impl CodegenContext {
                 };
 
                 Box::new(child)
-            } else if children.len() != 0 {
+            } else if !children.is_empty() {
                 // [child1, child2, child3]
                 let children: Vec<Option<ExprOrSpread>> = children
                     .into_iter()
@@ -260,7 +260,7 @@ impl CodegenContext {
         let mut out: Vec<Option<ExprOrSpread>> = Vec::new();
 
         // Element `v-model` needs a special processing compared to a component one
-        if directives.v_model.len() != 0 {
+        if !directives.v_model.is_empty() {
             let span = DUMMY_SP; // TODO Span
             let v_model_ident = Ident {
                 span,
