@@ -95,7 +95,7 @@ impl CodegenContext {
                 AttributeOrBinding::RegularAttribute { name, value } => {
                     out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                         KeyValueProp {
-                            key: str_to_propname(&name, span),
+                            key: str_to_propname(name, span),
                             value: Box::from(Expr::Lit(Lit::Str(Str {
                                 span,
                                 value: JsWord::from(*value),
@@ -208,14 +208,14 @@ impl CodegenContext {
                     // The patch flag does not apply to v-on
                     let (transformed, _was_transformed) = handler
                         .as_ref()
-                        .and_then(|handler| {
+                        .map(|handler| {
                             let handler = handler.to_owned();
                             // let was_transformed = transform_scoped(
                             //     &mut handler,
                             //     &self.scope_helper,
                             //     template_scope_id,
                             // );
-                            Some((handler, true /* TODO */))
+                            (handler, true /* TODO */)
                         })
                         .unwrap_or_else(|| (Box::new(empty_arrow_expr(span)), false));
 

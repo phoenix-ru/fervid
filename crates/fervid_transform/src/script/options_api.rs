@@ -173,9 +173,9 @@ mod tests {
             .expect("analyze_js expects the input to be parseable")
             .0;
 
-        let analyzed = transform_and_record_script_options_api(&mut parsed, opts);
+        
 
-        analyzed
+        transform_and_record_script_options_api(&mut parsed, opts)
     }
 
     fn analyze_ts(input: &str, opts: AnalyzeOptions) -> ScriptOptionsTransformResult {
@@ -183,9 +183,9 @@ mod tests {
             .expect("analyze_ts expects the input to be parseable")
             .0;
 
-        let analyzed = transform_and_record_script_options_api(&mut parsed, opts);
+        
 
-        analyzed
+        transform_and_record_script_options_api(&mut parsed, opts)
     }
 
     macro_rules! test_js_and_ts {

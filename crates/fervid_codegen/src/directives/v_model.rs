@@ -90,7 +90,7 @@ impl CodegenContext {
     fn transform_v_model_value(
         &self,
         value: &Expr,
-        scope_to_use: u32,
+        _scope_to_use: u32,
         _span: Span,
     ) -> (Box<Expr>, bool) {
         // Polyfill
@@ -156,7 +156,7 @@ fn generate_v_model_modifiers(modifiers: &[&str], span: Span) -> ObjectLit {
         .map(|modifier| {
             // `.lazy` -> `lazy: true`
             PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                key: str_to_propname(&modifier, span),
+                key: str_to_propname(modifier, span),
                 value: Box::new(Expr::Lit(Lit::Bool(Bool { span, value: true }))),
             })))
         })

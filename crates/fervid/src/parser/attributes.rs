@@ -85,7 +85,7 @@ fn parse_vanilla_attr<'i>(
         Err(_) => {
             out.push(AttributeOrBinding::RegularAttribute {
                 name: attr_name,
-                value: &attr_name,
+                value: attr_name,
             });
             Ok((input, ()))
         }
@@ -171,7 +171,7 @@ fn parse_directive<'i>(
     // Read argument part if we spotted `:` earlier
     let (input, argument) = if has_argument {
         // Support v-slot:[slotname], v-bind:[attr], etc.
-        let (input, arg) = if input.starts_with("[") {
+        let (input, arg) = if input.starts_with('[') {
             is_dynamic = true;
 
             delimited(char('['), html_name, char(']'))(input)?
@@ -224,7 +224,7 @@ fn parse_directive<'i>(
 
     macro_rules! get_directives {
         () => {
-            directives.get_or_insert_with(|| Box::new(VueDirectives::default()))
+            directives.get_or_insert_with(|| Box::<VueDirectives<'_>>::default())
         };
     }
 

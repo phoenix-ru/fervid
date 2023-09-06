@@ -41,7 +41,7 @@ impl ScopeHelper {
             // Check variable existence in the current scope
             let found = current_scope.variables.iter().find(|it| *it == variable);
 
-            if let Some(_) = found {
+            if found.is_some() {
                 return BindingTypes::TemplateLocal;
             }
 

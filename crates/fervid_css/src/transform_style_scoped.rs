@@ -62,7 +62,7 @@ impl<'i> Transformer<'i> {
         // Check if Transformer was consumed already
         // Because we always need to tie output and `self.cache` to `self.input`,
         // sadly we cannot just consume Transformer and have to use a reference
-        if self.cache.len() > 0 {
+        if !self.cache.is_empty() {
             panic!("Transformer was already consumed")
         }
 
@@ -107,9 +107,9 @@ fn transform_cached_strategy<'i>(
         };
 
         for selector in style.selectors.0.iter_mut() {
-            let mut iter = selector.iter_raw_match_order();
+            let iter = selector.iter_raw_match_order();
 
-            while let Some(part) = iter.next() {
+            for part in iter {
                 let Component::NonTSPseudoClass(PseudoClass::CustomFunction { name, arguments }) = part else {
                     continue;
                 };
@@ -179,7 +179,7 @@ fn transform_cached_strategy<'i>(
                 // Find the start of the sequence
                 if is_combinator!(part) {
                     previous_combinator = Some(idx);
-                } else if let Some(_) = previous_combinator {
+                } else if previous_combinator.is_some() {
                     sequence_start = idx;
                     previous_combinator = None;
                 }
@@ -305,7 +305,7 @@ fn transform_cached_strategy<'i>(
                 let mut encountered_combinator = false;
                 let mut deep = &mut *part;
 
-                while let Some((_, next_part)) = iter.next() {
+                for (_, next_part) in iter.by_ref() {
                     if is_combinator!(next_part) {
                         if !encountered_combinator {
                             encountered_combinator = true
@@ -333,7 +333,7 @@ fn transform_cached_strategy<'i>(
 
             // When we have components, we have parsed `:deep`,
             // otherwise we have not and will just append to the right-most selector
-            if components.len() > 0 {
+            if !components.is_empty() {
                 selector.insert_raw_multiple(sequence_start, components);
             } else {
                 // this needs testing

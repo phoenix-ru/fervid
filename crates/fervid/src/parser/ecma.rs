@@ -1,4 +1,4 @@
-use swc_core::{ecma::ast::{Expr, Pat, Module}, common::{BytePos, comments::SingleThreadedComments}};
+use swc_core::{ecma::ast::{Expr, Pat, Module}, common::BytePos};
 use swc_ecma_parser::{PResult, lexer::Lexer, Syntax, StringInput, Parser};
 
 pub fn parse_js(raw: &str, span_start: u32, span_end: u32) -> PResult<Box<Expr>> {

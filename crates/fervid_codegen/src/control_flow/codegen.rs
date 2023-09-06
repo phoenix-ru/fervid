@@ -114,7 +114,7 @@ impl CodegenContext {
             };
         }
 
-        while let Some(node) = iter.next() {
+        for node in iter.by_ref() {
             let (generated, has_js) = self.generate_node(node, false);
             let is_text_node = matches!(node, Node::Text(_) | Node::Interpolation { .. });
             patch_flag_text |= has_js;

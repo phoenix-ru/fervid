@@ -186,9 +186,9 @@ impl CodegenContext {
         create_element_expr
     }
 
-    fn generate_element_attributes<'e>(
+    fn generate_element_attributes(
         &mut self,
-        element_node: &'e ElementNode,
+        element_node: &ElementNode,
     ) -> Vec<PropOrSpread> {
         let mut result_props = Vec::new();
 
@@ -197,11 +197,11 @@ impl CodegenContext {
         // Directives
         if let Some(ref directives) = element_node.starting_tag.directives {
             if let Some(ref v_text) = directives.v_text {
-                result_props.push(self.generate_v_text(&v_text));
+                result_props.push(self.generate_v_text(v_text));
             }
 
             if let Some(ref v_html) = directives.v_html {
-                result_props.push(self.generate_v_html(&v_html));
+                result_props.push(self.generate_v_html(v_html));
             }
         }
 

@@ -41,8 +41,8 @@ pub fn transform_and_record_template(
 
     // Optimize each root node separately
     let ast = &mut template.roots;
-    let mut iter = ast.iter_mut();
-    while let Some(ref mut node) = iter.next() {
+    let iter = ast.iter_mut();
+    for ref mut node in iter {
         node.visit_mut_with(&mut template_visitor);
     }
 }
@@ -90,7 +90,7 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
     });
 
     // For components, reorder children so that named slots come first
-    if matches!(element_kind, ElementKind::Component) && children.len() > 0 {
+    if matches!(element_kind, ElementKind::Component) && !children.is_empty() {
         children.sort_by(|a, b| {
             let a_is_from_default = is_from_default_slot(a);
             let b_is_from_default = is_from_default_slot(b);
@@ -173,7 +173,7 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
             }
 
             // Check for `v-else`
-            if let Some(_) = directives.v_else {
+            if directives.v_else.is_some() {
                 let Some(ref mut cond_seq) = seq else {
                     // This must be a warning, v-else without v-if
                     finish_seq!(child);
@@ -231,8 +231,8 @@ impl<'a> Visitor for TemplateVisitor<'_> {
 
             if let Some(v_for) = v_for {
                 // Get the iterator variable and collect its variables
-                let mut scope = &mut self.scope_helper.template_scopes[scope_to_use as usize];
-                collect_variables(&v_for.itervar, &mut scope);
+                let scope = &mut self.scope_helper.template_scopes[scope_to_use as usize];
+                collect_variables(&v_for.itervar, scope);
 
                 // Transform the iterable
                 self.scope_helper
@@ -245,8 +245,8 @@ impl<'a> Visitor for TemplateVisitor<'_> {
             }) = v_slot
             {
                 // Collect slot bindings
-                let mut scope = &mut self.scope_helper.template_scopes[scope_to_use as usize];
-                collect_variables(v_slot_value, &mut scope);
+                let scope = &mut self.scope_helper.template_scopes[scope_to_use as usize];
+                collect_variables(v_slot_value, scope);
                 // TODO transform slot?
             }
         }

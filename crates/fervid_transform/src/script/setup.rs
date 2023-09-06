@@ -16,7 +16,7 @@ pub struct ScriptSetupTransformResult {
     pub fields: Vec<PropOrSpread>
 }
 
-pub fn transform_and_record_script_setup(script_setup: SfcScriptBlock, scope_helper: &mut ScopeHelper) -> ScriptSetupTransformResult {
+pub fn transform_and_record_script_setup(script_setup: SfcScriptBlock, _scope_helper: &mut ScopeHelper) -> ScriptSetupTransformResult {
     let mut result = ScriptSetupTransformResult {
         decls: Vec::new(),
         fields: Vec::new(),
@@ -25,7 +25,7 @@ pub fn transform_and_record_script_setup(script_setup: SfcScriptBlock, scope_hel
     for module_item in script_setup.content.body {
         match module_item {
             ModuleItem::ModuleDecl(decl) => result.decls.push(decl),
-            ModuleItem::Stmt(stmt) => {
+            ModuleItem::Stmt(_stmt) => {
                 // todo actual analysis and transformation as in `fervid_script`
             }
         }

@@ -20,7 +20,7 @@ impl<'n> Iterator for SlottedIterator<'n> {
     /// Gets the next item and advances the iterator
     fn next(&mut self) -> Option<Self::Item> {
         let next_item = self.peek();
-        if let Some(_) = next_item {
+        if next_item.is_some() {
             self.idx += 1;
         }
         next_item
@@ -53,7 +53,7 @@ impl<'n> SlottedIterator<'n> {
     /// Switches the iteration mode if peek() yields None
     #[inline]
     pub fn toggle_mode_if_peek_is_none(&mut self) {
-        if let None = self.peek() {
+        if self.peek().is_none() {
             self.toggle_mode();
         }
     }
@@ -217,7 +217,7 @@ mod tests {
 
         // Just count default and named
         while iter.has_more() {
-            while let Some(_) = iter.next() {
+            for _ in iter.by_ref() {
                 cnt[curr_incr] += 1;
             }
 

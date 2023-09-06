@@ -99,7 +99,7 @@ pub fn categorize_var_decls(
     let is_const = matches!(var_decl.kind, VarDeclKind::Const);
 
     for decl in var_decl.decls.iter() {
-        categorize_var_declarator(&decl, out, vue_imports, is_const)
+        categorize_var_declarator(decl, out, vue_imports, is_const)
     }
 }
 
@@ -163,7 +163,6 @@ fn categorize_var_declarator(
                 // This is something unsupported, just add a MaybeRef binding
                 _ => {
                     push!(BindingTypes::SetupMaybeRef);
-                    return;
                 }
             }
         },

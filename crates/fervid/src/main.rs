@@ -51,7 +51,7 @@ fn test_real_compilation() {
     transform_and_record_template(template_block, &mut scope_helper);
 
     let mut ctx = fervid_codegen::CodegenContext::default();
-    let template_expr = ctx.generate_sfc_template(&template_block);
+    let template_expr = ctx.generate_sfc_template(template_block);
 
     // TODO
     let sfc_module = ctx.generate_module(template_expr, module.0, module.1);

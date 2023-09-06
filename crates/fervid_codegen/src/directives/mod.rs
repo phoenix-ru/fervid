@@ -128,7 +128,7 @@ impl CodegenContext {
         span: Span,
     ) -> Expr {
         let has_argument = argument.is_some();
-        let has_modifiers = modifiers.len() > 0;
+        let has_modifiers = !modifiers.is_empty();
 
         // Array and size hint
         let directive_arr_len_hint = if has_modifiers {
@@ -200,7 +200,7 @@ impl CodegenContext {
             modifiers_obj
                 .props
                 .push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                    key: str_to_propname(&modifier, DUMMY_SP),
+                    key: str_to_propname(modifier, DUMMY_SP),
                     value: Box::new(Expr::Lit(Lit::Bool(Bool {
                         span: DUMMY_SP,
                         value: true,

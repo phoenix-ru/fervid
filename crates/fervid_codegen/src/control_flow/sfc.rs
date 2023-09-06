@@ -24,7 +24,7 @@ impl CodegenContext {
 
         // TODO Multi-root? Is it actually merged before into a Fragment?
         let first_child = &sfc_template.roots[0];
-        let (result, _) = self.generate_node(&first_child, true);
+        let (result, _) = self.generate_node(first_child, true);
 
         result
     }
@@ -89,7 +89,7 @@ impl CodegenContext {
         let directive_resolves = self.generate_directive_resolves();
 
         // Add them
-        if directive_resolves.len() != 0 || component_resolves.len() != 0 {
+        if !directive_resolves.is_empty() || !component_resolves.is_empty() {
             component_resolves.extend(directive_resolves);
 
             fn_body_stmts.push(Stmt::Decl(Decl::Var(Box::new(VarDecl {

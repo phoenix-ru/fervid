@@ -23,7 +23,7 @@ pub fn find_default_export(module: &Module) -> Option<&ObjectLit> {
                     // Plain export
                     // `export default { /* ... */ }`
                     Expr::Object(ref object_lit) => {
-                        return Some(object_lit);
+                        Some(object_lit)
                     }
 
                     // When doing `defineComponent`
@@ -98,7 +98,7 @@ pub fn collect_block_stmt_return_fields(block_stmt: &BlockStmt, out: &mut Vec<Js
         return;
     };
 
-    let return_arg = unroll_paren_seq(&return_arg);
+    let return_arg = unroll_paren_seq(return_arg);
 
     let Expr::Object(ref return_obj) = *return_arg else {
         return;
@@ -199,7 +199,7 @@ pub fn get_string_expr(expr: &Expr) -> Option<JsWord> {
 /// - <code>\`something ${notSoSimple}\`</code> is not trivial and will return `None`.
 pub fn get_string_tpl(tpl: &Tpl) -> Option<JsWord> {
     // This is not a js runtime, only simple template strings are supported
-    if tpl.exprs.len() > 0 || tpl.quasis.len() != 1 {
+    if !tpl.exprs.is_empty() || tpl.quasis.len() != 1 {
         return None;
     };
 
@@ -275,7 +275,7 @@ pub fn unroll_paren_seq(expr: &Expr) -> &Expr {
         // Afaik, `SeqExpr` always has elements in it.
         // If that was not the case, this arm won't be matched and `expr` will be returned instead.
         // The consumer will have to handle this weird `SeqExpr` himself.
-        Expr::Seq(seq_expr) if seq_expr.exprs.len() > 0 => {
+        Expr::Seq(seq_expr) if !seq_expr.exprs.is_empty() => {
             unroll_paren_seq(&seq_expr.exprs[seq_expr.exprs.len() - 1])
         }
 

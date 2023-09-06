@@ -111,7 +111,7 @@ impl CodegenContext {
 
         // Arg 3 (optional): component children expression (default to null)
         if expected_component_args_count >= 3 {
-            let expr_to_push = children_or_slots.map_or_else(|| null(span), |expr| Box::new(expr));
+            let expr_to_push = children_or_slots.map_or_else(|| null(span), Box::new);
             create_component_args.push(ExprOrSpread {
                 spread: None,
                 expr: expr_to_push,
@@ -150,15 +150,15 @@ impl CodegenContext {
         });
 
         // When wrapping in block, we also need `openBlock()`
-        let create_component_expr = if wrap_in_block {
+        
+
+        if wrap_in_block {
             // (openBlock(), createBlock(_component_name, {component:attrs}, {component:slots}, PATCH_FLAGS))
             self.wrap_in_open_block(create_component_fn_call, span)
         } else {
             // Just `createVNode` call
             create_component_fn_call
-        };
-
-        create_component_expr
+        }
     }
 
     pub fn generate_component_resolves(&mut self) -> Vec<VarDeclarator> {
@@ -217,7 +217,7 @@ impl CodegenContext {
         result
     }
 
-    fn generate_component_attributes<'e>(&mut self, component_node: &'e ElementNode) -> ObjectLit {
+    fn generate_component_attributes(&mut self, component_node: &ElementNode) -> ObjectLit {
         let mut result_props = Vec::new();
 
         self.generate_attributes(&component_node.starting_tag.attributes, &mut result_props);
@@ -240,19 +240,19 @@ impl CodegenContext {
 
             // Process `v-html`
             if let Some(ref v_html) = directives.v_html {
-                result_props.push(self.generate_v_html(&v_html));
+                result_props.push(self.generate_v_html(v_html));
             }
         }
 
         // TODO Take the remaining_directives and call a forwarding function
         // Process directives and hints wrt the createVNode
 
-        let result = ObjectLit {
+        
+
+        ObjectLit {
             span: DUMMY_SP, // todo from the component_node
             props: result_props,
-        };
-
-        result
+        }
     }
 
     pub(crate) fn generate_component_children(&mut self, component_node: &ElementNode) -> Option<Expr> {
@@ -352,8 +352,8 @@ impl CodegenContext {
                 // We need to generate it as if it was a named slot
                 self.generate_named_slot(
                     v_slot_directive,
-                    &children,
-                    &directives,
+                    children,
+                    directives,
                     &mut result_static_slots,
                 );
 
@@ -383,7 +383,7 @@ impl CodegenContext {
                 self.generate_named_slot(
                     v_slot_directive,
                     &slotted_node.children,
-                    &directives,
+                    directives,
                     &mut result_static_slots,
                 );
             }
@@ -493,7 +493,7 @@ impl CodegenContext {
         self.components
             .insert(tag_name.to_owned(), component_name.to_owned());
 
-        return component_name;
+        component_name
     }
 
     // Generates `withDirectives(expr, [directives])`
