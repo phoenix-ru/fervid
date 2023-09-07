@@ -11,4 +11,4 @@ license = "Apache-2.0"
 
 [dependencies]
 phf = { version = "0.11", features = ["macros"] }
-swc_core = { version = "0.75.*", features = ["common_plugin_transform", "ecma_ast"] }
+swc_core = { version = "0.75.*", features = ["ecma_ast"] }

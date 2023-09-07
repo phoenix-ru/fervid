@@ -1,6 +1,6 @@
 //! The main public crate of the `fervid` project.
 //!
-//! Here's how you can `fervid` to generate a module from an SFC:
+//! Here's how you can use `fervid` to generate a module from an SFC:
 //! <p style="background:rgba(255,181,77,0.16);padding:0.75em;">
 //! <strong>Warning:</strong> This example is very likely to change in the future.
 //! Please note that fervid is still unstable.
@@ -30,7 +30,7 @@
 //! let template_expr = ctx.generate_sfc_template(&template_block);
 //!
 //! // Generate the module code
-//! let sfc_module = ctx.generate_module(template_expr, module.0, module.1);
+//! let sfc_module = ctx.generate_module(Some(template_expr), module.0, module.1);
 //!
 //! // (Optional) Stringify the code
 //! let compiled_code = fervid_codegen::CodegenContext::stringify(input, &sfc_module, false);

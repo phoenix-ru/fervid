@@ -12,7 +12,7 @@ license = "Apache-2.0"
 [dependencies]
 fervid_core = { path="../fervid_core", version = "0.0.1" }
 lazy_static = "1.4.0"
-swc_core = { version = "0.75.*", features = ["common_plugin_transform", "ecma_ast"] }
+swc_core = { version = "0.75.*", features = ["ecma_ast"] }
 swc_ecma_codegen = "0.138.*"
 fxhash = "0.2.1"
 smallvec = "1.10.0"

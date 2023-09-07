@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use fervid_core::SfcTemplateBlock;
 use swc_core::{
     common::{FileName, SourceMap, DUMMY_SP},
@@ -150,7 +148,7 @@ impl CodegenContext {
 
     pub fn stringify(source: &str, item: &impl Node, minify: bool) -> String {
         // Emitting the result requires some setup with SWC
-        let cm: Arc<SourceMap> = Default::default();
+        let cm: swc_core::common::sync::Lrc<SourceMap> = Default::default();
         cm.new_source_file(FileName::Custom("test.ts".to_owned()), source.to_owned());
         let mut buff: Vec<u8> = Vec::new();
         let writer: JsWriter<&mut Vec<u8>> = JsWriter::new(cm.clone(), "\n", &mut buff, None);
