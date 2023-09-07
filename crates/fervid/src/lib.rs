@@ -40,5 +40,40 @@ extern crate lazy_static;
 
 pub mod parser;
 
-pub use parser::core::parse_sfc;
+use fervid_codegen::CodegenContext;
 pub use fervid_core::*;
+use fervid_transform::{
+    script::transform_and_record_scripts, structs::ScopeHelper,
+    template::transform_and_record_template,
+};
+pub use parser::core::parse_sfc;
+use swc_core::ecma::ast::Expr;
+
+/// Naive implementation of the SFC compilation, meaning that:
+/// - it handles the standard flow without plugins;
+/// - it compiles to `String` instead of SWC module;
+/// - it does not report errors.
+/// This implementation is mostly meant for the WASM and NAPI beta.
+/// Later on, it will be replaced with a stable API.
+pub fn compile_sync_naive(source: &str) -> Result<String, String> {
+    let (_, mut sfc) = parse_sfc(&source).map_err(|err| {
+        return err.to_string();
+    })?;
+
+    let mut scope_helper = ScopeHelper::default();
+    let module =
+        transform_and_record_scripts(sfc.script_setup, sfc.script_legacy, &mut scope_helper);
+
+    let mut ctx = CodegenContext::default();
+
+    let template_expr: Option<Expr> = sfc.template.as_mut().map(|template_block| {
+        transform_and_record_template(template_block, &mut scope_helper);
+        ctx.generate_sfc_template(&template_block)
+    });
+
+    let sfc_module = ctx.generate_module(template_expr, module.0, module.1);
+
+    let compiled_code = CodegenContext::stringify(&source, &sfc_module, false);
+
+    Ok(compiled_code)
+}

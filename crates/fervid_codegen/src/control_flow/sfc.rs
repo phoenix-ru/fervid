@@ -31,25 +31,27 @@ impl CodegenContext {
 
     pub fn generate_module(
         &mut self,
-        template_expr: Expr,
+        template_expr: Option<Expr>,
         mut script: Module,
         mut sfc_export_obj: ObjectLit,
     ) -> Module {
-        // TODO Distinguish between RenderFn and Inline
-        let render_fn = self.generate_render_fn(template_expr);
-
-        // TODO Properly append the template code depending on mode, what scripts are there, etc.
-        // `render(_ctx) { return template_expression }`
-        sfc_export_obj
-            .props
-            .push(PropOrSpread::Prop(Box::new(Prop::Method(MethodProp {
-                key: PropName::Ident(Ident {
-                    span: DUMMY_SP,
-                    sym: JsWord::from("render"),
-                    optional: false,
-                }),
-                function: Box::new(render_fn),
-            }))));
+        if let Some(template_expr) = template_expr {
+            // TODO Distinguish between RenderFn and Inline
+            let render_fn = self.generate_render_fn(template_expr);
+    
+            // TODO Properly append the template code depending on mode, what scripts are there, etc.
+            // `render(_ctx) { return template_expression }`
+            sfc_export_obj
+                .props
+                .push(PropOrSpread::Prop(Box::new(Prop::Method(MethodProp {
+                    key: PropName::Ident(Ident {
+                        span: DUMMY_SP,
+                        sym: JsWord::from("render"),
+                        optional: false,
+                    }),
+                    function: Box::new(render_fn),
+                }))));
+        }
 
         // Append the Vue imports
         // TODO Smart merging with user imports?

@@ -4,9 +4,8 @@ import { compileSync } from '../index'
 import { compileTemplate } from '@vue/compiler-sfc'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { cwd } from 'node:process'
 
-const input = readFileSync(join(cwd(), '../crates/fervid/benches/fixtures/input.vue'), {
+const input = readFileSync(join(__dirname, '../../fervid/benches/fixtures/input.vue'), {
   encoding: 'utf-8',
 })
 
