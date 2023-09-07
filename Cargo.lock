@@ -563,19 +563,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fervid-napi"
-version = "0.1.0"
-dependencies = [
- "fervid",
- "fervid_codegen",
- "fervid_transform",
- "mimalloc-rust",
- "napi",
- "napi-build",
- "napi-derive",
-]
-
-[[package]]
 name = "fervid_codegen"
 version = "0.0.1"
 dependencies = [
@@ -606,6 +593,19 @@ dependencies = [
  "cssparser",
  "lightningcss",
  "parcel_selectors",
+]
+
+[[package]]
+name = "fervid_napi"
+version = "0.0.1"
+dependencies = [
+ "fervid",
+ "fervid_codegen",
+ "fervid_transform",
+ "mimalloc-rust",
+ "napi",
+ "napi-build",
+ "napi-derive",
 ]
 
 [[package]]
