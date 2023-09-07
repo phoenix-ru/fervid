@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <title>hello-wasm example</title>
+  </head>
+  <body>
+    <script type="module">
+      import init, { compile_sync } from "./pkg/fervid_wasm.js";
+      init().then(() => {
+        const result = compile_sync("<template><div>Hello world!</div></template>");
+        document.write(result)
+      });
+    </script>
+  </body>
+</html>
