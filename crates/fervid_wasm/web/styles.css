@@ -6,9 +6,10 @@
   gap: .75rem;
 }
 .playground__area {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
 }
-#in, #out {
+#editor, #output {
   width: 100%;
-  padding: .75rem;
+  height: 600px;
+  border: 1px solid grey;
 }

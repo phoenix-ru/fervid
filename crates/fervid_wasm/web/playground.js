@@ -1,7 +1,8 @@
 import init, { compile_sync } from '../pkg/fervid_wasm.js'
+import * as monaco from 'https://cdn.jsdelivr.net/npm/monaco-editor@0.41.0/esm/vs/editor/editor.main.js/+esm'
 
 const INITIAL =
-`<template>
+    `<template>
     <div>
         Hello {{ name }}!
     </div>
@@ -16,29 +17,60 @@ export default {
 </script>
 `
 
-/** @type {HTMLTextAreaElement} */
-const inputEl = document.getElementById('in')
-/** @type {HTMLTextAreaElement} */
-const outputEl = document.getElementById('out')
 /** @type {HTMLElement} */
 const timeEl = document.getElementById('time')
 
-inputEl.value = INITIAL
-
-function compileAndOutput() {
-    const inputData = inputEl.value
-    if (inputData.trim().length === 0) return
-
+function compileAndTime (input) {
     const start = performance.now()
-    const result = compile_sync(inputData)
+    const result = compile_sync(input)
     const end = performance.now()
 
-    outputEl.value = result
-    timeEl.textContent = `${end - start}ms`
+    timeEl.textContent = `${((end - start) * 1000).toFixed(0)}µs`
+    return result
 }
 
-inputEl.addEventListener('input', compileAndOutput)
+function mountEditor (inputElement, outputElement, initialValue, compile) {
+    const inputEditorInstance = monaco.editor.create(inputElement, {
+        value: initialValue,
+        language: 'vue'
+    })
+
+    const outputEditorInstance = monaco.editor.create(outputElement, {
+        value: compile(initialValue),
+        language: 'javascript'
+    })
+
+    // self.MonacoEnvironment = {
+    //     async getWorker(_, label) {
+    //         if (label === 'vue') {
+    //             const worker = new vueWorker()
+    //             const init = new Promise((resolve) => {
+    //                 worker.addEventListener('message', (data) => {
+    //                     if (data.data === 'inited') {
+    //                         resolve()
+    //                     }
+    //                 })
+    //                 worker.postMessage({
+    //                     event: 'init',
+    //                     tsVersion: store.state.typescriptVersion,
+    //                     tsLocale: store.state.typescriptLocale || store.state.locale,
+    //                 })
+    //             })
+    //             await init
+    //             return worker
+    //         }
+    //         return new editorWorker()
+    //     },
+    // }
+    monaco.languages.register({ id: 'vue', extensions: ['.vue'] })
+    monaco.languages.register({ id: 'javascript', extensions: ['.js'] })
+    monaco.languages.register({ id: 'typescript', extensions: ['.ts'] })
+
+    inputEditorInstance.onDidChangeModelContent(() => {
+        outputEditorInstance.setValue(compileAndTime(inputEditorInstance.getValue()))
+    })
+}
 
 init().then(() => {
-    compileAndOutput()
+    mountEditor(document.getElementById('editor'), document.getElementById('output'), INITIAL, compileAndTime)
 })
