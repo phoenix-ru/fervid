@@ -19,6 +19,12 @@ const mimeTypes = {
     wasm: 'application/wasm'
 }
 
+// Headers required for high resolution timers: https://developer.mozilla.org/en-US/docs/Web/API/Performance/now#security_requirements
+const highResCors = {
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Cross-Origin-Embedder-Policy': 'require-corp'
+}
+
 http.createServer(async function (request, response) {
     const uri = url.parse(request.url).pathname
     let filename = path.join(process.cwd(), uri)
@@ -48,7 +54,7 @@ http.createServer(async function (request, response) {
         mimeType = 'text/plain';
     }
 
-    response.writeHead(200, { 'Content-Type': mimeType })
+    response.writeHead(200, { 'Content-Type': mimeType, ...highResCors })
     response.write(file, 'binary')
     response.end()
 }).listen(parseInt(port, 10))
