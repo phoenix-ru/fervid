@@ -1,0 +1,14 @@
+.playground {
+  margin: 2rem;
+}
+.playground__areas {
+  display: flex;
+  gap: .75rem;
+}
+.playground__area {
+  flex: 1 1 auto;
+}
+#in, #out {
+  width: 100%;
+  padding: .75rem;
+}

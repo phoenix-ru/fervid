@@ -2,15 +2,28 @@
 <html lang="en-US">
   <head>
     <meta charset="utf-8" />
-    <title>hello-wasm example</title>
+    <title>fervid playground</title>
+    <link rel="stylesheet" href="./web/normalize.css">
+    <link rel="stylesheet" href="./web/styles.css">
   </head>
+
   <body>
-    <script type="module">
-      import init, { compile_sync } from "./pkg/fervid_wasm.js";
-      init().then(() => {
-        const result = compile_sync("<template><div>Hello world!</div></template>");
-        document.write(result)
-      });
-    </script>
+    <div class="playground">
+      <h2>fervid playground</h2>
+
+      <div class="playground__areas">
+        <div class="playground__area">
+          <textarea id="in" rows="20"></textarea>
+        </div>
+
+        <div class="playground__area">
+          <textarea id="out" rows="20" readonly></textarea>
+        </div>
+      </div>
+
+      <p>WASM time took to compile: <strong id="time"></strong></p>
+    </div>
+
+    <script type="module" src="./web/playground.js" defer></script>
   </body>
 </html>
