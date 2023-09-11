@@ -1,28 +1,39 @@
 use fervid_core::BindingTypes;
 use swc_core::ecma::ast::{
-    Callee, ClassDecl, Decl, Expr, FnDecl, Pat, Stmt, VarDecl, VarDeclKind, VarDeclarator, ObjectPatProp, RestPat,
+    Callee, ClassDecl, Decl, Expr, ExprStmt, FnDecl, ObjectPatProp, Pat, PropOrSpread, RestPat,
+    Stmt, VarDecl, VarDeclKind, VarDeclarator,
 };
 
-use crate::{structs::{SetupBinding, VueResolvedImports}, script::utils::unroll_paren_seq};
+use crate::{
+    script::utils::unroll_paren_seq,
+    structs::{SetupBinding, VueResolvedImports},
+};
+
+use super::macros::transform_script_setup_macro_expr_stmt;
 
 /// Analyzes the statement in `script setup` context.
 /// This can either be:
 /// 1. The whole body of `<script setup>`;
 /// 2. The top-level statements in `<script>` when using mixed `<script>` + `<script setup>`;
 /// 3. The insides of `setup()` function in `<script>` Options API.
-pub fn analyze_stmt(
+pub fn transform_and_record_stmt(
     stmt: &Stmt,
     out: &mut Vec<SetupBinding>,
     vue_imports: &VueResolvedImports,
-) {
+    sfc_fields: &mut Vec<PropOrSpread>,
+) -> Option<Stmt> {
     match stmt {
-        Stmt::Decl(decl) => analyze_decl(decl, out, vue_imports),
+        // Try to process macros
+        Stmt::Expr(ref expr) => return transform_expr_stmt(expr, sfc_fields).map(Stmt::Expr),
 
-        // Todo stmt expression macro like defineProps?
-        // Stmt::Expr()
+        Stmt::Decl(decl) => {
+            analyze_decl(decl, out, vue_imports);
+        }
 
         _ => {}
     }
+
+    Some(stmt.to_owned())
 }
 
 /// Analyzes the declaration in `script setup` context.
@@ -50,6 +61,15 @@ pub fn analyze_decl(decl: &Decl, out: &mut Vec<SetupBinding>, vue_imports: &VueR
         // Decl::TsModule(_) => todo!(),
         _ => {}
     }
+}
+
+pub fn transform_expr_stmt(
+    expr_stmt: &ExprStmt,
+    sfc_fields: &mut Vec<PropOrSpread>,
+) -> Option<ExprStmt> {
+    // TODO Macros support
+    // TODO Support macros inside variable declarations as well (const props = defineProps())??
+    transform_script_setup_macro_expr_stmt(expr_stmt, sfc_fields)
 }
 
 /// Javascript class declaration is always constant.
@@ -195,16 +215,14 @@ fn categorize_var_declarator(
 fn collect_destructure(dest: &Pat, out: &mut Vec<SetupBinding>, is_const: bool) {
     match dest {
         // Base case for recursion
-        Pat::Ident(ident) => {
-            out.push(SetupBinding(
-                ident.sym.to_owned(),
-                if is_const {
-                    BindingTypes::SetupMaybeRef
-                } else {
-                    BindingTypes::SetupLet
-                }
-            ))
-        }
+        Pat::Ident(ident) => out.push(SetupBinding(
+            ident.sym.to_owned(),
+            if is_const {
+                BindingTypes::SetupMaybeRef
+            } else {
+                BindingTypes::SetupLet
+            },
+        )),
 
         // `[foo, bar]` in `const [foo, bar] = []
         Pat::Array(arr_destr) => {
@@ -218,9 +236,7 @@ fn collect_destructure(dest: &Pat, out: &mut Vec<SetupBinding>, is_const: bool) 
         }
 
         // `...bar` in `const [foo, ...bar] = []` or in `const { foo, ..bar } = {}`
-        Pat::Rest(rest_destr) => {
-            collect_rest_pat(rest_destr, out)
-        }
+        Pat::Rest(rest_destr) => collect_rest_pat(rest_destr, out),
 
         // `foo` in `const { foo } = {}`
         Pat::Object(obj_destr) => {
@@ -232,28 +248,22 @@ fn collect_destructure(dest: &Pat, out: &mut Vec<SetupBinding>, is_const: bool) 
                     }
 
                     // `foo` in `const { foo } = {}` and in `const { foo = 'bar' } = {}`
-                    ObjectPatProp::Assign(assign_destr) => {
-                        out.push(SetupBinding(
-                            assign_destr.key.sym.to_owned(),
-                            if is_const {
-                                BindingTypes::SetupMaybeRef
-                            } else {
-                                BindingTypes::SetupLet
-                            }
-                        ))
-                    }
+                    ObjectPatProp::Assign(assign_destr) => out.push(SetupBinding(
+                        assign_destr.key.sym.to_owned(),
+                        if is_const {
+                            BindingTypes::SetupMaybeRef
+                        } else {
+                            BindingTypes::SetupLet
+                        },
+                    )),
 
                     // `bar` in `const { foo, ...bar } = {}`
-                    ObjectPatProp::Rest(rest_destr) => {
-                        collect_rest_pat(rest_destr, out)
-                    }
+                    ObjectPatProp::Rest(rest_destr) => collect_rest_pat(rest_destr, out),
                 }
             }
         }
 
-        Pat::Assign(assign_destr) => {
-            collect_destructure(&assign_destr.left, out, is_const)
-        }
+        Pat::Assign(assign_destr) => collect_destructure(&assign_destr.left, out, is_const),
 
         Pat::Invalid(_) | Pat::Expr(_) => {}
     }
@@ -262,14 +272,11 @@ fn collect_destructure(dest: &Pat, out: &mut Vec<SetupBinding>, is_const: bool) 
 #[inline]
 fn collect_rest_pat(rest_pat: &RestPat, out: &mut Vec<SetupBinding>) {
     // Only `...ident` is supported.
-    // Current Vue js compiler has a bug, it returns `undefined` for `...[bar]` 
+    // Current Vue js compiler has a bug, it returns `undefined` for `...[bar]`
     let Some(ident) = rest_pat.arg.as_ident() else {
         return;
     };
 
     // Binding type is always `SetupConst` because of the nature of rest operator
-    out.push(SetupBinding(
-        ident.sym.to_owned(),
-        BindingTypes::SetupConst
-    ))
+    out.push(SetupBinding(ident.sym.to_owned(), BindingTypes::SetupConst))
 }

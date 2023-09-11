@@ -9,7 +9,7 @@ use swc_core::ecma::{
 use crate::{
     atoms::*,
     script::{
-        setup::{analyze_stmt, collect_imports},
+        setup::{collect_imports, transform_and_record_stmt},
         utils::get_string_tpl,
     },
     structs::{ScriptLegacyVars, VueResolvedImports},
@@ -88,6 +88,9 @@ pub fn analyze_top_level_items(
     out: &mut ScriptLegacyVars,
     vue_imports: &mut VueResolvedImports,
 ) {
+    // These are technically invalid for Options API, because macros are not supported there
+    let mut sfc_fields = Vec::new();
+
     for module_item in module.body.iter() {
         match *module_item {
             ModuleItem::ModuleDecl(ref module_decl) => {
@@ -109,7 +112,9 @@ pub fn analyze_top_level_items(
                 }
             }
 
-            ModuleItem::Stmt(ref stmt) => analyze_stmt(stmt, &mut out.setup, vue_imports),
+            ModuleItem::Stmt(ref stmt) => {
+                transform_and_record_stmt(stmt, &mut out.setup, vue_imports, &mut sfc_fields);
+            }
         }
     }
 }

@@ -1,9 +1,13 @@
 use fervid_core::SfcScriptBlock;
-use swc_core::ecma::ast::{ModuleDecl, ModuleItem, PropOrSpread, Id};
+use swc_core::{
+    common::DUMMY_SP,
+    ecma::ast::{BlockStmt, Function, Id, ModuleDecl, ModuleItem, PropOrSpread, Stmt},
+};
 
 use crate::structs::{ScopeHelper, VueResolvedImports};
 
 mod imports;
+mod macros;
 mod statements;
 
 pub use imports::*;
@@ -11,22 +15,26 @@ pub use statements::*;
 
 pub struct ScriptSetupTransformResult {
     /// All the imports (and maybe exports) of the `<script setup>`
-    pub decls: Vec<ModuleDecl>,
+    pub module_decls: Vec<ModuleDecl>,
     /// Fields of the SFC object
-    pub fields: Vec<PropOrSpread>,
+    pub sfc_fields: Vec<PropOrSpread>,
+    /// `setup()` function
+    pub setup_fn: Function,
 }
 
 pub fn transform_and_record_script_setup(
     script_setup: SfcScriptBlock,
     scope_helper: &mut ScopeHelper,
 ) -> ScriptSetupTransformResult {
-    let mut result = ScriptSetupTransformResult {
-        decls: Vec::<ModuleDecl>::new(),
-        fields: Vec::<PropOrSpread>::new(),
-    };
+    let span = DUMMY_SP; // TODO
+
+    let mut module_decls = Vec::<ModuleDecl>::new();
+    // TODO Maybe these fields need to be typed for a better error handling?
+    let mut sfc_fields = Vec::<PropOrSpread>::new();
 
     let mut vue_imports = VueResolvedImports::default();
     let mut imports = Vec::<Id>::new();
+    let mut setup_body_stmts = Vec::<Stmt>::new();
 
     for module_item in script_setup.content.body {
         match module_item {
@@ -37,23 +45,48 @@ pub fn transform_and_record_script_setup(
                     collect_imports(import_decl, &mut imports, &mut vue_imports);
                 }
 
-                result.decls.push(decl);
+                module_decls.push(decl);
             }
 
             ModuleItem::Stmt(stmt) => {
                 // todo actual analysis and transformation as in `fervid_script`
-                analyze_stmt(&stmt, &mut scope_helper.setup_bindings, &vue_imports)
+                if let Some(transformed_stmt) = transform_and_record_stmt(
+                    &stmt,
+                    &mut scope_helper.setup_bindings,
+                    &vue_imports,
+                    &mut sfc_fields,
+                ) {
+                    setup_body_stmts.push(transformed_stmt);
+                }
             }
         }
     }
 
-    result
+    let setup_fn = Function {
+        params: vec![],
+        decorators: vec![],
+        span,
+        body: Some(BlockStmt {
+            span,
+            stmts: setup_body_stmts,
+        }),
+        is_generator: false,
+        is_async: false, // TODO
+        type_params: None,
+        return_type: None,
+    };
+
+    ScriptSetupTransformResult {
+        module_decls,
+        sfc_fields,
+        setup_fn,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        script::setup::{analyze_stmt, collect_imports},
+        script::setup::{collect_imports, transform_and_record_stmt},
         structs::{SetupBinding, VueResolvedImports},
         test_utils::parser::*,
     };
@@ -77,6 +110,7 @@ mod tests {
         let mut imports = Vec::new();
         let mut vue_imports = VueResolvedImports::default();
         let mut setup = Vec::new();
+        let mut sfc_fields = Vec::new();
 
         for module_item in module.body.iter() {
             match *module_item {
@@ -84,7 +118,9 @@ mod tests {
                     collect_imports(import_decl, &mut imports, &mut vue_imports)
                 }
 
-                ModuleItem::Stmt(ref stmt) => analyze_stmt(stmt, &mut setup, &mut vue_imports),
+                ModuleItem::Stmt(ref stmt) => {
+                    transform_and_record_stmt(stmt, &mut setup, &mut vue_imports, &mut sfc_fields);
+                }
 
                 // Exports are ignored (ModuleDecl::Export* and ModuleDecl::Ts*)
                 _ => {}
