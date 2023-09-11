@@ -1,7 +1,7 @@
 use fervid_core::SfcScriptBlock;
-use swc_core::ecma::ast::{ModuleItem, ModuleDecl, PropOrSpread};
+use swc_core::ecma::ast::{ModuleDecl, ModuleItem, PropOrSpread, Id};
 
-use crate::structs::ScopeHelper;
+use crate::structs::{ScopeHelper, VueResolvedImports};
 
 mod imports;
 mod statements;
@@ -10,23 +10,39 @@ pub use imports::*;
 pub use statements::*;
 
 pub struct ScriptSetupTransformResult {
-    /// All the imports (and maybe exports) of the <script setup>
+    /// All the imports (and maybe exports) of the `<script setup>`
     pub decls: Vec<ModuleDecl>,
     /// Fields of the SFC object
-    pub fields: Vec<PropOrSpread>
+    pub fields: Vec<PropOrSpread>,
 }
 
-pub fn transform_and_record_script_setup(script_setup: SfcScriptBlock, scope_helper: &mut ScopeHelper) -> ScriptSetupTransformResult {
+pub fn transform_and_record_script_setup(
+    script_setup: SfcScriptBlock,
+    scope_helper: &mut ScopeHelper,
+) -> ScriptSetupTransformResult {
     let mut result = ScriptSetupTransformResult {
-        decls: Vec::new(),
-        fields: Vec::new(),
+        decls: Vec::<ModuleDecl>::new(),
+        fields: Vec::<PropOrSpread>::new(),
     };
+
+    let mut vue_imports = VueResolvedImports::default();
+    let mut imports = Vec::<Id>::new();
 
     for module_item in script_setup.content.body {
         match module_item {
-            ModuleItem::ModuleDecl(decl) => result.decls.push(decl),
+            ModuleItem::ModuleDecl(decl) => {
+                // Collect Vue imports
+                // TODO And maybe non-Vue as well?
+                if let ModuleDecl::Import(ref import_decl) = decl {
+                    collect_imports(import_decl, &mut imports, &mut vue_imports);
+                }
+
+                result.decls.push(decl);
+            }
+
             ModuleItem::Stmt(stmt) => {
                 // todo actual analysis and transformation as in `fervid_script`
+                analyze_stmt(&stmt, &mut scope_helper.setup_bindings, &vue_imports)
             }
         }
     }
@@ -37,9 +53,9 @@ pub fn transform_and_record_script_setup(script_setup: SfcScriptBlock, scope_hel
 #[cfg(test)]
 mod tests {
     use crate::{
-        test_utils::parser::*,
-        script::setup::{collect_imports, analyze_stmt},
+        script::setup::{analyze_stmt, collect_imports},
         structs::{SetupBinding, VueResolvedImports},
+        test_utils::parser::*,
     };
     use fervid_core::BindingTypes;
     use swc_core::{
@@ -68,9 +84,7 @@ mod tests {
                     collect_imports(import_decl, &mut imports, &mut vue_imports)
                 }
 
-                ModuleItem::Stmt(ref stmt) => {
-                    analyze_stmt(stmt, &mut setup, &mut vue_imports)
-                }
+                ModuleItem::Stmt(ref stmt) => analyze_stmt(stmt, &mut setup, &mut vue_imports),
 
                 // Exports are ignored (ModuleDecl::Export* and ModuleDecl::Ts*)
                 _ => {}
