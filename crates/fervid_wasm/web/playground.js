@@ -19,25 +19,30 @@ export default {
 
 /** @type {HTMLElement} */
 const timeEl = document.getElementById('time')
+let isTimeInitial = true
 
 function compileAndTime (input) {
     const start = performance.now()
     const result = compile_sync(input)
     const end = performance.now()
 
-    timeEl.textContent = `${((end - start) * 1000).toFixed(0)}µs`
+    timeEl.textContent = `${((end - start) * 1000).toFixed(0)}µs ${isTimeInitial ? '(cold)' : ''}`
+    isTimeInitial = false
     return result
 }
 
 function mountEditor (inputElement, outputElement, initialValue, compile) {
     const inputEditorInstance = monaco.editor.create(inputElement, {
         value: initialValue,
-        language: 'vue'
+        language: 'vue',
+        minimap: { enabled: false }
     })
 
     const outputEditorInstance = monaco.editor.create(outputElement, {
         value: compile(initialValue),
-        language: 'javascript'
+        language: 'javascript',
+        readOnly: true,
+        minimap: { enabled: false }
     })
 
     // self.MonacoEnvironment = {

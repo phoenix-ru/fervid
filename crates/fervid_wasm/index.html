@@ -9,7 +9,8 @@
 
   <body>
     <div class="playground">
-      <h2>fervid playground</h2>
+      <h2>fervid playground v0.0.1 <a href="https://github.com/phoenix-ru/fervid"><img alt="github" src="https://badgen.net/github/stars/phoenix-ru/fervid?icon=github"></a></h2>
+      <p>NOTE: some features may be not implemented yet. Please, see <a href="https://github.com/phoenix-ru/fervid#roadmap">Roadmap</a>.</p>
 
       <div class="playground__areas">
         <div class="playground__area">
@@ -22,6 +23,8 @@
       </div>
 
       <p>WASM time took to compile: <strong id="time"></strong></p>
+      <p>You should be able to see high-precision time measures in <a href="https://developer.mozilla.org/en-US/docs/Web/API/Performance/now#security_requirements">Isolated Contexts</a>,
+        for example by running <code>node server.js</code> yourself.</p>
     </div>
 
     <script type="module" src="./web/playground.js" defer></script>
