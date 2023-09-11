@@ -24,8 +24,8 @@ jobs:
       with:
         # Optional version of wasm-pack to install(eg. 'v0.9.1', 'latest')
         version: 'latest'
-    - run: cd crates/fervid_wasm
     - name: Pack WASM
+      working-directory: ./crates/fervid_wasm
       run: wasm-pack build --target web
     - name: Upload GitHub Pages artifact
       uses: actions/upload-pages-artifact@v2.0.0
@@ -33,7 +33,7 @@ jobs:
         # Artifact name
         name: github-pages # optional, default is github-pages
         # Path of the directory containing the static assets.
-        path: . # default is _site/
+        path: ./crates/fervid_wasm # default is _site/
         # Duration after which artifact will expire in days.
         retention-days: 31 # optional, default is 1
     - name: Deploy GitHub Pages site
