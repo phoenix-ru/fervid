@@ -54,19 +54,21 @@ impl CodegenContext {
         // Append the Vue imports
         // TODO Smart merging with user imports?
         let used_imports = self.generate_imports();
-        script
-            .body
-            .push(ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
-                span: DUMMY_SP,
-                specifiers: used_imports,
-                src: Box::new(Str {
+        if !used_imports.is_empty() {
+            script
+                .body
+                .push(ModuleItem::ModuleDecl(ModuleDecl::Import(ImportDecl {
                     span: DUMMY_SP,
-                    value: JsWord::from("vue"),
-                    raw: None,
-                }),
-                type_only: false,
-                asserts: None,
-            })));
+                    specifiers: used_imports,
+                    src: Box::new(Str {
+                        span: DUMMY_SP,
+                        value: JsWord::from("vue"),
+                        raw: None,
+                    }),
+                    type_only: false,
+                    asserts: None,
+                })));
+        }
 
         // Append the default export
         script
