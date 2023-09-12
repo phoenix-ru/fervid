@@ -1,7 +1,7 @@
 //! Exports data structs used by the crate
 
 use fervid_core::BindingTypes;
-use swc_core::ecma::{atoms::JsWord, ast::Id};
+use swc_core::ecma::{atoms::JsWord, ast::{Id, Expr, PropOrSpread, Module, ObjectLit, Function}};
 use smallvec::SmallVec;
 
 #[derive(Debug, PartialEq)]
@@ -47,6 +47,16 @@ pub struct ScopeHelper {
     pub transform_mode: TemplateGenerationMode
 }
 
+#[derive(Default)]
+pub struct SfcExportedObjectHelper {
+    // `emits` property
+    pub emits: Option<Box<Expr>>,
+    // `props` property
+    pub props: Option<Box<Expr>>,
+    /// Other fields of the object
+    pub untyped_fields: Vec<PropOrSpread>
+}
+
 #[derive(Debug, Default)]
 pub enum TemplateGenerationMode {
     /// Applies the transformation as if the template is rendered inline
@@ -61,4 +71,13 @@ pub enum TemplateGenerationMode {
     /// e.g. `const foo = ref(0)` and `foo.bar` -> `$setup.foo.bar`.
     #[default]
     RenderFn
+}
+
+pub struct TransformScriptsResult {
+    /// EcmaScript module
+    pub module: Module,
+    /// Default exported object (not linked to module yet)
+    pub export_obj: ObjectLit,
+    /// Setup function (not linked to default export yet)
+    pub setup_fn: Option<Box<Function>>,
 }

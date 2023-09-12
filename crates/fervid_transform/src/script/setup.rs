@@ -1,10 +1,10 @@
 use fervid_core::SfcScriptBlock;
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{BlockStmt, Function, Id, ModuleDecl, ModuleItem, PropOrSpread, Stmt},
+    ecma::ast::{BlockStmt, Function, Id, ModuleDecl, ModuleItem, Stmt},
 };
 
-use crate::structs::{ScopeHelper, VueResolvedImports};
+use crate::structs::{ScopeHelper, VueResolvedImports, SfcExportedObjectHelper};
 
 mod imports;
 mod macros;
@@ -13,24 +13,23 @@ mod statements;
 pub use imports::*;
 pub use statements::*;
 
-pub struct ScriptSetupTransformResult {
+pub struct TransformScriptSetupResult {
     /// All the imports (and maybe exports) of the `<script setup>`
     pub module_decls: Vec<ModuleDecl>,
-    /// Fields of the SFC object
-    pub sfc_fields: Vec<PropOrSpread>,
-    /// `setup()` function
-    pub setup_fn: Function,
+    /// SFC object produced
+    pub sfc_object: SfcExportedObjectHelper,
+    /// `setup` function produced
+    pub setup_fn: Option<Box<Function>>
 }
 
 pub fn transform_and_record_script_setup(
     script_setup: SfcScriptBlock,
     scope_helper: &mut ScopeHelper,
-) -> ScriptSetupTransformResult {
+) -> TransformScriptSetupResult {
     let span = DUMMY_SP; // TODO
 
     let mut module_decls = Vec::<ModuleDecl>::new();
-    // TODO Maybe these fields need to be typed for a better error handling?
-    let mut sfc_fields = Vec::<PropOrSpread>::new();
+    let mut sfc_object = SfcExportedObjectHelper::default();
 
     let mut vue_imports = VueResolvedImports::default();
     let mut imports = Vec::<Id>::new();
@@ -54,7 +53,7 @@ pub fn transform_and_record_script_setup(
                     &stmt,
                     &mut scope_helper.setup_bindings,
                     &vue_imports,
-                    &mut sfc_fields,
+                    &mut sfc_object,
                 ) {
                     setup_body_stmts.push(transformed_stmt);
                 }
@@ -62,7 +61,8 @@ pub fn transform_and_record_script_setup(
         }
     }
 
-    let setup_fn = Function {
+    // Should we check that this function was not assigned anywhere else?
+    let setup_fn = Some(Box::new(Function {
         params: vec![],
         decorators: vec![],
         span,
@@ -74,12 +74,12 @@ pub fn transform_and_record_script_setup(
         is_async: false, // TODO
         type_params: None,
         return_type: None,
-    };
+    }));
 
-    ScriptSetupTransformResult {
+    TransformScriptSetupResult {
         module_decls,
-        sfc_fields,
-        setup_fn,
+        sfc_object,
+        setup_fn
     }
 }
 
@@ -110,7 +110,7 @@ mod tests {
         let mut imports = Vec::new();
         let mut vue_imports = VueResolvedImports::default();
         let mut setup = Vec::new();
-        let mut sfc_fields = Vec::new();
+        let mut sfc_object = Default::default();
 
         for module_item in module.body.iter() {
             match *module_item {
@@ -119,7 +119,7 @@ mod tests {
                 }
 
                 ModuleItem::Stmt(ref stmt) => {
-                    transform_and_record_stmt(stmt, &mut setup, &mut vue_imports, &mut sfc_fields);
+                    transform_and_record_stmt(stmt, &mut setup, &mut vue_imports, &mut sfc_object);
                 }
 
                 // Exports are ignored (ModuleDecl::Export* and ModuleDecl::Ts*)

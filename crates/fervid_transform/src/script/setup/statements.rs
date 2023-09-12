@@ -1,12 +1,12 @@
 use fervid_core::BindingTypes;
 use swc_core::ecma::ast::{
-    Callee, ClassDecl, Decl, Expr, ExprStmt, FnDecl, ObjectPatProp, Pat, PropOrSpread, RestPat,
+    Callee, ClassDecl, Decl, Expr, ExprStmt, FnDecl, ObjectPatProp, Pat, RestPat,
     Stmt, VarDecl, VarDeclKind, VarDeclarator,
 };
 
 use crate::{
     script::utils::unroll_paren_seq,
-    structs::{SetupBinding, VueResolvedImports},
+    structs::{SetupBinding, VueResolvedImports, SfcExportedObjectHelper},
 };
 
 use super::macros::transform_script_setup_macro_expr_stmt;
@@ -20,11 +20,11 @@ pub fn transform_and_record_stmt(
     stmt: &Stmt,
     out: &mut Vec<SetupBinding>,
     vue_imports: &VueResolvedImports,
-    sfc_fields: &mut Vec<PropOrSpread>,
+    sfc_object: &mut SfcExportedObjectHelper,
 ) -> Option<Stmt> {
     match stmt {
         // Try to process macros
-        Stmt::Expr(ref expr) => return transform_expr_stmt(expr, sfc_fields).map(Stmt::Expr),
+        Stmt::Expr(ref expr) => return transform_expr_stmt(expr, sfc_object).map(Stmt::Expr),
 
         Stmt::Decl(decl) => {
             analyze_decl(decl, out, vue_imports);
@@ -65,11 +65,11 @@ pub fn analyze_decl(decl: &Decl, out: &mut Vec<SetupBinding>, vue_imports: &VueR
 
 pub fn transform_expr_stmt(
     expr_stmt: &ExprStmt,
-    sfc_fields: &mut Vec<PropOrSpread>,
+    sfc_object: &mut SfcExportedObjectHelper,
 ) -> Option<ExprStmt> {
     // TODO Macros support
     // TODO Support macros inside variable declarations as well (const props = defineProps())??
-    transform_script_setup_macro_expr_stmt(expr_stmt, sfc_fields)
+    transform_script_setup_macro_expr_stmt(expr_stmt, sfc_object)
 }
 
 /// Javascript class declaration is always constant.

@@ -32,6 +32,7 @@ impl CodegenContext {
         template_expr: Option<Expr>,
         mut script: Module,
         mut sfc_export_obj: ObjectLit,
+        setup_fn: Option<Box<Function>>
     ) -> Module {
         if let Some(template_expr) = template_expr {
             // TODO Distinguish between RenderFn and Inline
@@ -49,6 +50,14 @@ impl CodegenContext {
                     }),
                     function: Box::new(render_fn),
                 }))));
+        }
+
+        // Add the `setup` function to the exported object
+        if let Some(setup_fn) = setup_fn {
+            sfc_export_obj.props.push(PropOrSpread::Prop(Box::new(Prop::Method(MethodProp {
+                key: PropName::Ident(Ident { span: DUMMY_SP, sym: JsWord::from("setup"), optional: false }),
+                function: setup_fn,
+            }))));
         }
 
         // Append the Vue imports

@@ -89,7 +89,7 @@ pub fn analyze_top_level_items(
     vue_imports: &mut VueResolvedImports,
 ) {
     // These are technically invalid for Options API, because macros are not supported there
-    let mut sfc_fields = Vec::new();
+    let mut sfc_object = Default::default();
 
     for module_item in module.body.iter() {
         match *module_item {
@@ -113,7 +113,7 @@ pub fn analyze_top_level_items(
             }
 
             ModuleItem::Stmt(ref stmt) => {
-                transform_and_record_stmt(stmt, &mut out.setup, vue_imports, &mut sfc_fields);
+                transform_and_record_stmt(stmt, &mut out.setup, vue_imports, &mut sfc_object);
             }
         }
     }

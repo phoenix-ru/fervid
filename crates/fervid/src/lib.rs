@@ -30,7 +30,7 @@
 //! let template_expr = ctx.generate_sfc_template(&template_block);
 //!
 //! // Generate the module code
-//! let sfc_module = ctx.generate_module(Some(template_expr), module.0, module.1);
+//! let sfc_module = ctx.generate_module(Some(template_expr), module.module, module.export_obj, module.setup_fn);
 //!
 //! // (Optional) Stringify the code
 //! let compiled_code = fervid_codegen::CodegenContext::stringify(input, &sfc_module, false);
@@ -61,7 +61,7 @@ pub fn compile_sync_naive(source: &str) -> Result<String, String> {
     })?;
 
     let mut scope_helper = ScopeHelper::default();
-    let module =
+    let transform_result =
         transform_and_record_scripts(sfc.script_setup, sfc.script_legacy, &mut scope_helper);
 
     let mut ctx = CodegenContext::default();
@@ -71,7 +71,12 @@ pub fn compile_sync_naive(source: &str) -> Result<String, String> {
         ctx.generate_sfc_template(&template_block)
     });
 
-    let sfc_module = ctx.generate_module(template_expr, module.0, module.1);
+    let sfc_module = ctx.generate_module(
+        template_expr,
+        transform_result.module,
+        transform_result.export_obj,
+        transform_result.setup_fn,
+    );
 
     let compiled_code = CodegenContext::stringify(&source, &sfc_module, false);
 
