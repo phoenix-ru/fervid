@@ -54,10 +54,17 @@ impl CodegenContext {
 
         // Add the `setup` function to the exported object
         if let Some(setup_fn) = setup_fn {
-            sfc_export_obj.props.push(PropOrSpread::Prop(Box::new(Prop::Method(MethodProp {
-                key: PropName::Ident(Ident { span: DUMMY_SP, sym: JsWord::from("setup"), optional: false }),
-                function: setup_fn,
-            }))));
+            match setup_fn.body {
+                // Append only when function has a body and it is not empty
+                Some(ref b) if !b.stmts.is_empty() => {
+                    sfc_export_obj.props.push(PropOrSpread::Prop(Box::new(Prop::Method(MethodProp {
+                        key: PropName::Ident(Ident { span: DUMMY_SP, sym: JsWord::from("setup"), optional: false }),
+                        function: setup_fn,
+                    }))));
+                },
+
+                _ => {}
+            }
         }
 
         // Append the Vue imports
