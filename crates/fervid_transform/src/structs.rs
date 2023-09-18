@@ -1,7 +1,7 @@
 //! Exports data structs used by the crate
 
 use fervid_core::BindingTypes;
-use swc_core::ecma::{atoms::JsWord, ast::{Id, Expr, PropOrSpread, Module, ObjectLit, Function}};
+use swc_core::ecma::{atoms::JsWord, ast::{Id, Expr, PropOrSpread, Module, ObjectLit, Function, ExprOrSpread}};
 use smallvec::SmallVec;
 
 #[derive(Debug, PartialEq)]
@@ -50,8 +50,7 @@ pub struct ScopeHelper {
 /// https://github.com/vuejs/rfcs/discussions/503
 pub struct SfcDefineModel {
     pub name: JsWord,
-    pub required: bool,
-    pub default: Option<Box<Expr>>,
+    pub options: Option<Box<ExprOrSpread>>,
     pub local: bool
 }
 
@@ -59,6 +58,8 @@ pub struct SfcDefineModel {
 pub struct SfcExportedObjectHelper {
     /// `emits` property
     pub emits: Option<Box<Expr>>,
+    /// Whether `defineExposes` was used
+    pub exposes: bool,
     /// To generate two-way binding code, as used in `defineModel`
     pub models: Vec<SfcDefineModel>,
     /// `props` property

@@ -61,6 +61,8 @@ pub fn transform_and_record_script_setup(
         }
     }
 
+    // TODO Add setup fn params based on `sfc_object_helper`
+
     // Should we check that this function was not assigned anywhere else?
     let setup_fn = Some(Box::new(Function {
         params: vec![],

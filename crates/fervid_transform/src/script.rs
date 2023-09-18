@@ -111,6 +111,8 @@ fn merge_sfc_helper(sfc_helper: SfcExportedObjectHelper, dest: &mut Vec<PropOrSp
         };
     }
 
+    // TODO Process sfc_helper.models here, because `defineModel` involves adding to `props` and `emits`
+
     merge!(emits, DUMMY_SP, EMITS.to_owned());
     merge!(props, DUMMY_SP, PROPS.to_owned());
 

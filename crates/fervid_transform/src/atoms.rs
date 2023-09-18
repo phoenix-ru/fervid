@@ -20,6 +20,16 @@ lazy_static! {
 
     // Composition API atoms
     // pub static ref COMPUTED: JsWord = JsWord::from("computed");
-    pub static ref REF: JsWord = JsWord::from("ref");
+    pub static ref DEFINE_EMITS: JsWord = JsWord::from("defineEmits");
+    pub static ref DEFINE_EXPOSE: JsWord = JsWord::from("defineExpose");
+    pub static ref DEFINE_MODEL: JsWord = JsWord::from("defineModel");
+    pub static ref DEFINE_PROPS: JsWord = JsWord::from("defineProps");
     pub static ref REACTIVE: JsWord = JsWord::from("reactive");
+    pub static ref REF: JsWord = JsWord::from("ref");
+
+    // Helper atoms
+    pub static ref EXPOSE_HELPER: JsWord = JsWord::from("__expose");
+    pub static ref MODEL_VALUE: JsWord = JsWord::from("modelValue");
+    pub static ref PROPS_HELPER: JsWord = JsWord::from("__props");
+    pub static ref USE_MODEL_HELPER: JsWord = JsWord::from("_useModel");
 }
