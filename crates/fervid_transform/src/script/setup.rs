@@ -16,8 +16,8 @@ pub use statements::*;
 pub struct TransformScriptSetupResult {
     /// All the imports (and maybe exports) of the `<script setup>`
     pub module_decls: Vec<ModuleDecl>,
-    /// SFC object produced
-    pub sfc_object: SfcExportedObjectHelper,
+    /// SFC object produced in a form of helper
+    pub sfc_object_helper: SfcExportedObjectHelper,
     /// `setup` function produced
     pub setup_fn: Option<Box<Function>>
 }
@@ -29,7 +29,7 @@ pub fn transform_and_record_script_setup(
     let span = DUMMY_SP; // TODO
 
     let mut module_decls = Vec::<ModuleDecl>::new();
-    let mut sfc_object = SfcExportedObjectHelper::default();
+    let mut sfc_object_helper = SfcExportedObjectHelper::default();
 
     let mut vue_imports = VueResolvedImports::default();
     let mut imports = Vec::<Id>::new();
@@ -53,7 +53,7 @@ pub fn transform_and_record_script_setup(
                     &stmt,
                     &mut scope_helper.setup_bindings,
                     &vue_imports,
-                    &mut sfc_object,
+                    &mut sfc_object_helper,
                 ) {
                     setup_body_stmts.push(transformed_stmt);
                 }
@@ -78,7 +78,7 @@ pub fn transform_and_record_script_setup(
 
     TransformScriptSetupResult {
         module_decls,
-        sfc_object,
+        sfc_object_helper,
         setup_fn
     }
 }

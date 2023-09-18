@@ -47,11 +47,21 @@ pub struct ScopeHelper {
     pub transform_mode: TemplateGenerationMode
 }
 
+/// https://github.com/vuejs/rfcs/discussions/503
+pub struct SfcDefineModel {
+    pub name: JsWord,
+    pub required: bool,
+    pub default: Option<Box<Expr>>,
+    pub local: bool
+}
+
 #[derive(Default)]
 pub struct SfcExportedObjectHelper {
-    // `emits` property
+    /// `emits` property
     pub emits: Option<Box<Expr>>,
-    // `props` property
+    /// To generate two-way binding code, as used in `defineModel`
+    pub models: Vec<SfcDefineModel>,
+    /// `props` property
     pub props: Option<Box<Expr>>,
     /// Other fields of the object
     pub untyped_fields: Vec<PropOrSpread>
