@@ -1,4 +1,4 @@
-use fervid_core::{AttributeOrBinding, VBindDirective, VOnDirective, StrOrExpr};
+use fervid_core::{AttributeOrBinding, VBindDirective, VOnDirective, StrOrExpr, VueImports};
 use regex::Regex;
 use swc_core::{
     common::{Span, Spanned, DUMMY_SP},
@@ -14,7 +14,6 @@ use swc_core::{
 
 use crate::{
     context::CodegenContext,
-    imports::VueImports,
     utils::{str_to_propname, to_pascalcase},
 };
 

@@ -1,4 +1,4 @@
-use fervid_core::{ElementNode, Node, StartingTag, VSlotDirective, VueDirectives};
+use fervid_core::{ElementNode, Node, StartingTag, VSlotDirective, VueDirectives, VueImports};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
@@ -12,7 +12,7 @@ use swc_core::{
 };
 
 use crate::{
-    context::CodegenContext, control_flow::SlottedIterator, imports::VueImports,
+    context::CodegenContext, control_flow::SlottedIterator,
     utils::str_to_propname,
 };
 

@@ -1,3 +1,4 @@
+use fervid_core::VueImports;
 use swc_core::{
     common::Span,
     ecma::{
@@ -6,7 +7,7 @@ use swc_core::{
     },
 };
 
-use crate::{context::CodegenContext, imports::VueImports};
+use crate::context::CodegenContext;
 
 impl CodegenContext {
     /// Generates `createCommentVNode("comment contents")`

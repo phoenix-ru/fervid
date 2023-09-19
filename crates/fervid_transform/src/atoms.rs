@@ -28,6 +28,8 @@ lazy_static! {
     pub static ref REF: JsWord = JsWord::from("ref");
 
     // Helper atoms
+    pub static ref EMIT: JsWord = JsWord::from("emit");
+    pub static ref EMIT_HELPER: JsWord = JsWord::from("__emit");
     pub static ref EXPOSE_HELPER: JsWord = JsWord::from("__expose");
     pub static ref MODEL_VALUE: JsWord = JsWord::from("modelValue");
     pub static ref PROPS_HELPER: JsWord = JsWord::from("__props");

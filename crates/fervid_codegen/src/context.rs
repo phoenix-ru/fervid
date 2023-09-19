@@ -1,8 +1,7 @@
+use fervid_core::VueImports;
 use flagset::FlagSet;
 use fxhash::FxHashMap as HashMap;
 use swc_core::ecma::atoms::JsWord;
-
-use crate::imports::VueImports;
 
 #[derive(Debug, Default)]
 pub struct CodegenContext {

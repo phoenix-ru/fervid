@@ -1,10 +1,10 @@
-use fervid_core::Interpolation;
+use fervid_core::{Interpolation, VueImports};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{CallExpr, Callee, Expr, ExprOrSpread, Ident},
 };
 
-use crate::{context::CodegenContext, imports::VueImports};
+use crate::context::CodegenContext;
 
 impl CodegenContext {
     pub fn generate_interpolation(

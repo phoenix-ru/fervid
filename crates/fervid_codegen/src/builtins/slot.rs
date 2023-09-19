@@ -1,4 +1,4 @@
-use fervid_core::{AttributeOrBinding, ElementNode, StrOrExpr, VBindDirective};
+use fervid_core::{AttributeOrBinding, ElementNode, StrOrExpr, VBindDirective, VueImports};
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
@@ -10,7 +10,7 @@ use swc_core::{
     },
 };
 
-use crate::{imports::VueImports, CodegenContext};
+use crate::CodegenContext;
 
 impl CodegenContext {
     /// Generates the code for `<slot>` element.

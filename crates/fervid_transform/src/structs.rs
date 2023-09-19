@@ -1,6 +1,6 @@
 //! Exports data structs used by the crate
 
-use fervid_core::BindingTypes;
+use fervid_core::{BindingTypes, VueImportsSet};
 use swc_core::ecma::{atoms::JsWord, ast::{Id, Expr, PropOrSpread, Module, ObjectLit, Function, ExprOrSpread}};
 use smallvec::SmallVec;
 
@@ -65,7 +65,9 @@ pub struct SfcExportedObjectHelper {
     /// `props` property
     pub props: Option<Box<Expr>>,
     /// Other fields of the object
-    pub untyped_fields: Vec<PropOrSpread>
+    pub untyped_fields: Vec<PropOrSpread>,
+    /// What imports need to be used
+    pub vue_imports: VueImportsSet
 }
 
 #[derive(Debug, Default)]

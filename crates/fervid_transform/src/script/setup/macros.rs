@@ -1,3 +1,4 @@
+use fervid_core::VueImports;
 use swc_core::ecma::{
     ast::{
         Bool, CallExpr, Callee, Expr, ExprOrSpread, ExprStmt, Ident, KeyValueProp, Lit, ObjectLit,
@@ -80,7 +81,9 @@ pub fn transform_script_setup_macro_expr_stmt(
         let define_model = read_define_model(&call_expr.args);
         let span = call_expr.span;
 
-        // TODO Import `_useModel`
+        // Add to imports
+        sfc_object_helper.vue_imports |= VueImports::UseModel;
+
         let use_model_ident = Ident {
             span,
             sym: USE_MODEL_HELPER.to_owned(),

@@ -1,4 +1,4 @@
-use fervid_core::VueDirectives;
+use fervid_core::{VueDirectives, VueImports};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
@@ -11,7 +11,7 @@ use swc_core::{
     },
 };
 
-use crate::{imports::VueImports, utils::str_to_propname, CodegenContext};
+use crate::{utils::str_to_propname, CodegenContext};
 
 mod v_html;
 mod v_model;

@@ -1,5 +1,5 @@
 use fervid_core::{
-    AttributeOrBinding, ElementNode, StartingTag, StrOrExpr, VBindDirective,
+    AttributeOrBinding, ElementNode, StartingTag, StrOrExpr, VBindDirective, VueImports,
 };
 use swc_core::{
     common::DUMMY_SP,
@@ -12,7 +12,7 @@ use swc_core::{
     },
 };
 
-use crate::{context::CodegenContext, control_flow::SlottedIterator, imports::VueImports};
+use crate::{context::CodegenContext, control_flow::SlottedIterator};
 
 impl CodegenContext {
     pub fn generate_element_vnode(

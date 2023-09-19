@@ -1,10 +1,10 @@
-use fervid_core::ElementNode;
+use fervid_core::{ElementNode, VueImports};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{ArrayLit, Expr, ExprOrSpread, Ident},
 };
 
-use crate::{imports::VueImports, CodegenContext};
+use crate::CodegenContext;
 
 impl CodegenContext {
     /// Generates `(_openBlock(), _createBlock(_KeepAlive, null, [keepalive_children], 1024))`

@@ -1,4 +1,4 @@
-use fervid_core::{ElementNode, Node, ElementKind};
+use fervid_core::{ElementNode, Node, ElementKind, VueImports};
 use smallvec::SmallVec;
 use swc_core::{
     common::{BytePos, Span, SyntaxContext, DUMMY_SP},
@@ -8,7 +8,7 @@ use swc_core::{
     },
 };
 
-use crate::{context::CodegenContext, imports::VueImports};
+use crate::context::CodegenContext;
 
 type TextNodesConcatenationVec = SmallVec<[Expr; 3]>;
 

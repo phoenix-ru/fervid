@@ -1,10 +1,10 @@
-use fervid_core::ElementNode;
+use fervid_core::{ElementNode, VueImports};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{Expr, Ident},
 };
 
-use crate::{imports::VueImports, CodegenContext};
+use crate::CodegenContext;
 
 impl CodegenContext {
     pub fn generate_transition(&mut self, element_node: &ElementNode) -> Expr {

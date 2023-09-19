@@ -1,4 +1,4 @@
-use flagset::flags;
+use fervid_core::VueImports;
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
@@ -11,42 +11,6 @@ use swc_core::{
 };
 
 use super::context::CodegenContext;
-
-flags! {
-    // #[derive(Clone, Copy)]
-    pub enum VueImports: u64 {
-        CreateBlock,
-        CreateCommentVNode,
-        CreateElementBlock,
-        CreateElementVNode,
-        CreateTextVNode,
-        CreateVNode,
-        Fragment,
-        KeepAlive,
-        NormalizeClass,
-        NormalizeStyle,
-        OpenBlock,
-        RenderList,
-        RenderSlot,
-        ResolveComponent,
-        ResolveDirective,
-        ResolveDynamicComponent,
-        Suspense,
-        Teleport,
-        ToDisplayString,
-        Transition,
-        TransitionGroup,
-        VModelCheckbox,
-        VModelDynamic,
-        VModelRadio,
-        VModelSelect,
-        VModelText,
-        VShow,
-        WithCtx,
-        WithDirectives,
-        WithModifiers,
-    }
-}
 
 impl CodegenContext {
     pub fn add_to_imports(&mut self, vue_import: VueImports) {
@@ -63,6 +27,7 @@ impl CodegenContext {
             VueImports::CreateVNode => "_createVNode",
             VueImports::Fragment => "_Fragment",
             VueImports::KeepAlive => "_KeepAlive",
+            VueImports::MergeModels => "_mergeModels",
             VueImports::NormalizeClass => "_normalizeClass",
             VueImports::NormalizeStyle => "_normalizeStyle",
             VueImports::OpenBlock => "_openBlock",
@@ -76,6 +41,7 @@ impl CodegenContext {
             VueImports::ToDisplayString => "_toDisplayString",
             VueImports::Transition => "_Transition",
             VueImports::TransitionGroup => "_TransitionGroup",
+            VueImports::UseModel => "_useModel",
             VueImports::VModelCheckbox => "_vModelCheckbox",
             VueImports::VModelDynamic => "_vModelDynamic",
             VueImports::VModelRadio => "_vModelRadio",
@@ -100,28 +66,6 @@ impl CodegenContext {
     pub fn get_and_add_import_ident(&mut self, vue_import: VueImports) -> JsWord {
         self.add_to_imports(vue_import);
         Self::get_import_ident(vue_import)
-    }
-
-    pub fn generate_imports_string(&self) -> String {
-        let mut result = String::from("import { ");
-        let mut has_first_import = false;
-
-        for import in self.used_imports.into_iter() {
-            if has_first_import {
-                result.push_str(", ");
-            }
-
-            let import_str = Self::get_import_str(import);
-            result.push_str(&import_str[1..]);
-            result.push_str(" as ");
-            result.push_str(import_str);
-
-            has_first_import = true;
-        }
-
-        result.push_str(" } from \"vue\"");
-
-        result
     }
 
     /// Generates all the imports used by template generation.

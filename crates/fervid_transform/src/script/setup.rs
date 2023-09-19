@@ -1,10 +1,16 @@
 use fervid_core::SfcScriptBlock;
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{BlockStmt, Function, Id, ModuleDecl, ModuleItem, Stmt},
+    ecma::ast::{
+        BindingIdent, BlockStmt, Function, Id, Ident, KeyValuePatProp, ModuleDecl, ModuleItem,
+        ObjectPat, ObjectPatProp, Param, Pat, Stmt,
+    },
 };
 
-use crate::structs::{ScopeHelper, VueResolvedImports, SfcExportedObjectHelper};
+use crate::{
+    atoms::{EMIT, EMIT_HELPER, EXPOSE, EXPOSE_HELPER, PROPS_HELPER},
+    structs::{ScopeHelper, SfcExportedObjectHelper, VueResolvedImports},
+};
 
 mod imports;
 mod macros;
@@ -19,7 +25,7 @@ pub struct TransformScriptSetupResult {
     /// SFC object produced in a form of helper
     pub sfc_object_helper: SfcExportedObjectHelper,
     /// `setup` function produced
-    pub setup_fn: Option<Box<Function>>
+    pub setup_fn: Option<Box<Function>>,
 }
 
 pub fn transform_and_record_script_setup(
@@ -61,11 +67,9 @@ pub fn transform_and_record_script_setup(
         }
     }
 
-    // TODO Add setup fn params based on `sfc_object_helper`
-
     // Should we check that this function was not assigned anywhere else?
     let setup_fn = Some(Box::new(Function {
-        params: vec![],
+        params: get_setup_fn_params(&sfc_object_helper),
         decorators: vec![],
         span,
         body: Some(BlockStmt {
@@ -81,8 +85,76 @@ pub fn transform_and_record_script_setup(
     TransformScriptSetupResult {
         module_decls,
         sfc_object_helper,
-        setup_fn
+        setup_fn,
     }
+}
+
+/// Used to populate the params to `setup()`, such as `__props`, `emit`, etc.
+fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param> {
+    let has_ctx_param = sfc_object_helper.emits.is_some() || sfc_object_helper.exposes;
+    let has_props = sfc_object_helper.props.is_some() || has_ctx_param;
+
+    let result_len = (has_props as usize) + (has_ctx_param as usize);
+    let mut result = Vec::<Param>::with_capacity(result_len);
+
+    if has_props {
+        result.push(Param {
+            span: DUMMY_SP,
+            decorators: vec![],
+            pat: Pat::Ident(BindingIdent {
+                id: Ident {
+                    span: DUMMY_SP,
+                    sym: PROPS_HELPER.to_owned(),
+                    optional: false,
+                },
+                type_ann: None,
+            }),
+        });
+    }
+
+    if has_ctx_param {
+        let mut ctx_props = Vec::<ObjectPatProp>::with_capacity(2);
+
+        macro_rules! add_prop {
+            ($prop_sym: expr, $rename_to: expr) => {
+                ctx_props.push(ObjectPatProp::KeyValue(KeyValuePatProp {
+                    key: swc_core::ecma::ast::PropName::Ident(Ident {
+                        span: DUMMY_SP,
+                        sym: $prop_sym,
+                        optional: false,
+                    }),
+                    value: Box::new(Pat::Ident(BindingIdent {
+                        id: Ident {
+                            span: DUMMY_SP,
+                            sym: $rename_to,
+                            optional: false,
+                        },
+                        type_ann: None,
+                    })),
+                }))
+            };
+        }
+
+        if sfc_object_helper.emits.is_some() {
+            add_prop!(EMIT.to_owned(), EMIT_HELPER.to_owned());
+        }
+        if sfc_object_helper.exposes {
+            add_prop!(EXPOSE.to_owned(), EXPOSE_HELPER.to_owned());
+        }
+
+        result.push(Param {
+            span: DUMMY_SP,
+            decorators: vec![],
+            pat: Pat::Object(ObjectPat {
+                span: DUMMY_SP,
+                props: ctx_props,
+                optional: false,
+                type_ann: None,
+            }),
+        });
+    }
+
+    result
 }
 
 #[cfg(test)]
