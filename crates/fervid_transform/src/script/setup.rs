@@ -3,12 +3,12 @@ use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
         BindingIdent, BlockStmt, Function, Id, Ident, KeyValuePatProp, ModuleDecl, ModuleItem,
-        ObjectPat, ObjectPatProp, Param, Pat, Stmt,
+        ObjectPat, ObjectPatProp, Param, Pat, Stmt, PropOrSpread, KeyValueProp, Prop, PropName,
     },
 };
 
 use crate::{
-    atoms::{EMIT, EMIT_HELPER, EXPOSE, EXPOSE_HELPER, PROPS_HELPER},
+    atoms::{EMIT, EMIT_HELPER, EXPOSE, EXPOSE_HELPER, PROPS_HELPER, EMITS, PROPS},
     structs::{ScopeHelper, SfcExportedObjectHelper, VueResolvedImports},
 };
 
@@ -18,6 +18,8 @@ mod statements;
 
 pub use imports::*;
 pub use statements::*;
+
+use self::macros::postprocess_macros;
 
 pub struct TransformScriptSetupResult {
     /// All the imports (and maybe exports) of the `<script setup>`
@@ -41,6 +43,7 @@ pub fn transform_and_record_script_setup(
     let mut imports = Vec::<Id>::new();
     let mut setup_body_stmts = Vec::<Stmt>::new();
 
+    // Go over the whole script setup: process all the statements and declarations
     for module_item in script_setup.content.body {
         match module_item {
             ModuleItem::ModuleDecl(decl) => {
@@ -67,6 +70,9 @@ pub fn transform_and_record_script_setup(
         }
     }
 
+    // Post-process macros, e.g. merge models to `props` and `emits`
+    postprocess_macros(&mut sfc_object_helper);
+
     // Should we check that this function was not assigned anywhere else?
     let setup_fn = Some(Box::new(Function {
         params: get_setup_fn_params(&sfc_object_helper),
@@ -87,6 +93,28 @@ pub fn transform_and_record_script_setup(
         sfc_object_helper,
         setup_fn,
     }
+}
+
+pub fn merge_sfc_helper(sfc_helper: SfcExportedObjectHelper, dest: &mut Vec<PropOrSpread>) {
+    macro_rules! merge {
+        ($field: ident, $span: expr, $sym: expr) => {
+            if let Some(value) = sfc_helper.$field {
+                dest.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                    key: PropName::Ident(Ident {
+                        span: $span,
+                        sym: $sym,
+                        optional: false,
+                    }),
+                    value,
+                }))));
+            }        
+        };
+    }
+
+    merge!(emits, DUMMY_SP, EMITS.to_owned());
+    merge!(props, DUMMY_SP, PROPS.to_owned());
+
+    dest.extend(sfc_helper.untyped_fields);
 }
 
 /// Used to populate the params to `setup()`, such as `__props`, `emit`, etc.
@@ -135,6 +163,9 @@ fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param
             };
         }
 
+        // TODO (minor) This should only happen when a variable is actually used
+        // `const emit = defineEmits()` is OK
+        // `defineEmits()` should not generate a prop
         if sfc_object_helper.emits.is_some() {
             add_prop!(EMIT.to_owned(), EMIT_HELPER.to_owned());
         }

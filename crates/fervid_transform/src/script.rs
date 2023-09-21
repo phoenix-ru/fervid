@@ -4,18 +4,15 @@ use fervid_core::SfcScriptBlock;
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
-        Function, Ident, KeyValueProp, Module, ObjectLit, Prop, PropName, PropOrSpread, ModuleItem,
+        Function, Module, ObjectLit, ModuleItem,
     },
 };
 
-use crate::{
-    atoms::{PROPS, EMITS},
-    structs::{ScopeHelper, SfcExportedObjectHelper, TransformScriptsResult},
-};
+use crate::structs::{ScopeHelper, TransformScriptsResult};
 
 use self::{
     options_api::{transform_and_record_script_options_api, AnalyzeOptions},
-    setup::transform_and_record_script_setup,
+    setup::{transform_and_record_script_setup, merge_sfc_helper},
 };
 
 mod options_api;
@@ -93,28 +90,4 @@ pub fn transform_and_record_scripts(
         export_obj,
         setup_fn,
     }
-}
-
-fn merge_sfc_helper(sfc_helper: SfcExportedObjectHelper, dest: &mut Vec<PropOrSpread>) {
-    macro_rules! merge {
-        ($field: ident, $span: expr, $sym: expr) => {
-            if let Some(value) = sfc_helper.$field {
-                dest.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                    key: PropName::Ident(Ident {
-                        span: $span,
-                        sym: $sym,
-                        optional: false,
-                    }),
-                    value,
-                }))));
-            }        
-        };
-    }
-
-    // TODO Process sfc_helper.models here, because `defineModel` involves adding to `props` and `emits`
-
-    merge!(emits, DUMMY_SP, EMITS.to_owned());
-    merge!(props, DUMMY_SP, PROPS.to_owned());
-
-    dest.extend(sfc_helper.untyped_fields);
 }

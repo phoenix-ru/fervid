@@ -1,16 +1,19 @@
 use fervid_core::VueImports;
-use swc_core::ecma::{
-    ast::{
-        Bool, CallExpr, Callee, Expr, ExprOrSpread, ExprStmt, Ident, KeyValueProp, Lit, ObjectLit,
-        Prop, PropName, PropOrSpread, Str,
+use swc_core::{
+    common::DUMMY_SP,
+    ecma::{
+        ast::{
+            ArrayLit, Bool, CallExpr, Callee, Expr, ExprOrSpread, ExprStmt, Ident, KeyValueProp,
+            Lit, ObjectLit, Prop, PropName, PropOrSpread, Str,
+        },
+        atoms::{js_word, JsWord},
     },
-    atoms::js_word,
 };
 
 use crate::{
     atoms::{
-        DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_MODEL, DEFINE_PROPS, EXPOSE_HELPER, MODEL_VALUE,
-        PROPS_HELPER, USE_MODEL_HELPER,
+        DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_MODEL, DEFINE_PROPS, EXPOSE_HELPER,
+        MERGE_MODELS_HELPER, MODEL_VALUE, PROPS_HELPER, USE_MODEL_HELPER,
     },
     structs::{SfcDefineModel, SfcExportedObjectHelper},
 };
@@ -108,7 +111,7 @@ pub fn transform_script_setup_macro_expr_stmt(
             spread: None,
             expr: Box::new(Expr::Lit(Lit::Str(Str {
                 span,
-                value: define_model.name,
+                value: define_model.name.to_owned(),
                 raw: None,
             }))),
         });
@@ -131,6 +134,8 @@ pub fn transform_script_setup_macro_expr_stmt(
             })
         }
 
+        sfc_object_helper.models.push(define_model);
+
         // _useModel(__props, "model-name", %model options%)
         Some(ExprStmt {
             span: expr_stmt.span,
@@ -143,6 +148,144 @@ pub fn transform_script_setup_macro_expr_stmt(
         })
     } else {
         bail!();
+    }
+}
+
+/// Mainly used to process `models` by adding them to `props` and `emits`
+pub fn postprocess_macros(sfc_object_helper: &mut SfcExportedObjectHelper) {
+    let len = sfc_object_helper.models.len();
+    println!("Here {}", len);
+    if len == 0 {
+        return;
+    }
+
+    let mut new_props = Vec::<PropOrSpread>::with_capacity(len);
+    let mut new_emits = Vec::<Option<ExprOrSpread>>::with_capacity(len);
+
+    for model in sfc_object_helper.models.drain(..) {
+        let model_value: Box<Expr> = match model.options {
+            Some(options) => options.expr,
+            None => Box::new(Expr::Object(ObjectLit {
+                span: DUMMY_SP,
+                props: vec![],
+            })),
+        };
+
+        let mut model_update_evt_name = String::with_capacity("update:".len() + model.name.len());
+        model_update_evt_name.push_str("update:");
+        model_update_evt_name.push_str(&model.name);
+
+        // Push a string literal into emits
+        new_emits.push(Some(ExprOrSpread {
+            spread: None,
+            expr: Box::new(Expr::Lit(Lit::Str(Str {
+                span: DUMMY_SP,
+                value: JsWord::from(model_update_evt_name),
+                raw: None,
+            }))),
+        }));
+
+        // Push an options object (or expr) into props
+        new_props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+            key: PropName::Str(Str {
+                span: DUMMY_SP,
+                value: model.name,
+                raw: None,
+            }),
+            value: model_value,
+        }))));
+    }
+
+    match sfc_object_helper.props.take() {
+        Some(mut existing_props) => {
+            // Try merging into an object if previous props is an object
+            if let Expr::Object(ref mut existing_props_obj) = *existing_props {
+                existing_props_obj.props.extend(new_props);
+
+                sfc_object_helper.props = Some(existing_props);
+            } else {
+                // Use `mergeModels` otherwise
+                sfc_object_helper.vue_imports |= VueImports::MergeModels;
+                let merge_models_ident = MERGE_MODELS_HELPER.to_owned();
+
+                let new_props = Expr::Call(CallExpr {
+                    span: DUMMY_SP,
+                    callee: Callee::Expr(Box::new(Expr::Ident(Ident {
+                        span: DUMMY_SP,
+                        sym: merge_models_ident,
+                        optional: false,
+                    }))),
+                    args: vec![
+                        ExprOrSpread {
+                            spread: None,
+                            expr: existing_props,
+                        },
+                        ExprOrSpread {
+                            spread: None,
+                            expr: Box::new(Expr::Object(ObjectLit {
+                                span: DUMMY_SP,
+                                props: new_props,
+                            })),
+                        },
+                    ],
+                    type_args: None,
+                });
+
+                sfc_object_helper.props = Some(Box::new(new_props));
+            };
+        }
+        None => {
+            sfc_object_helper.props = Some(Box::new(Expr::Object(ObjectLit {
+                span: DUMMY_SP,
+                props: new_props,
+            })))
+        }
+    }
+
+    match sfc_object_helper.emits.take() {
+        Some(mut existing_emits) => {
+            // Try merging into an array if previous emits is an array
+            if let Expr::Array(ref mut existing_emits_arr) = *existing_emits {
+                existing_emits_arr.elems.extend(new_emits);
+
+                sfc_object_helper.emits = Some(existing_emits);
+            } else {
+                // Use `mergeModels` otherwise
+                sfc_object_helper.vue_imports |= VueImports::MergeModels;
+                let merge_models_ident = MERGE_MODELS_HELPER.to_owned();
+
+                let new_emits = Expr::Call(CallExpr {
+                    span: DUMMY_SP,
+                    callee: Callee::Expr(Box::new(Expr::Ident(Ident {
+                        span: DUMMY_SP,
+                        sym: merge_models_ident,
+                        optional: false,
+                    }))),
+                    args: vec![
+                        ExprOrSpread {
+                            spread: None,
+                            expr: existing_emits,
+                        },
+                        ExprOrSpread {
+                            spread: None,
+                            expr: Box::new(Expr::Array(ArrayLit {
+                                span: DUMMY_SP,
+                                elems: new_emits,
+                            })),
+                        },
+                    ],
+                    type_args: None,
+                });
+
+                sfc_object_helper.emits = Some(Box::new(new_emits));
+            };
+        }
+        None => {
+            sfc_object_helper.emits = Some(Box::new(Expr::Array(ArrayLit {
+                span: DUMMY_SP,
+                elems: new_emits,
+            })))
+        }
     }
 }
 
