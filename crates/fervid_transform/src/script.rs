@@ -15,6 +15,7 @@ use self::{
     setup::{transform_and_record_script_setup, merge_sfc_helper},
 };
 
+mod common;
 mod options_api;
 mod setup;
 pub mod utils;

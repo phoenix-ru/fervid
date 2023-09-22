@@ -1,7 +1,8 @@
+use fervid_core::BindingTypes;
 use swc_core::ecma::{
     ast::{
         ArrayLit, ArrowExpr, BlockStmtOrExpr, Expr, Function, Lit, Module, ModuleDecl, ModuleItem,
-        ObjectLit, Prop, PropName, PropOrSpread, Tpl,
+        ObjectLit, Prop, PropName, PropOrSpread, Tpl, Decl, VarDeclKind, Stmt,
     },
     atoms::JsWord,
 };
@@ -9,10 +10,10 @@ use swc_core::ecma::{
 use crate::{
     atoms::*,
     script::{
-        setup::{collect_imports, transform_and_record_stmt},
-        utils::get_string_tpl,
+        setup::collect_imports,
+        utils::get_string_tpl, common::{categorize_class, categorize_fn_decl, categorize_var_declarator},
     },
-    structs::{ScriptLegacyVars, VueResolvedImports},
+    structs::{ScriptLegacyVars, VueResolvedImports, SetupBinding},
 };
 
 use super::{
@@ -88,9 +89,6 @@ pub fn analyze_top_level_items(
     out: &mut ScriptLegacyVars,
     vue_imports: &mut VueResolvedImports,
 ) {
-    // These are technically invalid for Options API, because macros are not supported there
-    let mut sfc_object = Default::default();
-
     for module_item in module.body.iter() {
         match *module_item {
             ModuleItem::ModuleDecl(ref module_decl) => {
@@ -113,9 +111,48 @@ pub fn analyze_top_level_items(
             }
 
             ModuleItem::Stmt(ref stmt) => {
-                transform_and_record_stmt(stmt, &mut out.setup, vue_imports, &mut sfc_object);
+                match stmt {
+                    Stmt::Decl(decl) => {
+                        analyze_decl(decl, &mut out.setup, vue_imports);
+                    }
+            
+                    _ => {}
+                }
             }
         }
+    }
+}
+
+/// Analyzes the declaration in Options API top-level context.
+/// These are typically `var`/`let`/`const` declarations, function declarations, etc.
+pub fn analyze_decl(decl: &Decl, out: &mut Vec<SetupBinding>, vue_imports: &mut VueResolvedImports) {
+    match decl {
+        Decl::Class(class) => out.push(categorize_class(class)),
+
+        Decl::Fn(fn_decl) => out.push(categorize_fn_decl(fn_decl)),
+
+        Decl::Var(var_decl) => {
+            let is_const = matches!(var_decl.kind, VarDeclKind::Const);
+
+            for decl in var_decl.decls.iter() {
+                categorize_var_declarator(&decl, out, vue_imports, is_const);
+            }
+        },
+
+        Decl::TsEnum(ts_enum) => {
+            // Ambient enums are also included, this is intentional
+            // I am not sure about `const enum`s though
+            out.push(SetupBinding(
+                ts_enum.id.sym.to_owned(),
+                BindingTypes::LiteralConst,
+            ))
+        }
+
+        // TODO: What?
+        // Decl::TsInterface(_) => todo!(),
+        // Decl::TsTypeAlias(_) => todo!(),
+        // Decl::TsModule(_) => todo!(),
+        _ => {}
     }
 }
 

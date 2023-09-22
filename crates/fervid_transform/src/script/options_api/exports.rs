@@ -1,7 +1,9 @@
 use fervid_core::BindingTypes;
 use swc_core::ecma::ast::{ExportDecl, ExportSpecifier, ModuleExportName, NamedExport};
 
-use crate::{structs::{SetupBinding, VueResolvedImports}, script::setup::analyze_decl};
+use crate::structs::{SetupBinding, VueResolvedImports};
+
+use super::analyzer::analyze_decl;
 
 /// Collects exports from e.g. `export { foo, bar as baz } from 'qux'`
 pub fn collect_exports_named(
@@ -47,13 +49,13 @@ pub fn collect_exports_named(
     }
 }
 
-/// Collects an export from e.g. `export function foo() {}`
+/// Collects an export from e.g. `export function foo() {}` or `export const bar = 'baz'`
 pub fn collect_exports_decl(
     export_decl: &ExportDecl,
     out: &mut Vec<SetupBinding>,
     vue_imports: &mut VueResolvedImports,
 ) {
-    analyze_decl(&export_decl.decl, out, vue_imports)
+    analyze_decl(&export_decl.decl, out, vue_imports);
 }
 
 fn collect_module_export_name(
