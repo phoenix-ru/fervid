@@ -1,7 +1,7 @@
 use fervid_core::{
     is_from_default_slot, is_html_tag, AttributeOrBinding, Conditional, ConditionalNodeSequence,
-    ElementKind, ElementNode, Interpolation, Node, SfcTemplateBlock, StartingTag, VOnDirective,
-    VSlotDirective, VUE_BUILTINS, VBindDirective, StrOrExpr,
+    ElementKind, ElementNode, Interpolation, Node, SfcTemplateBlock, StartingTag, StrOrExpr,
+    VBindDirective, VOnDirective, VSlotDirective, VUE_BUILTINS,
 };
 use smallvec::SmallVec;
 
@@ -32,7 +32,21 @@ pub fn transform_and_record_template(
     // Optimize conditional sequences within template root
     optimize_children(&mut template.roots, ElementKind::Element);
 
-    // Todo merge 1+ children into a separate `<template>` element so that Fragment gets generated
+    // Merge more than 1 child into a separate `<template>` element so that Fragment gets generated
+    if template.roots.len() > 1 {
+        let all_roots = std::mem::replace(&mut template.roots, Vec::with_capacity(1));
+        let new_root = Node::Element(ElementNode {
+            kind: ElementKind::Element,
+            starting_tag: StartingTag {
+                tag_name: "template",
+                attributes: vec![],
+                directives: None,
+            },
+            children: all_roots,
+            template_scope: 0,
+        });
+        template.roots.push(new_root);
+    }
 
     let mut template_visitor = TemplateVisitor {
         scope_helper,
@@ -120,7 +134,9 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
         // To move out of &ElementNode to ElementNode and avoid "partially moved variable" error
         macro_rules! deref_element {
             ($child: ident) => {{
-                let Node::Element(child_element) = $child else { unreachable!() };
+                let Node::Element(child_element) = $child else {
+                    unreachable!()
+                };
                 child_element
             }};
         }
@@ -345,19 +361,16 @@ impl TemplateVisitor<'_> {
         if let Some(builtin_type) = VUE_BUILTINS.get(tag_name) {
             // Special case for `<component>`. If it does not have `is`, this is not a built-in
             if tag_name == "component" {
-                let has_is = starting_tag
-                    .attributes
-                    .iter()
-                    .any(|attr| {
-                        matches!(
-                            attr,
-                            AttributeOrBinding::RegularAttribute { name: "is", .. }
-                                | AttributeOrBinding::VBind(VBindDirective {
-                                    argument: Some(StrOrExpr::Str("is")),
-                                    ..
-                                })
-                        )
-                    });
+                let has_is = starting_tag.attributes.iter().any(|attr| {
+                    matches!(
+                        attr,
+                        AttributeOrBinding::RegularAttribute { name: "is", .. }
+                            | AttributeOrBinding::VBind(VBindDirective {
+                                argument: Some(StrOrExpr::Str("is")),
+                                ..
+                            })
+                    )
+                });
 
                 if !has_is {
                     return ElementKind::Component;
@@ -410,7 +423,10 @@ mod tests {
             scope_helper: &mut scope_helper,
             current_scope: 0,
         };
-        assert!(matches!(template_visitor.recognize_element_kind(&starting_tag), ElementKind::Component));
+        assert!(matches!(
+            template_visitor.recognize_element_kind(&starting_tag),
+            ElementKind::Component
+        ));
     }
 
     #[test]
@@ -505,16 +521,19 @@ mod tests {
 
         transform_and_record_template(&mut sfc_template, &mut Default::default());
 
-        // Template roots: two conditional sequences
-        assert_eq!(2, sfc_template.roots.len());
-        let Node::ConditionalSeq(ref seq) = sfc_template.roots[0] else {
-            panic!("roots[0] is not a conditional sequence")
+        // Template roots: two conditional sequences inside one root
+        assert_eq!(1, sfc_template.roots.len());
+        let Node::Element(ref root) = sfc_template.roots[0] else {
+            panic!("root is not an element")
+        };
+        let Node::ConditionalSeq(ref seq) = root.children[0] else {
+            panic!("root.children[0] is not a conditional sequence")
         };
         // <h1 v-if="true">if</h1>
         check_if_node(&seq.if_node);
 
-        let Node::ConditionalSeq(ref seq) = sfc_template.roots[1] else {
-            panic!("roots[1] not a conditional sequence")
+        let Node::ConditionalSeq(ref seq) = root.children[1] else {
+            panic!("root.children[1] not a conditional sequence")
         };
         // <h1 v-if="true">if</h1>
         check_if_node(&seq.if_node);
@@ -535,15 +554,18 @@ mod tests {
 
         transform_and_record_template(&mut sfc_template, &mut Default::default());
 
-        // Template roots: two conditional sequences
-        assert_eq!(2, sfc_template.roots.len());
-        let Node::ConditionalSeq(ref seq) = sfc_template.roots[0] else {
+        // Template roots: two conditional sequences inside one root
+        assert_eq!(1, sfc_template.roots.len());
+        let Node::Element(ref root) = sfc_template.roots[0] else {
+            panic!("root is not an element")
+        };
+        let Node::ConditionalSeq(ref seq) = root.children[0] else {
             panic!("roots[0] is not a conditional sequence")
         };
         check_if_node(&seq.if_node);
         check_else_if_node(&seq.else_if_nodes[0]);
 
-        let Node::ConditionalSeq(ref seq) = sfc_template.roots[1] else {
+        let Node::ConditionalSeq(ref seq) = root.children[1] else {
             panic!("roots[1] not a conditional sequence")
         };
         check_if_node(&seq.if_node);
@@ -563,10 +585,13 @@ mod tests {
 
         transform_and_record_template(&mut sfc_template, &mut Default::default());
 
-        // Template roots: still two
-        assert_eq!(2, sfc_template.roots.len());
-        assert!(matches!(sfc_template.roots[0], Node::Element(_)));
-        assert!(matches!(sfc_template.roots[1], Node::Element(_)));
+        // Template root children: still two
+        assert_eq!(1, sfc_template.roots.len());
+        let Node::Element(ref root) = sfc_template.roots[0] else {
+            panic!("root is not an element")
+        };
+        assert!(matches!(root.children[0], Node::Element(_)));
+        assert!(matches!(root.children[1], Node::Element(_)));
     }
 
     #[test]
@@ -657,8 +682,12 @@ mod tests {
 
         transform_and_record_template(&mut sfc_template, &mut Default::default());
 
-        // Template roots: both nodes are still present
-        assert_eq!(2, sfc_template.roots.len());
+        // Template root: both children nodes are still present
+        assert_eq!(1, sfc_template.roots.len());
+        let Node::Element(ref root) = sfc_template.roots[0] else {
+            panic!("root is not an element")
+        };
+        assert_eq!(2, root.children.len());
     }
 
     // text
