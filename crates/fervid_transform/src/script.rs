@@ -73,6 +73,7 @@ pub fn transform_and_record_scripts(
         let setup_transform_result = transform_and_record_script_setup(script_setup, scope_helper);
 
         // TODO Push imports at module top or bottom? Or smart merge?
+        // TODO Merge Vue imports produced by module transformation
         // TODO Is this really a `Vec<ModuleDecl>` or should rather be a `Vec<ModuleItem>`?
         for module_decl in setup_transform_result.module_decls.into_iter() {
             module.body.push(ModuleItem::ModuleDecl(module_decl));

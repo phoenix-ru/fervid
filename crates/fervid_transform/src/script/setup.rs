@@ -119,8 +119,8 @@ pub fn merge_sfc_helper(sfc_helper: SfcExportedObjectHelper, dest: &mut Vec<Prop
 
 /// Used to populate the params to `setup()`, such as `__props`, `emit`, etc.
 fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param> {
-    let has_ctx_param = sfc_object_helper.emits.is_some() || sfc_object_helper.exposes;
-    let has_props = sfc_object_helper.props.is_some() || has_ctx_param;
+    let has_ctx_param = sfc_object_helper.is_setup_emit_referenced || sfc_object_helper.is_setup_expose_referenced;
+    let has_props = sfc_object_helper.is_setup_props_referenced || has_ctx_param;
 
     let result_len = (has_props as usize) + (has_ctx_param as usize);
     let mut result = Vec::<Param>::with_capacity(result_len);
@@ -163,13 +163,10 @@ fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param
             };
         }
 
-        // TODO (minor) This should only happen when a variable is actually used
-        // `const emit = defineEmits()` is OK
-        // `defineEmits()` should not generate a prop
-        if sfc_object_helper.emits.is_some() {
+        if sfc_object_helper.is_setup_emit_referenced {
             add_prop!(EMIT.to_owned(), EMIT_HELPER.to_owned());
         }
-        if sfc_object_helper.exposes {
+        if sfc_object_helper.is_setup_expose_referenced {
             add_prop!(EXPOSE.to_owned(), EXPOSE_HELPER.to_owned());
         }
 

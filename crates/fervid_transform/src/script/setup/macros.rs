@@ -3,8 +3,8 @@ use swc_core::{
     common::DUMMY_SP,
     ecma::{
         ast::{
-            ArrayLit, Bool, CallExpr, Callee, Expr, ExprOrSpread, ExprStmt, Ident, KeyValueProp,
-            Lit, ObjectLit, Prop, PropName, PropOrSpread, Str,
+            ArrayLit, Bool, CallExpr, Callee, Expr, ExprOrSpread, Ident, KeyValueProp, Lit,
+            ObjectLit, Prop, PropName, PropOrSpread, Str,
         },
         atoms::{js_word, JsWord},
     },
@@ -12,27 +12,33 @@ use swc_core::{
 
 use crate::{
     atoms::{
-        DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_MODEL, DEFINE_PROPS, EXPOSE_HELPER,
+        DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_MODEL, DEFINE_PROPS, EMIT_HELPER, EXPOSE_HELPER,
         MERGE_MODELS_HELPER, MODEL_VALUE, PROPS_HELPER, USE_MODEL_HELPER,
     },
     structs::{SfcDefineModel, SfcExportedObjectHelper},
 };
 
-pub fn transform_script_setup_macro_expr_stmt(
-    expr_stmt: &ExprStmt,
+/// Tries to transform a Vue compiler macro.\
+/// When `is_var_decl` is `true`, this function is guaranteed to return an `Expr`.
+/// In case the macro transform does not return anything, an `Expr` containing `undefined` is returned instead.
+///
+/// See https://vuejs.org/api/sfc-script-setup.html#defineprops-defineemits
+pub fn transform_script_setup_macro_expr(
+    expr: &Expr,
     sfc_object_helper: &mut SfcExportedObjectHelper,
-) -> Option<ExprStmt> {
+    is_var_decl: bool,
+) -> Option<Expr> {
     // `defineExpose` and `defineModel` actually generate something
     // https://play.vuejs.org/#eNp9kE1LxDAQhv/KmEtXWOphb8sqqBRU8AMVveRS2mnNmiYhk66F0v/uJGVXD8ueEt7nTfJkRnHtXL7rUazFhiqvXADC0LsraVTnrA8wgscGJmi87SDjaiaNNJU1FKCjFi4jX2R3qLWFT+t1fZadx0qNjTJYDM4SLsbUnRjM8aOtUS+yLi4fpeZbGW0uZgV+XCxFIH6kUW2+JWvYb5QGQIrKdk5p9M8uKJaQYg2JRFayw89DyoLvcbnPqy+svo/kWxpiJsWLR0K/QykOLJS+xTDj4u0JB94fIHv3mtsn4CuS1X10nGs3valZ+18v2d6nKSvTvlMxBDS0/1QUjc0p9aXgyd+e+Pqf7ipfpXPSTGL6BRH3n+Q=
 
     macro_rules! bail {
         () => {
-            return Some(expr_stmt.to_owned());
+            return Some(expr.to_owned());
         };
     }
 
     // Script setup macros are calls
-    let Expr::Call(ref call_expr) = *expr_stmt.expr else {
+    let Expr::Call(ref call_expr) = expr else {
         bail!();
     };
 
@@ -45,6 +51,8 @@ pub fn transform_script_setup_macro_expr_stmt(
         bail!();
     };
 
+    // TODO We can also strip out `onMounted` and `onUnmounted` for SSR here
+
     // We do a bit of a juggle here to use `string_cache`s fast comparisons
     let sym = &callee_ident.sym;
     if DEFINE_PROPS.eq(sym) {
@@ -53,15 +61,37 @@ pub fn transform_script_setup_macro_expr_stmt(
             sfc_object_helper.props = Some(arg0.expr.to_owned());
         }
 
-        None
+        // Return `__props` when in var mode
+        if is_var_decl {
+            sfc_object_helper.is_setup_props_referenced = true;
+
+            Some(Expr::Ident(Ident {
+                span: call_expr.span,
+                sym: PROPS_HELPER.to_owned(),
+                optional: false,
+            }))
+        } else {
+            None
+        }
     } else if DEFINE_EMITS.eq(sym) {
         if let Some(arg0) = &call_expr.args.get(0) {
             sfc_object_helper.emits = Some(arg0.expr.to_owned())
         }
 
-        None
+        // Return `__emits` when in var mode
+        if is_var_decl {
+            sfc_object_helper.is_setup_emit_referenced = true;
+
+            Some(Expr::Ident(Ident {
+                span: call_expr.span,
+                sym: EMIT_HELPER.to_owned(),
+                optional: false,
+            }))
+        } else {
+            None
+        }
     } else if DEFINE_EXPOSE.eq(sym) {
-        sfc_object_helper.exposes = true;
+        sfc_object_helper.is_setup_expose_referenced = true;
 
         // __expose
         let new_callee_ident = Ident {
@@ -71,15 +101,12 @@ pub fn transform_script_setup_macro_expr_stmt(
         };
 
         // __expose(%call_expr.args%)
-        Some(ExprStmt {
-            span: expr_stmt.span,
-            expr: Box::new(Expr::Call(CallExpr {
-                span: call_expr.span,
-                callee: Callee::Expr(Box::new(Expr::Ident(new_callee_ident))),
-                args: call_expr.args.to_owned(),
-                type_args: None,
-            })),
-        })
+        Some(Expr::Call(CallExpr {
+            span: call_expr.span,
+            callee: Callee::Expr(Box::new(Expr::Ident(new_callee_ident))),
+            args: call_expr.args.to_owned(),
+            type_args: None,
+        }))
     } else if DEFINE_MODEL.eq(sym) {
         let define_model = read_define_model(&call_expr.args);
         let span = call_expr.span;
@@ -97,6 +124,7 @@ pub fn transform_script_setup_macro_expr_stmt(
             Vec::<ExprOrSpread>::with_capacity(if define_model.local { 3 } else { 2 });
 
         // __props
+        sfc_object_helper.is_setup_props_referenced = true;
         use_model_args.push(ExprOrSpread {
             spread: None,
             expr: Box::new(Expr::Ident(Ident {
@@ -137,15 +165,12 @@ pub fn transform_script_setup_macro_expr_stmt(
         sfc_object_helper.models.push(define_model);
 
         // _useModel(__props, "model-name", %model options%)
-        Some(ExprStmt {
-            span: expr_stmt.span,
-            expr: Box::new(Expr::Call(CallExpr {
-                span,
-                callee: Callee::Expr(Box::new(Expr::Ident(use_model_ident))),
-                args: use_model_args,
-                type_args: None,
-            })),
-        })
+        Some(Expr::Call(CallExpr {
+            span,
+            callee: Callee::Expr(Box::new(Expr::Ident(use_model_ident))),
+            args: use_model_args,
+            type_args: None,
+        }))
     } else {
         bail!();
     }
@@ -154,7 +179,6 @@ pub fn transform_script_setup_macro_expr_stmt(
 /// Mainly used to process `models` by adding them to `props` and `emits`
 pub fn postprocess_macros(sfc_object_helper: &mut SfcExportedObjectHelper) {
     let len = sfc_object_helper.models.len();
-    println!("Here {}", len);
     if len == 0 {
         return;
     }
@@ -337,7 +361,7 @@ fn is_local(options: Option<&ExprOrSpread>) -> bool {
     let local_prop_value = obj.props.iter().find_map(|prop| match prop {
         PropOrSpread::Prop(prop) => {
             let Prop::KeyValue(ref key_value) = **prop else {
-                return None
+                return None;
             };
 
             match key_value.key {

@@ -58,8 +58,12 @@ pub struct SfcDefineModel {
 pub struct SfcExportedObjectHelper {
     /// `emits` property
     pub emits: Option<Box<Expr>>,
-    /// Whether `defineExposes` was used
-    pub exposes: bool,
+    /// Whether `__emit` was referenced (e.g. as a result of `const foo = defineEmits()`)
+    pub is_setup_emit_referenced: bool,
+    /// Whether `__expose` was referenced (e.g. as a result of `defineExpose()`)
+    pub is_setup_expose_referenced: bool,
+    /// Whether `__props` was referenced (e.g. as a result of `const foo = defineProps()` or from `useModel`)
+    pub is_setup_props_referenced: bool,
     /// To generate two-way binding code, as used in `defineModel`
     pub models: Vec<SfcDefineModel>,
     /// `props` property

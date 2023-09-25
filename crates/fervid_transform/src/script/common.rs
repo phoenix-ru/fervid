@@ -23,7 +23,23 @@ pub fn categorize_fn_decl(fn_decl: &FnDecl) -> SetupBinding {
     SetupBinding(fn_decl.ident.sym.to_owned(), BindingTypes::SetupConst)
 }
 
-/// Collects the identifiers from `foo = 42` and `bar = 'baz'` separately in `const foo = 42, bar = 'baz'`
+/// Collects the identifiers from `foo = 42` and `bar = 'baz'` separately in `const foo = 42, bar = 'baz'`.
+///
+/// Categorizes `var`/`let`/`const` declaration block
+/// which may include multiple variables.
+/// Categorization strongly depends on the previously analyzed `vue_imports`.
+///
+/// ## Examples
+/// ```js
+/// import { ref, computed, reactive } from 'vue'
+///
+/// let foo = ref(1)                    // BindingTypes::SetupLet
+/// const
+///     pi = 3.14,                      // BindingTypes::LiteralConst
+///     bar = ref(2),                   // BindingTypes::SetupRef
+///     baz = computed(() => 3),        // BindingTypes::SetupRef
+///     qux = reactive({ x: 4 }),       // BindingTypes::SetupReactiveConst
+/// ```
 pub fn categorize_var_declarator(
     var_decl: &VarDeclarator,
     out: &mut Vec<SetupBinding>,

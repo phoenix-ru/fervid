@@ -1,15 +1,12 @@
 use fervid_core::BindingTypes;
-use swc_core::ecma::ast::{
-    Decl, Stmt, VarDecl,
-    VarDeclKind,
-};
+use swc_core::ecma::ast::{Decl, ExprStmt, Stmt, VarDeclKind};
 
 use crate::{
     script::common::{categorize_class, categorize_fn_decl, categorize_var_declarator},
     structs::{SetupBinding, SfcExportedObjectHelper, VueResolvedImports},
 };
 
-use super::macros::transform_script_setup_macro_expr_stmt;
+use super::macros::transform_script_setup_macro_expr;
 
 /// Analyzes the statement in `script setup` context.
 /// This can either be:
@@ -23,12 +20,19 @@ pub fn transform_and_record_stmt(
     sfc_object_helper: &mut SfcExportedObjectHelper,
 ) -> Option<Stmt> {
     match stmt {
-        Stmt::Expr(ref expr) => {
-            return transform_script_setup_macro_expr_stmt(expr, sfc_object_helper).map(Stmt::Expr)
+        Stmt::Expr(ref expr_stmt) => {
+            let span = expr_stmt.span;
+            return transform_script_setup_macro_expr(&expr_stmt.expr, sfc_object_helper, false)
+                .map(|transformed| {
+                    Stmt::Expr(ExprStmt {
+                        span,
+                        expr: Box::new(transformed),
+                    })
+                });
         }
 
-        Stmt::Decl(decl) => {
-            transform_decl_stmt(decl, out, vue_imports, sfc_object_helper);
+        Stmt::Decl(ref decl) => {
+            return transform_decl_stmt(decl, out, vue_imports, sfc_object_helper).map(Stmt::Decl);
         }
 
         _ => {}
@@ -44,14 +48,33 @@ fn transform_decl_stmt(
     decl: &Decl,
     out: &mut Vec<SetupBinding>,
     vue_imports: &VueResolvedImports,
-    sfc_object_helper: &mut SfcExportedObjectHelper
-) {
+    sfc_object_helper: &mut SfcExportedObjectHelper,
+) -> Option<Decl> {
     match decl {
         Decl::Class(class) => out.push(categorize_class(class)),
 
         Decl::Fn(fn_decl) => out.push(categorize_fn_decl(fn_decl)),
 
-        Decl::Var(var_decl) => transform_and_record_var_decls(var_decl, out, vue_imports),
+        Decl::Var(var_decl) => {
+            let is_const = matches!(var_decl.kind, VarDeclKind::Const);
+
+            // We need to clone the whole declaration to mutate its decls.
+            // I am not too happy by the amount of copying done everywhere. Maybe it should mutate instead?..
+            let mut new_var_decl = var_decl.to_owned();
+
+            for var_declarator in new_var_decl.as_mut().decls.iter_mut() {
+                categorize_var_declarator(&var_declarator, out, vue_imports, is_const);
+
+                if let Some(ref mut init_expr) = var_declarator.init {
+                    let transformed = transform_script_setup_macro_expr(&init_expr, sfc_object_helper, true);
+                    if let Some(transformed) = transformed {
+                        *init_expr = Box::new(transformed);
+                    }
+                }
+            }
+
+            return Some(Decl::Var(new_var_decl));
+        }
 
         Decl::TsEnum(ts_enum) => {
             // Ambient enums are also included, this is intentional
@@ -68,36 +91,7 @@ fn transform_decl_stmt(
         // Decl::TsModule(_) => todo!(),
         _ => {}
     }
-}
 
-// TODO The algorithms are a bit different for <script>, <script setup> and setup()
-// I still need to test how it works MORE
-
-/// Categorizes `var`/`let`/`const` declaration block
-/// which may include multiple variables.
-/// Categorization strongly depends on the previously analyzed `vue_imports`.
-///
-/// ## Examples
-/// ```js
-/// import { ref, computed, reactive } from 'vue'
-///
-/// let foo = ref(1)                    // BindingTypes::SetupLet
-/// const
-///     pi = 3.14,                      // BindingTypes::LiteralConst
-///     bar = ref(2),                   // BindingTypes::SetupRef
-///     baz = computed(() => 3),        // BindingTypes::SetupRef
-///     qux = reactive({ x: 4 }),       // BindingTypes::SetupReactiveConst
-/// ```
-///
-pub fn transform_and_record_var_decls(
-    var_decl: &VarDecl,
-    out: &mut Vec<SetupBinding>,
-    vue_imports: &VueResolvedImports,
-) {
-    let is_const = matches!(var_decl.kind, VarDeclKind::Const);
-
-    for decl in var_decl.decls.iter() {
-        categorize_var_declarator(&decl, out, vue_imports, is_const);
-        // TODO Process macros
-    }
+    // By default, just return the copied declaration
+    Some(decl.to_owned())
 }
