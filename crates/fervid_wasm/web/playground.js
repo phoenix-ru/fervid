@@ -34,7 +34,7 @@ function compileAndTime (input) {
 function mountEditor (inputElement, outputElement, initialValue, compile) {
     const inputEditorInstance = monaco.editor.create(inputElement, {
         value: initialValue,
-        language: 'vue',
+        language: 'html',
         minimap: { enabled: false }
     })
 
