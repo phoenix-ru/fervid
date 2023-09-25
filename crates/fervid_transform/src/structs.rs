@@ -91,6 +91,8 @@ pub enum TemplateGenerationMode {
 }
 
 pub struct TransformScriptsResult {
+    /// Imports added by transformation (usually by macros)
+    pub added_imports: VueImportsSet,
     /// EcmaScript module
     pub module: Module,
     /// Default exported object (not linked to module yet)

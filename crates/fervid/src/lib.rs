@@ -71,6 +71,9 @@ pub fn compile_sync_naive(source: &str) -> Result<String, String> {
         ctx.generate_sfc_template(&template_block)
     });
 
+    // Add imports from script transformation (because macros generate new imports)
+    ctx.used_imports |= transform_result.added_imports;
+
     let sfc_module = ctx.generate_module(
         template_expr,
         transform_result.module,

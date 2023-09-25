@@ -1,6 +1,6 @@
 //! Responsible for `<script>` and `<script setup>` transformations and analysis.
 
-use fervid_core::SfcScriptBlock;
+use fervid_core::{SfcScriptBlock, VueImportsSet};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
@@ -69,6 +69,7 @@ pub fn transform_and_record_scripts(
     //
 
     let mut setup_fn: Option<Box<Function>> = None;
+    let mut added_imports = VueImportsSet::default();
     if let Some(script_setup) = script_setup {
         let setup_transform_result = transform_and_record_script_setup(script_setup, scope_helper);
 
@@ -80,6 +81,7 @@ pub fn transform_and_record_scripts(
         }
 
         // Merge fields into an SFC exported object
+        added_imports = setup_transform_result.sfc_object_helper.vue_imports;
         merge_sfc_helper(setup_transform_result.sfc_object_helper, &mut export_obj.props);
 
         // TODO Adding bindings to `setup()` in Options API will get overwritten in `<script setup>`
@@ -88,6 +90,7 @@ pub fn transform_and_record_scripts(
     }
 
     TransformScriptsResult {
+        added_imports,
         module,
         export_obj,
         setup_fn,
