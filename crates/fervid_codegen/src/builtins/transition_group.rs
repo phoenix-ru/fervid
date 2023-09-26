@@ -1,14 +1,11 @@
 use fervid_core::{ElementNode, VueImports};
-use swc_core::{
-    common::DUMMY_SP,
-    ecma::ast::{Expr, Ident},
-};
+use swc_core::ecma::ast::{Expr, Ident};
 
 use crate::CodegenContext;
 
 impl CodegenContext {
     pub fn generate_transition_group(&mut self, element_node: &ElementNode) -> Expr {
-        let span = DUMMY_SP; // TODO
+        let span = element_node.span;
 
         // _TransitionGroup
         let transition_group_identifier = Expr::Ident(Ident {
@@ -22,13 +19,11 @@ impl CodegenContext {
 
         let transition_group_slots = self.generate_builtin_slots(element_node);
 
-        let patch_flag = 0; // TODO This comes from the attributes
-
         self.generate_componentlike(
             transition_group_identifier,
             transition_group_attrs,
             transition_group_slots,
-            patch_flag,
+            &element_node.patch_hints,
             false,
             span,
         )
@@ -37,7 +32,8 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{BuiltinType, ElementKind, StartingTag, Node, AttributeOrBinding};
+    use fervid_core::{AttributeOrBinding, BuiltinType, ElementKind, Node, StartingTag};
+    use swc_core::common::DUMMY_SP;
 
     use crate::test_utils::js;
 
@@ -56,6 +52,8 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"_createVNode(_TransitionGroup)"#,
         )
@@ -86,6 +84,8 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"_createVNode(_TransitionGroup,{foo:"bar",baz:qux})"#,
         )
@@ -104,6 +104,8 @@ mod tests {
                 },
                 children: vec![Node::Text("foobar")],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"_createVNode(_TransitionGroup,null,{"default":_withCtx(()=>[_createTextVNode("foobar")]),_:1})"#,
         )
@@ -134,6 +136,8 @@ mod tests {
                 },
                 children: vec![Node::Text("foobar")],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"_createVNode(_TransitionGroup,{foo:"bar",baz:qux},{"default":_withCtx(()=>[_createTextVNode("foobar")]),_:1})"#,
         )

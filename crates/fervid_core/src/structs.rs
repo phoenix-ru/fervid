@@ -1,4 +1,4 @@
-use swc_core::ecma::ast::{Expr, Pat};
+use swc_core::{ecma::{ast::{Expr, Pat}, atoms::JsWord}, common::Span};
 
 /// A Node represents a part of the Abstract Syntax Tree (AST).
 #[derive(Debug, Clone)]
@@ -27,6 +27,11 @@ pub enum Node<'a> {
     /// `ConditionalSeq` is a representation of `v-if`/`v-else-if`/`v-else` node sequence.
     /// Its children are the other `Node`s, this node is just a wrapper.
     ConditionalSeq(ConditionalNodeSequence<'a>),
+
+    // /// `ForFragment` is a representation of a `v-for` node.
+    // /// This type is for ergonomics,
+    // /// i.e. to separate patch flags and `key` of the repeater from the repeatable.
+    // ForFragment(ForFragment<'a>)
 }
 
 /// Element node is a classic HTML node with some added functionality:
@@ -41,6 +46,8 @@ pub struct ElementNode<'a> {
     pub starting_tag: StartingTag<'a>,
     pub children: Vec<Node<'a>>,
     pub template_scope: u32,
+    pub patch_hints: PatchHints,
+    pub span: Span
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -48,7 +55,7 @@ pub enum ElementKind {
     Builtin(BuiltinType),
     #[default]
     Element,
-    Component
+    Component,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -78,14 +85,14 @@ pub struct ConditionalNodeSequence<'a> {
 #[derive(Debug, Clone)]
 pub struct Conditional<'e> {
     pub condition: Expr,
-    pub node: ElementNode<'e>
+    pub node: ElementNode<'e>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Interpolation {
     pub value: Box<Expr>,
     pub template_scope: u32,
-    pub patch_flag: bool
+    pub patch_flag: bool,
 }
 
 /// Starting tag represents [`ElementNode`]'s tag name and attributes
@@ -118,14 +125,135 @@ pub enum AttributeOrBinding<'a> {
 #[derive(Debug, Clone)]
 pub enum StrOrExpr<'s> {
     Str(&'s str),
-    Expr(Box<Expr>)
+    Expr(Box<Expr>),
 }
 
-impl <'s> From<&'s str> for StrOrExpr<'s> {
+impl<'s> From<&'s str> for StrOrExpr<'s> {
     fn from(value: &'s str) -> StrOrExpr<'s> {
         StrOrExpr::Str(value)
     }
 }
+
+#[derive(Debug, Default, Clone)]
+pub struct PatchHints {
+    /// Patch flags
+    pub flags: PatchFlagsSet,
+    /// Dynamic props
+    pub props: Vec<JsWord>
+}
+
+flagset::flags! {
+    /// From https://github.com/vuejs/core/blob/b8fc18c0b23be9a77b05dc41ed452a87a0becf82/packages/shared/src/patchFlags.ts
+    #[derive(Default)]
+    pub enum PatchFlags: i32 {
+        /**
+         * Indicates an element with dynamic textContent (children fast path)
+         */
+        Text = 1,
+
+        /**
+         * Indicates an element with dynamic class binding.
+         */
+        Class = 1 << 1,
+
+        /**
+         * Indicates an element with dynamic style
+         * The compiler pre-compiles static string styles into static objects
+         * + detects and hoists inline static objects
+         * e.g. `style="color: red"` and `:style="{ color: 'red' }"` both get hoisted
+         * as:
+         * ```js
+         * const style = { color: 'red' }
+         * render() { return e('div', { style }) }
+         * ```
+         */
+        Style = 1 << 2,
+
+        /**
+         * Indicates an element that has non-class/style dynamic props.
+         * Can also be on a component that has any dynamic props (includes
+         * class/style). when this flag is present, the vnode also has a dynamicProps
+         * array that contains the keys of the props that may change so the runtime
+         * can diff them faster (without having to worry about removed props)
+         */
+        Props = 1 << 3,
+
+        /**
+         * Indicates an element with props with dynamic keys. When keys change, a full
+         * diff is always needed to remove the old key. This flag is mutually
+         * exclusive with CLASS, STYLE and PROPS.
+         */
+        FullProps = 1 << 4,
+
+        /**
+         * Indicates an element with event listeners (which need to be attached
+         * during hydration)
+         */
+        HydrateEvents = 1 << 5,
+
+        /**
+         * Indicates a fragment whose children order doesn't change.
+         */
+        StableFragment = 1 << 6,
+
+        /**
+         * Indicates a fragment with keyed or partially keyed children
+         */
+        KeyedFragment = 1 << 7,
+
+        /**
+         * Indicates a fragment with unkeyed children.
+         */
+        UnkeyedFragment = 1 << 8,
+
+        /**
+         * Indicates an element that only needs non-props patching, e.g. ref or
+         * directives (onVnodeXXX hooks). since every patched vnode checks for refs
+         * and onVnodeXXX hooks, it simply marks the vnode so that a parent block
+         * will track it.
+         */
+        #[default]
+        NeedPatch = 1 << 9,
+
+        /**
+         * Indicates a component with dynamic slots (e.g. slot that references a v-for
+         * iterated value, or dynamic slot names).
+         * Components with this flag are always force updated.
+         */
+        DynamicSlots = 1 << 10,
+
+        /**
+         * Indicates a fragment that was created only because the user has placed
+         * comments at the root level of a template. This is a dev-only flag since
+         * comments are stripped in production.
+         */
+        DevRootFragment = 1 << 11,
+
+        /**
+         * SPECIAL FLAGS -------------------------------------------------------------
+         * Special flags are negative integers. They are never matched against using
+         * bitwise operators (bitwise matching should only happen in branches where
+         * patchFlag > 0), and are mutually exclusive. When checking for a special
+         * flag, simply check patchFlag === FLAG.
+         */
+
+        /**
+         * Indicates a hoisted static vnode. This is a hint for hydration to skip
+         * the entire sub tree since static content never needs to be updated.
+         */
+        Hoisted = -1,
+        /**
+         * A special flag that indicates that the diffing algorithm should bail out
+         * of optimized mode. For example, on block fragments created by renderSlot()
+         * when encountering non-compiler generated slots (i.e. manually written
+         * render functions, which should always be fully diffed)
+         * OR manually cloneVNodes
+         */
+        Bail = -2,
+    }
+}
+
+pub type PatchFlagsSet = flagset::FlagSet<PatchFlags>;
 
 #[derive(Clone, Debug, Default)]
 pub struct VueDirectives<'d> {
@@ -185,6 +313,7 @@ pub struct VModelDirective<'a> {
     pub value: Expr,
     /// `lazy` and `trim` in `v-model.lazy.trim`
     pub modifiers: Vec<&'a str>,
+    pub span: Span
 }
 
 #[derive(Clone, Debug)]

@@ -30,6 +30,8 @@ mod tests {
     use fervid_core::{ElementKind, ElementNode, StartingTag, VueDirectives};
     use swc_core::ecma::ast::BinExpr;
 
+    use crate::test_utils::js;
+
     use super::*;
 
     #[test]
@@ -61,6 +63,8 @@ mod tests {
                     })),
                 },
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"_createVNode(_component_test_component,{textContent:foo+bar})"#,
             false,
@@ -78,24 +82,13 @@ mod tests {
                     tag_name: "h1",
                     attributes: vec![],
                     directives: Some(Box::new(VueDirectives {
-                        v_text: Some(Box::new(Expr::Bin(BinExpr {
-                            span: DUMMY_SP,
-                            op: swc_core::ecma::ast::BinaryOp::Add,
-                            left: Box::new(Expr::Ident(Ident {
-                                span: DUMMY_SP,
-                                sym: JsWord::from("foo"),
-                                optional: false,
-                            })),
-                            right: Box::new(Expr::Ident(Ident {
-                                span: DUMMY_SP,
-                                sym: JsWord::from("bar"),
-                                optional: false,
-                            })),
-                        }))),
+                        v_text: Some(js("foo + bar")),
                         ..Default::default()
                     })),
                 },
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"_createElementVNode("h1",{textContent:foo+bar})"#,
             false,

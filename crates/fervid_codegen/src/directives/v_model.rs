@@ -1,6 +1,6 @@
 use fervid_core::VModelDirective;
 use swc_core::{
-    common::{Span, DUMMY_SP},
+    common::Span,
     ecma::{
         ast::{
             ArrowExpr, AssignExpr, AssignOp, BindingIdent, BlockStmtOrExpr, Bool, Expr, Ident,
@@ -23,8 +23,7 @@ impl CodegenContext {
         out: &mut Vec<PropOrSpread>,
         scope_to_use: u32,
     ) -> bool {
-        // TODO Spans
-        let span = DUMMY_SP;
+        let span = v_model.span;
 
         // `v-model="smth"` is same as `v-model:modelValue="smth"`
         let bound_attribute = v_model.argument.unwrap_or("modelValue");
@@ -167,7 +166,7 @@ fn generate_v_model_modifiers(modifiers: &[&str], span: Span) -> ObjectLit {
 
 #[cfg(test)]
 mod tests {
-    use swc_core::ecma::ast::ObjectLit;
+    use swc_core::{common::DUMMY_SP, ecma::ast::ObjectLit};
 
     use crate::test_utils::js;
 
@@ -181,6 +180,7 @@ mod tests {
                 argument: None,
                 value: *js("foo"),
                 modifiers: Vec::new(),
+                span: DUMMY_SP,
             }],
             r#"{modelValue:foo,"onUpdate:modelValue":$event=>((foo)=$event)}"#,
         );
@@ -194,6 +194,7 @@ mod tests {
                 argument: Some("simple"),
                 value: *js("foo"),
                 modifiers: Vec::new(),
+                span: DUMMY_SP,
             }],
             r#"{simple:foo,"onUpdate:simple":$event=>((foo)=$event)}"#,
         );
@@ -204,6 +205,7 @@ mod tests {
                 argument: Some("modelValue"),
                 value: *js("bar"),
                 modifiers: Vec::new(),
+                span: DUMMY_SP,
             }],
             r#"{modelValue:bar,"onUpdate:modelValue":$event=>((bar)=$event)}"#,
         );
@@ -214,6 +216,7 @@ mod tests {
                 argument: Some("model-value"),
                 value: *js("baz"),
                 modifiers: Vec::new(),
+                span: DUMMY_SP,
             }],
             r#"{"model-value":baz,"onUpdate:modelValue":$event=>((baz)=$event)}"#,
         );
@@ -227,6 +230,7 @@ mod tests {
                 argument: None,
                 value: *js("foo"),
                 modifiers: vec!["lazy", "trim"],
+                span: DUMMY_SP,
             }],
             r#"{modelValue:foo,"onUpdate:modelValue":$event=>((foo)=$event),modelModifiers:{lazy:true,trim:true}}"#,
         );
@@ -237,6 +241,7 @@ mod tests {
                 argument: None,
                 value: *js("foo"),
                 modifiers: vec!["custom-modifier"],
+                span: DUMMY_SP,
             }],
             r#"{modelValue:foo,"onUpdate:modelValue":$event=>((foo)=$event),modelModifiers:{"custom-modifier":true}}"#,
         );
@@ -247,6 +252,7 @@ mod tests {
                 argument: Some("foo-bar"),
                 value: *js("bazQux"),
                 modifiers: vec!["custom-modifier"],
+                span: DUMMY_SP,
             }],
             r#"{"foo-bar":bazQux,"onUpdate:fooBar":$event=>((bazQux)=$event),"foo-barModifiers":{"custom-modifier":true}}"#,
         );

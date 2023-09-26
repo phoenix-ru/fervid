@@ -1,15 +1,12 @@
 use fervid_core::{ElementNode, VueImports};
-use swc_core::{
-    common::DUMMY_SP,
-    ecma::ast::{ArrayLit, Expr, ExprOrSpread, Ident},
-};
+use swc_core::ecma::ast::{ArrayLit, Expr, ExprOrSpread, Ident};
 
 use crate::CodegenContext;
 
 impl CodegenContext {
     /// Generates `(_openBlock(), _createBlock(_Teleport, null, [teleport_children]))`
     pub fn generate_teleport(&mut self, element_node: &ElementNode) -> Expr {
-        let span = DUMMY_SP; // TODO
+        let span = element_node.span;
 
         // _Teleport
         let teleport_identifier = Expr::Ident(Ident {
@@ -40,13 +37,11 @@ impl CodegenContext {
             None
         };
 
-        let patch_flag = 0; // TODO Patch flag?
-
         self.generate_componentlike(
             teleport_identifier,
             teleport_attrs,
             teleport_children,
-            patch_flag,
+            &element_node.patch_hints,
             true,
             span,
         )
@@ -56,6 +51,7 @@ impl CodegenContext {
 #[cfg(test)]
 mod tests {
     use fervid_core::{AttributeOrBinding, BuiltinType, ElementKind, Node, StartingTag};
+    use swc_core::common::DUMMY_SP;
 
     use crate::test_utils::js;
 
@@ -74,6 +70,8 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"(_openBlock(),_createBlock(_Teleport))"#,
         )
@@ -104,6 +102,8 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"(_openBlock(),_createBlock(_Teleport,{foo:"bar",baz:qux}))"#,
         )
@@ -122,6 +122,8 @@ mod tests {
                 },
                 children: vec![Node::Text("foobar")],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"(_openBlock(),_createBlock(_Teleport,null,[_createTextVNode("foobar")]))"#,
         )
@@ -152,6 +154,8 @@ mod tests {
                 },
                 children: vec![Node::Text("foobar")],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"(_openBlock(),_createBlock(_Teleport,{foo:"bar",baz:qux},[_createTextVNode("foobar")]))"#,
         )

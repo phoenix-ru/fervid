@@ -93,7 +93,9 @@ mod tests {
                         },
                         children: vec![Node::Text("hello")],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
+                        patch_hints: Default::default(),
+                        span: DUMMY_SP,
                     },
                 }),
                 else_if_nodes: vec![],
@@ -119,7 +121,9 @@ mod tests {
                         },
                         children: vec![Node::Text("hello")],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
+                        patch_hints: Default::default(),
+                        span: DUMMY_SP,
                     },
                 }),
                 else_if_nodes: vec![],
@@ -131,7 +135,9 @@ mod tests {
                     },
                     children: vec![Node::Text("bye")],
                     template_scope: 0,
-                    kind: ElementKind::Element
+                    kind: ElementKind::Element,
+                    patch_hints: Default::default(),
+                    span: DUMMY_SP,
                 })),
             },
             r#"foo||true?(_openBlock(),_createElementBlock("h1",null,"hello")):(_openBlock(),_createElementBlock("h2",null,"bye"))"#,
@@ -155,7 +161,9 @@ mod tests {
                         },
                         children: vec![Node::Text("hello")],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
+                        patch_hints: Default::default(),
+                        span: DUMMY_SP,
                     },
                 }),
                 else_if_nodes: vec![
@@ -169,7 +177,9 @@ mod tests {
                             },
                             children: vec![Node::Text("hi")],
                             template_scope: 0,
-                            kind: ElementKind::Element
+                            kind: ElementKind::Element,
+                            patch_hints: Default::default(),
+                            span: DUMMY_SP,
                         },
                     },
                     Conditional {
@@ -182,7 +192,9 @@ mod tests {
                             },
                             children: vec![Node::Text("bye")],
                             template_scope: 0,
-                            kind: ElementKind::Element
+                            kind: ElementKind::Element,
+                            patch_hints: Default::default(),
+                            span: DUMMY_SP,
                         },
                     },
                 ],
@@ -210,7 +222,9 @@ mod tests {
                         },
                         children: vec![Node::Text("hello")],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
+                        patch_hints: Default::default(),
+                        span: DUMMY_SP,
                     },
                 }),
                 else_if_nodes: vec![
@@ -224,7 +238,9 @@ mod tests {
                             },
                             children: vec![Node::Text("hi")],
                             template_scope: 0,
-                            kind: ElementKind::Element
+                            kind: ElementKind::Element,
+                            patch_hints: Default::default(),
+                            span: DUMMY_SP,
                         },
                     },
                     Conditional {
@@ -237,7 +253,9 @@ mod tests {
                             },
                             children: vec![Node::Text("good morning")],
                             template_scope: 0,
-                            kind: ElementKind::Element
+                            kind: ElementKind::Element,
+                            patch_hints: Default::default(),
+                            span: DUMMY_SP,
                         },
                     },
                 ],
@@ -249,7 +267,9 @@ mod tests {
                     },
                     children: vec![Node::Text("bye")],
                     template_scope: 0,
-                    kind: ElementKind::Element
+                    kind: ElementKind::Element,
+                    patch_hints: Default::default(),
+                    span: DUMMY_SP,
                 })),
             },
             r#"foo?(_openBlock(),_createElementBlock("h1",null,"hello")):true?(_openBlock(),_createElementBlock("h2",null,"hi")):undefined?(_openBlock(),_createElementBlock("h3",null,"good morning")):(_openBlock(),_createElementBlock("h4",null,"bye"))"#,

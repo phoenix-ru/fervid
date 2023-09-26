@@ -20,8 +20,6 @@ impl CodegenContext {
         element_node: &ElementNode,
         wrap_in_block: bool,
     ) -> Expr {
-        // TODO
-        let needs_patch_flags = false;
         let span = DUMMY_SP;
         let starting_tag = &element_node.starting_tag;
 
@@ -50,8 +48,11 @@ impl CodegenContext {
         // 1st - element name or Fragment;
         // 2nd (optional) - element attributes & directives object;
         // 3rd (optional) - element children;
-        // 4th (optional) - element patch flag.
-        let expected_element_args_count = if needs_patch_flags {
+        // 4th (optional) - element patch flag;
+        // 5th (optional) - props array (for PROPS patch flag).
+        let expected_element_args_count = if !element_node.patch_hints.props.is_empty() {
+            5
+        } else if !element_node.patch_hints.flags.is_empty() {
             4
         } else if children.len() != 0 {
             3
@@ -141,15 +142,42 @@ impl CodegenContext {
 
         // Arg 4 (optional): patch flags (default to nothing)
         if expected_element_args_count >= 4 {
-            // TODO Actual patch flag value
+            let patch_flag_value = element_node.patch_hints.flags.bits();
+
             create_element_args.push(ExprOrSpread {
                 spread: None,
                 expr: Box::new(Expr::Lit(Lit::Num(Number {
                     span,
-                    value: 512.0, // TODO
+                    value: patch_flag_value.into(),
                     raw: None,
                 }))),
-            })
+            });
+
+            if !element_node.patch_hints.props.is_empty() {
+                let props_array = element_node
+                    .patch_hints
+                    .props
+                    .iter()
+                    .map(|prop| {
+                        Some(ExprOrSpread {
+                            spread: None,
+                            expr: Box::new(Expr::Lit(Lit::Str(Str {
+                                span: DUMMY_SP,
+                                value: prop.to_owned(),
+                                raw: None,
+                            }))),
+                        })
+                    })
+                    .collect();
+
+                create_element_args.push(ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(Expr::Array(ArrayLit {
+                        span: DUMMY_SP,
+                        elems: props_array,
+                    })),
+                });
+            }
         }
 
         // When wrapping in block, `createElementBlock` is used, otherwise `createElementVNode`
@@ -337,7 +365,8 @@ impl CodegenContext {
 #[cfg(test)]
 mod tests {
     use fervid_core::{
-        AttributeOrBinding, Interpolation, Node, StartingTag, VBindDirective, VOnDirective, ElementKind,
+        AttributeOrBinding, ElementKind, Interpolation, Node, StartingTag, VBindDirective,
+        VOnDirective,
     };
 
     use super::*;
@@ -384,7 +413,9 @@ mod tests {
                 },
                 children: vec![Node::Text("hello from div")],
                 template_scope: 0,
-                kind: ElementKind::Element
+                kind: ElementKind::Element,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"_createElementVNode("div",{foo:"bar",baz:qux,readonly:true,onClick:handleClick},"hello from div")"#,
             false,
@@ -403,7 +434,9 @@ mod tests {
                 },
                 children: vec![Node::Text("hello from div")],
                 template_scope: 0,
-                kind: ElementKind::Element
+                kind: ElementKind::Element,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"_createElementVNode("div",null,"hello from div")"#,
             false,
@@ -434,7 +467,9 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
-                kind: ElementKind::Element
+                kind: ElementKind::Element,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"_createElementVNode("div",{foo:"bar","some-baz":qux})"#,
             false,
@@ -462,7 +497,9 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
-                kind: ElementKind::Element
+                kind: ElementKind::Element,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"_createElementVNode("div",{foo:"bar","some-baz":qux})"#,
             false,
@@ -489,7 +526,9 @@ mod tests {
                     Node::Text(" bye!"),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Element
+                kind: ElementKind::Element,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"_createElementVNode("div",null,"hello from div "+_toDisplayString(true)+" bye!")"#,
             false,
@@ -521,11 +560,15 @@ mod tests {
                         },
                         children: vec![Node::Text("bye!")],
                         template_scope: 0,
-                        kind: ElementKind::Element
+                        kind: ElementKind::Element,
+                        patch_hints: Default::default(),
+                        span: DUMMY_SP,
                     }),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Element
+                kind: ElementKind::Element,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"_createElementVNode("div",null,[_createTextVNode("hello from div "+_toDisplayString(true)),_createElementVNode("span",null,"bye!")])"#,
             false,

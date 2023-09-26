@@ -2,12 +2,9 @@
 //! Please do not confuse with the user components.
 
 use fervid_core::{AttributeOrBinding, ElementNode, StrOrExpr, VBindDirective, VueImports};
-use swc_core::{
-    common::DUMMY_SP,
-    ecma::{
-        ast::{CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, ObjectLit, PropOrSpread, Str},
-        atoms::JsWord,
-    },
+use swc_core::ecma::{
+    ast::{CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, ObjectLit, PropOrSpread, Str},
+    atoms::JsWord,
 };
 
 use crate::CodegenContext;
@@ -15,7 +12,7 @@ use crate::CodegenContext;
 impl CodegenContext {
     /// Generates the `<component>` builtin
     pub fn generate_component_builtin(&mut self, element_node: &ElementNode) -> Expr {
-        let span = DUMMY_SP; // TODO
+        let span = element_node.span;
 
         // Shortcut
         let attributes = &element_node.starting_tag.attributes;
@@ -94,13 +91,11 @@ impl CodegenContext {
 
         let component_builtin_slots = self.generate_builtin_slots(element_node);
 
-        let patch_flag = 0; // TODO This comes from the attributes
-
         self.generate_componentlike(
             identifier,
             component_builtin_attrs,
             component_builtin_slots,
-            patch_flag,
+            &element_node.patch_hints,
             true,
             span,
         )
@@ -115,6 +110,7 @@ mod tests {
         AttributeOrBinding, BuiltinType, ElementKind, Node, StartingTag, VSlotDirective,
         VueDirectives,
     };
+    use swc_core::common::DUMMY_SP;
 
     use crate::test_utils::js;
 
@@ -135,6 +131,8 @@ mod tests {
                         },
                         children: vec![],
                         template_scope: 0,
+                        patch_hints: Default::default(),
+                        span: DUMMY_SP,
                     },
                     r#""#,
                 );
@@ -159,6 +157,8 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"(_openBlock(),_createBlock(_resolveDynamicComponent("div")))"#,
         );
@@ -183,6 +183,8 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"(_openBlock(),_createBlock(_resolveDynamicComponent(foo)))"#,
         );
@@ -217,6 +219,8 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"(_openBlock(),_createBlock(_resolveDynamicComponent("div"),{foo:"bar",baz:qux}))"#,
         )
@@ -238,6 +242,8 @@ mod tests {
                 },
                 children: vec![Node::Text("foobar")],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"(_openBlock(),_createBlock(_resolveDynamicComponent("div"),null,{"default":_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
         )
@@ -275,8 +281,12 @@ mod tests {
                     },
                     children: vec![Node::Text("foobar")],
                     template_scope: 0,
+                    patch_hints: Default::default(),
+                    span: DUMMY_SP,
                 })],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"(_openBlock(),_createBlock(_resolveDynamicComponent("div"),null,{named:_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
         )
@@ -332,9 +342,13 @@ mod tests {
                         },
                         children: vec![Node::Text("bazqux")],
                         template_scope: 0,
+                        patch_hints: Default::default(),
+                        span: DUMMY_SP,
                     }),
                 ],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"(_openBlock(),_createBlock(_resolveDynamicComponent("div"),{foo:"bar",baz:qux},{named:_withCtx(()=>[_createTextVNode("bazqux")]),"default":_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
         )

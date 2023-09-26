@@ -12,6 +12,7 @@ use nom::{
     sequence::{delimited, preceded},
     Err, IResult,
 };
+use swc_core::common::DUMMY_SP;
 
 use crate::parser::{
     ecma::{parse_js, parse_js_pat},
@@ -359,6 +360,7 @@ fn parse_directive<'i>(
                         argument,
                         value: *model_binding,
                         modifiers,
+                        span: DUMMY_SP, // TODO
                     });
                 }
                 Result::Err(_) => {}

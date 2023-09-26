@@ -122,6 +122,7 @@ fn parse_root_block<'a>(
             out.template = Some(SfcTemplateBlock {
                 lang,
                 roots: Vec::new(),
+                span: DUMMY_SP, // TODO
             });
 
             return Ok(input);
@@ -137,6 +138,7 @@ fn parse_root_block<'a>(
         out.template = Some(SfcTemplateBlock {
             lang,
             roots: children,
+            span: DUMMY_SP, // TODO
         });
 
         return Ok(input);
@@ -301,6 +303,8 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
                 children: vec![],
                 template_scope: 0,
                 kind: ElementKind::Element,
+                patch_hints: Default::default(),
+                span: DUMMY_SP, // TODO
             }),
         ));
     }
@@ -326,6 +330,8 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
             children,
             template_scope: 0,
             kind: ElementKind::Element,
+            patch_hints: Default::default(),
+            span: DUMMY_SP, // TODO
         }),
     ))
 }

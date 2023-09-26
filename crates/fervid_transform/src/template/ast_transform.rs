@@ -1,9 +1,10 @@
 use fervid_core::{
     is_from_default_slot, is_html_tag, AttributeOrBinding, Conditional, ConditionalNodeSequence,
-    ElementKind, ElementNode, Interpolation, Node, SfcTemplateBlock, StartingTag, StrOrExpr,
-    VBindDirective, VOnDirective, VSlotDirective, VUE_BUILTINS,
+    ElementKind, ElementNode, Interpolation, Node, PatchFlags, SfcTemplateBlock, StartingTag,
+    StrOrExpr, VBindDirective, VOnDirective, VSlotDirective, VUE_BUILTINS,
 };
 use smallvec::SmallVec;
+use swc_core::ecma::atoms::JsWord;
 
 use crate::structs::{ScopeHelper, TemplateScope};
 
@@ -44,6 +45,8 @@ pub fn transform_and_record_template(
             },
             children: all_roots,
             template_scope: 0,
+            patch_hints: Default::default(),
+            span: template.span,
         });
         template.roots.push(new_root);
     }
@@ -228,6 +231,11 @@ impl<'a> Visitor for TemplateVisitor<'_> {
         let parent_scope = self.current_scope;
         let mut scope_to_use = parent_scope;
 
+        // Mark the node with a correct type (element, component or built-in)
+        let element_kind = self.recognize_element_kind(&element_node.starting_tag);
+        let is_component = matches!(element_kind, ElementKind::Component);
+        element_node.kind = element_kind;
+
         // Check if there is a scoping directive
         // Finds a `v-for` or `v-slot` directive when in ElementNode
         // and collects their variables into the new template scope
@@ -274,16 +282,59 @@ impl<'a> Visitor for TemplateVisitor<'_> {
         // Transform the VBind and VOn attributes
         for attr in element_node.starting_tag.attributes.iter_mut() {
             match attr {
+                // The logic for the patch flags:
+                // 1. Check if the attribute name is dynamic (`:foo` vs `:[foo]`) or ;
+                //    If it is, clear the previous prop hints and set FULL_PROPS, then continue loop;
+                // 2. Check if there is a Js variable in the value;
+                //    If there is, check if it is a component
+                // 2. Check if
                 AttributeOrBinding::VBind(v_bind) => {
-                    self.scope_helper
+                    let has_bindings = self
+                        .scope_helper
                         .transform_expr(&mut v_bind.value, scope_to_use);
+                    let patch_hints = &mut element_node.patch_hints;
+
+                    let Some(StrOrExpr::Str(argument)) = v_bind.argument else {
+                        // This is dynamic
+                        // From docs: [FULL_PROPS is] exclusive with CLASS, STYLE and PROPS.
+                        patch_hints.flags &=
+                            !(PatchFlags::Props | PatchFlags::Class | PatchFlags::Style);
+                        patch_hints.flags |= PatchFlags::FullProps;
+                        patch_hints.props.clear();
+                        continue;
+                    };
+
+                    // Again, if we are FULL_PROPS already, do not add other props/class/style.
+                    // Or if we do not need to add.
+                    if !has_bindings || patch_hints.flags.contains(PatchFlags::FullProps) {
+                        continue;
+                    }
+
+                    // Adding `class` and `style` bindings depends on `is_component`
+                    // They are added to PROPS for the components.
+                    if is_component {
+                        patch_hints.flags |= PatchFlags::Props;
+                        patch_hints.props.push(JsWord::from(argument));
+                        continue;
+                    }
+
+                    if argument == "class" {
+                        patch_hints.flags |= PatchFlags::Class;
+                    } else if argument == "style" {
+                        patch_hints.flags |= PatchFlags::Style;
+                    } else {
+                        patch_hints.flags |= PatchFlags::Props;
+                        patch_hints.props.push(JsWord::from(argument));
+                    }
                 }
+
                 AttributeOrBinding::VOn(VOnDirective {
                     handler: Some(ref mut handler),
                     ..
                 }) => {
                     self.scope_helper.transform_expr(handler, scope_to_use);
                 }
+
                 _ => {}
             }
         }
@@ -303,10 +354,6 @@ impl<'a> Visitor for TemplateVisitor<'_> {
             maybe_transform!(v_show);
             maybe_transform!(v_text);
         }
-
-        // Mark the node with a correct type (element, component or built-in)
-        let element_kind = self.recognize_element_kind(&element_node.starting_tag);
-        element_node.kind = element_kind;
 
         // Merge conditional nodes and clean up whitespace
         optimize_children(&mut element_node.children, element_kind);
@@ -403,7 +450,7 @@ impl VisitMut for Node<'_> {
 #[cfg(test)]
 mod tests {
     use fervid_core::{ElementKind, Node, VueDirectives};
-    use swc_core::ecma::ast::Expr;
+    use swc_core::{common::DUMMY_SP, ecma::ast::Expr};
 
     use crate::test_utils::{parser::parse_javascript_expr, to_str};
 
@@ -448,7 +495,10 @@ mod tests {
                 children: vec![text_node(), if_node(), else_if_node(), else_node()],
                 template_scope: 0,
                 kind: ElementKind::Element,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             })],
+            span: DUMMY_SP,
         };
 
         transform_and_record_template(&mut sfc_template, &mut Default::default());
@@ -487,6 +537,7 @@ mod tests {
         let mut sfc_template = SfcTemplateBlock {
             lang: "html",
             roots: vec![if_node(), else_if_node(), else_node()],
+            span: DUMMY_SP,
         };
 
         transform_and_record_template(&mut sfc_template, &mut Default::default());
@@ -517,6 +568,7 @@ mod tests {
         let mut sfc_template = SfcTemplateBlock {
             lang: "html",
             roots: vec![if_node(), if_node()],
+            span: DUMMY_SP,
         };
 
         transform_and_record_template(&mut sfc_template, &mut Default::default());
@@ -550,6 +602,7 @@ mod tests {
         let mut sfc_template = SfcTemplateBlock {
             lang: "html",
             roots: vec![if_node(), else_if_node(), if_node(), else_if_node()],
+            span: DUMMY_SP,
         };
 
         transform_and_record_template(&mut sfc_template, &mut Default::default());
@@ -581,6 +634,7 @@ mod tests {
         let mut sfc_template = SfcTemplateBlock {
             lang: "html",
             roots: vec![else_if_node(), else_node()],
+            span: DUMMY_SP,
         };
 
         transform_and_record_template(&mut sfc_template, &mut Default::default());
@@ -626,7 +680,10 @@ mod tests {
                 ],
                 template_scope: 0,
                 kind: ElementKind::Element,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             })],
+            span: DUMMY_SP,
         };
 
         transform_and_record_template(&mut sfc_template, &mut Default::default());
@@ -660,6 +717,8 @@ mod tests {
             children: vec![],
             template_scope: 0,
             kind: ElementKind::Element,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
         });
 
         let no_directives2 = Node::Element(ElementNode {
@@ -673,11 +732,14 @@ mod tests {
             children: vec![Node::Text("hello")],
             template_scope: 0,
             kind: ElementKind::Element,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
         });
 
         let mut sfc_template = SfcTemplateBlock {
             lang: "html",
             roots: vec![no_directives1, no_directives2],
+            span: DUMMY_SP,
         };
 
         transform_and_record_template(&mut sfc_template, &mut Default::default());
@@ -713,6 +775,8 @@ mod tests {
             children: vec![Node::Text("if")],
             template_scope: 0,
             kind: ElementKind::Element,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
         })
     }
 
@@ -741,6 +805,8 @@ mod tests {
             children: vec![Node::Text("else-if")],
             template_scope: 0,
             kind: ElementKind::Element,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
         })
     }
 
@@ -770,6 +836,8 @@ mod tests {
             children: vec![Node::Text("else")],
             template_scope: 0,
             kind: ElementKind::Element,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
         })
     }
 

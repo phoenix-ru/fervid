@@ -1,15 +1,12 @@
-use fervid_core::{ElementNode, VueImports};
-use swc_core::{
-    common::DUMMY_SP,
-    ecma::ast::{ArrayLit, Expr, ExprOrSpread, Ident},
-};
+use fervid_core::{ElementNode, PatchFlags, PatchFlagsSet, PatchHints, VueImports};
+use swc_core::ecma::ast::{ArrayLit, Expr, ExprOrSpread, Ident};
 
 use crate::CodegenContext;
 
 impl CodegenContext {
     /// Generates `(_openBlock(), _createBlock(_KeepAlive, null, [keepalive_children], 1024))`
     pub fn generate_keepalive(&mut self, element_node: &ElementNode) -> Expr {
-        let span = DUMMY_SP; // TODO
+        let span = element_node.span;
 
         // _KeepAlive
         let keepalive_identifier = Expr::Ident(Ident {
@@ -41,13 +38,21 @@ impl CodegenContext {
         };
 
         let should_wrap_in_block = keepalive_children.is_some();
-        let patch_flag = if should_wrap_in_block { 1024 } else { 0 };
+
+        let patch_hints = PatchHints {
+            flags: if should_wrap_in_block {
+                PatchFlagsSet::from(PatchFlags::DynamicSlots)
+            } else {
+                PatchFlagsSet::default()
+            },
+            props: vec![],
+        };
 
         self.generate_componentlike(
             keepalive_identifier,
             keepalive_attrs,
             keepalive_children,
-            patch_flag,
+            &patch_hints,
             should_wrap_in_block,
             span,
         )
@@ -57,6 +62,7 @@ impl CodegenContext {
 #[cfg(test)]
 mod tests {
     use fervid_core::{AttributeOrBinding, BuiltinType, ElementKind, Node, StartingTag};
+    use swc_core::common::DUMMY_SP;
 
     use crate::test_utils::js;
 
@@ -75,6 +81,8 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"_createVNode(_KeepAlive)"#,
         )
@@ -105,6 +113,8 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"_createVNode(_KeepAlive,{foo:"bar",baz:qux})"#,
         )
@@ -123,6 +133,8 @@ mod tests {
                 },
                 children: vec![Node::Text("foobar")],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"(_openBlock(),_createBlock(_KeepAlive,null,[_createTextVNode("foobar")],1024))"#,
         )
@@ -153,6 +165,8 @@ mod tests {
                 },
                 children: vec![Node::Text("foobar")],
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             },
             r#"(_openBlock(),_createBlock(_KeepAlive,{foo:"bar",baz:qux},[_createTextVNode("foobar")],1024))"#,
         )

@@ -1,4 +1,4 @@
-use swc_core::ecma::ast::Module;
+use swc_core::{ecma::ast::Module, common::Span};
 
 use crate::{Node, StartingTag};
 
@@ -15,6 +15,7 @@ pub struct SfcDescriptor<'a> {
 pub struct SfcTemplateBlock<'a> {
   pub lang: &'a str,
   pub roots: Vec<Node<'a>>,
+  pub span: Span
 }
 
 #[derive(Clone, Debug)]

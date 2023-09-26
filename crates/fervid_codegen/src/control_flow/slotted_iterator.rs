@@ -114,8 +114,12 @@ fn is_from_default_slot(node: &Node) -> bool {
             // `v-slot:default` is default
             // `v-slot:custom` is not default
             // `v-slot:[default]` is not default
-            let Some(ref directives) = starting_tag.directives else { return true; };
-            let Some(ref v_slot) = directives.v_slot else { return true; };
+            let Some(ref directives) = starting_tag.directives else {
+                return true;
+            };
+            let Some(ref v_slot) = directives.v_slot else {
+                return true;
+            };
             if v_slot.is_dynamic_slot {
                 return false;
             }
@@ -137,7 +141,11 @@ fn is_from_default_slot(node: &Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{StartingTag, VBindDirective, VOnDirective, VSlotDirective, VueDirectives, AttributeOrBinding, ElementKind};
+    use fervid_core::{
+        AttributeOrBinding, ElementKind, StartingTag, VBindDirective, VOnDirective, VSlotDirective,
+        VueDirectives,
+    };
+    use swc_core::common::DUMMY_SP;
 
     use crate::test_utils::js;
 
@@ -235,11 +243,13 @@ mod tests {
             starting_tag: StartingTag {
                 tag_name: "h1",
                 attributes: vec![],
-                directives: None
+                directives: None,
             },
             children: vec![Node::Text("This is an h1")],
             template_scope: 0,
-            kind: ElementKind::Element
+            kind: ElementKind::Element,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
         })
     }
 
@@ -261,11 +271,13 @@ mod tests {
                         is_attr: false,
                     }),
                 ],
-                directives: None
+                directives: None,
             },
             children: vec![],
             template_scope: 0,
-            kind: ElementKind::Element
+            kind: ElementKind::Element,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
         })
     }
 
@@ -288,11 +300,13 @@ mod tests {
                         modifiers: vec![],
                     }),
                 ],
-                directives: None
+                directives: None,
             },
             children: vec![Node::Text("This is a component")],
             template_scope: 0,
-            kind: ElementKind::Element
+            kind: ElementKind::Element,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
         })
     }
 
@@ -302,11 +316,13 @@ mod tests {
             starting_tag: StartingTag {
                 tag_name: "template",
                 attributes: vec![],
-                directives: None
+                directives: None,
             },
             children: vec![Node::Text("This is just a template")],
             template_scope: 0,
-            kind: ElementKind::Element
+            kind: ElementKind::Element,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
         })
     }
 
@@ -323,11 +339,13 @@ mod tests {
                         is_dynamic_slot: false,
                     }),
                     ..Default::default()
-                }))
+                })),
             },
             children: vec![Node::Text("This is a default template")],
             template_scope: 0,
-            kind: ElementKind::Element
+            kind: ElementKind::Element,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
         })
     }
 
@@ -344,11 +362,13 @@ mod tests {
                         is_dynamic_slot: false,
                     }),
                     ..Default::default()
-                }))
+                })),
             },
             children: vec![Node::Text("This is a named template")],
             template_scope: 0,
-            kind: ElementKind::Element
+            kind: ElementKind::Element,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
         })
     }
 }

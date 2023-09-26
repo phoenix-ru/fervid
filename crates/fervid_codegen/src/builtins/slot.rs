@@ -1,13 +1,10 @@
 use fervid_core::{AttributeOrBinding, ElementNode, StrOrExpr, VBindDirective, VueImports};
-use swc_core::{
-    common::DUMMY_SP,
-    ecma::{
-        ast::{
-            ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, MemberExpr, MemberProp,
-            ObjectLit, Str,
-        },
-        atoms::{js_word, JsWord},
+use swc_core::ecma::{
+    ast::{
+        ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, MemberExpr, MemberProp,
+        ObjectLit, Str,
     },
+    atoms::{js_word, JsWord},
 };
 
 use crate::CodegenContext;
@@ -20,7 +17,7 @@ impl CodegenContext {
     /// renderSlot(_ctx.$slots, "slot-name", /*optional*/ { slot: attributes }, /*optional*/ [slot, children])
     /// ```
     pub fn generate_slot(&mut self, element_node: &ElementNode) -> Expr {
-        let span = DUMMY_SP; // TODO
+        let span = element_node.span;
 
         // The `name` attribute should NOT be generated,
         // therefore we split attributes generation to two slices, like so:
@@ -184,6 +181,7 @@ impl CodegenContext {
 #[cfg(test)]
 mod tests {
     use fervid_core::{BuiltinType, ElementKind, Node, StartingTag};
+    use swc_core::common::DUMMY_SP;
 
     use crate::test_utils::js;
 
@@ -200,6 +198,8 @@ mod tests {
                 },
                 children: $children,
                 template_scope: 0,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
             }
         };
     }
@@ -375,7 +375,9 @@ mod tests {
                             directives: None
                         },
                         children: vec![Node::Text("Placeholder")],
-                        template_scope: 0
+                        template_scope: 0,
+                        patch_hints: Default::default(),
+                        span: DUMMY_SP,
                     }),
                     Node::Element(ElementNode {
                         kind: ElementKind::Component,
@@ -385,7 +387,9 @@ mod tests {
                             directives: None
                         },
                         children: vec![],
-                        template_scope: 0
+                        template_scope: 0,
+                        patch_hints: Default::default(),
+                        span: DUMMY_SP,
                     })
                 ]
             ),
@@ -427,7 +431,9 @@ mod tests {
                             directives: None
                         },
                         children: vec![Node::Text("Placeholder")],
-                        template_scope: 0
+                        template_scope: 0,
+                        patch_hints: Default::default(),
+                        span: DUMMY_SP,
                     }),
                     Node::Element(ElementNode {
                         kind: ElementKind::Component,
@@ -437,7 +443,9 @@ mod tests {
                             directives: None
                         },
                         children: vec![],
-                        template_scope: 0
+                        template_scope: 0,
+                        patch_hints: Default::default(),
+                        span: DUMMY_SP,
                     })
                 ]
             ),

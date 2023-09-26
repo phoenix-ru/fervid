@@ -7,7 +7,7 @@ All-In-One Vue compiler written in Rust.
 
 Currently in early development, and the closest goal is to reach feature-parity with the current [Vue SFC compiler](https://sfc.vuejs.org).
 
-## Progress till MVP ![](https://geps.dev/progress/68)
+## Progress till MVP ![](https://geps.dev/progress/70)
 A minimal target of this project includes:
 - Vue 3 code generation;
 - [unplugin](https://github.com/unjs/unplugin) integration;
@@ -20,7 +20,7 @@ A minimal target of this project includes:
 This project uses [Vue SFC playground](https://sfc.vuejs.org) as its reference to compare the output. As of April 2023, fervid is capable of producing the DEV code almost identical to the official compiler, except for:
 - [WIP] Context variables. This includes usages like `{{ foo + bar.buzz }}` or `<div v-if="isShown">`.
   These usages require a JavaScript parser and transformer like SWC and support for them in fervid is currently ongoing.
-- Patch flags. These are used to help Vue runtime when diffing the VNodes. If a VNode only has one prop which is dynamic, and all the other props and text are static, this needs to be conveyed to Vue for fast updates. I am currently researching how they are originally implemented.
+- [WIP] Patch flags. These are used to help Vue runtime when diffing the VNodes. If a VNode only has one prop which is dynamic, and all the other props and text are static, this needs to be conveyed to Vue for fast updates. I am currently researching how they are originally implemented.
 
 To check correctness of fervid, you can compare the [run log](run.log) to the output of playground. For doing so, go to https://sfc.vuejs.org and paste in the contents of [crates/fervid/benches/fixtures/input.vue](crates/fervid/benches/fixtures/input.vue).
 
@@ -133,7 +133,7 @@ Code generator
 - [ ] Eager pre-compilation of Vue imports (avoid unneccessary bundler->compiler calls)
 
 Integrations
-- [ ] WASM binary (with/without WASI)
+- [x] WASM binary (unpublished)
 - [x] NAPI binary (unpublished)
 - [ ] [unplugin](https://github.com/unjs/unplugin)
 - [ ] [Turbopack](https://github.com/vercel/turbo) plugin (when plugin system is defined)
