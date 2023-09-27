@@ -120,6 +120,8 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                         prop: MemberProp::Ident(ident_expr.to_owned()),
                     });
                     self.has_js_bindings = true;
+                } else if let BindingTypes::TemplateLocal = binding_type {
+                    self.has_js_bindings = true;
                 }
             }
 
