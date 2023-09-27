@@ -13,6 +13,7 @@ use swc_core::{
 
 use crate::{utils::str_to_propname, CodegenContext};
 
+mod v_for;
 mod v_html;
 mod v_model;
 mod v_text;

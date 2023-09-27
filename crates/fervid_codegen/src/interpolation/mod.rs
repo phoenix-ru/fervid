@@ -10,7 +10,7 @@ impl CodegenContext {
     pub fn generate_interpolation(
         &mut self,
         interpolation: &Interpolation
-    ) -> (Expr, bool) {    
+    ) -> Expr {    
         // This is using a string with value if transformation failed
         // let (transformed, has_js_bindings) =
         //     // Polyfill
@@ -34,21 +34,18 @@ impl CodegenContext {
         let span = DUMMY_SP;
 
         // toDisplayString(transformed)
-        (
-            Expr::Call(CallExpr {
+        Expr::Call(CallExpr {
+            span,
+            callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                 span,
-                callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                    span,
-                    sym: self.get_and_add_import_ident(VueImports::ToDisplayString),
-                    optional: false,
-                }))),
-                args: vec![ExprOrSpread {
-                    spread: None,
-                    expr: interpolation.value.to_owned(),
-                }],
-                type_args: None,
-            }),
-            interpolation.patch_flag
-        )
+                sym: self.get_and_add_import_ident(VueImports::ToDisplayString),
+                optional: false,
+            }))),
+            args: vec![ExprOrSpread {
+                spread: None,
+                expr: interpolation.value.to_owned(),
+            }],
+            type_args: None,
+        })
     }
 }

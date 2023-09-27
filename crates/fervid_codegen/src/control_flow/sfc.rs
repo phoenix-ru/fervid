@@ -22,9 +22,7 @@ impl CodegenContext {
 
         // TODO Multi-root? Is it actually merged before into a Fragment?
         let first_child = &sfc_template.roots[0];
-        let (result, _) = self.generate_node(&first_child, true);
-
-        result
+        self.generate_node(&first_child, true)
     }
 
     pub fn generate_module(

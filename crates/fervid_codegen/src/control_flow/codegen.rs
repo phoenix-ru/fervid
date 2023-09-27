@@ -1,4 +1,4 @@
-use fervid_core::{ElementNode, Node, ElementKind, VueImports};
+use fervid_core::{ElementKind, ElementNode, Node, VueImports};
 use smallvec::SmallVec;
 use swc_core::{
     common::{BytePos, Span, SyntaxContext, DUMMY_SP},
@@ -13,10 +13,9 @@ use crate::context::CodegenContext;
 type TextNodesConcatenationVec = SmallVec<[Expr; 3]>;
 
 impl CodegenContext {
-    /// Returns `true` when node generation involved some Js variables
-    pub fn generate_node(&mut self, node: &Node, wrap_in_block: bool) -> (Expr, bool) {
+    pub fn generate_node(&mut self, node: &Node, wrap_in_block: bool) -> Expr {
         match node {
-            Node::Text(contents) => (self.generate_text_node(contents, DUMMY_SP), false),
+            Node::Text(contents) => self.generate_text_node(contents, DUMMY_SP),
 
             Node::Interpolation(interpolation) => self.generate_interpolation(interpolation),
 
@@ -24,11 +23,9 @@ impl CodegenContext {
                 self.generate_element_or_component(element_node, wrap_in_block)
             }
 
-            Node::Comment(comment) => (self.generate_comment_vnode(comment, DUMMY_SP), false),
+            Node::Comment(comment) => self.generate_comment_vnode(comment, DUMMY_SP),
 
-            Node::ConditionalSeq(conditional_seq) => {
-                (self.generate_conditional_seq(conditional_seq), false)
-            }
+            Node::ConditionalSeq(conditional_seq) => self.generate_conditional_seq(conditional_seq),
         }
     }
 
@@ -36,32 +33,23 @@ impl CodegenContext {
         &mut self,
         element_node: &ElementNode,
         wrap_in_block: bool,
-    ) -> (Expr, bool) {
-        match element_node.kind {
-            ElementKind::Builtin(builtin_type) => {
-                // TODO
-                (
-                    self.generate_builtin(element_node, builtin_type),
-                    false,
-                )
-            }
+    ) -> Expr {
+        let mut result = match element_node.kind {
+            ElementKind::Builtin(builtin_type) => self.generate_builtin(element_node, builtin_type),
 
-            ElementKind::Element => {
-                // TODO
-                (
-                    self.generate_element_vnode(element_node, wrap_in_block),
-                    false,
-                )
-            }
+            ElementKind::Element => self.generate_element_vnode(element_node, wrap_in_block),
 
-            ElementKind::Component => {
-                // TODO
-                (
-                    self.generate_component_vnode(element_node, wrap_in_block),
-                    false,
-                )
+            ElementKind::Component => self.generate_component_vnode(element_node, wrap_in_block),
+        };
+
+        // Generate `v-for` if it is present
+        if let Some(ref directives) = element_node.starting_tag.directives {
+            if let Some(ref v_for) = directives.v_for {
+                result = self.generate_v_for(v_for, result);
             }
         }
+
+        result
     }
 
     /// Generates a sequence of nodes taken from an iterator.
@@ -115,9 +103,12 @@ impl CodegenContext {
         }
 
         while let Some(node) = iter.next() {
-            let (generated, has_js) = self.generate_node(node, false);
+            let generated = self.generate_node(node, false);
             let is_text_node = matches!(node, Node::Text(_) | Node::Interpolation { .. });
-            patch_flag_text |= has_js;
+
+            if let Node::Interpolation(interpolation) = node {
+                patch_flag_text |= interpolation.patch_flag;
+            }
 
             if is_text_node {
                 text_nodes.push(generated);

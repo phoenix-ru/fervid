@@ -259,8 +259,37 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                 collect_variables(&v_for.itervar, &mut scope);
 
                 // Transform the iterable
-                self.scope_helper
+                let is_dynamic = self
+                    .scope_helper
                     .transform_expr(&mut v_for.iterable, scope_to_use);
+
+                // Add patch flags
+                if !is_dynamic {
+                    // This is `64 /* STABLE_FRAGMENT */))`
+                    // when iterable is non-dynamic (number, string) (`v-for="i in 3"`)
+                    v_for.patch_flags |= PatchFlags::StableFragment;
+                } else {
+                    // Look for `key`. Fragment is either keyed or unkeyed.
+                    let has_key =
+                        element_node
+                            .starting_tag
+                            .attributes
+                            .iter()
+                            .any(|attr| match attr {
+                                AttributeOrBinding::RegularAttribute { name: "key", .. } => true,
+                                AttributeOrBinding::VBind(VBindDirective {
+                                    argument: Some(StrOrExpr::Str("key")),
+                                    ..
+                                }) => true,
+                                _ => false,
+                            });
+
+                    v_for.patch_flags |= if has_key {
+                        PatchFlags::KeyedFragment
+                    } else {
+                        PatchFlags::UnkeyedFragment
+                    };
+                }
             }
 
             if let Some(VSlotDirective {
