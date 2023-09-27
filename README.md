@@ -136,4 +136,5 @@ Integrations
 - [x] WASM binary (unpublished)
 - [x] NAPI binary (unpublished)
 - [ ] [unplugin](https://github.com/unjs/unplugin)
+- [ ] [Farm](https://github.com/farm-fe/farm) native plugin
 - [ ] [Turbopack](https://github.com/vercel/turbo) plugin (when plugin system is defined)
