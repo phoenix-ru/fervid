@@ -13,9 +13,9 @@ license = "Apache-2.0"
 fervid_core = { path="../fervid_core", version = "0.0.1" }
 lazy_static = "1.4.0"
 phf = { version = "0.11", features = ["macros"] }
-swc_core = { version = "0.75.*", features = ["common", "ecma_ast", "ecma_visit"] }
+swc_core = { version = "0.83.*", features = ["common", "ecma_ast", "ecma_visit"] }
 smallvec = "1.10.0"
 
 [dev-dependencies]
-swc_ecma_codegen = "0.138.*"
-swc_ecma_parser = "0.133.*"
+swc_ecma_codegen = "0.145.*"
+swc_ecma_parser = "0.140.*"

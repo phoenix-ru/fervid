@@ -21,9 +21,9 @@ fervid_transform = { path="../fervid_transform", version = "0.0.1" }
 nom = "7"
 regex = "1"
 phf = { version = "0.11", features = ["macros"] }
-swc_ecma_codegen = "0.138.*"
-swc_ecma_parser = "0.133.*"
-swc_core = { version = "0.75.*", features = ["ecma_ast"] }
+swc_ecma_codegen = "0.145.*"
+swc_ecma_parser = "0.140.*"
+swc_core = { version = "0.83.*", features = ["ecma_ast"] }
 lazy_static = "1.4.0"
 fxhash = "0.2.1"
 

@@ -12,4 +12,4 @@ license = "Apache-2.0"
 [dependencies]
 flagset = "0.4.3"
 phf = { version = "0.11", features = ["macros"] }
-swc_core = { version = "0.75.*", features = ["ecma_ast"] }
+swc_core = { version = "0.83.*", features = ["ecma_ast"] }
