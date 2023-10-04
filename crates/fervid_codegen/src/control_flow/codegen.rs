@@ -1,7 +1,7 @@
 use fervid_core::{ElementKind, ElementNode, Node, VueImports};
 use smallvec::SmallVec;
 use swc_core::{
-    common::{BytePos, Span, SyntaxContext, DUMMY_SP},
+    common::{BytePos, Span, SyntaxContext},
     ecma::ast::{
         BinExpr, BinaryOp, CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, Number, ParenExpr,
         SeqExpr,
@@ -15,7 +15,7 @@ type TextNodesConcatenationVec = SmallVec<[Expr; 3]>;
 impl CodegenContext {
     pub fn generate_node(&mut self, node: &Node, wrap_in_block: bool) -> Expr {
         match node {
-            Node::Text(contents) => self.generate_text_node(contents, DUMMY_SP),
+            Node::Text(contents, span) => self.generate_text_node(contents, span.to_owned()),
 
             Node::Interpolation(interpolation) => self.generate_interpolation(interpolation),
 
@@ -23,7 +23,7 @@ impl CodegenContext {
                 self.generate_element_or_component(element_node, wrap_in_block)
             }
 
-            Node::Comment(comment) => self.generate_comment_vnode(comment, DUMMY_SP),
+            Node::Comment(comment, span) => self.generate_comment_vnode(comment, span.to_owned()),
 
             Node::ConditionalSeq(conditional_seq) => self.generate_conditional_seq(conditional_seq),
         }
@@ -62,7 +62,7 @@ impl CodegenContext {
     /// Returns `true` if all the nodes were inlined successfully
     pub fn generate_node_sequence<'n>(
         &mut self,
-        iter: &mut impl Iterator<Item = &'n Node<'n>>,
+        iter: &mut impl Iterator<Item = &'n Node>,
         out: &mut Vec<Expr>,
         total_nodes: usize,
         allow_inlining: bool,
@@ -104,7 +104,7 @@ impl CodegenContext {
 
         while let Some(node) = iter.next() {
             let generated = self.generate_node(node, false);
-            let is_text_node = matches!(node, Node::Text(_) | Node::Interpolation { .. });
+            let is_text_node = matches!(node, Node::Text(_, _) | Node::Interpolation { .. });
 
             if let Node::Interpolation(interpolation) = node {
                 patch_flag_text |= interpolation.patch_flag;
@@ -160,7 +160,7 @@ impl CodegenContext {
     /// Special case: `<template>` with `v-if`/`v-else-if`/`v-else`/`v-for`
     #[inline]
     pub fn should_generate_fragment(&self, element_node: &ElementNode) -> bool {
-        element_node.starting_tag.tag_name == "template"
+        element_node.starting_tag.tag_name.eq("template")
             && match element_node.starting_tag.directives {
                 Some(ref directives) => {
                     directives.v_if.is_some()

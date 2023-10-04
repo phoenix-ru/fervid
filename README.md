@@ -55,8 +55,8 @@ The core structures and functionality shared across crates.
 This crate is responsible for AST transformation.
 Handles `<script>` and `<script setup>` analysis and transformations, along with Typescript. Based on [SWC](https://github.com/swc-project/swc) and provides fast and correct transforms without using regular expressions.
 
-### `fervid_parser` ![future](https://badgen.net/badge/Status/Planned/orange)
-Parser for Vue SFC based on [Servo html5ever](https://github.com/servo/html5ever), the industry-grade HTML parser.
+### `fervid_parser` ![wip](https://badgen.net/badge/Status/In%20progress/blue)
+Parser for Vue SFC based on [swc_html_parser](https://rustdoc.swc.rs/swc_html_parser/).
 
 ### `fervid_napi` ![wip](https://badgen.net/badge/Status/In%20progress/blue)
 NAPI-rs bindings for usage in Node.js.
@@ -70,7 +70,7 @@ These crates allow authoring plugins for `fervid` in Rust using dynamically load
 ## Roadmap
 Parser
 - [x] Template parsing
-- [ ] W3 Spec compliance
+- [x] W3 Spec compliance
 
 Transformer
 - [x] Template scope construction

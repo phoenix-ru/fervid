@@ -4,7 +4,7 @@ use fervid_core::{
     StrOrExpr, VBindDirective, VOnDirective, VSlotDirective, VUE_BUILTINS,
 };
 use smallvec::SmallVec;
-use swc_core::ecma::atoms::JsWord;
+use swc_core::ecma::atoms::{JsWord, js_word};
 
 use crate::structs::{ScopeHelper, TemplateScope};
 
@@ -39,7 +39,7 @@ pub fn transform_and_record_template(
         let new_root = Node::Element(ElementNode {
             kind: ElementKind::Element,
             starting_tag: StartingTag {
-                tag_name: "template",
+                tag_name: js_word!("template"),
                 attributes: vec![],
                 directives: None,
             },
@@ -74,13 +74,13 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
 
     // Filter out whitespace text nodes at the beginning and end of ElementNode
     match children.first() {
-        Some(Node::Text(v)) if v.trim().len() == 0 => {
+        Some(Node::Text(v, _)) if v.trim().len() == 0 => {
             discard_mask |= 1 << 0;
         }
         _ => {}
     }
     match children.last() {
-        Some(Node::Text(v)) if v.trim().len() == 0 => {
+        Some(Node::Text(v, _)) if v.trim().len() == 0 => {
             discard_mask |= 1 << (children_len - 1);
         }
         _ => {}
@@ -89,7 +89,7 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
     // For removing the middle whitespace text nodes, we need sliding windows of three nodes
     for (index, window) in children.windows(3).enumerate() {
         match window {
-            [Node::Element(_) | Node::Comment(_), Node::Text(middle), Node::Element(_) | Node::Comment(_)]
+            [Node::Element(_) | Node::Comment(_, _), Node::Text(middle, _), Node::Element(_) | Node::Comment(_, _)]
                 if middle.trim().len() == 0 =>
             {
                 discard_mask |= 1 << (index + 1);
@@ -148,7 +148,7 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
             // Only process `ElementNode`s.
             // Otherwise, when we have an `if` node, ignore `Comment`s and finish sequence.
             let Node::Element(child_element) = &mut child else {
-                if let (Node::Comment(_), Some(_)) = (&child, seq.as_ref()) {
+                if let (Node::Comment(_, _), Some(_)) = (&child, seq.as_ref()) {
                     continue;
                 } else {
                     finish_seq!(child);
@@ -276,9 +276,9 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                             .attributes
                             .iter()
                             .any(|attr| match attr {
-                                AttributeOrBinding::RegularAttribute { name: "key", .. } => true,
+                                AttributeOrBinding::RegularAttribute { name: js_word!("key"), .. } => true,
                                 AttributeOrBinding::VBind(VBindDirective {
-                                    argument: Some(StrOrExpr::Str("key")),
+                                    argument: Some(StrOrExpr::Str(js_word!("key"))),
                                     ..
                                 }) => true,
                                 _ => false,
@@ -323,7 +323,7 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                         .transform_expr(&mut v_bind.value, scope_to_use);
                     let patch_hints = &mut element_node.patch_hints;
 
-                    let Some(StrOrExpr::Str(argument)) = v_bind.argument else {
+                    let Some(StrOrExpr::Str(ref argument)) = v_bind.argument else {
                         // This is dynamic
                         // From docs: [FULL_PROPS is] exclusive with CLASS, STYLE and PROPS.
                         patch_hints.flags &=
@@ -347,9 +347,9 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                         continue;
                     }
 
-                    if argument == "class" {
+                    if argument == &js_word!("class") {
                         patch_hints.flags |= PatchFlags::Class;
-                    } else if argument == "style" {
+                    } else if argument == &js_word!("style") {
                         patch_hints.flags |= PatchFlags::Style;
                     } else {
                         patch_hints.flags |= PatchFlags::Props;
@@ -431,18 +431,18 @@ impl<'a> Visitor for TemplateVisitor<'_> {
 
 impl TemplateVisitor<'_> {
     fn recognize_element_kind(&self, starting_tag: &StartingTag) -> ElementKind {
-        let tag_name = starting_tag.tag_name;
+        let tag_name = &starting_tag.tag_name;
 
         // First, check for a built-in
-        if let Some(builtin_type) = VUE_BUILTINS.get(tag_name) {
+        if let Some(builtin_type) = VUE_BUILTINS.get(&tag_name) {
             // Special case for `<component>`. If it does not have `is`, this is not a built-in
-            if tag_name == "component" {
+            if tag_name.eq("component") {
                 let has_is = starting_tag.attributes.iter().any(|attr| {
                     matches!(
                         attr,
-                        AttributeOrBinding::RegularAttribute { name: "is", .. }
+                        AttributeOrBinding::RegularAttribute { name: js_word!("is"), .. }
                             | AttributeOrBinding::VBind(VBindDirective {
-                                argument: Some(StrOrExpr::Str("is")),
+                                argument: Some(StrOrExpr::Str(js_word!("is"))),
                                 ..
                             })
                     )
@@ -457,7 +457,7 @@ impl TemplateVisitor<'_> {
         }
 
         // Then check if this is an HTML tag
-        if is_html_tag(starting_tag.tag_name) {
+        if is_html_tag(&starting_tag.tag_name) {
             ElementKind::Element
         } else {
             ElementKind::Component
@@ -465,7 +465,7 @@ impl TemplateVisitor<'_> {
     }
 }
 
-impl VisitMut for Node<'_> {
+impl VisitMut for Node {
     fn visit_mut_with(&mut self, visitor: &mut impl Visitor) {
         match self {
             Node::Element(el) => visitor.visit_element_node(el),
@@ -489,7 +489,7 @@ mod tests {
     #[test]
     fn it_distinguishes_component_builtin_and_not() {
         let starting_tag = StartingTag {
-            tag_name: "component",
+            tag_name: "component".into(),
             attributes: vec![],
             directives: None,
         };
@@ -514,10 +514,10 @@ mod tests {
         //   <h3 v-else>else</h3>
         // </div></template>
         let mut sfc_template = SfcTemplateBlock {
-            lang: "html",
+            lang: "html".into(),
             roots: vec![Node::Element(ElementNode {
                 starting_tag: StartingTag {
-                    tag_name: "div",
+                    tag_name: "div".into(),
                     attributes: vec![],
                     directives: None,
                 },
@@ -564,7 +564,7 @@ mod tests {
         //   <h3 v-else>else</h3>
         // </template>
         let mut sfc_template = SfcTemplateBlock {
-            lang: "html",
+            lang: "html".into(),
             roots: vec![if_node(), else_if_node(), else_node()],
             span: DUMMY_SP,
         };
@@ -595,7 +595,7 @@ mod tests {
         //   <h1 v-if="true">if</h1>
         // </template>
         let mut sfc_template = SfcTemplateBlock {
-            lang: "html",
+            lang: "html".into(),
             roots: vec![if_node(), if_node()],
             span: DUMMY_SP,
         };
@@ -629,7 +629,7 @@ mod tests {
         //   <h2 v-else-if="foo">else-if</h2>
         // </template>
         let mut sfc_template = SfcTemplateBlock {
-            lang: "html",
+            lang: "html".into(),
             roots: vec![if_node(), else_if_node(), if_node(), else_if_node()],
             span: DUMMY_SP,
         };
@@ -661,7 +661,7 @@ mod tests {
         //   <h3 v-else>else</h3>
         // </template>
         let mut sfc_template = SfcTemplateBlock {
-            lang: "html",
+            lang: "html".into(),
             roots: vec![else_if_node(), else_node()],
             span: DUMMY_SP,
         };
@@ -690,10 +690,10 @@ mod tests {
         //   <h3 v-else>else</h3>
         // </div></template>
         let mut sfc_template = SfcTemplateBlock {
-            lang: "html",
+            lang: "html".into(),
             roots: vec![Node::Element(ElementNode {
                 starting_tag: StartingTag {
-                    tag_name: "div",
+                    tag_name: "div".into(),
                     attributes: vec![],
                     directives: None,
                 },
@@ -737,7 +737,7 @@ mod tests {
     fn it_ignores_node_without_conditional_directives() {
         let no_directives1 = Node::Element(ElementNode {
             starting_tag: StartingTag {
-                tag_name: "test-component",
+                tag_name: "test-component".into(),
                 attributes: vec![],
                 directives: Some(Box::new(VueDirectives {
                     ..Default::default()
@@ -752,13 +752,13 @@ mod tests {
 
         let no_directives2 = Node::Element(ElementNode {
             starting_tag: StartingTag {
-                tag_name: "div",
+                tag_name: "div".into(),
                 attributes: vec![],
                 directives: Some(Box::new(VueDirectives {
                     ..Default::default()
                 })),
             },
-            children: vec![Node::Text("hello")],
+            children: vec![Node::Text("hello".into(), DUMMY_SP)],
             template_scope: 0,
             kind: ElementKind::Element,
             patch_hints: Default::default(),
@@ -766,7 +766,7 @@ mod tests {
         });
 
         let mut sfc_template = SfcTemplateBlock {
-            lang: "html",
+            lang: "html".into(),
             roots: vec![no_directives1, no_directives2],
             span: DUMMY_SP,
         };
@@ -782,26 +782,26 @@ mod tests {
     }
 
     // text
-    fn text_node() -> Node<'static> {
-        Node::Text("text")
+    fn text_node() -> Node {
+        Node::Text("text".into(), DUMMY_SP)
     }
 
     fn check_text_node(node: &Node) {
-        assert!(matches!(node, Node::Text("text")));
+        assert!(matches!(node, Node::Text(js_word!("text"), DUMMY_SP)));
     }
 
     // <h1 v-if="true">if</h1>
-    fn if_node() -> Node<'static> {
+    fn if_node() -> Node {
         Node::Element(ElementNode {
             starting_tag: StartingTag {
-                tag_name: "h1",
+                tag_name: "h1".into(),
                 attributes: vec![],
                 directives: Some(Box::new(VueDirectives {
                     v_if: Some(js("true")),
                     ..Default::default()
                 })),
             },
-            children: vec![Node::Text("if")],
+            children: vec![Node::Text("if".into(), DUMMY_SP)],
             template_scope: 0,
             kind: ElementKind::Element,
             patch_hints: Default::default(),
@@ -814,24 +814,24 @@ mod tests {
         assert!(matches!(
             if_node.node,
             ElementNode {
-                starting_tag: StartingTag { tag_name: "h1", .. },
+                starting_tag: StartingTag { tag_name: js_word!("h1"), .. },
                 ..
             }
         ));
     }
 
     // <h2 v-else-if="foo">else-if</h3>
-    fn else_if_node() -> Node<'static> {
+    fn else_if_node() -> Node {
         Node::Element(ElementNode {
             starting_tag: StartingTag {
-                tag_name: "h2",
+                tag_name: "h2".into(),
                 attributes: vec![],
                 directives: Some(Box::new(VueDirectives {
                     v_else_if: Some(js("foo")),
                     ..Default::default()
                 })),
             },
-            children: vec![Node::Text("else-if")],
+            children: vec![Node::Text("else-if".into(), DUMMY_SP)],
             template_scope: 0,
             kind: ElementKind::Element,
             patch_hints: Default::default(),
@@ -845,24 +845,24 @@ mod tests {
         assert!(matches!(
             else_if_node.node,
             ElementNode {
-                starting_tag: StartingTag { tag_name: "h2", .. },
+                starting_tag: StartingTag { tag_name: js_word!("h2"), .. },
                 ..
             }
         ));
     }
 
     // <h3 v-else>else</h3>
-    fn else_node() -> Node<'static> {
+    fn else_node() -> Node {
         Node::Element(ElementNode {
             starting_tag: StartingTag {
-                tag_name: "h3",
+                tag_name: "h3".into(),
                 attributes: vec![],
                 directives: Some(Box::new(VueDirectives {
                     v_else: Some(()),
                     ..Default::default()
                 })),
             },
-            children: vec![Node::Text("else")],
+            children: vec![Node::Text("else".into(), DUMMY_SP)],
             template_scope: 0,
             kind: ElementKind::Element,
             patch_hints: Default::default(),
@@ -875,7 +875,7 @@ mod tests {
         assert!(matches!(
             **else_node,
             ElementNode {
-                starting_tag: StartingTag { tag_name: "h3", .. },
+                starting_tag: StartingTag { tag_name: js_word!("h3"), .. },
                 ..
             }
         ));

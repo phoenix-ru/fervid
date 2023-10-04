@@ -42,7 +42,7 @@ mod tests {
                 children: vec![],
                 kind: ElementKind::Component,
                 starting_tag: StartingTag {
-                    tag_name: "test-component",
+                    tag_name: "test-component".into(),
                     attributes: vec![],
                     directives: Some(Box::new(VueDirectives {
                         v_text: Some(Box::new(Expr::Bin(BinExpr {
@@ -79,7 +79,7 @@ mod tests {
                 children: vec![],
                 kind: ElementKind::Element,
                 starting_tag: StartingTag {
-                    tag_name: "h1",
+                    tag_name: "h1".into(),
                     attributes: vec![],
                     directives: Some(Box::new(VueDirectives {
                         v_text: Some(js("foo + bar")),

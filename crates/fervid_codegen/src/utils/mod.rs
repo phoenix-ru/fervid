@@ -2,7 +2,8 @@
 
 use std::fmt::{Write, Error};
 
-use swc_core::{ecma::ast::{Ident, IdentExt, PropName, Str}, common::Span};
+use fervid_core::{FervidAtom, StrOrExpr};
+use swc_core::{ecma::ast::{Ident, IdentExt, PropName, Str, ComputedPropName}, common::Span};
 
 /// Adapted from SWC Ident::verify_symbol
 #[inline]
@@ -29,8 +30,30 @@ pub fn str_to_propname(s: &str, span: Span) -> PropName {
         PropName::Str(Str {
             span,
             value: s.into(),
-            raw: Some(s.into()),
+            raw: None,
         })
+    }
+}
+
+pub fn atom_to_propname(sym: FervidAtom, span: Span) -> PropName {
+    if is_valid_ident(&sym) {
+        PropName::Ident(Ident { span, sym, optional: false })
+    } else {
+        PropName::Str(Str {
+            span,
+            value: sym,
+            raw: None,
+        })
+    }
+}
+
+pub fn str_or_expr_to_propname(str_or_expr: StrOrExpr, span: Span) -> PropName {
+    match str_or_expr {
+        StrOrExpr::Str(sym) => atom_to_propname(sym, span),
+        StrOrExpr::Expr(expr) => PropName::Computed(ComputedPropName {
+            span,
+            expr,
+        }),
     }
 }
 

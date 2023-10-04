@@ -1,4 +1,4 @@
-use fervid_core::{VueDirectives, VueImports};
+use fervid_core::{VueDirectives, VueImports, FervidAtom, StrOrExpr};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
@@ -62,14 +62,14 @@ impl CodegenContext {
         // Generate custom directives last
         for custom_directive in directives.custom.iter() {
             let span = DUMMY_SP; // TODO Span
-            let directive_ident = self.get_custom_directive_ident(custom_directive.name, span);
+            let directive_ident = self.get_custom_directive_ident(&custom_directive.name, span);
 
             out.push(Some(ExprOrSpread {
                 spread: None,
                 expr: Box::new(self.generate_directive_from_parts(
                     directive_ident,
                     custom_directive.value.as_deref(),
-                    custom_directive.argument,
+                    custom_directive.argument.as_ref(),
                     &custom_directive.modifiers,
                     span,
                 )),
@@ -124,8 +124,8 @@ impl CodegenContext {
         &mut self,
         name: Ident,
         value: Option<&Expr>,
-        argument: Option<&str>,
-        modifiers: &[&str],
+        argument: Option<&StrOrExpr>,
+        modifiers: &[FervidAtom],
         span: Span,
     ) -> Expr {
         let has_argument = argument.is_some();
@@ -177,17 +177,18 @@ impl CodegenContext {
         early_exit!(2);
 
         // Write the argument or `void 0`
+        let directive_arg_expr = match argument {
+            Some(StrOrExpr::Str(s)) => Box::new(Expr::Lit(Lit::Str(Str {
+                span: DUMMY_SP,
+                value: s.to_owned(),
+                raw: None,
+            }))),
+            Some(StrOrExpr::Expr(expr)) => expr.to_owned(),
+            None => Box::new(void0()),
+        };
         directive_arr.elems.push(Some(ExprOrSpread {
             spread: None,
-            expr: if let Some(argument) = argument {
-                Box::new(Expr::Lit(Lit::Str(Str {
-                    span: DUMMY_SP,
-                    value: JsWord::from(argument),
-                    raw: None,
-                })))
-            } else {
-                Box::new(void0())
-            },
+            expr: directive_arg_expr,
         }));
 
         early_exit!(3);
@@ -216,7 +217,7 @@ impl CodegenContext {
         Expr::Array(directive_arr)
     }
 
-    fn get_custom_directive_ident(&mut self, directive_name: &str, span: Span) -> Ident {
+    fn get_custom_directive_ident(&mut self, directive_name: &FervidAtom, span: Span) -> Ident {
         // Check directive existence and early exit
         let existing_directive_name = self.directives.get(directive_name);
         if let Some(directive_name) = existing_directive_name {
@@ -254,10 +255,10 @@ impl CodegenContext {
 
         // We need sorted entries for stable output.
         // Entries are sorted by Js identifier (second element of tuple in hashmap entry)
-        let mut sorted_directives: Vec<(&str, &JsWord)> = self
+        let mut sorted_directives: Vec<(&FervidAtom, &FervidAtom)> = self
             .directives
             .iter()
-            .map(|(directive_name, directive_ident)| (directive_name.as_str(), directive_ident))
+            .map(|(directive_name, directive_ident)| (directive_name, directive_ident))
             .collect();
 
         sorted_directives.sort_by(|a, b| a.1.cmp(b.1));

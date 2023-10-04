@@ -1,10 +1,10 @@
-use fervid_core::VModelDirective;
+use fervid_core::{VModelDirective, FervidAtom, StrOrExpr};
 use swc_core::{
     common::Span,
     ecma::{
         ast::{
             ArrowExpr, AssignExpr, AssignOp, BindingIdent, BlockStmtOrExpr, Bool, Expr, Ident,
-            KeyValueProp, Lit, ObjectLit, ParenExpr, Pat, PatOrExpr, Prop, PropOrSpread,
+            KeyValueProp, Lit, ObjectLit, ParenExpr, Pat, PatOrExpr, Prop, PropOrSpread, BinExpr, BinaryOp, Str, PropName, ComputedPropName,
         },
         atoms::JsWord,
     },
@@ -12,7 +12,7 @@ use swc_core::{
 
 use crate::{
     context::CodegenContext,
-    utils::{str_to_propname, to_camelcase},
+    utils::{str_to_propname, to_camelcase, str_or_expr_to_propname},
 };
 
 impl CodegenContext {
@@ -24,9 +24,10 @@ impl CodegenContext {
         scope_to_use: u32,
     ) -> bool {
         let span = v_model.span;
+        let mut buf = String::new();
 
         // `v-model="smth"` is same as `v-model:modelValue="smth"`
-        let bound_attribute = v_model.argument.unwrap_or("modelValue");
+        let bound_attribute = v_model.argument.to_owned().unwrap_or_else(|| "modelValue".into());
 
         // 1. Transform the binding
         // let (transformed, has_js_bindings) =
@@ -36,19 +37,44 @@ impl CodegenContext {
         // 2. Push model attribute and its binding,
         // e.g. `v-model="smth"` -> `modelValue: _ctx.smth`
         out.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-            key: str_to_propname(bound_attribute, span),
+            key: str_or_expr_to_propname(bound_attribute.to_owned(), span),
             value: Box::new(v_model.value.to_owned()),
         }))));
 
         // 3. Generate event name, e.g. `onUpdate:modelValue` or `onUpdate:usersArgument`
-        let mut event_listener = String::with_capacity(9 + bound_attribute.len());
-        event_listener.push_str("onUpdate:");
-        let _ = to_camelcase(bound_attribute, &mut event_listener); // ignore fault
+        // For dynamic model args, `["onUpdate:" + <model arg>]` will be generated
+        let event_listener_propname = match bound_attribute {
+            StrOrExpr::Str(ref s) => {
+                buf.reserve(9 + s.len());
+                buf.push_str("onUpdate:");
+                let _ = to_camelcase(&s, &mut buf); // ignore fault
+                str_to_propname(&buf, span)
+            }
+
+            StrOrExpr::Expr(ref expr) => {
+                let addition = Expr::Bin(BinExpr {
+                    span,
+                    op: BinaryOp::Add,
+                    left: Box::new(Expr::Lit(Lit::Str(Str {
+                        span,
+                        value: JsWord::from("onUpdate:"),
+                        raw: None,
+                    }))),
+                    right: expr.to_owned(),
+                });
+
+                PropName::Computed(ComputedPropName {
+                    span,
+                    expr: Box::new(addition),
+                })
+            }
+        };
 
         // 4. Push the update code,
         // e.g. `v-model="smth"` -> `"onUpdate:modelValue": $event => ((_ctx.smth) = $event)`
+        // TODO Cache like so `_cache[1] || (_cache[1] = `
         out.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-            key: str_to_propname(&event_listener, span),
+            key: event_listener_propname,
             value: self.generate_v_model_update_fn(&v_model.value, scope_to_use, span),
         }))));
 
@@ -57,23 +83,48 @@ impl CodegenContext {
             return has_js_bindings;
         }
 
-        // Because we already used `event_listener` buffer,
-        // we can safely reuse it without allocating a new buffer
-        let mut modifiers_prop = event_listener;
-        modifiers_prop.clear();
+        // For regular model values, `<model name>Modifiers` is generated.
+        // For dynamic ones - `[<model name> + "Modifiers"]`.
+        let modifiers_propname = match bound_attribute {
+            StrOrExpr::Str(model_arg) => {
+                // Because we already used buffer for `event_listener`,
+                // we can safely reuse it without allocating a new buffer
+                buf.clear();
+        
+                // This is weird, but that's how the official compiler is implemented
+                // modelValue => modelModifiers
+                // users-argument => "users-argumentModifiers"
+                if model_arg.eq("modelValue") {
+                    buf.push_str("modelModifiers");
+                } else {
+                    buf.push_str(&model_arg);
+                    buf.push_str("Modifiers");
+                }
 
-        // This is weird, but that's how the official compiler is implemented
-        // modelValue => modelModifiers
-        // users-argument => "users-argumentModifiers"
-        if bound_attribute == "modelValue" {
-            modifiers_prop.push_str("modelModifiers");
-        } else {
-            modifiers_prop.push_str(bound_attribute);
-            modifiers_prop.push_str("Modifiers");
-        }
+                str_to_propname(&buf, span)
+            }
+
+            StrOrExpr::Expr(expr) => {
+                let addition = Expr::Bin(BinExpr {
+                    span,
+                    op: BinaryOp::Add,
+                    left: expr.to_owned(),
+                    right: Box::new(Expr::Lit(Lit::Str(Str {
+                        span,
+                        value: JsWord::from("Modifiers"),
+                        raw: None,
+                    }))),
+                });
+
+                PropName::Computed(ComputedPropName {
+                    span,
+                    expr: Box::new(addition),
+                })
+            }
+        };
 
         out.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-            key: str_to_propname(&modifiers_prop, span),
+            key: modifiers_propname,
             value: Box::new(Expr::Object(generate_v_model_modifiers(
                 &v_model.modifiers,
                 span,
@@ -149,7 +200,7 @@ impl CodegenContext {
     }
 }
 
-fn generate_v_model_modifiers(modifiers: &[&str], span: Span) -> ObjectLit {
+fn generate_v_model_modifiers(modifiers: &[FervidAtom], span: Span) -> ObjectLit {
     let props = modifiers
         .iter()
         .map(|modifier| {
@@ -191,7 +242,7 @@ mod tests {
         // v-model:simple="foo"
         test_out(
             vec![VModelDirective {
-                argument: Some("simple"),
+                argument: Some("simple".into()),
                 value: *js("foo"),
                 modifiers: Vec::new(),
                 span: DUMMY_SP,
@@ -202,7 +253,7 @@ mod tests {
         // v-model:modelValue="bar"
         test_out(
             vec![VModelDirective {
-                argument: Some("modelValue"),
+                argument: Some("modelValue".into()),
                 value: *js("bar"),
                 modifiers: Vec::new(),
                 span: DUMMY_SP,
@@ -213,7 +264,7 @@ mod tests {
         // v-model:model-value="baz"
         test_out(
             vec![VModelDirective {
-                argument: Some("model-value"),
+                argument: Some("model-value".into()),
                 value: *js("baz"),
                 modifiers: Vec::new(),
                 span: DUMMY_SP,
@@ -229,7 +280,7 @@ mod tests {
             vec![VModelDirective {
                 argument: None,
                 value: *js("foo"),
-                modifiers: vec!["lazy", "trim"],
+                modifiers: vec!["lazy".into(), "trim".into()],
                 span: DUMMY_SP,
             }],
             r#"{modelValue:foo,"onUpdate:modelValue":$event=>((foo)=$event),modelModifiers:{lazy:true,trim:true}}"#,
@@ -240,7 +291,7 @@ mod tests {
             vec![VModelDirective {
                 argument: None,
                 value: *js("foo"),
-                modifiers: vec!["custom-modifier"],
+                modifiers: vec!["custom-modifier".into()],
                 span: DUMMY_SP,
             }],
             r#"{modelValue:foo,"onUpdate:modelValue":$event=>((foo)=$event),modelModifiers:{"custom-modifier":true}}"#,
@@ -249,12 +300,37 @@ mod tests {
         // v-model:foo-bar.custom-modifier="bazQux"
         test_out(
             vec![VModelDirective {
-                argument: Some("foo-bar"),
+                argument: Some("foo-bar".into()),
                 value: *js("bazQux"),
-                modifiers: vec!["custom-modifier"],
+                modifiers: vec!["custom-modifier".into()],
                 span: DUMMY_SP,
             }],
             r#"{"foo-bar":bazQux,"onUpdate:fooBar":$event=>((bazQux)=$event),"foo-barModifiers":{"custom-modifier":true}}"#,
+        );
+    }
+
+    #[test]
+    fn it_generates_dynamic_model_name() {
+        // v-model:[foo]="bar"
+        test_out(
+            vec![VModelDirective {
+                argument: Some(StrOrExpr::Expr(js("foo"))),
+                value: *js("bar"),
+                modifiers: Vec::new(),
+                span: DUMMY_SP,
+            }],
+            r#"{[foo]:bar,["onUpdate:"+foo]:$event=>((bar)=$event)}"#,
+        );
+
+        // v-model:[foo].baz="bar"
+        test_out(
+            vec![VModelDirective {
+                argument: Some(StrOrExpr::Expr(js("foo"))),
+                value: *js("bar"),
+                modifiers: vec!["baz".into()],
+                span: DUMMY_SP,
+            }],
+            r#"{[foo]:bar,["onUpdate:"+foo]:$event=>((bar)=$event),[foo+"Modifiers"]:{baz:true}}"#,
         );
     }
 

@@ -1,6 +1,6 @@
 [package]
-name = "fervid_core"
-description = "The core structures and utilities of fervid"
+name = "fervid_parser"
+description = "Vue SFC parser for the fervid crate"
 version = "0.0.1"
 edition = "2021"
 authors = ["Marsel Shaikhin <phoenix.apps@yahoo.com>"]
@@ -10,6 +10,8 @@ license = "Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flagset = "0.4.3"
-phf = { version = "0.11", features = ["macros"] }
+fervid_core = { path = "../fervid_core" }
 swc_core = { version = "0.83.*", features = ["common", "ecma_ast"] }
+swc_ecma_parser = "0.140.*"
+swc_html_ast = "0.32.*"
+swc_html_parser = "0.38.*"

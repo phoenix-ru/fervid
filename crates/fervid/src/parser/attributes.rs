@@ -1,5 +1,5 @@
 use fervid_core::{
-    AttributeOrBinding, StrOrExpr, VBindDirective, VCustomDirective, VForDirective,
+    AttributeOrBinding, FervidAtom, StrOrExpr, VBindDirective, VCustomDirective, VForDirective,
     VModelDirective, VOnDirective, VSlotDirective, VueDirectives,
 };
 use nom::{
@@ -75,7 +75,7 @@ pub fn parse_attributes(
 
 fn parse_vanilla_attr<'i>(
     input: &'i str,
-    out: &mut Vec<AttributeOrBinding<'i>>,
+    out: &mut Vec<AttributeOrBinding>,
 ) -> IResult<&'i str, ()> {
     let (input, attr_name) = html_name(input)?;
 
@@ -85,8 +85,8 @@ fn parse_vanilla_attr<'i>(
         // consider omitted attribute as attribute name itself (as current Vue compiler does)
         Err(_) => {
             out.push(AttributeOrBinding::RegularAttribute {
-                name: attr_name,
-                value: &attr_name,
+                name: attr_name.into(),
+                value: attr_name.into(),
             });
             Ok((input, ()))
         }
@@ -98,8 +98,8 @@ fn parse_vanilla_attr<'i>(
             println!("Dynamic attr: value = {:?}", attr_value);
 
             out.push(AttributeOrBinding::RegularAttribute {
-                name: attr_name,
-                value: attr_value,
+                name: attr_name.into(),
+                value: attr_value.into(),
             });
 
             Ok((input, ()))
@@ -116,8 +116,8 @@ fn parse_attr_value(input: &str) -> IResult<&str, &str> {
 /// Allows for shortcuts like `@` (same as `v-on`), `:` (`v-bind`) and `#` (`v-slot`)
 fn parse_directive<'i>(
     input: &'i str,
-    attributes: &mut Vec<AttributeOrBinding<'i>>,
-    directives: &mut Option<Box<VueDirectives<'i>>>,
+    attributes: &mut Vec<AttributeOrBinding>,
+    directives: &mut Option<Box<VueDirectives>>,
 ) -> IResult<&'i str, ()> {
     let (input, prefix) = alt((tag("v-"), tag("@"), tag("#"), tag(":"), tag(".")))(input)?;
 
@@ -249,6 +249,9 @@ fn parse_directive<'i>(
         };
     }
 
+    let argument = argument.map(|v| FervidAtom::from(v));
+    let modifiers: Vec<FervidAtom> = modifiers.into_iter().map(|v| FervidAtom::from(v)).collect();
+
     // Type the directive
     match directive_name {
         // Directives arranged by estimated usage frequency
@@ -258,7 +261,7 @@ fn parse_directive<'i>(
             let mut is_prop = is_bind_prop;
             let mut is_attr = false;
             for modifier in modifiers.iter() {
-                match *modifier {
+                match modifier.as_ref() {
                     "camel" => is_camel = true,
                     "prop" => is_prop = true,
                     "attr" => is_attr = true,
@@ -352,6 +355,7 @@ fn parse_directive<'i>(
         }
         "model" => {
             let value = expect_value!();
+            let argument = convert_argument(argument, is_dynamic, input)?;
 
             // TODO Span
             match parse_js(value, 0, 0) {
@@ -375,12 +379,13 @@ fn parse_directive<'i>(
                     Result::Err(_) => None,
                 }
             });
+            let argument = convert_argument(argument, is_dynamic, input)?;
+
             push_directive!(
                 v_slot,
                 VSlotDirective {
                     slot_name: argument,
                     value,
-                    is_dynamic_slot: is_dynamic
                 }
             );
         }
@@ -412,11 +417,13 @@ fn parse_directive<'i>(
 
         // Custom
         _ => 'custom: {
+            let argument = convert_argument(argument, is_dynamic, input)?;
+
             // If no value, include as is
             let Some(value) = value else {
                 let directives = get_directives!();
                 directives.custom.push(VCustomDirective {
-                    name: directive_name,
+                    name: directive_name.into(),
                     argument,
                     modifiers,
                     value: None,
@@ -429,7 +436,7 @@ fn parse_directive<'i>(
                 Ok(parsed) => {
                     let directives = get_directives!();
                     directives.custom.push(VCustomDirective {
-                        name: directive_name,
+                        name: directive_name.into(),
                         argument,
                         modifiers,
                         value: Some(parsed),
@@ -447,16 +454,19 @@ fn parse_directive<'i>(
 /// which value is either a string or a js expression.
 /// If parsing Js fails, returns Err.
 fn convert_argument<'s>(
-    argument: Option<&'s str>,
+    argument: Option<FervidAtom>,
     is_dynamic: bool,
-    input: &'s str
-) -> Result<Option<StrOrExpr<'s>>, nom::Err<nom::error::Error<&'s str>>> {
+    input: &'s str,
+) -> Result<Option<StrOrExpr>, nom::Err<nom::error::Error<&'s str>>> {
     match argument {
         Some(raw_arg) => {
             if is_dynamic {
                 // TODO Span & better error
-                let Ok(dynamic_argument) = parse_js(raw_arg, 0, 0) else {
-                    return Err(nom::Err::Error(nom::error::Error::from_error_kind(input, ErrorKind::Fail)));
+                let Ok(dynamic_argument) = parse_js(&raw_arg, 0, 0) else {
+                    return Err(nom::Err::Error(nom::error::Error::from_error_kind(
+                        input,
+                        ErrorKind::Fail,
+                    )));
                 };
 
                 Ok(Some(StrOrExpr::Expr(dynamic_argument)))

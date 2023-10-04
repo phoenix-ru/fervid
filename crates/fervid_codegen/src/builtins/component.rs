@@ -4,7 +4,7 @@
 use fervid_core::{AttributeOrBinding, ElementNode, StrOrExpr, VBindDirective, VueImports};
 use swc_core::ecma::{
     ast::{CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, ObjectLit, PropOrSpread, Str},
-    atoms::JsWord,
+    atoms::js_word,
 };
 
 use crate::CodegenContext;
@@ -23,9 +23,9 @@ impl CodegenContext {
             .position(|attr| {
                 matches!(
                     attr,
-                    AttributeOrBinding::RegularAttribute { name: "is", .. }
+                    AttributeOrBinding::RegularAttribute { name: js_word!("is"), .. }
                         | AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some(StrOrExpr::Str("is")),
+                            argument: Some(StrOrExpr::Str(js_word!("is"))),
                             ..
                         })
                 )
@@ -36,16 +36,16 @@ impl CodegenContext {
 
         // Expression to put as the first argument to `resolveDynamicComponent()`
         let is_attribute_expr = match component_is_attribute {
-            AttributeOrBinding::RegularAttribute { name: "is", value } => {
+            AttributeOrBinding::RegularAttribute { name: js_word!("is"), value } => {
                 Expr::Lit(Lit::Str(Str {
                     span,
-                    value: JsWord::from(*value),
+                    value: value.to_owned(),
                     raw: None,
                 }))
             }
 
             AttributeOrBinding::VBind(VBindDirective {
-                argument: Some(StrOrExpr::Str("is")),
+                argument: Some(StrOrExpr::Str(js_word!("is"))),
                 value,
                 ..
             }) => (**value).to_owned(),
@@ -125,7 +125,7 @@ mod tests {
                     ElementNode {
                         kind: ElementKind::Builtin(BuiltinType::Component),
                         starting_tag: StartingTag {
-                            tag_name: "component",
+                            tag_name: "component".into(),
                             attributes: vec![],
                             directives: None,
                         },
@@ -148,10 +148,10 @@ mod tests {
             ElementNode {
                 kind: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
-                    tag_name: "component",
+                    tag_name: "component".into(),
                     attributes: vec![AttributeOrBinding::RegularAttribute {
-                        name: "is",
-                        value: "div",
+                        name: "is".into(),
+                        value: "div".into(),
                     }],
                     directives: None,
                 },
@@ -171,9 +171,9 @@ mod tests {
             ElementNode {
                 kind: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
-                    tag_name: "component",
+                    tag_name: "component".into(),
                     attributes: vec![AttributeOrBinding::VBind(VBindDirective {
-                        argument: Some(StrOrExpr::Str("is")),
+                        argument: Some(StrOrExpr::Str("is".into())),
                         value: js("foo"),
                         is_camel: false,
                         is_prop: false,
@@ -197,15 +197,15 @@ mod tests {
             ElementNode {
                 kind: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
-                    tag_name: "component",
+                    tag_name: "component".into(),
                     attributes: vec![
                         AttributeOrBinding::RegularAttribute {
-                            name: "is",
-                            value: "div",
+                            name: "is".into(),
+                            value: "div".into(),
                         },
                         AttributeOrBinding::RegularAttribute {
-                            name: "foo",
-                            value: "bar",
+                            name: "foo".into(),
+                            value: "bar".into(),
                         },
                         AttributeOrBinding::VBind(fervid_core::VBindDirective {
                             argument: Some("baz".into()),
@@ -233,14 +233,14 @@ mod tests {
             ElementNode {
                 kind: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
-                    tag_name: "component",
+                    tag_name: "component".into(),
                     attributes: vec![AttributeOrBinding::RegularAttribute {
-                        name: "is",
-                        value: "div",
+                        name: "is".into(),
+                        value: "div".into(),
                     }],
                     directives: None,
                 },
-                children: vec![Node::Text("foobar")],
+                children: vec![Node::Text("foobar".into(), DUMMY_SP)],
                 template_scope: 0,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
@@ -258,28 +258,27 @@ mod tests {
             ElementNode {
                 kind: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
-                    tag_name: "component",
+                    tag_name: "component".into(),
                     attributes: vec![AttributeOrBinding::RegularAttribute {
-                        name: "is",
-                        value: "div",
+                        name: "is".into(),
+                        value: "div".into(),
                     }],
                     directives: None,
                 },
                 children: vec![Node::Element(ElementNode {
                     kind: ElementKind::Element,
                     starting_tag: StartingTag {
-                        tag_name: "template",
+                        tag_name: "template".into(),
                         attributes: vec![],
                         directives: Some(Box::new(VueDirectives {
                             v_slot: Some(VSlotDirective {
-                                slot_name: Some("named"),
+                                slot_name: Some("named".into()),
                                 value: None,
-                                is_dynamic_slot: false,
                             }),
                             ..Default::default()
                         })),
                     },
-                    children: vec![Node::Text("foobar")],
+                    children: vec![Node::Text("foobar".into(), DUMMY_SP)],
                     template_scope: 0,
                     patch_hints: Default::default(),
                     span: DUMMY_SP,
@@ -304,15 +303,15 @@ mod tests {
             ElementNode {
                 kind: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
-                    tag_name: "component",
+                    tag_name: "component".into(),
                     attributes: vec![
                         AttributeOrBinding::RegularAttribute {
-                            name: "is",
-                            value: "div",
+                            name: "is".into(),
+                            value: "div".into(),
                         },
                         AttributeOrBinding::RegularAttribute {
-                            name: "foo",
-                            value: "bar",
+                            name: "foo".into(),
+                            value: "bar".into(),
                         },
                         AttributeOrBinding::VBind(fervid_core::VBindDirective {
                             argument: Some("baz".into()),
@@ -325,22 +324,21 @@ mod tests {
                     directives: None,
                 },
                 children: vec![
-                    Node::Text("foobar"),
+                    Node::Text("foobar".into(), DUMMY_SP),
                     Node::Element(ElementNode {
                         kind: ElementKind::Element,
                         starting_tag: StartingTag {
-                            tag_name: "template",
+                            tag_name: "template".into(),
                             attributes: vec![],
                             directives: Some(Box::new(VueDirectives {
                                 v_slot: Some(VSlotDirective {
-                                    slot_name: Some("named"),
+                                    slot_name: Some("named".into()),
                                     value: None,
-                                    is_dynamic_slot: false,
                                 }),
                                 ..Default::default()
                             })),
                         },
-                        children: vec![Node::Text("bazqux")],
+                        children: vec![Node::Text("bazqux".into(), DUMMY_SP)],
                         template_scope: 0,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,

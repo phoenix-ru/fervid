@@ -46,7 +46,6 @@ use fervid_transform::{
     script::transform_and_record_scripts, structs::ScopeHelper,
     template::transform_and_record_template,
 };
-pub use parser::core::parse_sfc;
 use swc_core::ecma::ast::Expr;
 
 /// Naive implementation of the SFC compilation, meaning that:
@@ -56,7 +55,12 @@ use swc_core::ecma::ast::Expr;
 /// This implementation is mostly meant for the WASM and NAPI beta.
 /// Later on, it will be replaced with a stable API.
 pub fn compile_sync_naive(source: &str) -> Result<String, String> {
-    let (_, mut sfc) = parse_sfc(&source).map_err(|err| {
+    // let (_, mut sfc) = parse_sfc(&source).map_err(|err| {
+    //     return err.to_string();
+    // })?;
+
+    let mut errors = Vec::new();
+    let mut sfc = fervid_parser::parse_sfc(&source, &mut errors).map_err(|err| {
         return err.to_string();
     })?;
 

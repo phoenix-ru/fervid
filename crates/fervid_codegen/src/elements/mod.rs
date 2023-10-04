@@ -8,7 +8,7 @@ use swc_core::{
             ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, Null, Number, ObjectLit,
             PropOrSpread, Str,
         },
-        atoms::JsWord,
+        atoms::{JsWord, js_word},
     },
 };
 
@@ -36,7 +36,7 @@ impl CodegenContext {
 
         // There is a special case here: `<template>` with `v-if`/`v-else-if`/`v-else`/`v-for`
         let should_generate_fragment_instead = (wrap_in_block
-            && element_node.starting_tag.tag_name == "template")
+            && element_node.starting_tag.tag_name == js_word!("template"))
             || self.should_generate_fragment(element_node);
 
         // Generate children
@@ -82,7 +82,7 @@ impl CodegenContext {
         } else {
             Expr::Lit(Lit::Str(Str {
                 span,
-                value: JsWord::from(starting_tag.tag_name),
+                value: starting_tag.tag_name.to_owned(),
                 raw: None,
             }))
         };
@@ -302,7 +302,7 @@ impl CodegenContext {
                     expr: Box::new(self.generate_directive_from_parts(
                         v_model_ident.clone(),
                         Some(&v_model.value),
-                        v_model.argument,
+                        v_model.argument.as_ref(),
                         &v_model.modifiers,
                         DUMMY_SP,
                     )),
@@ -323,15 +323,15 @@ impl CodegenContext {
         // select -> vModelSelect
         // textarea -> vModelText
         match starting_tag.tag_name {
-            "input" => {
+            js_word!("input") => {
                 // Find `type` attribute
                 for attr in starting_tag.attributes.iter() {
                     match attr {
                         // type="smth"
                         AttributeOrBinding::RegularAttribute {
-                            name: "type",
+                            name: js_word!("type"),
                             value,
-                        } => match *value {
+                        } => match value.as_ref() {
                             "checkbox" => {
                                 return self.get_and_add_import_ident(VueImports::VModelCheckbox)
                             }
@@ -343,7 +343,7 @@ impl CodegenContext {
 
                         // :type="smth"
                         AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some(StrOrExpr::Str("type")),
+                            argument: Some(StrOrExpr::Str(js_word!("type"))),
                             ..
                         }) => return self.get_and_add_import_ident(VueImports::VModelDynamic),
 
@@ -354,7 +354,7 @@ impl CodegenContext {
                 self.get_and_add_import_ident(VueImports::VModelText)
             }
 
-            "select" => self.get_and_add_import_ident(VueImports::VModelSelect),
+            js_word!("select") => self.get_and_add_import_ident(VueImports::VModelSelect),
 
             // TODO Clean up such usage (except "textarea")? Or just use `VModelText`?
             _ => self.get_and_add_import_ident(VueImports::VModelText),
@@ -383,11 +383,11 @@ mod tests {
         test_out(
             ElementNode {
                 starting_tag: StartingTag {
-                    tag_name: "div",
+                    tag_name: "div".into(),
                     attributes: vec![
                         AttributeOrBinding::RegularAttribute {
-                            name: "foo",
-                            value: "bar",
+                            name: "foo".into(),
+                            value: "bar".into(),
                         },
                         AttributeOrBinding::VBind(VBindDirective {
                             argument: Some("baz".into()),
@@ -411,7 +411,7 @@ mod tests {
                     ],
                     directives: None,
                 },
-                children: vec![Node::Text("hello from div")],
+                children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
                 template_scope: 0,
                 kind: ElementKind::Element,
                 patch_hints: Default::default(),
@@ -428,11 +428,11 @@ mod tests {
         test_out(
             ElementNode {
                 starting_tag: StartingTag {
-                    tag_name: "div",
+                    tag_name: "div".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![Node::Text("hello from div")],
+                children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
                 template_scope: 0,
                 kind: ElementKind::Element,
                 patch_hints: Default::default(),
@@ -449,11 +449,11 @@ mod tests {
         test_out(
             ElementNode {
                 starting_tag: StartingTag {
-                    tag_name: "div",
+                    tag_name: "div".into(),
                     attributes: vec![
                         AttributeOrBinding::RegularAttribute {
-                            name: "foo",
-                            value: "bar",
+                            name: "foo".into(),
+                            value: "bar".into(),
                         },
                         AttributeOrBinding::VBind(VBindDirective {
                             argument: Some("some-baz".into()),
@@ -479,11 +479,11 @@ mod tests {
         test_out(
             ElementNode {
                 starting_tag: StartingTag {
-                    tag_name: "div",
+                    tag_name: "div".into(),
                     attributes: vec![
                         AttributeOrBinding::RegularAttribute {
-                            name: "foo",
-                            value: "bar",
+                            name: "foo".into(),
+                            value: "bar".into(),
                         },
                         AttributeOrBinding::VBind(VBindDirective {
                             argument: Some("some-baz".into()),
@@ -512,18 +512,18 @@ mod tests {
         test_out(
             ElementNode {
                 starting_tag: StartingTag {
-                    tag_name: "div",
+                    tag_name: "div".into(),
                     attributes: vec![],
                     directives: None,
                 },
                 children: vec![
-                    Node::Text("hello from div "),
+                    Node::Text("hello from div ".into(), DUMMY_SP),
                     Node::Interpolation(Interpolation {
                         value: js("true"),
                         template_scope: 0,
                         patch_flag: false,
                     }),
-                    Node::Text(" bye!"),
+                    Node::Text(" bye!".into(), DUMMY_SP),
                 ],
                 template_scope: 0,
                 kind: ElementKind::Element,
@@ -541,12 +541,12 @@ mod tests {
         test_out(
             ElementNode {
                 starting_tag: StartingTag {
-                    tag_name: "div",
+                    tag_name: "div".into(),
                     attributes: vec![],
                     directives: None,
                 },
                 children: vec![
-                    Node::Text("hello from div "),
+                    Node::Text("hello from div ".into(), DUMMY_SP),
                     Node::Interpolation(Interpolation {
                         value: js("true"),
                         template_scope: 0,
@@ -554,11 +554,11 @@ mod tests {
                     }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {
-                            tag_name: "span",
+                            tag_name: "span".into(),
                             attributes: vec![],
                             directives: None,
                         },
-                        children: vec![Node::Text("bye!")],
+                        children: vec![Node::Text("bye!".into(), DUMMY_SP)],
                         template_scope: 0,
                         kind: ElementKind::Element,
                         patch_hints: Default::default(),

@@ -3,7 +3,7 @@ use swc_core::{
     common::Span,
     ecma::{
         ast::{CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, Str},
-        atoms::{Atom, JsWord},
+        atoms::JsWord,
     },
 };
 
@@ -26,7 +26,7 @@ impl CodegenContext {
                 expr: Box::new(Expr::Lit(Lit::Str(Str {
                     span,
                     value: JsWord::from(comment),
-                    raw: Some(Atom::from(comment)),
+                    raw: None,
                 }))),
             }],
             type_args: None,

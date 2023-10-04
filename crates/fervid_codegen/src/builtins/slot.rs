@@ -31,9 +31,9 @@ impl CodegenContext {
             .position(|attr| {
                 matches!(
                     attr,
-                    AttributeOrBinding::RegularAttribute { name: "name", .. }
+                    AttributeOrBinding::RegularAttribute { name: js_word!("name"), .. }
                         | AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some(StrOrExpr::Str("name")),
+                            argument: Some(StrOrExpr::Str(js_word!("name"))),
                             ..
                         })
                 )
@@ -79,7 +79,7 @@ impl CodegenContext {
             match name_attr {
                 AttributeOrBinding::RegularAttribute { value, .. } => Expr::Lit(Lit::Str(Str {
                     span,
-                    value: JsWord::from(*value),
+                    value: value.to_owned(),
                     raw: None,
                 })),
                 AttributeOrBinding::VBind(v_bind) => (*v_bind.value).to_owned(),
@@ -192,7 +192,7 @@ mod tests {
             ElementNode {
                 kind: ElementKind::Builtin(BuiltinType::Slot),
                 starting_tag: StartingTag {
-                    tag_name: "slot",
+                    tag_name: "slot".into(),
                     attributes: $attributes,
                     directives: None,
                 },
@@ -216,8 +216,8 @@ mod tests {
         test_out(
             slot!(
                 vec![AttributeOrBinding::RegularAttribute {
-                    name: "name",
-                    value: "default"
+                    name: "name".into(),
+                    value: "default".into()
                 }],
                 vec![]
             ),
@@ -231,8 +231,8 @@ mod tests {
         test_out(
             slot!(
                 vec![AttributeOrBinding::RegularAttribute {
-                    name: "name",
-                    value: "test-slot"
+                    name: "name".into(),
+                    value: "test-slot".into()
                 }],
                 vec![]
             ),
@@ -246,7 +246,7 @@ mod tests {
         test_out(
             slot!(
                 vec![AttributeOrBinding::VBind(VBindDirective {
-                    argument: Some(StrOrExpr::Str("name")),
+                    argument: Some(StrOrExpr::Str("name".into())),
                     value: js("slot + name"),
                     is_camel: false,
                     is_prop: false,
@@ -265,11 +265,11 @@ mod tests {
             slot!(
                 vec![
                     AttributeOrBinding::RegularAttribute {
-                        name: "foo",
-                        value: "bar"
+                        name: "foo".into(),
+                        value: "bar".into()
                     },
                     AttributeOrBinding::VBind(VBindDirective {
-                        argument: Some(StrOrExpr::Str("baz")),
+                        argument: Some(StrOrExpr::Str("baz".into())),
                         value: js("qux"),
                         is_camel: false,
                         is_prop: false,
@@ -286,15 +286,15 @@ mod tests {
             slot!(
                 vec![
                     AttributeOrBinding::RegularAttribute {
-                        name: "name",
-                        value: "default"
+                        name: "name".into(),
+                        value: "default".into()
                     },
                     AttributeOrBinding::RegularAttribute {
-                        name: "foo",
-                        value: "bar"
+                        name: "foo".into(),
+                        value: "bar".into()
                     },
                     AttributeOrBinding::VBind(VBindDirective {
-                        argument: Some(StrOrExpr::Str("baz")),
+                        argument: Some(StrOrExpr::Str("baz".into())),
                         value: js("qux"),
                         is_camel: false,
                         is_prop: false,
@@ -311,15 +311,15 @@ mod tests {
             slot!(
                 vec![
                     AttributeOrBinding::RegularAttribute {
-                        name: "foo",
-                        value: "bar"
+                        name: "foo".into(),
+                        value: "bar".into()
                     },
                     AttributeOrBinding::RegularAttribute {
-                        name: "name",
-                        value: "default"
+                        name: "name".into(),
+                        value: "default".into()
                     },
                     AttributeOrBinding::VBind(VBindDirective {
-                        argument: Some(StrOrExpr::Str("baz")),
+                        argument: Some(StrOrExpr::Str("baz".into())),
                         value: js("qux"),
                         is_camel: false,
                         is_prop: false,
@@ -336,19 +336,19 @@ mod tests {
             slot!(
                 vec![
                     AttributeOrBinding::RegularAttribute {
-                        name: "foo",
-                        value: "bar"
+                        name: "foo".into(),
+                        value: "bar".into()
                     },
                     AttributeOrBinding::VBind(VBindDirective {
-                        argument: Some(StrOrExpr::Str("baz")),
+                        argument: Some(StrOrExpr::Str("baz".into())),
                         value: js("qux"),
                         is_camel: false,
                         is_prop: false,
                         is_attr: false
                     }),
                     AttributeOrBinding::RegularAttribute {
-                        name: "name",
-                        value: "default"
+                        name: "name".into(),
+                        value: "default".into()
                     }
                 ],
                 vec![]
@@ -370,11 +370,11 @@ mod tests {
                     Node::Element(ElementNode {
                         kind: ElementKind::Element,
                         starting_tag: StartingTag {
-                            tag_name: "div",
+                            tag_name: "div".into(),
                             attributes: vec![],
                             directives: None
                         },
-                        children: vec![Node::Text("Placeholder")],
+                        children: vec![Node::Text("Placeholder".into(), DUMMY_SP)],
                         template_scope: 0,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
@@ -382,7 +382,7 @@ mod tests {
                     Node::Element(ElementNode {
                         kind: ElementKind::Component,
                         starting_tag: StartingTag {
-                            tag_name: "foo-component",
+                            tag_name: "foo-component".into(),
                             attributes: vec![],
                             directives: None
                         },
@@ -407,15 +407,15 @@ mod tests {
             slot!(
                 vec![
                     AttributeOrBinding::RegularAttribute {
-                        name: "name",
-                        value: "test-slot"
+                        name: "name".into(),
+                        value: "test-slot".into()
                     },
                     AttributeOrBinding::RegularAttribute {
-                        name: "foo",
-                        value: "bar"
+                        name: "foo".into(),
+                        value: "bar".into()
                     },
                     AttributeOrBinding::VBind(VBindDirective {
-                        argument: Some(StrOrExpr::Str("baz")),
+                        argument: Some(StrOrExpr::Str("baz".into())),
                         value: js("qux"),
                         is_camel: false,
                         is_prop: false,
@@ -426,11 +426,11 @@ mod tests {
                     Node::Element(ElementNode {
                         kind: ElementKind::Element,
                         starting_tag: StartingTag {
-                            tag_name: "div",
+                            tag_name: "div".into(),
                             attributes: vec![],
                             directives: None
                         },
-                        children: vec![Node::Text("Placeholder")],
+                        children: vec![Node::Text("Placeholder".into(), DUMMY_SP)],
                         template_scope: 0,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
@@ -438,7 +438,7 @@ mod tests {
                     Node::Element(ElementNode {
                         kind: ElementKind::Component,
                         starting_tag: StartingTag {
-                            tag_name: "foo-component",
+                            tag_name: "foo-component".into(),
                             attributes: vec![],
                             directives: None
                         },

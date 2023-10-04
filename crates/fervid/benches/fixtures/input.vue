@@ -13,9 +13,9 @@
 
     {{ dynamicValue }}
 
-    <slot />
+    <slot></slot>
 
-    <slot name="named-slot-1" />
+    <slot name="named-slot-1"></slot>
 
     <slot name="named-slot-2" class="ye" :prop="modelValue">
       <div>
@@ -24,7 +24,7 @@
     </slot>
 
     <!-- Comment -->
-    <another-element />
+    <another-element></another-element>
 
     yet another text
 
@@ -47,14 +47,14 @@
 
     <span v-for="i in list" :key="i">hey</span>
     <br v-show="false">
-    <another-element v-for="i in 3" :key="i" v-text="foo + bar" />
+    <another-element v-for="i in 3" :key="i" v-text="foo + bar"></another-element>
 
     <template v-for="([item1, item2], index) in list">
       hey
       <span :key="index">{{ item1 }}{{ index }}</span>
-      <div  :key="index" class="both regular and bound" :class="[item2, index]" />
-      <div  :key="index" class="just regular class" />
-      <div  :key="index" :class="[member.expr, globalIdent, item2, index]" />
+      <div  :key="index" class="both regular and bound" :class="[item2, index]"></div>
+      <div  :key="index" class="just regular class"></div>
+      <div  :key="index" :class="[member.expr, globalIdent, item2, index]"></div>
     </template>
 
     <template v-if="false">
@@ -73,7 +73,7 @@
       v-text="foo + bar"
       style="background-color:red;color:#000;content: ''; grid-template-column: repeat(1fr, min(auto-fit, 100px))"
       :style="{ backgroundColor: v ? 'yellow' : undefined }"
-    />
+    ></div>
   </abc-def>
 </template>
 
@@ -89,6 +89,19 @@ export default defineComponent({
     }
   },
 })
+</script>
+
+<script setup>
+import { ref } from 'vue'
+
+const foo = '123'
+const bar = ref(456)
+
+defineProps({ baz: String })
+defineEmits(['emit-change'])
+defineExpose('foo', 'bar')
+
+const modelValue = defineModel()
 </script>
 
 <style scoped>

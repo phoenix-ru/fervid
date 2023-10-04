@@ -1,4 +1,4 @@
-use fervid_core::{AttributeOrBinding, VBindDirective, VOnDirective, StrOrExpr, VueImports};
+use fervid_core::{AttributeOrBinding, VBindDirective, VOnDirective, StrOrExpr, VueImports, FervidAtom};
 use regex::Regex;
 use swc_core::{
     common::{Span, Spanned, DUMMY_SP},
@@ -8,7 +8,7 @@ use swc_core::{
             ComputedPropName, Expr, ExprOrSpread, Ident, KeyValueProp, Lit, ObjectLit,
             Prop, PropName, PropOrSpread, Str,
         },
-        atoms::{js_word, Atom, JsWord},
+        atoms::{js_word, JsWord},
     },
 };
 
@@ -36,10 +36,10 @@ pub struct GenerateAttributesResultHints<'i> {
     pub needs_normalize_props: bool,
 
     /// When `v-bind="smth"` was found
-    pub v_bind_no_arg: Option<&'i VBindDirective<'i>>,
+    pub v_bind_no_arg: Option<&'i VBindDirective>,
 
     /// When `v-on="smth"` was found
-    pub v_on_no_event: Option<&'i VOnDirective<'i>>,
+    pub v_on_no_event: Option<&'i VOnDirective>,
 
     /// When a js binding in :class was found
     pub class_patch_flag: bool,
@@ -59,9 +59,9 @@ impl CodegenContext {
     ) -> GenerateAttributesResultHints<'attr> {
         // Special generation for `class` and `style` attributes,
         // as they can have both Regular and VDirective variants
-        let mut class_regular_attr: Option<(&str, Span)> = None;
+        let mut class_regular_attr: Option<(&FervidAtom, Span)> = None;
         let mut class_bound: Option<(Box<Expr>, Span)> = None;
-        let mut style_regular_attr: Option<(&str, Span)> = None;
+        let mut style_regular_attr: Option<(&FervidAtom, Span)> = None;
         let mut style_bound: Option<(Box<Expr>, Span)> = None;
 
         // Hints on what was processed and what to do next
@@ -75,30 +75,32 @@ impl CodegenContext {
                 // First, we check the special case: `class` and `style` attributes
                 // class
                 AttributeOrBinding::RegularAttribute {
-                    name: "class",
+                    name: js_word!("class"),
                     value,
                 } => {
-                    class_regular_attr = Some((*value, span));
+                    class_regular_attr = Some((value, span));
                 }
 
                 // style
                 AttributeOrBinding::RegularAttribute {
-                    name: "style",
+                    name: js_word!("style"),
                     value,
                 } => {
-                    style_regular_attr = Some((*value, span));
+                    style_regular_attr = Some((value, span));
                 }
 
                 // Any regular attribute will be added as an object entry,
                 // where key is attribute name and value is attribute value as string literal
                 AttributeOrBinding::RegularAttribute { name, value } => {
+                    // let raw = Some(Atom::from(value.as_ref()));
+
                     out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                         KeyValueProp {
                             key: str_to_propname(&name, span),
                             value: Box::from(Expr::Lit(Lit::Str(Str {
                                 span,
-                                value: JsWord::from(*value),
-                                raw: Some(Atom::from(*value)),
+                                value: value.to_owned(),
+                                raw: None,
                             }))),
                         },
                     ))));
@@ -110,7 +112,7 @@ impl CodegenContext {
 
                 // :class
                 AttributeOrBinding::VBind(VBindDirective {
-                    argument: Some(StrOrExpr::Str("class")),
+                    argument: Some(StrOrExpr::Str(js_word!("class"))),
                     value,
                     ..
                 }) => {
@@ -119,7 +121,7 @@ impl CodegenContext {
 
                 // :style
                 AttributeOrBinding::VBind(VBindDirective {
-                    argument: Some(StrOrExpr::Str("style")),
+                    argument: Some(StrOrExpr::Str(js_word!("style"))),
                     value,
                     ..
                 }) => {
@@ -223,7 +225,7 @@ impl CodegenContext {
                                 spread: None,
                                 expr: Box::from(Expr::Lit(Lit::Str(Str {
                                     span,
-                                    value: JsWord::from(*modifier),
+                                    value: modifier.to_owned(),
                                     raw: None,
                                 }))),
                             })
@@ -307,7 +309,7 @@ impl CodegenContext {
     /// Returns `true` when there were JavaScript bindings
     fn generate_class_bindings(
         &mut self,
-        class_regular_attr: Option<(&str, Span)>,
+        class_regular_attr: Option<(&FervidAtom, Span)>,
         class_bound: Option<(Box<Expr>, Span)>,
         out: &mut Vec<PropOrSpread>,
     ) -> bool {
@@ -331,7 +333,7 @@ impl CodegenContext {
                     expr: Box::from(Expr::Lit(Lit::Str(Str {
                         span: regular_span,
                         value: regular_value.into(),
-                        raw: Some(regular_value.into()),
+                        raw: None //Some(Atom::from(regular_value.as_ref())),
                     }))),
                 }));
 
@@ -367,7 +369,7 @@ impl CodegenContext {
             // Just regular `class`
             (Some((regular_value, span)), None) => {
                 expr = Some(Expr::Lit(Lit::Str(Str {
-                    raw: Some(regular_value.into()),
+                    raw: None, // Some(Atom::from(regular_value.as_ref())),
                     value: regular_value.into(),
                     span,
                 })));
@@ -418,7 +420,7 @@ impl CodegenContext {
     /// Returns `true` when there were JavaScript bindings
     fn generate_style_bindings(
         &mut self,
-        style_regular_attr: Option<(&str, Span)>,
+        style_regular_attr: Option<(&FervidAtom, Span)>,
         style_bound: Option<(Box<Expr>, Span)>,
         out: &mut Vec<PropOrSpread>,
     ) -> bool {
@@ -547,7 +549,7 @@ fn generate_regular_style(style: &str, span: Span) -> ObjectLit {
                     value: Box::from(Expr::Lit(Lit::Str(Str {
                         span,
                         value: style_value.into(),
-                        raw: Some(style_value.into()),
+                        raw: None // Some(style_value.into()),
                     }))),
                 },
             ))));
@@ -614,8 +616,8 @@ mod tests {
     fn it_generates_class_regular() {
         test_out(
             vec![AttributeOrBinding::RegularAttribute {
-                name: "class",
-                value: "both regular and bound",
+                name: "class".into(),
+                value: "both regular and bound".into(),
             }],
             r#"{class:"both regular and bound"}"#,
         );
@@ -637,8 +639,8 @@ mod tests {
         test_out(
             vec![
                 AttributeOrBinding::RegularAttribute {
-                    name: "class",
-                    value: "both regular and bound",
+                    name: "class".into(),
+                    value: "both regular and bound".into(),
                 },
                 AttributeOrBinding::VBind(v_bind! {
                     argument: Some("class".into()),
@@ -653,8 +655,8 @@ mod tests {
     fn it_generates_style_regular() {
         test_out(
             vec![AttributeOrBinding::RegularAttribute {
-                name: "style",
-                value: "margin: 0px; background-color: magenta",
+                name: "style".into(),
+                value: "margin: 0px; background-color: magenta".into(),
             }],
             r#"{style:{margin:"0px","background-color":"magenta"}}"#,
         );
@@ -677,8 +679,8 @@ mod tests {
         test_out(
             vec![
                 AttributeOrBinding::RegularAttribute {
-                    name: "style",
-                    value: "margin: 0px; background-color: magenta",
+                    name: "style".into(),
+                    value: "margin: 0px; background-color: magenta".into(),
                 },
                 AttributeOrBinding::VBind(v_bind! {
                     argument: Some("style".into()),
@@ -787,7 +789,7 @@ mod tests {
             vec![AttributeOrBinding::VOn(VOnDirective {
                 event: Some("click".into()),
                 handler: None,
-                modifiers: vec!["stop", "prevent", "self"],
+                modifiers: vec!["stop".into(), "prevent".into(), "self".into()],
             })],
             r#"{onClick:_withModifiers(()=>{},["stop","prevent","self"])}"#,
         );
@@ -797,7 +799,7 @@ mod tests {
             vec![AttributeOrBinding::VOn(VOnDirective {
                 event: Some("click".into()),
                 handler: Some(js("$event => handleClick($event, foo, bar)")),
-                modifiers: vec!["stop"],
+                modifiers: vec!["stop".into()],
             })],
             r#"{onClick:_withModifiers($event=>handleClick($event,foo,bar),["stop"])}"#,
         );

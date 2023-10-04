@@ -1,4 +1,4 @@
-use fervid_core::{ElementNode, Node};
+use fervid_core::{Node, is_from_default_slot};
 
 #[derive(PartialEq)]
 pub enum SlottedIteratorMode {
@@ -9,13 +9,13 @@ pub enum SlottedIteratorMode {
 }
 
 pub struct SlottedIterator<'n> {
-    nodes: &'n [Node<'n>],
+    nodes: &'n [Node],
     idx: usize,
     mode: SlottedIteratorMode,
 }
 
 impl<'n> Iterator for SlottedIterator<'n> {
-    type Item = &'n Node<'n>;
+    type Item = &'n Node;
 
     /// Gets the next item and advances the iterator
     fn next(&mut self) -> Option<Self::Item> {
@@ -75,7 +75,7 @@ impl<'n> SlottedIterator<'n> {
     /// but does not advance the iterator.
     ///
     /// To switch mode, use [`SlottedIterator::toggle_mode`]
-    pub fn peek(&self) -> Option<&'n Node<'n>> {
+    pub fn peek(&self) -> Option<&'n Node> {
         match self.nodes.get(self.idx) {
             Some(node) => {
                 // From default slot and mode is Default,
@@ -102,48 +102,11 @@ impl<'n> SlottedIterator<'n> {
     }
 }
 
-fn is_from_default_slot(node: &Node) -> bool {
-    match node {
-        Node::Element(ElementNode { starting_tag, .. }) => {
-            if starting_tag.tag_name != "template" {
-                return true;
-            }
-
-            // Slot is not default if its `v-slot` has an argument which is not "" or "default"
-            // `v-slot` is default
-            // `v-slot:default` is default
-            // `v-slot:custom` is not default
-            // `v-slot:[default]` is not default
-            let Some(ref directives) = starting_tag.directives else {
-                return true;
-            };
-            let Some(ref v_slot) = directives.v_slot else {
-                return true;
-            };
-            if v_slot.is_dynamic_slot {
-                return false;
-            }
-
-            match v_slot.slot_name {
-                None | Some("default") => true,
-                Some(_) => false,
-            }
-        }
-
-        // TODO: <template v-if="true" v-slot:foo>
-        // https://play.vuejs.org/#eNp9UT1PwzAQ/SvWzW0YukWABKgDDICA0UuUXlIXx7Z85xCpyn/HdvqpVp3sex+n93RbeHKu6ANCCfeMndMV46M0QsSJeF7bzuUxAxMt+rlqHiSwDyghTqQtl421O6EQ8b/z3J3tPF+CmtJz4V6rq+Y0HhOdkDADptqaRrXFhqyJVbbJICFplUb/4VhZQxJKkZnEVVrbv7eMpSKzPV6vsf69gm9oSJiET4+Evo/VDxxXvkWe6OX3Ow7xfyA7uwo6qm+QX0hWh5Rxkj0Hs4qxT3Q57WvnrGdl2h9aDoyG9qXyJaJyzHoJ8Z4vN6of4y6KRfZJM8L4D55mqXA=
-        Node::ConditionalSeq(_) => true,
-
-        // explicit just in case I decide to change node types and forget about this place
-        Node::Interpolation { .. } | Node::Text(_) | Node::Comment(_) => true,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use fervid_core::{
         AttributeOrBinding, ElementKind, StartingTag, VBindDirective, VOnDirective, VSlotDirective,
-        VueDirectives,
+        VueDirectives, ElementNode,
     };
     use swc_core::common::DUMMY_SP;
 
@@ -238,14 +201,14 @@ mod tests {
     }
 
     /// <h1>This is an h1</h1>
-    fn get_default_item1() -> Node<'static> {
+    fn get_default_item1() -> Node {
         Node::Element(ElementNode {
             starting_tag: StartingTag {
-                tag_name: "h1",
+                tag_name: "h1".into(),
                 attributes: vec![],
                 directives: None,
             },
-            children: vec![Node::Text("This is an h1")],
+            children: vec![Node::Text("This is an h1".into(), DUMMY_SP)],
             template_scope: 0,
             kind: ElementKind::Element,
             patch_hints: Default::default(),
@@ -254,14 +217,14 @@ mod tests {
     }
 
     /// <div class="regular" :disabled="true" />
-    fn get_default_item2() -> Node<'static> {
+    fn get_default_item2() -> Node {
         Node::Element(ElementNode {
             starting_tag: StartingTag {
-                tag_name: "div",
+                tag_name: "div".into(),
                 attributes: vec![
                     AttributeOrBinding::RegularAttribute {
-                        name: "class",
-                        value: "regular",
+                        name: "class".into(),
+                        value: "regular".into(),
                     },
                     AttributeOrBinding::VBind(fervid_core::VBindDirective {
                         argument: Some("disabled".into()),
@@ -282,10 +245,10 @@ mod tests {
     }
 
     /// <test-component :foo="bar" @event="baz">This is a component</test-component>
-    fn get_default_item3() -> Node<'static> {
+    fn get_default_item3() -> Node {
         Node::Element(ElementNode {
             starting_tag: StartingTag {
-                tag_name: "h1",
+                tag_name: "h1".into(),
                 attributes: vec![
                     AttributeOrBinding::VBind(VBindDirective {
                         argument: Some("disabled".into()),
@@ -302,7 +265,7 @@ mod tests {
                 ],
                 directives: None,
             },
-            children: vec![Node::Text("This is a component")],
+            children: vec![Node::Text("This is a component".into(), DUMMY_SP)],
             template_scope: 0,
             kind: ElementKind::Element,
             patch_hints: Default::default(),
@@ -311,14 +274,14 @@ mod tests {
     }
 
     /// <template>This is just a template</template>
-    fn get_default_item4() -> Node<'static> {
+    fn get_default_item4() -> Node {
         Node::Element(ElementNode {
             starting_tag: StartingTag {
-                tag_name: "template",
+                tag_name: "template".into(),
                 attributes: vec![],
                 directives: None,
             },
-            children: vec![Node::Text("This is just a template")],
+            children: vec![Node::Text("This is just a template".into(), DUMMY_SP)],
             template_scope: 0,
             kind: ElementKind::Element,
             patch_hints: Default::default(),
@@ -327,21 +290,20 @@ mod tests {
     }
 
     /// <template v-slot:default>This is a default template</template>
-    fn get_default_item5() -> Node<'static> {
+    fn get_default_item5() -> Node {
         Node::Element(ElementNode {
             starting_tag: StartingTag {
-                tag_name: "template",
+                tag_name: "template".into(),
                 attributes: vec![],
                 directives: Some(Box::new(VueDirectives {
                     v_slot: Some(VSlotDirective {
-                        slot_name: Some("default"),
+                        slot_name: Some("default".into()),
                         value: None,
-                        is_dynamic_slot: false,
                     }),
                     ..Default::default()
                 })),
             },
-            children: vec![Node::Text("This is a default template")],
+            children: vec![Node::Text("This is a default template".into(), DUMMY_SP)],
             template_scope: 0,
             kind: ElementKind::Element,
             patch_hints: Default::default(),
@@ -350,21 +312,20 @@ mod tests {
     }
 
     /// <template v-slot:named>This is a default template</template>
-    fn get_named_item1() -> Node<'static> {
+    fn get_named_item1() -> Node {
         Node::Element(ElementNode {
             starting_tag: StartingTag {
-                tag_name: "template",
+                tag_name: "template".into(),
                 attributes: vec![],
                 directives: Some(Box::new(VueDirectives {
                     v_slot: Some(VSlotDirective {
-                        slot_name: Some("named"),
+                        slot_name: Some("named".into()),
                         value: None,
-                        is_dynamic_slot: false,
                     }),
                     ..Default::default()
                 })),
             },
-            children: vec![Node::Text("This is a named template")],
+            children: vec![Node::Text("This is a named template".into(), DUMMY_SP)],
             template_scope: 0,
             kind: ElementKind::Element,
             patch_hints: Default::default(),

@@ -1,4 +1,4 @@
-use swc_core::{ecma::{ast::{Expr, Lit, Str}, atoms::{JsWord, Atom}}, common::Span};
+use swc_core::{ecma::{ast::{Expr, Lit, Str}, atoms::JsWord}, common::Span};
 
 use crate::context::CodegenContext;
 
@@ -30,7 +30,7 @@ impl CodegenContext {
         Expr::Lit(Lit::Str(Str {
             span,
             value,
-            raw: Some(Atom::from(contents)),
+            raw: None
         }))
     }
 }

@@ -87,11 +87,11 @@ mod tests {
                     condition: *js("foo || true"),
                     node: ElementNode {
                         starting_tag: StartingTag {
-                            tag_name: "h1",
+                            tag_name: "h1".into(),
                             attributes: vec![],
                             directives: None
                         },
-                        children: vec![Node::Text("hello")],
+                        children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
                         kind: ElementKind::Element,
                         patch_hints: Default::default(),
@@ -115,11 +115,11 @@ mod tests {
                     condition: *js("foo || true"),
                     node: ElementNode {
                         starting_tag: StartingTag {
-                            tag_name: "h1",
+                            tag_name: "h1".into(),
                             attributes: vec![],
                             directives: None
                         },
-                        children: vec![Node::Text("hello")],
+                        children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
                         kind: ElementKind::Element,
                         patch_hints: Default::default(),
@@ -129,11 +129,11 @@ mod tests {
                 else_if_nodes: vec![],
                 else_node: Some(Box::new(ElementNode {
                     starting_tag: StartingTag {
-                        tag_name: "h2",
+                        tag_name: "h2".into(),
                         attributes: vec![],
                         directives: None
                     },
-                    children: vec![Node::Text("bye")],
+                    children: vec![Node::Text("bye".into(), DUMMY_SP)],
                     template_scope: 0,
                     kind: ElementKind::Element,
                     patch_hints: Default::default(),
@@ -155,11 +155,11 @@ mod tests {
                     condition: *js("foo"),
                     node: ElementNode {
                         starting_tag: StartingTag {
-                            tag_name: "h1",
+                            tag_name: "h1".into(),
                             attributes: vec![],
                             directives: None
                         },
-                        children: vec![Node::Text("hello")],
+                        children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
                         kind: ElementKind::Element,
                         patch_hints: Default::default(),
@@ -171,11 +171,11 @@ mod tests {
                         condition: *js("true"),
                         node: ElementNode {
                             starting_tag: StartingTag {
-                                tag_name: "h2",
+                                tag_name: "h2".into(),
                                 attributes: vec![],
                                 directives: None
                             },
-                            children: vec![Node::Text("hi")],
+                            children: vec![Node::Text("hi".into(), DUMMY_SP)],
                             template_scope: 0,
                             kind: ElementKind::Element,
                             patch_hints: Default::default(),
@@ -186,11 +186,11 @@ mod tests {
                         condition: *js("undefined"),
                         node: ElementNode {
                             starting_tag: StartingTag {
-                                tag_name: "h3",
+                                tag_name: "h3".into(),
                                 attributes: vec![],
                                 directives: None
                             },
-                            children: vec![Node::Text("bye")],
+                            children: vec![Node::Text("bye".into(), DUMMY_SP)],
                             template_scope: 0,
                             kind: ElementKind::Element,
                             patch_hints: Default::default(),
@@ -216,11 +216,11 @@ mod tests {
                     condition: *js("foo"),
                     node: ElementNode {
                         starting_tag: StartingTag {
-                            tag_name: "h1",
+                            tag_name: "h1".into(),
                             attributes: vec![],
                             directives: None
                         },
-                        children: vec![Node::Text("hello")],
+                        children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
                         kind: ElementKind::Element,
                         patch_hints: Default::default(),
@@ -232,11 +232,11 @@ mod tests {
                         condition: *js("true"),
                         node: ElementNode {
                             starting_tag: StartingTag {
-                                tag_name: "h2",
+                                tag_name: "h2".into(),
                                 attributes: vec![],
                                 directives: None
                             },
-                            children: vec![Node::Text("hi")],
+                            children: vec![Node::Text("hi".into(), DUMMY_SP)],
                             template_scope: 0,
                             kind: ElementKind::Element,
                             patch_hints: Default::default(),
@@ -247,11 +247,11 @@ mod tests {
                         condition: *js("undefined"),
                         node: ElementNode {
                             starting_tag: StartingTag {
-                                tag_name: "h3",
+                                tag_name: "h3".into(),
                                 attributes: vec![],
                                 directives: None
                             },
-                            children: vec![Node::Text("good morning")],
+                            children: vec![Node::Text("good morning".into(), DUMMY_SP)],
                             template_scope: 0,
                             kind: ElementKind::Element,
                             patch_hints: Default::default(),
@@ -261,11 +261,11 @@ mod tests {
                 ],
                 else_node: Some(Box::new(ElementNode {
                     starting_tag: StartingTag {
-                        tag_name: "h4",
+                        tag_name: "h4".into(),
                         attributes: vec![],
                         directives: None
                     },
-                    children: vec![Node::Text("bye")],
+                    children: vec![Node::Text("bye".into(), DUMMY_SP)],
                     template_scope: 0,
                     kind: ElementKind::Element,
                     patch_hints: Default::default(),

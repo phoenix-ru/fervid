@@ -10,8 +10,9 @@ fn codegen_benchmark(c: &mut Criterion) {
 
     for (name, component) in inputs {
         c.bench_with_input(BenchmarkId::new("codegen: generate CSR+DEV", name), &component, |b, component| {
-            let res = fervid::parse_sfc(component);
-            let sfc_blocks = res.unwrap().1;
+            let mut errors = Vec::new();
+            let res = fervid_parser::parse_sfc(component, &mut errors);
+            let sfc_blocks = res.unwrap();
             let mut template_block = sfc_blocks.template;
             let Some(ref mut template_block) = template_block else {
                 panic!("Test component has no template block");

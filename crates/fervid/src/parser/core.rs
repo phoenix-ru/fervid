@@ -6,6 +6,7 @@ use nom::error::{ErrorKind, ParseError};
 use nom::multi::many0;
 use nom::sequence::{delimited, preceded};
 use nom::{bytes::complete::tag, sequence::tuple, IResult};
+use swc_core::ecma::atoms::js_word;
 use std::str;
 use swc_core::common::DUMMY_SP;
 use swc_core::ecma::ast::Module;
@@ -15,7 +16,7 @@ use super::ecma::{parse_js, parse_js_module};
 use super::html_utils::{classify_element_kind, html_name, space0, TagKind};
 use fervid_core::{
     AttributeOrBinding, ElementKind, ElementNode, Interpolation, Node, SfcCustomBlock,
-    SfcDescriptor, SfcScriptBlock, SfcStyleBlock, SfcTemplateBlock, StartingTag,
+    SfcDescriptor, SfcScriptBlock, SfcScriptLang, SfcStyleBlock, SfcTemplateBlock, StartingTag, FervidAtom,
 };
 
 /// Parses the Vue Single-File Component
@@ -53,7 +54,7 @@ pub fn parse_sfc(mut input: &str) -> IResult<&str, SfcDescriptor> {
 
 fn parse_root_block<'a>(
     input: &'a str,
-    out: &mut SfcDescriptor<'a>,
+    out: &mut SfcDescriptor,
 ) -> Result<&'a str, nom::Err<nom::error::Error<&'a str>>> {
     // Remove leading space
     let input = input.trim_start();
@@ -62,19 +63,19 @@ fn parse_root_block<'a>(
     let (input, (starting_tag, is_self_closing)) = parse_element_starting_tag(input)?;
 
     // Mutually exclusive flags
-    let is_script = starting_tag.tag_name == "script";
-    let is_template = !is_script && starting_tag.tag_name == "template";
-    let is_style = !is_template && starting_tag.tag_name == "style";
+    let is_script = starting_tag.tag_name == js_word!("script");
+    let is_template = !is_script && starting_tag.tag_name == js_word!("template");
+    let is_style = !is_template && starting_tag.tag_name == js_word!("style");
 
     // Helper fn
     let read_raw_text = |input: &'a str| {
         parse_text_node(input).map_or_else(
-            move |_| (input, ""),
+            move |_| (input, "".into()),
             move |v| {
-                let Node::Text(content) = v.1 else {
+                let Node::Text(content, _) = v.1 else {
                     unreachable!("parse_text_node always returns a Node::TextNode")
                 };
-                (v.0, content)
+                (v.0, content.into())
             },
         )
     };
@@ -85,7 +86,7 @@ fn parse_root_block<'a>(
         if is_self_closing {
             out.custom_blocks.push(SfcCustomBlock {
                 starting_tag,
-                content: "",
+                content: "".into(),
             });
 
             return Ok(input);
@@ -106,16 +107,16 @@ fn parse_root_block<'a>(
     // Get `lang` attribute, which is common for all the Vue root blocks
     let lang = starting_tag.attributes.iter().find_map(|attr| match attr {
         AttributeOrBinding::RegularAttribute {
-            name: "lang",
+            name: js_word!("lang"),
             value,
-        } => Some(*value),
+        } => Some(value.to_owned()),
         _ => None,
     });
 
     // Parse children only for `<template>` root block
     if is_template {
         // Parser does not really look at it currently
-        let lang = lang.unwrap_or("html");
+        let lang = lang.unwrap_or(js_word!("html"));
 
         // Check for self-closing `<template />`. I see no reason why someone might do it, but still
         if is_self_closing {
@@ -146,12 +147,16 @@ fn parse_root_block<'a>(
 
     // Read script
     if is_script {
-        let lang = lang.unwrap_or("js");
+        let lang = if matches!(lang.as_deref(), Some("ts")) {
+            SfcScriptLang::Typescript
+        } else {
+            SfcScriptLang::Es
+        };
 
         let is_setup = starting_tag.attributes.iter().any(|attr| {
             matches!(
                 attr,
-                AttributeOrBinding::RegularAttribute { name: "setup", .. }
+                AttributeOrBinding::RegularAttribute { name, .. } if name.eq("setup")
             )
         });
 
@@ -159,14 +164,14 @@ fn parse_root_block<'a>(
             ($content: expr) => {
                 if is_setup {
                     out.script_setup = Some(SfcScriptBlock {
-                        lang,
                         content: $content,
+                        lang,
                         is_setup,
                     });
                 } else {
                     out.script_legacy = Some(SfcScriptBlock {
-                        lang,
                         content: $content,
+                        lang,
                         is_setup,
                     })
                 }
@@ -189,7 +194,7 @@ fn parse_root_block<'a>(
         let (input, _end_tag) = parse_element_end_tag(input)?;
 
         // TODO Span
-        let content = parse_js_module(content, 0, 0);
+        let content = parse_js_module(&content, 0, 0);
         match content {
             Ok(content_module) => {
                 add_script!(Box::new(content_module));
@@ -205,12 +210,12 @@ fn parse_root_block<'a>(
     }
 
     // Read style (basically same as script, but attributes are different)
-    let lang = lang.unwrap_or("css");
+    let lang = lang.unwrap_or_else(|| FervidAtom::from("css"));
 
     let is_scoped = starting_tag.attributes.iter().any(|attr| {
         matches!(
             attr,
-            AttributeOrBinding::RegularAttribute { name: "scoped", .. }
+            AttributeOrBinding::RegularAttribute { name, .. } if name.eq("scoped")
         )
     });
 
@@ -224,8 +229,8 @@ fn parse_root_block<'a>(
     let (input, _end_tag) = parse_element_end_tag(input)?;
 
     out.styles.push(SfcStyleBlock {
-        lang,
-        content,
+        lang: lang.into(),
+        content: content.into(),
         is_scoped,
     });
 
@@ -251,7 +256,7 @@ fn parse_element_starting_tag(input: &str) -> IResult<&str, (StartingTag, bool)>
         input,
         (
             StartingTag {
-                tag_name,
+                tag_name: FervidAtom::from(tag_name),
                 attributes,
                 directives,
             },
@@ -291,7 +296,7 @@ fn parse_interpolation_node(input: &str) -> IResult<&str, Node> {
 pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
     let (input, (starting_tag, is_self_closing)) = parse_element_starting_tag(input)?;
 
-    let element_kind = classify_element_kind(starting_tag.tag_name);
+    let element_kind = classify_element_kind(&starting_tag.tag_name);
 
     let early_return = matches!(element_kind, TagKind::Void) || is_self_closing;
 
@@ -316,7 +321,7 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
 
     // todo pass a stack of elements instead of a single tag
     // todo handle the error? soft/hard error -> either return Err or proceed and warn
-    if end_tag != starting_tag.tag_name {
+    if !starting_tag.tag_name.eq(end_tag) {
         println!(
             "End tag does not match start tag: <{}> </{}>",
             &starting_tag.tag_name, &end_tag
@@ -363,13 +368,13 @@ fn parse_text_node(input: &str) -> IResult<&str, Node> {
 
     let (text, input) = input.split_at(bytes_taken);
 
-    Ok((input, Node::Text(text)))
+    Ok((input, Node::Text(text.into(), DUMMY_SP)))
 }
 
 fn parse_comment_node(input: &str) -> IResult<&str, Node> {
     let (input, comment) = delimited(tag("<!--"), take_until("-->"), tag("-->"))(input)?;
 
-    Ok((input, Node::Comment(comment)))
+    Ok((input, Node::Comment(comment.into(), DUMMY_SP)))
 }
 
 fn parse_node_children(input: &str) -> IResult<&str, Vec<Node>> {

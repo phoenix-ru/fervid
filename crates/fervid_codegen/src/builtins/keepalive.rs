@@ -75,7 +75,7 @@ mod tests {
             ElementNode {
                 kind: ElementKind::Builtin(BuiltinType::KeepAlive),
                 starting_tag: StartingTag {
-                    tag_name: "keep-alive",
+                    tag_name: "keep-alive".into(),
                     attributes: vec![],
                     directives: None,
                 },
@@ -95,11 +95,11 @@ mod tests {
             ElementNode {
                 kind: ElementKind::Builtin(BuiltinType::KeepAlive),
                 starting_tag: StartingTag {
-                    tag_name: "keep-alive",
+                    tag_name: "keep-alive".into(),
                     attributes: vec![
                         AttributeOrBinding::RegularAttribute {
-                            name: "foo",
-                            value: "bar",
+                            name: "foo".into(),
+                            value: "bar".into(),
                         },
                         AttributeOrBinding::VBind(fervid_core::VBindDirective {
                             argument: Some("baz".into()),
@@ -127,11 +127,11 @@ mod tests {
             ElementNode {
                 kind: ElementKind::Builtin(BuiltinType::KeepAlive),
                 starting_tag: StartingTag {
-                    tag_name: "keep-alive",
+                    tag_name: "keep-alive".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![Node::Text("foobar")],
+                children: vec![Node::Text("foobar".into(), DUMMY_SP)],
                 template_scope: 0,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
@@ -147,11 +147,11 @@ mod tests {
             ElementNode {
                 kind: ElementKind::Builtin(BuiltinType::KeepAlive),
                 starting_tag: StartingTag {
-                    tag_name: "keep-alive",
+                    tag_name: "keep-alive".into(),
                     attributes: vec![
                         AttributeOrBinding::RegularAttribute {
-                            name: "foo",
-                            value: "bar",
+                            name: "foo".into(),
+                            value: "bar".into(),
                         },
                         AttributeOrBinding::VBind(fervid_core::VBindDirective {
                             argument: Some("baz".into()),
@@ -163,7 +163,7 @@ mod tests {
                     ],
                     directives: None,
                 },
-                children: vec![Node::Text("foobar")],
+                children: vec![Node::Text("foobar".into(), DUMMY_SP)],
                 template_scope: 0,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,

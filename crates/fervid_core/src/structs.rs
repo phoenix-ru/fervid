@@ -1,19 +1,21 @@
 use swc_core::{ecma::{ast::{Expr, Pat}, atoms::JsWord}, common::Span};
 
+pub type FervidAtom = JsWord;
+
 /// A Node represents a part of the Abstract Syntax Tree (AST).
 #[derive(Debug, Clone)]
-pub enum Node<'a> {
+pub enum Node {
     /// `Element` means that the node is a basic HTML tag node.
     ///
     /// `Element` has a starting `<tag>` with attributes,
     ///   zero or more children and a closing `</tag>` unless this node is self-closed `<tag />`.
     ///   The parser does not add any meaning to the discovered tag name,
     ///   as this logic is application-specific.
-    Element(ElementNode<'a>),
+    Element(ElementNode),
 
     /// These nodes are the basic HTML text leaf nodes
     /// which can only contain static text.
-    Text(&'a str),
+    Text(FervidAtom, Span),
 
     /// Interpolation is a special syntax for Vue templates.
     ///
@@ -22,11 +24,11 @@ pub enum Node<'a> {
     Interpolation(Interpolation),
 
     /// `Comment` is the vanilla HTML comment, which looks like this: `<-- this is comment -->`
-    Comment(&'a str),
+    Comment(FervidAtom, Span),
 
     /// `ConditionalSeq` is a representation of `v-if`/`v-else-if`/`v-else` node sequence.
     /// Its children are the other `Node`s, this node is just a wrapper.
-    ConditionalSeq(ConditionalNodeSequence<'a>),
+    ConditionalSeq(ConditionalNodeSequence),
 
     // /// `ForFragment` is a representation of a `v-for` node.
     // /// This type is for ergonomics,
@@ -40,11 +42,11 @@ pub enum Node<'a> {
 /// 3. It has a `template_scope` assigned, which is responsible
 ///    for the correct compilation of dynamic bindings and expressions.
 #[derive(Debug, Clone)]
-pub struct ElementNode<'a> {
+pub struct ElementNode {
     /// Marks the node as either an Element (HTML tag), Builtin (Vue) or Component
     pub kind: ElementKind,
-    pub starting_tag: StartingTag<'a>,
-    pub children: Vec<Node<'a>>,
+    pub starting_tag: StartingTag,
+    pub children: Vec<Node>,
     pub template_scope: u32,
     pub patch_hints: PatchHints,
     pub span: Span
@@ -76,16 +78,16 @@ pub enum BuiltinType {
 /// - 0 or more `v-else-if` `ElementNode`s;
 /// - 0 or 1 `v-else` `ElementNode`.
 #[derive(Debug, Clone)]
-pub struct ConditionalNodeSequence<'a> {
-    pub if_node: Box<Conditional<'a>>,
-    pub else_if_nodes: Vec<Conditional<'a>>,
-    pub else_node: Option<Box<ElementNode<'a>>>,
+pub struct ConditionalNodeSequence {
+    pub if_node: Box<Conditional>,
+    pub else_if_nodes: Vec<Conditional>,
+    pub else_node: Option<Box<ElementNode>>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Conditional<'e> {
+pub struct Conditional {
     pub condition: Expr,
-    pub node: ElementNode<'e>,
+    pub node: ElementNode,
 }
 
 #[derive(Debug, Clone)]
@@ -97,10 +99,10 @@ pub struct Interpolation {
 
 /// Starting tag represents [`ElementNode`]'s tag name and attributes
 #[derive(Debug, Clone)]
-pub struct StartingTag<'a> {
-    pub tag_name: &'a str,
-    pub attributes: Vec<AttributeOrBinding<'a>>,
-    pub directives: Option<Box<VueDirectives<'a>>>,
+pub struct StartingTag {
+    pub tag_name: FervidAtom,
+    pub attributes: Vec<AttributeOrBinding>,
+    pub directives: Option<Box<VueDirectives>>,
 }
 
 /// Denotes the basic attributes or bindings of a DOM element
@@ -108,13 +110,13 @@ pub struct StartingTag<'a> {
 /// because they bind something to DOM.
 /// `v-model` is not covered here because its code generation is not as trivial.
 #[derive(Debug, Clone)]
-pub enum AttributeOrBinding<'a> {
+pub enum AttributeOrBinding {
     /// `RegularAttribute` is a plain HTML attribute without any associated logic
-    RegularAttribute { name: &'a str, value: &'a str },
+    RegularAttribute { name: FervidAtom, value: FervidAtom },
     /// `v-bind` directive
-    VBind(VBindDirective<'a>),
+    VBind(VBindDirective),
     /// `v-on` directive
-    VOn(VOnDirective<'a>),
+    VOn(VOnDirective),
 }
 
 /// Describes a type which can be either a static &str or a js Expr.
@@ -123,14 +125,14 @@ pub enum AttributeOrBinding<'a> {
 /// - `:foo="bar"` yields `StrOrExpr::Str("foo")`;
 /// - `:[baz]="qux"` yields `StrOrExpr::Expr(Box::new(Expr::Lit(Lit::Str(Str { value: "baz".into(), .. }))))`
 #[derive(Debug, Clone)]
-pub enum StrOrExpr<'s> {
-    Str(&'s str),
+pub enum StrOrExpr {
+    Str(FervidAtom),
     Expr(Box<Expr>),
 }
 
-impl<'s> From<&'s str> for StrOrExpr<'s> {
-    fn from(value: &'s str) -> StrOrExpr<'s> {
-        StrOrExpr::Str(value)
+impl<'s> From<&'s str> for StrOrExpr {
+    fn from(value: &'s str) -> StrOrExpr {
+        StrOrExpr::Str(FervidAtom::from(value))
     }
 }
 
@@ -256,8 +258,8 @@ flagset::flags! {
 pub type PatchFlagsSet = flagset::FlagSet<PatchFlags>;
 
 #[derive(Clone, Debug, Default)]
-pub struct VueDirectives<'d> {
-    pub custom: Vec<VCustomDirective<'d>>,
+pub struct VueDirectives {
+    pub custom: Vec<VCustomDirective>,
     pub v_cloak: Option<()>,
     pub v_else: Option<()>,
     pub v_else_if: Option<Box<Expr>>,
@@ -265,11 +267,11 @@ pub struct VueDirectives<'d> {
     pub v_html: Option<Box<Expr>>,
     pub v_if: Option<Box<Expr>>,
     pub v_memo: Option<Box<Expr>>,
-    pub v_model: Vec<VModelDirective<'d>>,
+    pub v_model: Vec<VModelDirective>,
     pub v_once: Option<()>,
     pub v_pre: Option<()>,
     pub v_show: Option<Box<Expr>>,
-    pub v_slot: Option<VSlotDirective<'d>>,
+    pub v_slot: Option<VSlotDirective>,
     pub v_text: Option<Box<Expr>>,
 }
 
@@ -283,19 +285,19 @@ pub struct VForDirective {
 }
 
 #[derive(Clone, Debug)]
-pub struct VOnDirective<'a> {
+pub struct VOnDirective {
     /// What event to listen to. If None, it is equivalent to `v-on="..."`.
-    pub event: Option<StrOrExpr<'a>>,
+    pub event: Option<StrOrExpr>,
     /// What is the handler to use. If None, `modifiers` must not be empty.
     pub handler: Option<Box<Expr>>,
     /// A list of modifiers after the dot, e.g. `stop` and `prevent` in `@click.stop.prevent="handleClick"`
-    pub modifiers: Vec<&'a str>,
+    pub modifiers: Vec<FervidAtom>,
 }
 
 #[derive(Clone, Debug)]
-pub struct VBindDirective<'a> {
+pub struct VBindDirective {
     /// Attribute name to bind. If None, it is equivalent to `v-bind="..."`.
-    pub argument: Option<StrOrExpr<'a>>,
+    pub argument: Option<StrOrExpr>,
     /// Attribute value, e.g. `smth` in `:attr="smth"`
     pub value: Box<Expr>,
     /// .camel modifier
@@ -307,32 +309,31 @@ pub struct VBindDirective<'a> {
 }
 
 #[derive(Clone, Debug)]
-pub struct VModelDirective<'a> {
+pub struct VModelDirective {
     /// What to apply v-model to, e.g. `first-name` in `v-model:first-name="first"`
-    pub argument: Option<&'a str>,
+    pub argument: Option<StrOrExpr>,
     /// The binding of a `v-model`, e.g. `userInput` in `v-model="userInput"`
     pub value: Expr,
     /// `lazy` and `trim` in `v-model.lazy.trim`
-    pub modifiers: Vec<&'a str>,
+    pub modifiers: Vec<FervidAtom>,
     pub span: Span
 }
 
 #[derive(Clone, Debug)]
-pub struct VSlotDirective<'a> {
-    pub slot_name: Option<&'a str>,
+pub struct VSlotDirective {
+    pub slot_name: Option<StrOrExpr>,
     /// What bindings are provided to slot children, e.g. `value` in `v-slot="{ value }"`
     pub value: Option<Box<Pat>>,
-    pub is_dynamic_slot: bool,
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct VCustomDirective<'a> {
+pub struct VCustomDirective {
     /// `foo` in `v-foo`
-    pub name: &'a str,
+    pub name: FervidAtom,
     /// `bar` in `v-foo:bar`
-    pub argument: Option<&'a str>,
+    pub argument: Option<StrOrExpr>,
     /// `baz` and `qux` in `v-foo:bar.baz.qux`
-    pub modifiers: Vec<&'a str>,
+    pub modifiers: Vec<FervidAtom>,
     /// `loremIpsum` in `v-foo="loremIpsum"`
     pub value: Option<Box<Expr>>,
 }

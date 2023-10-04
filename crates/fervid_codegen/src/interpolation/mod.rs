@@ -24,7 +24,7 @@ impl CodegenContext {
         //                 Box::new(Expr::Lit(Lit::Str(Str {
         //                     span,
         //                     value: JsWord::from(value),
-        //                     raw: Some(Atom::from(value)),
+        //                     raw: None,
         //                 }))),
         //                 false,
         //             )

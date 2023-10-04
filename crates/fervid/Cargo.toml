@@ -17,6 +17,7 @@ dbg_print = []
 fervid_codegen = { path="../fervid_codegen", version = "0.0.1" }
 fervid_core = { path="../fervid_core", version = "0.0.1" }
 fervid_css = { path="../fervid_css", version = "0.0.1" }
+fervid_parser = { path="../fervid_parser", version = "0.0.1" }
 fervid_transform = { path="../fervid_transform", version = "0.0.1" }
 nom = "7"
 regex = "1"
