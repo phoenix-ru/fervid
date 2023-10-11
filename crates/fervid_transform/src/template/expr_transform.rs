@@ -1,35 +1,44 @@
-use fervid_core::BindingTypes;
-use swc_core::ecma::{
-    ast::{Expr, Ident, KeyValueProp, MemberExpr, MemberProp, Prop, PropName, PropOrSpread},
-    atoms::JsWord,
-    visit::{VisitMut, VisitMutWith},
+use fervid_core::{BindingTypes, FervidAtom};
+use swc_core::{
+    common::{Span, DUMMY_SP},
+    ecma::{
+        ast::{
+            CallExpr, Expr, Ident, KeyValueProp, MemberExpr, MemberProp, Prop, PropName,
+            PropOrSpread, Callee, ExprOrSpread, PatOrExpr,
+        },
+        atoms::JsWord,
+        visit::{VisitMut, VisitMutWith},
+    },
 };
 
 use crate::{structs::ScopeHelper, template::js_builtins::JS_BUILTINS};
 
 struct TransformVisitor<'s> {
     current_scope: u32,
-    scope_helper: &'s ScopeHelper,
+    scope_helper: &'s mut ScopeHelper,
     has_js_bindings: bool,
     is_inline: bool,
+    is_write: bool
 }
 
 impl ScopeHelper {
     // TODO This function needs to be invoked when an AST is being optimized
     // TODO Support transformation modes (e.g. `inline`, `renderFn`)
-    pub fn transform_expr(&self, expr: &mut Expr, scope_to_use: u32) -> bool {
+    pub fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> bool {
+        let is_inline = self.is_inline;
         let mut visitor = TransformVisitor {
             current_scope: scope_to_use,
             scope_helper: self,
             has_js_bindings: false,
-            is_inline: self.is_inline,
+            is_inline,
+            is_write: false
         };
         expr.visit_mut_with(&mut visitor);
 
         visitor.has_js_bindings
     }
 
-    pub fn get_var_binding_type(&self, starting_scope: u32, variable: &str) -> BindingTypes {
+    pub fn get_var_binding_type(&mut self, starting_scope: u32, variable: &str) -> BindingTypes {
         if JS_BUILTINS.contains(variable) {
             return BindingTypes::JsGlobal;
         }
@@ -54,6 +63,12 @@ impl ScopeHelper {
             current_scope_index = current_scope.parent;
         }
 
+        // Check hash-map for convenience (we may have found the reference previously)
+        let variable_atom = FervidAtom::from(variable);
+        if let Some(binding_type) = self.used_idents.get(&variable_atom) {
+            return binding_type.to_owned();
+        }
+
         // Check setup bindings (both `<script setup>` and `setup()`)
         let setup_bindings = self.setup_bindings.iter().chain(
             self.options_api_vars
@@ -61,7 +76,8 @@ impl ScopeHelper {
                 .map_or_else(|| [].iter(), |v| v.setup.iter()),
         );
         for binding in setup_bindings {
-            if &binding.0 == variable {
+            if binding.0 == variable_atom {
+                self.used_idents.insert(variable_atom, binding.1);
                 return binding.1;
             }
         }
@@ -69,7 +85,8 @@ impl ScopeHelper {
         // Macro to check if the variable is in the slice/Vec and conditionally return
         macro_rules! check_scope {
             ($vars: expr, $ret_descriptor: expr) => {
-                if $vars.iter().any(|it| it == variable) {
+                if $vars.iter().any(|it| *it == variable_atom) {
+                    self.used_idents.insert(variable_atom, $ret_descriptor);
                     return $ret_descriptor;
                 }
             };
@@ -86,7 +103,9 @@ impl ScopeHelper {
             // Check options API imports.
             // Currently it ignores the SyntaxContext (same as in js implementation)
             for binding in options_api_vars.imports.iter() {
-                if &binding.0 == variable {
+                if binding.0 == variable_atom {
+                    self.used_idents
+                        .insert(variable_atom, BindingTypes::SetupMaybeRef);
                     return BindingTypes::SetupMaybeRef;
                 }
             }
@@ -97,35 +116,99 @@ impl ScopeHelper {
 }
 
 impl<'s> VisitMut for TransformVisitor<'s> {
-    fn visit_mut_expr(&mut self, n: &mut Expr) {
-        match n {
-            Expr::Ident(ident_expr) => {
-                let symbol = &ident_expr.sym;
-                let binding_type = self
-                    .scope_helper
-                    .get_var_binding_type(self.current_scope, symbol);
-
-                // TODO The logic for setup variables actually differs quite significantly
-                // https://play.vuejs.org/#eNp9UU1rwzAM/SvCl25QEkZvIRTa0cN22Mq6oy8hUVJ3iW380QWC//tkh2Y7jN6k956kJ2liO62zq0dWsNLWRmgHFp3XWy7FoJVxMMEOArRGDbDK8v2KywZbIfFolLYPE5cArVIFnJwRsuMyPHJZ5nMv6kKJw0H3lUPKAMrz03aaYgmEQAE1D2VOYKxalGzNnK2VbEWXXaySZC9N4qxWgxY9mnfthJKWswISE7mq79X3a8Kc8bi+4fUZ669/8IsdI8bZ0aBFc0XOFs5VpkM304fTG44UL+SgGt+T+g75gVb1PnqcZXsvG7L9R5fcvqQj0+E+7WF0KO1tqWg0KkPSc0Y/er6z+q/dTbZJdfQJFn4A+DKelw==
-
-                // Get the prefix which fits the scope (e.g. `_ctx.` for unknown scopes, `$setup.` for setup scope)
-                if let Some(prefix) = get_prefix(&binding_type, self.is_inline) {
-                    *n = Expr::Member(MemberExpr {
-                        span: ident_expr.span,
-                        obj: Box::new(Expr::Ident(Ident {
-                            span: ident_expr.span,
-                            sym: prefix,
-                            optional: false,
-                        })),
-                        prop: MemberProp::Ident(ident_expr.to_owned()),
-                    });
-                    self.has_js_bindings = true;
-                } else if let BindingTypes::TemplateLocal = binding_type {
-                    self.has_js_bindings = true;
-                }
+    fn visit_mut_assign_expr(&mut self, n: &mut swc_core::ecma::ast::AssignExpr) {
+        match n.left {
+            // Assignments must have their LHS correctly handled
+            // Especially `SetupLet`
+            PatOrExpr::Expr(ref e) if matches!(**e, Expr::Ident(_)) => {
+                let old_is_write = self.is_write;
+                self.is_write = true;
+                n.left.visit_mut_with(self);
+                self.is_write = old_is_write;
+                n.right.visit_mut_with(self);
             }
 
-            _ => n.visit_mut_children_with(self),
+            _ => {
+                n.visit_mut_children_with(self)
+            }
+        }        
+    }
+
+    fn visit_mut_expr(&mut self, n: &mut Expr) {
+        let Expr::Ident(ident_expr) = n else {
+            n.visit_mut_children_with(self);
+            return;
+        };
+
+        let symbol = &ident_expr.sym;
+        let span = ident_expr.span;
+
+        let binding_type = self
+            .scope_helper
+            .get_var_binding_type(self.current_scope, symbol);
+
+        // Template local binding doesn't need any processing
+        if let BindingTypes::TemplateLocal = binding_type {
+            self.has_js_bindings = true;
+            return;
+        }
+
+        // Get the prefix which fits the scope (e.g. `_ctx.` for unknown scopes, `$setup.` for setup scope)
+        if let Some(prefix) = get_prefix(&binding_type, self.is_inline) {
+            *n = Expr::Member(MemberExpr {
+                span,
+                obj: Box::new(Expr::Ident(Ident {
+                    span,
+                    sym: prefix,
+                    optional: false,
+                })),
+                prop: MemberProp::Ident(ident_expr.to_owned()),
+            });
+            self.has_js_bindings = true;
+        }
+
+        // Non-inline logic ends here
+        if !self.is_inline {
+            return;
+        }
+
+        // TODO The logic for setup variables actually differs quite significantly
+        // https://play.vuejs.org/#eNp9UU1rwzAM/SvCl25QEkZvIRTa0cN22Mq6oy8hUVJ3iW380QWC//tkh2Y7jN6k956kJ2liO62zq0dWsNLWRmgHFp3XWy7FoJVxMMEOArRGDbDK8v2KywZbIfFolLYPE5cArVIFnJwRsuMyPHJZ5nMv6kKJw0H3lUPKAMrz03aaYgmEQAE1D2VOYKxalGzNnK2VbEWXXaySZC9N4qxWgxY9mnfthJKWswISE7mq79X3a8Kc8bi+4fUZ669/8IsdI8bZ0aBFc0XOFs5VpkM304fTG44UL+SgGt+T+g75gVb1PnqcZXsvG7L9R5fcvqQj0+E+7WF0KO1tqWg0KkPSc0Y/er6z+q/dTbZJdfQJFn4A+DKelw==
+
+        let dot_value = |expr: &mut Expr, span: Span| {
+            *expr = Expr::Member(MemberExpr {
+                span,
+                obj: Box::new(expr.to_owned()),
+                prop: MemberProp::Ident(Ident {
+                    span: DUMMY_SP,
+                    sym: "value".into(),
+                    optional: false,
+                }),
+            })
+        };
+
+        let unref = |expr: &mut Expr, span: Span| {
+            // TODO Import `_unref` somehow
+            *expr = Expr::Call(CallExpr {
+                span,
+                callee: Callee::Expr(Box::new(Expr::Ident(Ident { span, sym: JsWord::from("_unref"), optional: false }))),
+                args: vec![
+                    ExprOrSpread { spread: None, expr: Box::new(expr.to_owned()) }
+                ],
+                type_args: None,
+            });
+        };
+
+        // Inline logic is pretty complex
+        // TODO Actual logic
+        match binding_type {
+            BindingTypes::SetupLet => unref(n, span),
+            BindingTypes::SetupConst => {},
+            BindingTypes::SetupReactiveConst => {},
+            BindingTypes::SetupMaybeRef => unref(n, span),
+            BindingTypes::SetupRef => dot_value(n, span),
+            BindingTypes::LiteralConst => {},
+            _ => {}
         }
     }
 
@@ -190,7 +273,7 @@ pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<JsWord
     // For inline mode, options API variables become prefixed
     if is_inline {
         return match binding_type {
-            BindingTypes::Data | BindingTypes::Options => Some(JsWord::from("_ctx")),
+            BindingTypes::Data | BindingTypes::Options | BindingTypes::Unresolved => Some(JsWord::from("_ctx")),
             BindingTypes::Props => Some(JsWord::from("__props")),
             // TODO This is not correct. The transform implementation must handle `unref`
             _ => None,

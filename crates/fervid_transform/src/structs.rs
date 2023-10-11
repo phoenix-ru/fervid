@@ -1,6 +1,7 @@
 //! Exports data structs used by the crate
 
-use fervid_core::{BindingTypes, VueImportsSet};
+use fervid_core::{BindingTypes, VueImportsSet, FervidAtom};
+use fxhash::FxHashMap as HashMap;
 use swc_core::ecma::{atoms::JsWord, ast::{Id, Expr, PropOrSpread, Module, ObjectLit, Function, ExprOrSpread}};
 use smallvec::SmallVec;
 
@@ -44,7 +45,9 @@ pub struct ScopeHelper {
     pub setup_bindings: Vec<SetupBinding>,
     pub options_api_vars: Option<Box<ScriptLegacyVars>>,
     pub is_inline: bool,
-    pub transform_mode: TemplateGenerationMode
+    pub transform_mode: TemplateGenerationMode,
+    /// Identifiers used in the template and their respective binding types
+    pub used_idents: HashMap<FervidAtom, BindingTypes>,
 }
 
 /// https://github.com/vuejs/rfcs/discussions/503

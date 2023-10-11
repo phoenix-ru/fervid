@@ -57,9 +57,8 @@ pub fn transform_and_record_script_setup(
             }
 
             ModuleItem::Stmt(stmt) => {
-                // todo actual analysis and transformation as in `fervid_script`
                 if let Some(transformed_stmt) = transform_and_record_stmt(
-                    &stmt,
+                    stmt,
                     &mut scope_helper.setup_bindings,
                     &vue_imports,
                     &mut sfc_object_helper,
@@ -208,19 +207,19 @@ mod tests {
         setup: Vec<SetupBinding>,
     }
 
-    fn analyze_mock(module: &Module) -> MockAnalysisResult {
+    fn analyze_mock(module: Module) -> MockAnalysisResult {
         let mut imports = Vec::new();
         let mut vue_imports = VueResolvedImports::default();
         let mut setup = Vec::new();
         let mut sfc_object = Default::default();
 
-        for module_item in module.body.iter() {
-            match *module_item {
+        for module_item in module.body.into_iter() {
+            match module_item {
                 ModuleItem::ModuleDecl(ModuleDecl::Import(ref import_decl)) => {
                     collect_imports(import_decl, &mut imports, &mut vue_imports)
                 }
 
-                ModuleItem::Stmt(ref stmt) => {
+                ModuleItem::Stmt(stmt) => {
                     transform_and_record_stmt(stmt, &mut setup, &mut vue_imports, &mut sfc_object);
                 }
 
@@ -241,7 +240,7 @@ mod tests {
             .expect("analyze_js expects the input to be parseable")
             .0;
 
-        analyze_mock(&parsed)
+        analyze_mock(parsed)
     }
 
     fn analyze_ts(input: &str) -> MockAnalysisResult {
@@ -249,7 +248,7 @@ mod tests {
             .expect("analyze_ts expects the input to be parseable")
             .0;
 
-        analyze_mock(&parsed)
+        analyze_mock(parsed)
     }
 
     macro_rules! test_js_and_ts {

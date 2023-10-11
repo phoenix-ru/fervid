@@ -14,7 +14,7 @@ use super::macros::transform_script_setup_macro_expr;
 /// 2. The top-level statements in `<script>` when using mixed `<script>` + `<script setup>`;
 /// 3. The insides of `setup()` function in `<script>` Options API.
 pub fn transform_and_record_stmt(
-    stmt: &Stmt,
+    stmt: Stmt,
     out: &mut Vec<SetupBinding>,
     vue_imports: &VueResolvedImports,
     sfc_object_helper: &mut SfcExportedObjectHelper,
@@ -39,7 +39,7 @@ pub fn transform_and_record_stmt(
     }
 
     // By default, just return the copied statement
-    Some(stmt.to_owned())
+    Some(stmt)
 }
 
 /// Analyzes the declaration in `script setup` context.

@@ -34,6 +34,9 @@ pub fn transform_and_record_scripts(
     script_legacy: Option<SfcScriptBlock>,
     scope_helper: &mut ScopeHelper,
 ) -> TransformScriptsResult {
+    // Set `is_inline` flag in `ScopeHelper`
+    scope_helper.is_inline = script_legacy.is_none() && script_setup.is_some();
+
     //
     // STEP 1: Transform Options API `<script>`.
     //

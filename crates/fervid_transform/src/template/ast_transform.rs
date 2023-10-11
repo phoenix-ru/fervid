@@ -309,6 +309,7 @@ impl<'a> Visitor for TemplateVisitor<'_> {
         self.current_scope = scope_to_use;
 
         // Transform the VBind and VOn attributes
+        let patch_hints = &mut element_node.patch_hints;
         for attr in element_node.starting_tag.attributes.iter_mut() {
             match attr {
                 // The logic for the patch flags:
@@ -321,7 +322,6 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                     let has_bindings = self
                         .scope_helper
                         .transform_expr(&mut v_bind.value, scope_to_use);
-                    let patch_hints = &mut element_node.patch_hints;
 
                     let Some(StrOrExpr::Str(ref argument)) = v_bind.argument else {
                         // This is dynamic

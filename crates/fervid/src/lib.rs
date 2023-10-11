@@ -42,10 +42,7 @@ pub mod parser;
 
 use fervid_codegen::CodegenContext;
 pub use fervid_core::*;
-use fervid_transform::{
-    script::transform_and_record_scripts, structs::ScopeHelper,
-    template::transform_and_record_template,
-};
+use fervid_transform::transform_sfc;
 use swc_core::ecma::ast::Expr;
 
 /// Naive implementation of the SFC compilation, meaning that:
@@ -60,28 +57,25 @@ pub fn compile_sync_naive(source: &str) -> Result<String, String> {
     // })?;
 
     let mut errors = Vec::new();
-    let mut sfc = fervid_parser::parse_sfc(&source, &mut errors).map_err(|err| {
+    let sfc = fervid_parser::parse_sfc(&source, &mut errors).map_err(|err| {
         return err.to_string();
     })?;
 
-    let mut scope_helper = ScopeHelper::default();
-    let transform_result =
-        transform_and_record_scripts(sfc.script_setup, sfc.script_legacy, &mut scope_helper);
+    // TODO Return template used variables as a part of transformation result.
+    // Also `used_imports`? `vue_imports`? User imports?
+    let transform_result = transform_sfc(sfc);
 
     let mut ctx = CodegenContext::default();
+    ctx.used_imports = transform_result.used_vue_imports;
 
-    let template_expr: Option<Expr> = sfc.template.as_mut().map(|template_block| {
-        transform_and_record_template(template_block, &mut scope_helper);
+    let template_expr: Option<Expr> = transform_result.template_block.map(|template_block| {
         ctx.generate_sfc_template(&template_block)
     });
-
-    // Add imports from script transformation (because macros generate new imports)
-    ctx.used_imports |= transform_result.added_imports;
 
     let sfc_module = ctx.generate_module(
         template_expr,
         transform_result.module,
-        transform_result.export_obj,
+        transform_result.exported_obj,
         transform_result.setup_fn,
     );
 
