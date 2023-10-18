@@ -1,6 +1,6 @@
 //! Responsible for `<script>` and `<script setup>` transformations and analysis.
 
-use fervid_core::{SfcScriptBlock, VueImportsSet};
+use fervid_core::{SfcScriptBlock, VueImportsSet, TemplateGenerationMode};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
@@ -34,8 +34,10 @@ pub fn transform_and_record_scripts(
     script_legacy: Option<SfcScriptBlock>,
     scope_helper: &mut ScopeHelper,
 ) -> TransformScriptsResult {
-    // Set `is_inline` flag in `ScopeHelper`
-    scope_helper.is_inline = script_legacy.is_none() && script_setup.is_some();
+    // Set inline flag in `ScopeHelper`
+    if script_legacy.is_none() && script_setup.is_some() {
+        scope_helper.template_generation_mode = TemplateGenerationMode::Inline;
+    }
 
     //
     // STEP 1: Transform Options API `<script>`.

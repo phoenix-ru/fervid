@@ -77,6 +77,7 @@ pub fn compile_sync_naive(source: &str) -> Result<String, String> {
         transform_result.module,
         transform_result.exported_obj,
         transform_result.setup_fn,
+        transform_result.template_generation_mode
     );
 
     let compiled_code = CodegenContext::stringify(&source, &sfc_module, false);

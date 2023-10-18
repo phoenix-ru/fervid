@@ -1,4 +1,4 @@
-use fervid_core::{SfcDescriptor, SfcTemplateBlock, VueImportsSet, BindingTypes, FervidAtom};
+use fervid_core::{SfcDescriptor, SfcTemplateBlock, VueImportsSet, BindingTypes, FervidAtom, TemplateGenerationMode};
 use fxhash::FxHashMap as HashMap;
 use script::transform_and_record_scripts;
 use structs::ScopeHelper;
@@ -28,7 +28,11 @@ pub struct TransformSfcResult {
     /// All imports `from 'vue'`
     pub used_vue_imports: VueImportsSet,
     /// Identifiers used in the template and their respective binding types
-    pub used_idents: HashMap<FervidAtom, BindingTypes>
+    pub used_idents: HashMap<FervidAtom, BindingTypes>,
+    /// In which mode should the template be generated:
+    /// - inline as last statement of `setup` or
+    /// - as a `render` function.
+    pub template_generation_mode: TemplateGenerationMode
 }
 
 /// Applies all the necessary transformations to the SFC.
@@ -54,6 +58,7 @@ pub fn transform_sfc(sfc_descriptor: SfcDescriptor) -> TransformSfcResult {
         module: transform_result.module,
         setup_fn: transform_result.setup_fn,
         template_block,
+        template_generation_mode: scope_helper.template_generation_mode,
         used_idents: scope_helper.used_idents,
         used_vue_imports: transform_result.added_imports,
     }

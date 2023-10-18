@@ -1,4 +1,4 @@
-use fervid_core::{BindingTypes, FervidAtom};
+use fervid_core::{BindingTypes, FervidAtom, TemplateGenerationMode};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
@@ -25,7 +25,7 @@ impl ScopeHelper {
     // TODO This function needs to be invoked when an AST is being optimized
     // TODO Support transformation modes (e.g. `inline`, `renderFn`)
     pub fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> bool {
-        let is_inline = self.is_inline;
+        let is_inline = matches!(self.template_generation_mode, TemplateGenerationMode::Inline);
         let mut visitor = TransformVisitor {
             current_scope: scope_to_use,
             scope_helper: self,
@@ -189,6 +189,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
 
         let unref = |expr: &mut Expr, span: Span| {
             // TODO Import `_unref` somehow
+            // TODO Rename `ScopeHelper` to `BindingsHelper` and add `vue_imports` there
             *expr = Expr::Call(CallExpr {
                 span,
                 callee: Callee::Expr(Box::new(Expr::Ident(Ident { span, sym: JsWord::from("_unref"), optional: false }))),
@@ -301,7 +302,7 @@ mod tests {
         structs::{ScopeHelper, TemplateScope},
         template::js_builtins::JS_BUILTINS,
     };
-    use fervid_core::BindingTypes;
+    use fervid_core::{BindingTypes, TemplateGenerationMode};
     use smallvec::SmallVec;
     use swc_core::ecma::atoms::JsWord;
 
@@ -317,7 +318,7 @@ mod tests {
         }
 
         // Check inline mode as well
-        helper.is_inline = true;
+        helper.template_generation_mode = TemplateGenerationMode::Inline;
         for builtin in JS_BUILTINS.iter() {
             assert_eq!(
                 BindingTypes::JsGlobal,
