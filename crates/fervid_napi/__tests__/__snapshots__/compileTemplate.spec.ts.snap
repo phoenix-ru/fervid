@@ -115,7 +115,7 @@ export default {
                                 item2,
                                 index
                             ])
-                        })
+                        }, null, 2)
                     ]),
                     false ? (_openBlock(), _createElementBlock(_Fragment, null, [
                         _createTextVNode(\\" this is a v-if template \\")
@@ -137,9 +137,11 @@ export default {
                             }
                         ]),
                         textContent: _ctx.foo + _ctx.bar
-                    })
+                    }, null, 4)
                 ])
-        })), [
+        }, 8, [
+            \\"test-bound\\"
+        ])), [
             [
                 _directive_test_directive,
                 foo - bar,
