@@ -1,13 +1,10 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
-fn parser_benchmark(c: &mut Criterion) {
-    let inputs = vec![
-        ("input.vue", include_str!("./fixtures/input.vue")),
-        ("ElTable.vue", include_str!("./fixtures/ElTable.vue")),
-        ("TodoApp.vue", include_str!("./fixtures/TodoApp.vue")),
-    ];
+mod fixtures;
+use fixtures::FIXTURES;
 
-    for input in inputs {
+fn parser_benchmark(c: &mut Criterion) {
+    for input in FIXTURES {
         c.bench_with_input(
             BenchmarkId::new("parser: new parse", input.0),
             &input.1,

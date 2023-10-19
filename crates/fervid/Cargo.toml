@@ -38,3 +38,7 @@ harness = false
 [[bench]]
 name = "codegen_bench"
 harness = false
+
+[[bench]]
+name = "full_bench"
+harness = false

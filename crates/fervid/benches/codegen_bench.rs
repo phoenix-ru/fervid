@@ -1,14 +1,11 @@
 use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
 use swc_core::common::DUMMY_SP;
 
-fn codegen_benchmark(c: &mut Criterion) {
-    let inputs = vec![
-        ("input.vue", include_str!("./fixtures/input.vue")),
-        ("ElTable.vue", include_str!("./fixtures/ElTable.vue")),
-        ("TodoApp.vue", include_str!("./fixtures/TodoApp.vue")),
-    ];
+mod fixtures;
+use fixtures::FIXTURES;
 
-    for (name, component) in inputs {
+fn codegen_benchmark(c: &mut Criterion) {
+    for (name, component) in FIXTURES {
         c.bench_with_input(BenchmarkId::new("codegen: generate CSR+DEV", name), &component, |b, component| {
             let mut errors = Vec::new();
             let res = fervid_parser::parse_sfc(component, &mut errors);
