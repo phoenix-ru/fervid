@@ -107,7 +107,7 @@ export default {
                             _createTextVNode(" hey "),
                             _createElementVNode("span", {
                                 key: index
-                            }, _toDisplayString(item1) + _toDisplayString(index), 8, [
+                            }, _toDisplayString(item1) + _toDisplayString(index), 9, [
                                 "key"
                             ]),
                             _createElementVNode("div", {

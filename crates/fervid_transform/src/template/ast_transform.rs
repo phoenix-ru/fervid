@@ -387,9 +387,34 @@ impl<'a> Visitor for TemplateVisitor<'_> {
         // Merge conditional nodes and clean up whitespace
         optimize_children(&mut element_node.children, element_kind);
 
+        // Patch flag for HTML elements which only contain interpolation and text,
+        // e.g. `<p>{{ msg }}</p>`.
+        // Does not apply to components or child-less elements
+        let mut is_children_text_only = matches!(element_kind, ElementKind::Element) && !element_node.children.is_empty();
+        let mut has_dynamic_interpolation = false;
+
         // Recursively visit children
         for child in element_node.children.iter_mut() {
-            child.visit_mut_with(self)
+            child.visit_mut_with(self);
+
+            match child {
+                // When Elements are present, TEXT patch flag does not apply
+                Node::Element(_) | Node::ConditionalSeq(_) => {
+                    is_children_text_only = false;
+                }
+
+                // TEXT patch flag only applies when there is an interpolation with a patch flag
+                Node::Interpolation(interpolation) => {
+                    has_dynamic_interpolation |= interpolation.patch_flag;
+                }
+
+                Node::Text(_, _) | Node::Comment(_, _) => {}
+            }
+        }
+
+        // Apply TEXT patch flag
+        if is_children_text_only && has_dynamic_interpolation {
+            patch_hints.flags |= PatchFlags::Text;
         }
 
         // Restore the parent scope

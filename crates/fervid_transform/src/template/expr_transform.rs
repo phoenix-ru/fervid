@@ -3,8 +3,8 @@ use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
         ast::{
-            CallExpr, Expr, Ident, KeyValueProp, MemberExpr, MemberProp, Prop, PropName,
-            PropOrSpread, Callee, ExprOrSpread, PatOrExpr,
+            CallExpr, Callee, Expr, ExprOrSpread, Ident, KeyValueProp, MemberExpr, MemberProp,
+            PatOrExpr, Prop, PropName, PropOrSpread,
         },
         atoms::JsWord,
         visit::{VisitMut, VisitMutWith},
@@ -18,20 +18,23 @@ struct TransformVisitor<'s> {
     scope_helper: &'s mut ScopeHelper,
     has_js_bindings: bool,
     is_inline: bool,
-    is_write: bool
+    is_write: bool,
 }
 
 impl ScopeHelper {
     // TODO This function needs to be invoked when an AST is being optimized
     // TODO Support transformation modes (e.g. `inline`, `renderFn`)
     pub fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> bool {
-        let is_inline = matches!(self.template_generation_mode, TemplateGenerationMode::Inline);
+        let is_inline = matches!(
+            self.template_generation_mode,
+            TemplateGenerationMode::Inline
+        );
         let mut visitor = TransformVisitor {
             current_scope: scope_to_use,
             scope_helper: self,
             has_js_bindings: false,
             is_inline,
-            is_write: false
+            is_write: false,
         };
         expr.visit_mut_with(&mut visitor);
 
@@ -128,10 +131,8 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                 n.right.visit_mut_with(self);
             }
 
-            _ => {
-                n.visit_mut_children_with(self)
-            }
-        }        
+            _ => n.visit_mut_children_with(self),
+        }
     }
 
     fn visit_mut_expr(&mut self, n: &mut Expr) {
@@ -192,23 +193,39 @@ impl<'s> VisitMut for TransformVisitor<'s> {
             // TODO Rename `ScopeHelper` to `BindingsHelper` and add `vue_imports` there
             *expr = Expr::Call(CallExpr {
                 span,
-                callee: Callee::Expr(Box::new(Expr::Ident(Ident { span, sym: JsWord::from("_unref"), optional: false }))),
-                args: vec![
-                    ExprOrSpread { spread: None, expr: Box::new(expr.to_owned()) }
-                ],
+                callee: Callee::Expr(Box::new(Expr::Ident(Ident {
+                    span,
+                    sym: JsWord::from("_unref"),
+                    optional: false,
+                }))),
+                args: vec![ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(expr.to_owned()),
+                }],
                 type_args: None,
             });
         };
+
+        // Add a flag that binding is dynamic
+        if matches!(
+            binding_type,
+            BindingTypes::SetupLet
+                | BindingTypes::SetupReactiveConst
+                | BindingTypes::SetupMaybeRef
+                | BindingTypes::SetupRef
+        ) {
+            self.has_js_bindings = true;
+        }
 
         // Inline logic is pretty complex
         // TODO Actual logic
         match binding_type {
             BindingTypes::SetupLet => unref(n, span),
-            BindingTypes::SetupConst => {},
-            BindingTypes::SetupReactiveConst => {},
+            BindingTypes::SetupConst => {}
+            BindingTypes::SetupReactiveConst => {}
             BindingTypes::SetupMaybeRef => unref(n, span),
             BindingTypes::SetupRef => dot_value(n, span),
-            BindingTypes::LiteralConst => {},
+            BindingTypes::LiteralConst => {}
             _ => {}
         }
     }
@@ -274,7 +291,9 @@ pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<JsWord
     // For inline mode, options API variables become prefixed
     if is_inline {
         return match binding_type {
-            BindingTypes::Data | BindingTypes::Options | BindingTypes::Unresolved => Some(JsWord::from("_ctx")),
+            BindingTypes::Data | BindingTypes::Options | BindingTypes::Unresolved => {
+                Some(JsWord::from("_ctx"))
+            }
             BindingTypes::Props => Some(JsWord::from("__props")),
             // TODO This is not correct. The transform implementation must handle `unref`
             _ => None,
