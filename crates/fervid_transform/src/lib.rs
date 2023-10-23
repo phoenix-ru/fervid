@@ -1,7 +1,7 @@
 use fervid_core::{SfcDescriptor, SfcTemplateBlock, VueImportsSet, BindingTypes, FervidAtom, TemplateGenerationMode};
 use fxhash::FxHashMap as HashMap;
 use script::transform_and_record_scripts;
-use structs::ScopeHelper;
+use structs::BindingsHelper;
 use swc_core::ecma::ast::{Module, ObjectLit, Function};
 use template::transform_and_record_template;
 
@@ -41,15 +41,15 @@ pub struct TransformSfcResult {
 pub fn transform_sfc(sfc_descriptor: SfcDescriptor) -> TransformSfcResult {
     let mut template_block = None;
 
-    let mut scope_helper = ScopeHelper::default();
+    let mut bindings_helper = BindingsHelper::default();
     let transform_result = transform_and_record_scripts(
         sfc_descriptor.script_setup,
         sfc_descriptor.script_legacy,
-        &mut scope_helper,
+        &mut bindings_helper,
     );
 
     if let Some(mut template) = sfc_descriptor.template {
-        transform_and_record_template(&mut template, &mut scope_helper);
+        transform_and_record_template(&mut template, &mut bindings_helper);
         template_block = Some(template);
     }
 
@@ -58,8 +58,8 @@ pub fn transform_sfc(sfc_descriptor: SfcDescriptor) -> TransformSfcResult {
         module: transform_result.module,
         setup_fn: transform_result.setup_fn,
         template_block,
-        template_generation_mode: scope_helper.template_generation_mode,
-        used_idents: scope_helper.used_idents,
-        used_vue_imports: transform_result.added_imports,
+        template_generation_mode: bindings_helper.template_generation_mode,
+        used_idents: bindings_helper.used_bindings,
+        used_vue_imports: bindings_helper.vue_imports,
     }
 }

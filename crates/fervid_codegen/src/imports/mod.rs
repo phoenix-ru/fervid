@@ -17,55 +17,14 @@ impl CodegenContext {
         self.used_imports |= vue_import;
     }
 
-    pub fn get_import_str(vue_import: VueImports) -> &'static str {
-        match vue_import {
-            VueImports::CreateBlock => "_createBlock",
-            VueImports::CreateCommentVNode => "_createCommentVNode",
-            VueImports::CreateElementBlock => "_createElementBlock",
-            VueImports::CreateElementVNode => "_createElementVNode",
-            VueImports::CreateTextVNode => "_createTextVNode",
-            VueImports::CreateVNode => "_createVNode",
-            VueImports::Fragment => "_Fragment",
-            VueImports::KeepAlive => "_KeepAlive",
-            VueImports::MergeModels => "_mergeModels",
-            VueImports::NormalizeClass => "_normalizeClass",
-            VueImports::NormalizeStyle => "_normalizeStyle",
-            VueImports::OpenBlock => "_openBlock",
-            VueImports::RenderList => "_renderList",
-            VueImports::RenderSlot => "_renderSlot",
-            VueImports::ResolveComponent => "_resolveComponent",
-            VueImports::ResolveDirective => "_resolveDirective",
-            VueImports::ResolveDynamicComponent => "_resolveDynamicComponent",
-            VueImports::Suspense => "_Suspense",
-            VueImports::Teleport => "_Teleport",
-            VueImports::ToDisplayString => "_toDisplayString",
-            VueImports::Transition => "_Transition",
-            VueImports::TransitionGroup => "_TransitionGroup",
-            VueImports::UseModel => "_useModel",
-            VueImports::VModelCheckbox => "_vModelCheckbox",
-            VueImports::VModelDynamic => "_vModelDynamic",
-            VueImports::VModelRadio => "_vModelRadio",
-            VueImports::VModelSelect => "_vModelSelect",
-            VueImports::VModelText => "_vModelText",
-            VueImports::VShow => "_vShow",
-            VueImports::WithCtx => "_withCtx",
-            VueImports::WithDirectives => "_withDirectives",
-            VueImports::WithModifiers => "_withModifiers",
-        }
-    }
-
-    pub fn get_import_ident(vue_import: VueImports) -> JsWord {
-        JsWord::from(Self::get_import_str(vue_import))
-    }
-
     pub fn get_and_add_import_str(&mut self, vue_import: VueImports) -> &'static str {
         self.add_to_imports(vue_import);
-        Self::get_import_str(vue_import)
+        vue_import.as_str()
     }
 
     pub fn get_and_add_import_ident(&mut self, vue_import: VueImports) -> JsWord {
         self.add_to_imports(vue_import);
-        Self::get_import_ident(vue_import)
+        vue_import.as_atom()
     }
 
     /// Generates all the imports used by template generation.
@@ -73,11 +32,11 @@ impl CodegenContext {
     pub fn generate_imports(&self) -> Vec<ImportSpecifier> {
         let mut result = Vec::new();
         for import in self.used_imports.into_iter() {
-            let import_raw = Self::get_import_str(import);
+            let import_raw = import.as_str();
 
             let import_local = Ident {
                 span: DUMMY_SP,
-                sym: JsWord::from(import_raw),
+                sym: import.as_atom(),
                 optional: false,
             };
 

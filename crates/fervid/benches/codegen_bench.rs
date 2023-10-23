@@ -15,8 +15,8 @@ fn codegen_benchmark(c: &mut Criterion) {
                 panic!("Test component has no template block");
             };
 
-            let mut scope_helper = fervid_transform::structs::ScopeHelper::default();
-            fervid_transform::template::transform_and_record_template(template_block, &mut scope_helper);
+            let mut bindings_helper = fervid_transform::structs::BindingsHelper::default();
+            fervid_transform::template::transform_and_record_template(template_block, &mut bindings_helper);
 
             b.iter_batched(
                 || template_block.clone(),

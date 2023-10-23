@@ -1,4 +1,4 @@
-use fervid_core::{BindingTypes, FervidAtom, TemplateGenerationMode};
+use fervid_core::{BindingTypes, FervidAtom, TemplateGenerationMode, VueImports};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
@@ -11,17 +11,17 @@ use swc_core::{
     },
 };
 
-use crate::{structs::ScopeHelper, template::js_builtins::JS_BUILTINS};
+use crate::{structs::BindingsHelper, template::js_builtins::JS_BUILTINS};
 
 struct TransformVisitor<'s> {
     current_scope: u32,
-    scope_helper: &'s mut ScopeHelper,
+    scope_helper: &'s mut BindingsHelper,
     has_js_bindings: bool,
     is_inline: bool,
     is_write: bool,
 }
 
-impl ScopeHelper {
+impl BindingsHelper {
     // TODO This function needs to be invoked when an AST is being optimized
     // TODO Support transformation modes (e.g. `inline`, `renderFn`)
     pub fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> bool {
@@ -68,19 +68,19 @@ impl ScopeHelper {
 
         // Check hash-map for convenience (we may have found the reference previously)
         let variable_atom = FervidAtom::from(variable);
-        if let Some(binding_type) = self.used_idents.get(&variable_atom) {
+        if let Some(binding_type) = self.used_bindings.get(&variable_atom) {
             return binding_type.to_owned();
         }
 
         // Check setup bindings (both `<script setup>` and `setup()`)
         let setup_bindings = self.setup_bindings.iter().chain(
-            self.options_api_vars
+            self.options_api_bindings
                 .as_ref()
                 .map_or_else(|| [].iter(), |v| v.setup.iter()),
         );
         for binding in setup_bindings {
             if binding.0 == variable_atom {
-                self.used_idents.insert(variable_atom, binding.1);
+                self.used_bindings.insert(variable_atom, binding.1);
                 return binding.1;
             }
         }
@@ -89,14 +89,14 @@ impl ScopeHelper {
         macro_rules! check_scope {
             ($vars: expr, $ret_descriptor: expr) => {
                 if $vars.iter().any(|it| *it == variable_atom) {
-                    self.used_idents.insert(variable_atom, $ret_descriptor);
+                    self.used_bindings.insert(variable_atom, $ret_descriptor);
                     return $ret_descriptor;
                 }
             };
         }
 
         // Check all the options API variables
-        if let Some(options_api_vars) = &self.options_api_vars {
+        if let Some(options_api_vars) = &self.options_api_bindings {
             check_scope!(options_api_vars.data, BindingTypes::Data);
             check_scope!(options_api_vars.props, BindingTypes::Props);
             check_scope!(options_api_vars.computed, BindingTypes::Options);
@@ -107,7 +107,7 @@ impl ScopeHelper {
             // Currently it ignores the SyntaxContext (same as in js implementation)
             for binding in options_api_vars.imports.iter() {
                 if binding.0 == variable_atom {
-                    self.used_idents
+                    self.used_bindings
                         .insert(variable_atom, BindingTypes::SetupMaybeRef);
                     return BindingTypes::SetupMaybeRef;
                 }
@@ -188,14 +188,14 @@ impl<'s> VisitMut for TransformVisitor<'s> {
             })
         };
 
-        let unref = |expr: &mut Expr, span: Span| {
-            // TODO Import `_unref` somehow
-            // TODO Rename `ScopeHelper` to `BindingsHelper` and add `vue_imports` there
+        let mut unref = |expr: &mut Expr, span: Span| {
+            self.scope_helper.vue_imports |= VueImports::Unref;
+
             *expr = Expr::Call(CallExpr {
                 span,
                 callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                     span,
-                    sym: JsWord::from("_unref"),
+                    sym: VueImports::Unref.as_atom(),
                     optional: false,
                 }))),
                 args: vec![ExprOrSpread {
@@ -318,7 +318,7 @@ pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<JsWord
 #[cfg(test)]
 mod tests {
     use crate::{
-        structs::{ScopeHelper, TemplateScope},
+        structs::{BindingsHelper, TemplateScope},
         template::js_builtins::JS_BUILTINS,
     };
     use fervid_core::{BindingTypes, TemplateGenerationMode};
@@ -327,7 +327,7 @@ mod tests {
 
     #[test]
     fn it_acknowledges_builtins() {
-        let mut helper = ScopeHelper::default();
+        let mut helper = BindingsHelper::default();
 
         for builtin in JS_BUILTINS.iter() {
             assert_eq!(
@@ -375,7 +375,7 @@ mod tests {
             variables: SmallVec::from_vec(vec![v_grand2_1.to_owned(), v_grand2_2.to_owned()]),
         };
 
-        let mut scope_helper = ScopeHelper::default();
+        let mut scope_helper = BindingsHelper::default();
         scope_helper.template_scopes.extend(vec![
             root_scope,
             child_scope,

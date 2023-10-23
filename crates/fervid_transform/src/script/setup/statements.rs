@@ -3,7 +3,7 @@ use swc_core::ecma::ast::{Decl, ExprStmt, Stmt, VarDeclKind};
 
 use crate::{
     script::common::{categorize_class, categorize_fn_decl, categorize_var_declarator},
-    structs::{SetupBinding, SfcExportedObjectHelper, VueResolvedImports},
+    structs::{BindingsHelper, SetupBinding, SfcExportedObjectHelper, VueResolvedImports},
 };
 
 use super::macros::transform_script_setup_macro_expr;
@@ -15,24 +15,30 @@ use super::macros::transform_script_setup_macro_expr;
 /// 3. The insides of `setup()` function in `<script>` Options API.
 pub fn transform_and_record_stmt(
     stmt: Stmt,
-    out: &mut Vec<SetupBinding>,
+    bindings_helper: &mut BindingsHelper,
     vue_imports: &VueResolvedImports,
     sfc_object_helper: &mut SfcExportedObjectHelper,
 ) -> Option<Stmt> {
     match stmt {
         Stmt::Expr(ref expr_stmt) => {
             let span = expr_stmt.span;
-            return transform_script_setup_macro_expr(&expr_stmt.expr, sfc_object_helper, false)
-                .map(|transformed| {
-                    Stmt::Expr(ExprStmt {
-                        span,
-                        expr: Box::new(transformed),
-                    })
-                });
+            return transform_script_setup_macro_expr(
+                &expr_stmt.expr,
+                bindings_helper,
+                sfc_object_helper,
+                false,
+            )
+            .map(|transformed| {
+                Stmt::Expr(ExprStmt {
+                    span,
+                    expr: Box::new(transformed),
+                })
+            });
         }
 
         Stmt::Decl(ref decl) => {
-            return transform_decl_stmt(decl, out, vue_imports, sfc_object_helper).map(Stmt::Decl);
+            return transform_decl_stmt(decl, bindings_helper, vue_imports, sfc_object_helper)
+                .map(Stmt::Decl);
         }
 
         _ => {}
@@ -46,14 +52,20 @@ pub fn transform_and_record_stmt(
 /// These are typically `var`/`let`/`const` declarations, function declarations, etc.
 fn transform_decl_stmt(
     decl: &Decl,
-    out: &mut Vec<SetupBinding>,
-    vue_imports: &VueResolvedImports,
+    bindings_helper: &mut BindingsHelper,
+    vue_user_imports: &VueResolvedImports,
     sfc_object_helper: &mut SfcExportedObjectHelper,
 ) -> Option<Decl> {
-    match decl {
-        Decl::Class(class) => out.push(categorize_class(class)),
+    macro_rules! push {
+        ($binding: expr) => {
+            bindings_helper.setup_bindings.push($binding)
+        };
+    }
 
-        Decl::Fn(fn_decl) => out.push(categorize_fn_decl(fn_decl)),
+    match decl {
+        Decl::Class(class) => push!(categorize_class(class)),
+
+        Decl::Fn(fn_decl) => push!(categorize_fn_decl(fn_decl)),
 
         Decl::Var(var_decl) => {
             let is_const = matches!(var_decl.kind, VarDeclKind::Const);
@@ -63,10 +75,20 @@ fn transform_decl_stmt(
             let mut new_var_decl = var_decl.to_owned();
 
             for var_declarator in new_var_decl.as_mut().decls.iter_mut() {
-                categorize_var_declarator(&var_declarator, out, vue_imports, is_const);
+                categorize_var_declarator(
+                    &var_declarator,
+                    &mut bindings_helper.setup_bindings,
+                    vue_user_imports,
+                    is_const,
+                );
 
                 if let Some(ref mut init_expr) = var_declarator.init {
-                    let transformed = transform_script_setup_macro_expr(&init_expr, sfc_object_helper, true);
+                    let transformed = transform_script_setup_macro_expr(
+                        &init_expr,
+                        bindings_helper,
+                        sfc_object_helper,
+                        true,
+                    );
                     if let Some(transformed) = transformed {
                         *init_expr = Box::new(transformed);
                     }
@@ -79,7 +101,7 @@ fn transform_decl_stmt(
         Decl::TsEnum(ts_enum) => {
             // Ambient enums are also included, this is intentional
             // I am not sure about `const enum`s though
-            out.push(SetupBinding(
+            push!(SetupBinding(
                 ts_enum.id.sym.to_owned(),
                 BindingTypes::LiteralConst,
             ))

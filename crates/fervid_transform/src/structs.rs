@@ -1,6 +1,6 @@
 //! Exports data structs used by the crate
 
-use fervid_core::{BindingTypes, VueImportsSet, FervidAtom, TemplateGenerationMode};
+use fervid_core::{BindingTypes, VueImportsSet, FervidAtom, TemplateGenerationMode, BuiltinType};
 use fxhash::FxHashMap as HashMap;
 use swc_core::ecma::{atoms::JsWord, ast::{Id, Expr, PropOrSpread, Module, ObjectLit, Function, ExprOrSpread}};
 use smallvec::SmallVec;
@@ -33,6 +33,21 @@ pub struct VueResolvedImports {
     pub reactive: Option<Id>
 }
 
+#[derive(Debug, Default)]
+pub enum ComponentBinding {
+    Resolved(Box<Expr>),
+    #[default]
+    Unresolved,
+    Builtin(BuiltinType)
+}
+
+#[derive(Debug, Default)]
+pub enum CustomDirectiveBinding {
+    Resolved(Box<Expr>),
+    #[default]
+    Unresolved
+}
+
 #[derive(Debug)]
 pub struct TemplateScope {
     pub variables: SmallVec<[JsWord; 1]>,
@@ -40,13 +55,23 @@ pub struct TemplateScope {
 }
 
 #[derive(Debug, Default)]
-pub struct ScopeHelper {
+pub struct BindingsHelper {
+    /// All components present in the `<template>`
+    pub components: HashMap<FervidAtom, ComponentBinding>,
+    /// All custom directives present in the `<template>`
+    pub custom_directives: HashMap<FervidAtom, CustomDirectiveBinding>,
+    /// Scopes of the `<template>` for in-template variable resolutions
     pub template_scopes: Vec<TemplateScope>,
+    /// Bindings in `<script setup>`
     pub setup_bindings: Vec<SetupBinding>,
-    pub options_api_vars: Option<Box<ScriptLegacyVars>>,
+    /// Bindings in `<script>`
+    pub options_api_bindings: Option<Box<ScriptLegacyVars>>,
+    /// The mode with which `<template>` variables are resolved
     pub template_generation_mode: TemplateGenerationMode,
     /// Identifiers used in the template and their respective binding types
-    pub used_idents: HashMap<FervidAtom, BindingTypes>,
+    pub used_bindings: HashMap<FervidAtom, BindingTypes>,
+    /// Internal Vue imports used by built-in components, directives and others
+    pub vue_imports: VueImportsSet
 }
 
 /// https://github.com/vuejs/rfcs/discussions/503
@@ -72,13 +97,9 @@ pub struct SfcExportedObjectHelper {
     pub props: Option<Box<Expr>>,
     /// Other fields of the object
     pub untyped_fields: Vec<PropOrSpread>,
-    /// What imports need to be used
-    pub vue_imports: VueImportsSet
 }
 
 pub struct TransformScriptsResult {
-    /// Imports added by transformation (usually by macros)
-    pub added_imports: VueImportsSet,
     /// EcmaScript module
     pub module: Module,
     /// Default exported object (not linked to module yet)

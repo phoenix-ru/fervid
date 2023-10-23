@@ -1,6 +1,6 @@
 //! Responsible for `<script>` and `<script setup>` transformations and analysis.
 
-use fervid_core::{SfcScriptBlock, VueImportsSet, TemplateGenerationMode};
+use fervid_core::{SfcScriptBlock, TemplateGenerationMode};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
@@ -8,7 +8,7 @@ use swc_core::{
     },
 };
 
-use crate::structs::{ScopeHelper, TransformScriptsResult};
+use crate::structs::{BindingsHelper, TransformScriptsResult};
 
 use self::{
     options_api::{transform_and_record_script_options_api, AnalyzeOptions},
@@ -25,18 +25,18 @@ pub mod utils;
 ///
 /// Consumes both [`SfcScriptBlock`]s to avoid cloning.
 ///
-/// It will populate the provided [`ScopeHelper`] with the analysis information, such as:
+/// It will populate the provided [`BindingsHelper`] with the analysis information, such as:
 /// - Variable bindings (from `<script setup>` and from Options API);
 /// - Import bindings;
 /// - (TODO) Imported `.vue` component bindings;
 pub fn transform_and_record_scripts(
     script_setup: Option<SfcScriptBlock>,
     script_legacy: Option<SfcScriptBlock>,
-    scope_helper: &mut ScopeHelper,
+    bindings_helper: &mut BindingsHelper,
 ) -> TransformScriptsResult {
-    // Set inline flag in `ScopeHelper`
+    // Set inline flag in `BindingsHelper`
     if script_legacy.is_none() && script_setup.is_some() {
-        scope_helper.template_generation_mode = TemplateGenerationMode::Inline;
+        bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
     }
 
     //
@@ -56,7 +56,7 @@ pub fn transform_and_record_scripts(
         transform_and_record_script_options_api(&mut module, AnalyzeOptions::default());
 
     // Assign Options API bindings
-    scope_helper.options_api_vars = Some(script_options_transform_result.vars);
+    bindings_helper.options_api_bindings = Some(script_options_transform_result.vars);
 
     //
     // STEP 2: Prepare the exported object.
@@ -74,9 +74,8 @@ pub fn transform_and_record_scripts(
     //
 
     let mut setup_fn: Option<Box<Function>> = None;
-    let mut added_imports = VueImportsSet::default();
     if let Some(script_setup) = script_setup {
-        let setup_transform_result = transform_and_record_script_setup(script_setup, scope_helper);
+        let setup_transform_result = transform_and_record_script_setup(script_setup, bindings_helper);
 
         // TODO Push imports at module top or bottom? Or smart merge?
         // TODO Merge Vue imports produced by module transformation
@@ -86,7 +85,6 @@ pub fn transform_and_record_scripts(
         }
 
         // Merge fields into an SFC exported object
-        added_imports = setup_transform_result.sfc_object_helper.vue_imports;
         merge_sfc_helper(setup_transform_result.sfc_object_helper, &mut export_obj.props);
 
         // TODO Adding bindings to `setup()` in Options API will get overwritten in `<script setup>`
@@ -95,7 +93,6 @@ pub fn transform_and_record_scripts(
     }
 
     TransformScriptsResult {
-        added_imports,
         module,
         export_obj,
         setup_fn,

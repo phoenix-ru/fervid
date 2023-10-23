@@ -15,7 +15,7 @@ use crate::{
         DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_MODEL, DEFINE_PROPS, EMIT_HELPER, EXPOSE_HELPER,
         MERGE_MODELS_HELPER, MODEL_VALUE, PROPS_HELPER, USE_MODEL_HELPER,
     },
-    structs::{SfcDefineModel, SfcExportedObjectHelper},
+    structs::{SfcDefineModel, SfcExportedObjectHelper, BindingsHelper},
 };
 
 /// Tries to transform a Vue compiler macro.\
@@ -25,6 +25,7 @@ use crate::{
 /// See https://vuejs.org/api/sfc-script-setup.html#defineprops-defineemits
 pub fn transform_script_setup_macro_expr(
     expr: &Expr,
+    bindings_helper: &mut BindingsHelper,
     sfc_object_helper: &mut SfcExportedObjectHelper,
     is_var_decl: bool,
 ) -> Option<Expr> {
@@ -112,7 +113,7 @@ pub fn transform_script_setup_macro_expr(
         let span = call_expr.span;
 
         // Add to imports
-        sfc_object_helper.vue_imports |= VueImports::UseModel;
+        bindings_helper.vue_imports |= VueImports::UseModel;
 
         let use_model_ident = Ident {
             span,
@@ -177,7 +178,7 @@ pub fn transform_script_setup_macro_expr(
 }
 
 /// Mainly used to process `models` by adding them to `props` and `emits`
-pub fn postprocess_macros(sfc_object_helper: &mut SfcExportedObjectHelper) {
+pub fn postprocess_macros(bindings_helper: &mut BindingsHelper, sfc_object_helper: &mut SfcExportedObjectHelper) {
     let len = sfc_object_helper.models.len();
     if len == 0 {
         return;
@@ -229,7 +230,7 @@ pub fn postprocess_macros(sfc_object_helper: &mut SfcExportedObjectHelper) {
                 sfc_object_helper.props = Some(existing_props);
             } else {
                 // Use `mergeModels` otherwise
-                sfc_object_helper.vue_imports |= VueImports::MergeModels;
+                bindings_helper.vue_imports |= VueImports::MergeModels;
                 let merge_models_ident = MERGE_MODELS_HELPER.to_owned();
 
                 let new_props = Expr::Call(CallExpr {
@@ -275,7 +276,7 @@ pub fn postprocess_macros(sfc_object_helper: &mut SfcExportedObjectHelper) {
                 sfc_object_helper.emits = Some(existing_emits);
             } else {
                 // Use `mergeModels` otherwise
-                sfc_object_helper.vue_imports |= VueImports::MergeModels;
+                bindings_helper.vue_imports |= VueImports::MergeModels;
                 let merge_models_ident = MERGE_MODELS_HELPER.to_owned();
 
                 let new_emits = Expr::Call(CallExpr {

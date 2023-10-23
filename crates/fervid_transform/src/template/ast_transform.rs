@@ -6,16 +6,16 @@ use fervid_core::{
 use smallvec::SmallVec;
 use swc_core::ecma::atoms::{JsWord, js_word};
 
-use crate::structs::{ScopeHelper, TemplateScope};
+use crate::structs::{BindingsHelper, TemplateScope};
 
 use super::collect_vars::collect_variables;
 
 struct TemplateVisitor<'s> {
-    scope_helper: &'s mut ScopeHelper,
+    scope_helper: &'s mut BindingsHelper,
     current_scope: u32,
 }
 
-/// Transforms the AST template by using information from [`ScopeHelper`].
+/// Transforms the AST template by using information from [`BindingsHelper`].
 ///
 /// The transformations tackled:
 /// - Optimizing the tree by removing white-space nodes;
@@ -23,7 +23,7 @@ struct TemplateVisitor<'s> {
 /// - Transforming Js expressions by resolving variables inside them.
 pub fn transform_and_record_template(
     template: &mut SfcTemplateBlock,
-    scope_helper: &mut ScopeHelper,
+    bindings_helper: &mut BindingsHelper,
 ) {
     // Only retain `ElementNode`s as template roots
     template
@@ -52,7 +52,7 @@ pub fn transform_and_record_template(
     }
 
     let mut template_visitor = TemplateVisitor {
-        scope_helper,
+        scope_helper: bindings_helper,
         current_scope: 0,
     };
 
