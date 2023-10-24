@@ -9,7 +9,12 @@ use napi_derive::napi;
 
 use fervid::compile_sync_naive;
 
+#[napi(object)]
+pub struct CompileSyncOptions {
+    pub is_prod: bool
+}
+
 #[napi]
-pub fn compile_sync(source: String) -> Result<String> {
-    compile_sync_naive(&source).map_err(|e| Error::from_reason(e))
+pub fn compile_sync(source: String, options: Option<CompileSyncOptions>) -> Result<String> {
+    compile_sync_naive(&source, options.map_or(false, |v| v.is_prod)).map_err(|e| Error::from_reason(e))
 }

@@ -14,7 +14,7 @@ fn main() {
 fn test_real_compilation() {
     let test = include_str!("../benches/fixtures/input.vue");
 
-    let compiled_code = match compile_sync_naive(test) {
+    let compiled_code = match compile_sync_naive(test, true) {
         Ok(result) => result,
         Err(e) => std::panic::panic_any(e)
     };

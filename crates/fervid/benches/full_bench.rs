@@ -9,7 +9,7 @@ fn full_compile_benchmark(c: &mut Criterion) {
             b.iter_batched(
                 || (),
                 |_| {
-                    let _ = fervid::compile_sync_naive(component);
+                    let _ = fervid::compile_sync_naive(component, true);
                 },
                 criterion::BatchSize::SmallInput,
             );

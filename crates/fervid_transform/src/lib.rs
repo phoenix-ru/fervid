@@ -38,10 +38,11 @@ pub struct TransformSfcResult {
 /// Applies all the necessary transformations to the SFC.
 ///
 /// The transformations can be fine-tuned by using individual `transform_` functions.
-pub fn transform_sfc(sfc_descriptor: SfcDescriptor) -> TransformSfcResult {
+pub fn transform_sfc(sfc_descriptor: SfcDescriptor, is_prod: bool) -> TransformSfcResult {
     let mut template_block = None;
 
     let mut bindings_helper = BindingsHelper::default();
+    bindings_helper.is_prod = is_prod;
     let transform_result = transform_and_record_scripts(
         sfc_descriptor.script_setup,
         sfc_descriptor.script_legacy,
@@ -51,7 +52,7 @@ pub fn transform_sfc(sfc_descriptor: SfcDescriptor) -> TransformSfcResult {
     if let Some(mut template) = sfc_descriptor.template {
         transform_and_record_template(&mut template, &mut bindings_helper);
         if !template.roots.is_empty() {
-        template_block = Some(template);
+            template_block = Some(template);
         }
     }
 

@@ -35,7 +35,7 @@ pub fn transform_and_record_scripts(
     bindings_helper: &mut BindingsHelper,
 ) -> TransformScriptsResult {
     // Set inline flag in `BindingsHelper`
-    if script_legacy.is_none() && script_setup.is_some() {
+    if bindings_helper.is_prod && script_setup.is_some() {
         bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
     }
 

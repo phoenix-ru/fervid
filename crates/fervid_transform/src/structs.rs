@@ -60,6 +60,8 @@ pub struct BindingsHelper {
     pub components: HashMap<FervidAtom, ComponentBinding>,
     /// All custom directives present in the `<template>`
     pub custom_directives: HashMap<FervidAtom, CustomDirectiveBinding>,
+    /// Are we compiling for DEV or PROD
+    pub is_prod: bool,
     /// Scopes of the `<template>` for in-template variable resolutions
     pub template_scopes: Vec<TemplateScope>,
     /// Bindings in `<script setup>`

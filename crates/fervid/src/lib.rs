@@ -17,7 +17,8 @@
 //! let (remaining_input, sfc) = fervid::parser::core::parse_sfc(input).unwrap();
 //! 
 //! // Do the necessary transformations
-//! let transform_result = fervid_transform::transform_sfc(sfc);
+//! let is_prod = true;
+//! let transform_result = fervid_transform::transform_sfc(sfc, is_prod);
 //!
 //! // Create the context and generate the template block
 //! let mut ctx = fervid_codegen::CodegenContext::default();
@@ -55,7 +56,7 @@ use swc_core::ecma::ast::Expr;
 /// - it does not report errors.
 /// This implementation is mostly meant for the WASM and NAPI beta.
 /// Later on, it will be replaced with a stable API.
-pub fn compile_sync_naive(source: &str) -> Result<String, String> {
+pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String> {
     // let (_, mut sfc) = parse_sfc(&source).map_err(|err| {
     //     return err.to_string();
     // })?;
@@ -67,7 +68,7 @@ pub fn compile_sync_naive(source: &str) -> Result<String, String> {
 
     // TODO Return template used variables as a part of transformation result.
     // Also `used_imports`? `vue_imports`? User imports?
-    let transform_result = transform_sfc(sfc);
+    let transform_result = transform_sfc(sfc, is_prod);
 
     let mut ctx = CodegenContext::default();
     ctx.used_imports = transform_result.used_vue_imports;

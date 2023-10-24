@@ -8,6 +8,6 @@ use wasm_bindgen::prelude::*;
 use fervid::compile_sync_naive;
 
 #[wasm_bindgen]
-pub fn compile_sync(source: &str) -> Result<String, String> {
-    compile_sync_naive(source)
+pub fn compile_sync(source: &str, is_prod: Option<bool>) -> Result<String, String> {
+    compile_sync_naive(source, is_prod.unwrap_or(false))
 }

@@ -128,6 +128,7 @@ Code generator
   - [ ] defineSlots
   - [x] defineModel
   - [ ] Tests
+- [x] DEV/PROD mode
 - [ ] Vue 2.7 support
 - [ ] SSR with inline critical CSS support
 - [ ] Eager pre-compilation of Vue imports (avoid unneccessary bundler->compiler calls)
