@@ -50,7 +50,9 @@ pub fn transform_sfc(sfc_descriptor: SfcDescriptor) -> TransformSfcResult {
 
     if let Some(mut template) = sfc_descriptor.template {
         transform_and_record_template(&mut template, &mut bindings_helper);
+        if !template.roots.is_empty() {
         template_block = Some(template);
+        }
     }
 
     TransformSfcResult {
