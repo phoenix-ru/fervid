@@ -1,4 +1,7 @@
-use fervid_core::{ElementNode, Node, StartingTag, VSlotDirective, VueDirectives, VueImports, PatchHints, FervidAtom, StrOrExpr};
+use fervid_core::{
+    ElementNode, FervidAtom, Node, PatchHints, StartingTag, StrOrExpr, VSlotDirective,
+    VueDirectives, VueImports,
+};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
@@ -7,13 +10,12 @@ use swc_core::{
             ExprOrSpread, Ident, KeyValueProp, Lit, Null, Number, ObjectLit, Pat, Prop,
             PropOrSpread, Str, VarDeclarator,
         },
-        atoms::{JsWord, js_word},
+        atoms::{js_word, JsWord},
     },
 };
 
 use crate::{
-    context::CodegenContext, control_flow::SlottedIterator,
-    utils::str_or_expr_to_propname,
+    context::CodegenContext, control_flow::SlottedIterator, utils::str_or_expr_to_propname,
 };
 
 impl CodegenContext {
@@ -280,7 +282,10 @@ impl CodegenContext {
         result
     }
 
-    pub(crate) fn generate_component_children(&mut self, component_node: &ElementNode) -> Option<Expr> {
+    pub(crate) fn generate_component_children(
+        &mut self,
+        component_node: &ElementNode,
+    ) -> Option<Expr> {
         let mut result_static_slots = Vec::new();
         let total_children = component_node.children.len();
 
@@ -488,7 +493,10 @@ impl CodegenContext {
                 false,
             );
 
-            let slot_name = v_slot.slot_name.to_owned().unwrap_or_else(|| StrOrExpr::Str(js_word!("default")));
+            let slot_name = v_slot
+                .slot_name
+                .to_owned()
+                .unwrap_or_else(|| StrOrExpr::Str(js_word!("default")));
             let span = DUMMY_SP; // todo?
 
             out_static_slots.push(self.generate_slot_shell(
@@ -724,7 +732,7 @@ mod tests {
         );
 
         // <test-component>
-        //   <tempate v-slot:default>hello from component<div>hello from div</div></template>
+        //   <template v-slot:default>hello from component<div>hello from div</div></template>
         // </test-component>
         test_out(
             ElementNode {
@@ -778,7 +786,7 @@ mod tests {
     #[test]
     fn it_generates_named_slot() {
         // <test-component>
-        //   <tempate v-slot:foo-bar>hello from component<div>hello from div</div></template>
+        //   <template v-slot:foo-bar>hello from component<div>hello from div</div></template>
         // </test-component>
         test_out(
             ElementNode {
@@ -832,8 +840,8 @@ mod tests {
     #[test]
     fn it_generates_multiple_named_slots() {
         // <test-component>
-        //   <tempate v-slot:foo-bar>hello from slot {{ one }}</template>
-        //   <tempate v-slot:baz>hello from slot <b>two</b></template>
+        //   <template v-slot:foo-bar>hello from slot {{ one }}</template>
+        //   <template v-slot:baz>hello from slot <b>two</b></template>
         // </test-component>
         test_out(
             ElementNode {
@@ -915,7 +923,7 @@ mod tests {
     fn it_generates_mixed_slots() {
         // <test-component>
         //   hello from component<div>hello from div</div>
-        //   <tempate v-slot:foo-bar>hello from slot</template>
+        //   <template v-slot:foo-bar>hello from slot</template>
         // </test-component>
         test_out(
             ElementNode {
@@ -968,7 +976,7 @@ mod tests {
 
         // <test-component>
         //   <template v-slot>hello from default<div>hello from div</div></template>
-        //   <tempate v-slot:foo-bar>hello from slot</template>
+        //   <template v-slot:foo-bar>hello from slot</template>
         // </test-component>
         test_out(
             ElementNode {
@@ -1039,7 +1047,7 @@ mod tests {
         );
 
         // <test-component>
-        //   <tempate v-slot:foo-bar>hello from slot</template>
+        //   <template v-slot:foo-bar>hello from slot</template>
         //   hello from component<div>hello from div</div>
         // </test-component>
         test_out(
@@ -1095,9 +1103,9 @@ mod tests {
     #[test]
     fn it_generates_mixed_slots_multiple() {
         // <test-component>
-        //   <tempate v-slot:foo-bar>hello from slot</template>
+        //   <template v-slot:foo-bar>hello from slot</template>
         //   <template v-slot>hello from default<div>hello from div</div></template>
-        //   <tempate v-slot:baz>hello from baz</template>
+        //   <template v-slot:baz>hello from baz</template>
         // </test-component>
         test_out(
             ElementNode {

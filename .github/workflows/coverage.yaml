@@ -31,8 +31,6 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: 16
-      - name: Install Dependencies
-        run: npm install -g pnpm && pnpm i --frozen-lockfile
 
       - run: rustup component add llvm-tools-preview
       - run: cargo install grcov

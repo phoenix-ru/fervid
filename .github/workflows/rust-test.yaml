@@ -40,11 +40,5 @@ jobs:
         with:
           shared-key: cargo-test-release-${{ matrix.os }}
 
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 16
-      - name: Install Dependencies
-        run: npm install -g pnpm && pnpm i --frozen-lockfile
-
       - name: Run cargo test
         run: cargo test --release --tests
