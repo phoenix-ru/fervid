@@ -1,8 +1,9 @@
-name: CI
+name: Tests
 on:
+  push:
+    branches: [ "master" ]
   pull_request:
-    branches:
-      - master
+    branches: [ "master" ]
 
 jobs:
   cargo-check:
@@ -10,8 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Install Rust
-        uses: oxidecomputer/actions-rs_toolchain@oxide/master
+      # - name: Install Rust
+      #   uses: oxidecomputer/actions-rs_toolchain@oxide/master
       - name: Cache rust artifacts
         uses: Swatinem/rust-cache@v2
         with:
@@ -19,6 +20,7 @@ jobs:
 
       - name: Run cargo check
         run: cargo check --color always --all --all-targets
+
   cargo-test:
     name: Test - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -31,14 +33,14 @@ jobs:
           - windows-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Install Rust
-        uses: oxidecomputer/actions-rs_toolchain@oxide/master
-        with:
-          profile: minimal
+      # - name: Install Rust
+      #   uses: oxidecomputer/actions-rs_toolchain@oxide/master
+      #   with:
+      #     profile: minimal
       - name: Cache rust artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: cargo-test-release-${{ matrix.os }}
+          shared-key: cargo-test-${{ matrix.os }}
 
       - name: Run cargo test
-        run: cargo test --release --tests
+        run: cargo test
