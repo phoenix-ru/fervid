@@ -1,8 +1,4 @@
-use fervid_core::{
-    BindingTypes, BindingsHelper, FervidAtom, SfcDescriptor, SfcTemplateBlock,
-    TemplateGenerationMode, VueImportsSet,
-};
-use fxhash::FxHashMap as HashMap;
+use fervid_core::{BindingsHelper, SfcDescriptor, SfcTemplateBlock};
 use script::transform_and_record_scripts;
 use swc_core::ecma::ast::{Function, Module, ObjectLit};
 use template::transform_and_record_template;
@@ -19,6 +15,8 @@ pub mod template;
 mod test_utils;
 
 pub struct TransformSfcResult {
+    /// Helper with all the information about the bindings
+    pub bindings_helper: BindingsHelper,
     /// Object exported from the `Module`, but detached from it
     pub exported_obj: ObjectLit,
     /// Module obtained by processing `<script>` and `<script setup>`
@@ -27,14 +25,6 @@ pub struct TransformSfcResult {
     pub setup_fn: Option<Box<Function>>,
     /// Transformed template block
     pub template_block: Option<SfcTemplateBlock>,
-    /// All imports `from 'vue'`
-    pub used_vue_imports: VueImportsSet,
-    /// Identifiers used in the template and their respective binding types
-    pub used_idents: HashMap<FervidAtom, BindingTypes>,
-    /// In which mode should the template be generated:
-    /// - inline as last statement of `setup` or
-    /// - as a `render` function.
-    pub template_generation_mode: TemplateGenerationMode,
 }
 
 /// Applies all the necessary transformations to the SFC.
@@ -59,12 +49,10 @@ pub fn transform_sfc(sfc_descriptor: SfcDescriptor, is_prod: bool) -> TransformS
     }
 
     TransformSfcResult {
+        bindings_helper,
         exported_obj: transform_result.export_obj,
         module: transform_result.module,
         setup_fn: transform_result.setup_fn,
         template_block,
-        template_generation_mode: bindings_helper.template_generation_mode,
-        used_idents: bindings_helper.used_bindings,
-        used_vue_imports: bindings_helper.vue_imports,
     }
 }

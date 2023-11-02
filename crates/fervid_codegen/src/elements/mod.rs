@@ -290,17 +290,17 @@ impl CodegenContext {
         // Element `v-model` needs a special processing compared to a component one
         if directives.v_model.len() != 0 {
             let span = DUMMY_SP; // TODO Span
-            let v_model_ident = Ident {
+            let v_model_identifier = Expr::Ident(Ident {
                 span,
                 sym: self.get_element_vmodel_directive_name(&element_node.starting_tag),
                 optional: false,
-            };
+            });
 
             for v_model in directives.v_model.iter() {
                 out.push(Some(ExprOrSpread {
                     spread: None,
                     expr: Box::new(self.generate_directive_from_parts(
-                        v_model_ident.clone(),
+                        v_model_identifier.to_owned(),
                         Some(&v_model.value),
                         v_model.argument.as_ref(),
                         &v_model.modifiers,

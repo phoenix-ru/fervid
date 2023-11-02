@@ -14,7 +14,7 @@ use super::context::CodegenContext;
 
 impl CodegenContext {
     pub fn add_to_imports(&mut self, vue_import: VueImports) {
-        self.used_imports |= vue_import;
+        self.bindings_helper.vue_imports |= vue_import;
     }
 
     pub fn get_and_add_import_str(&mut self, vue_import: VueImports) -> &'static str {
@@ -31,7 +31,7 @@ impl CodegenContext {
     /// All of the imports come from 'vue'.
     pub fn generate_imports(&self) -> Vec<ImportSpecifier> {
         let mut result = Vec::new();
-        for import in self.used_imports.into_iter() {
+        for import in self.bindings_helper.vue_imports.into_iter() {
             let import_raw = import.as_str();
 
             let import_local = Ident {
@@ -77,7 +77,7 @@ mod tests {
         ctx.add_to_imports(VueImports::WithModifiers);
         ctx.add_to_imports(VueImports::OpenBlock);
 
-        assert_eq!(7, ctx.used_imports.into_iter().count());
+        assert_eq!(7, ctx.bindings_helper.vue_imports.into_iter().count());
     }
 
     #[test]

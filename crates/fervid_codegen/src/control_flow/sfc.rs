@@ -18,7 +18,7 @@ impl CodegenContext {
     // TODO Generation mode? Is it relevant?
     // TODO Generating module? Or instead taking a module? Or generating an expression and merging?
     pub fn generate_sfc_template(&mut self, sfc_template: &SfcTemplateBlock) -> Expr {
-        assert!(!sfc_template.roots.is_empty());
+        assert_eq!(sfc_template.roots.len(), 1);
 
         // TODO Multi-root? Is it actually merged before into a Fragment?
         let first_child = &sfc_template.roots[0];
@@ -30,16 +30,17 @@ impl CodegenContext {
         template_expr: Option<Expr>,
         mut script: Module,
         mut sfc_export_obj: ObjectLit,
-        mut setup_fn: Option<Box<Function>>,
-        template_generation_mode: TemplateGenerationMode,
+        mut synthetic_setup_fn: Option<Box<Function>>,
     ) -> Module {
+        let template_generation_mode = &self.bindings_helper.template_generation_mode;
+
         if let Some(template_expr) = template_expr {
             match template_generation_mode {
                 // Generates the render expression and appends it to the end of the `setup` function.
                 TemplateGenerationMode::Inline => {
                     let render_arrow = self.generate_render_arrow(template_expr);
 
-                    let setup_function = setup_fn.get_or_insert_with(|| {
+                    let setup_function = synthetic_setup_fn.get_or_insert_with(|| {
                         Box::new(Function {
                             params: vec![],
                             decorators: vec![],
@@ -83,7 +84,7 @@ impl CodegenContext {
         }
 
         // Add the `setup` function to the exported object
-        if let Some(setup_fn) = setup_fn {
+        if let Some(setup_fn) = synthetic_setup_fn {
             match setup_fn.body {
                 // Append only when function has a body and it is not empty
                 Some(ref b) if !b.stmts.is_empty() => {

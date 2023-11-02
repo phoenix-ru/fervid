@@ -21,8 +21,7 @@
 //! let transform_result = fervid_transform::transform_sfc(sfc, is_prod);
 //!
 //! // Create the context and generate the template block
-//! let mut ctx = fervid_codegen::CodegenContext::default();
-//! ctx.used_imports = transform_result.used_vue_imports;
+//! let mut ctx = fervid_codegen::CodegenContext::with_bindings_helper(transform_result.bindings_helper);
 //!
 //! let template_expr: Option<Expr> = transform_result.template_block.map(|template_block| {
 //!     ctx.generate_sfc_template(&template_block)
@@ -34,7 +33,6 @@
 //!     transform_result.module,
 //!     transform_result.exported_obj,
 //!     transform_result.setup_fn,
-//!     transform_result.template_generation_mode
 //! );
 //!
 //! // (Optional) Stringify the code
@@ -70,8 +68,7 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
     // Also `used_imports`? `vue_imports`? User imports?
     let transform_result = transform_sfc(sfc, is_prod);
 
-    let mut ctx = CodegenContext::default();
-    ctx.used_imports = transform_result.used_vue_imports;
+    let mut ctx = CodegenContext::with_bindings_helper(transform_result.bindings_helper);
 
     let template_expr: Option<Expr> = transform_result.template_block.map(|template_block| {
         ctx.generate_sfc_template(&template_block)
@@ -82,7 +79,6 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
         transform_result.module,
         transform_result.exported_obj,
         transform_result.setup_fn,
-        transform_result.template_generation_mode
     );
 
     let compiled_code = CodegenContext::stringify(&source, &sfc_module, false);

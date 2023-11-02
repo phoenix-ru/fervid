@@ -77,25 +77,13 @@
   </abc-def>
 </template>
 
-<script>
-import { defineComponent, ref } from 'vue'
-
-export default defineComponent({
-  setup() {
-    return {
-      inputModel: ref(''),
-      modelValue: ref(''),
-      list: [1, 2, 3]
-    }
-  },
-})
-</script>
-
 <script setup>
 import { ref } from 'vue'
 
 const foo = '123'
 const bar = ref(456)
+const inputModel = ref('')
+const list = [1, 2, 3]
 
 defineProps({ baz: String })
 defineEmits(['emit-change'])

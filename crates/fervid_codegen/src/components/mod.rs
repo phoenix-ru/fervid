@@ -1,6 +1,6 @@
 use fervid_core::{
-    ElementNode, FervidAtom, Node, PatchHints, StartingTag, StrOrExpr, VSlotDirective,
-    VueDirectives, VueImports,
+    ComponentBinding, ElementNode, FervidAtom, Node, PatchHints, StartingTag, StrOrExpr,
+    VSlotDirective, VueDirectives, VueImports,
 };
 use swc_core::{
     common::{Span, DUMMY_SP},
@@ -26,11 +26,8 @@ impl CodegenContext {
     ) -> Expr {
         let span = component_node.span;
 
-        let component_identifier = Expr::Ident(Ident {
-            span,
-            sym: self.get_component_identifier(&component_node.starting_tag.tag_name),
-            optional: false,
-        });
+        let component_identifier =
+            self.get_component_identifier(&component_node.starting_tag.tag_name, span);
 
         let attributes_obj = self.generate_component_attributes(component_node);
         // TODO Apply all the directives and modifications
@@ -191,33 +188,37 @@ impl CodegenContext {
     pub fn generate_component_resolves(&mut self) -> Vec<VarDeclarator> {
         let mut result = Vec::new();
 
-        if self.components.len() == 0 {
+        if self.bindings_helper.components.is_empty() {
             return result;
         }
 
         let resolve_component_ident = self.get_and_add_import_ident(VueImports::ResolveComponent);
 
         // We need sorted entries for stable output.
-        // Entries are sorted by Js identifier (second element of tuple in hashmap entry)
-        let mut sorted_components: Vec<(&FervidAtom, &FervidAtom)> = self
+        // Entries are sorted by a component name (first element of tuple in hashmap entry)
+        let mut sorted_components: Vec<(&FervidAtom, &Ident)> = self
+            .bindings_helper
             .components
             .iter()
-            .map(|(component_name, component_ident)| (component_name, component_ident))
+            .filter_map(
+                |(component_name, component_resolution)| match component_resolution {
+                    ComponentBinding::RuntimeResolved(ident) => {
+                        Some((component_name, ident.as_ref()))
+                    }
+                    _ => None,
+                },
+            )
             .collect();
 
-        sorted_components.sort_by(|a, b| a.1.cmp(b.1));
+        sorted_components.sort_by(|a, b| a.0.cmp(b.0));
 
         // Key is a component as used in template, value is the assigned Js identifier
-        for (component_name, identifier) in sorted_components.iter() {
+        for (component_name, component_identifier) in sorted_components.iter() {
             // _component_ident_name = resolveComponent("component-name")
             result.push(VarDeclarator {
                 span: DUMMY_SP,
                 name: Pat::Ident(BindingIdent {
-                    id: Ident {
-                        span: DUMMY_SP,
-                        sym: (*identifier).to_owned(),
-                        optional: false,
-                    },
+                    id: (*component_identifier).to_owned(),
                     type_ann: None,
                 }),
                 init: Some(Box::new(Expr::Call(CallExpr {
@@ -360,16 +361,17 @@ impl CodegenContext {
                 }
 
                 // Check if this is a `<template>` or not
-                let Node::Element(
-                    ElementNode {
-                        starting_tag: StartingTag {
+                let Node::Element(ElementNode {
+                    starting_tag:
+                        StartingTag {
                             tag_name: js_word!("template"),
                             directives: Some(directives),
                             ..
                         },
-                        children,
-                        ..
-                    }) = node else {
+                    children,
+                    ..
+                }) = node
+                else {
                     not_in_a_template_v_slot!();
                 };
 
@@ -509,11 +511,17 @@ impl CodegenContext {
     }
 
     /// Creates the SWC identifier from a tag name. Will fetch from cache if present
-    fn get_component_identifier(&mut self, tag_name: &FervidAtom) -> JsWord {
+    fn get_component_identifier(&mut self, tag_name: &FervidAtom, span: Span) -> Expr {
         // Cached
-        let existing_component_name = self.components.get(tag_name);
-        if let Some(component_name) = existing_component_name {
-            return component_name.to_owned();
+        let existing_component_binding = self.bindings_helper.components.get(tag_name);
+        match existing_component_binding {
+            Some(ComponentBinding::Resolved(component_binding)) => {
+                return (**component_binding).to_owned()
+            }
+            Some(ComponentBinding::RuntimeResolved(component_identifier)) => {
+                return Expr::Ident((**component_identifier).to_owned())
+            }
+            _ => {}
         }
 
         // _component_ prefix plus tag name
@@ -523,10 +531,21 @@ impl CodegenContext {
         // To create an identifier, we need to convert it to an SWC JsWord
         let component_name = JsWord::from(component_name);
 
-        self.components
-            .insert(tag_name.to_owned(), component_name.to_owned());
+        // Directive will be resolved during runtime, this provides a variable name,
+        // e.g. `const _component_custom = resolveComponent('custom')`
+        // and later used in `createVNode(_component_custom)`
+        let resolve_identifier = Ident {
+            span,
+            sym: component_name,
+            optional: false,
+        };
 
-        return component_name;
+        self.bindings_helper.components.insert(
+            tag_name.to_owned(),
+            ComponentBinding::RuntimeResolved(Box::new(resolve_identifier.to_owned())),
+        );
+
+        Expr::Ident(resolve_identifier)
     }
 
     // Generates `withDirectives(expr, [directives])`

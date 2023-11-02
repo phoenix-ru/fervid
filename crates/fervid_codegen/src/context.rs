@@ -1,11 +1,12 @@
-use fervid_core::{VueImports, FervidAtom};
-use flagset::FlagSet;
-use fxhash::FxHashMap as HashMap;
-use swc_core::ecma::atoms::JsWord;
+use fervid_core::BindingsHelper;
 
 #[derive(Debug, Default)]
 pub struct CodegenContext {
-    pub components: HashMap<FervidAtom, JsWord>,
-    pub directives: HashMap<FervidAtom, JsWord>,
-    pub used_imports: FlagSet<VueImports>,
+    pub bindings_helper: BindingsHelper,
+}
+
+impl CodegenContext {
+    pub fn with_bindings_helper(bindings_helper: BindingsHelper) -> CodegenContext {
+        CodegenContext { bindings_helper }
+    }
 }

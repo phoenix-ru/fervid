@@ -1,11 +1,11 @@
-use fervid_core::{VueDirectives, VueImports, FervidAtom, StrOrExpr};
+use fervid_core::{CustomDirectiveBinding, FervidAtom, StrOrExpr, VueDirectives, VueImports};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
         ast::{
             ArrayLit, BindingIdent, Bool, CallExpr, Callee, Expr, ExprOrSpread, Ident,
-            KeyValueProp, Lit, Number, ObjectLit, Pat, Prop, PropOrSpread, Str, UnaryExpr,
-            UnaryOp, VarDeclarator,
+            KeyValueProp, Lit, Number, ObjectLit, Pat, Prop, PropOrSpread, Str, UnaryExpr, UnaryOp,
+            VarDeclarator,
         },
         atoms::JsWord,
     },
@@ -41,16 +41,16 @@ impl CodegenContext {
         // v-show
         if let Some(ref v_show) = directives.v_show {
             let span = DUMMY_SP; // TODO Span
-            let v_show_ident = Ident {
+            let v_show_identifier = Expr::Ident(Ident {
                 span,
                 sym: self.get_and_add_import_ident(VueImports::VShow),
                 optional: false,
-            };
+            });
 
             out.push(Some(ExprOrSpread {
                 spread: None,
                 expr: Box::new(self.generate_directive_from_parts(
-                    v_show_ident,
+                    v_show_identifier,
                     Some(v_show),
                     None,
                     &[],
@@ -83,7 +83,7 @@ impl CodegenContext {
         expr: Expr,
         directives_arr: Vec<Option<ExprOrSpread>>,
     ) -> Expr {
-        if directives_arr.len() == 0 {
+        if directives_arr.is_empty() {
             return expr;
         }
 
@@ -122,7 +122,7 @@ impl CodegenContext {
     /// This typically applies to custom directives, `v-show` and element `v-model`
     pub fn generate_directive_from_parts(
         &mut self,
-        name: Ident,
+        identifier: Expr,
         value: Option<&Expr>,
         argument: Option<&StrOrExpr>,
         modifiers: &[FervidAtom],
@@ -150,7 +150,7 @@ impl CodegenContext {
         // let directive_ident = self.get_custom_directive_ident(custom_directive.name, DUMMY_SP);
         directive_arr.elems.push(Some(ExprOrSpread {
             spread: None,
-            expr: Box::new(Expr::Ident(name)),
+            expr: Box::new(identifier),
         }));
 
         // Tries to early exit if we reached the desired array length
@@ -217,15 +217,17 @@ impl CodegenContext {
         Expr::Array(directive_arr)
     }
 
-    fn get_custom_directive_ident(&mut self, directive_name: &FervidAtom, span: Span) -> Ident {
+    fn get_custom_directive_ident(&mut self, directive_name: &FervidAtom, span: Span) -> Expr {
         // Check directive existence and early exit
-        let existing_directive_name = self.directives.get(directive_name);
-        if let Some(directive_name) = existing_directive_name {
-            return Ident {
-                span,
-                sym: directive_name.to_owned(),
-                optional: false,
-            };
+        let existing_directive_binding = self.bindings_helper.custom_directives.get(directive_name);
+        match existing_directive_binding {
+            Some(CustomDirectiveBinding::Resolved(directive_binding)) => {
+                return (**directive_binding).to_owned()
+            }
+            Some(CustomDirectiveBinding::RuntimeResolved(directive_ident)) => {
+                return Expr::Ident((**directive_ident).to_owned())
+            }
+            _ => {}
         }
 
         // _directive_ prefix plus directive name
@@ -233,47 +235,58 @@ impl CodegenContext {
         directive_ident_raw.insert_str(0, "_directive_");
         let directive_ident_atom = JsWord::from(directive_ident_raw);
 
-        // Add to map
-        self.directives
-            .insert(directive_name.to_owned(), directive_ident_atom.to_owned());
-
-        Ident {
+        // Directive will be resolved during runtime, this provides a variable name,
+        // e.g. `const _directive_custom = resolveDirective('custom')`
+        // and later `withDirectives(/*component*/, [[_directive_custom]])`
+        let resolve_identifier = Ident {
             span,
             sym: directive_ident_atom,
             optional: false,
-        }
+        };
+
+        // Add as a runtime resolution
+        self.bindings_helper.custom_directives.insert(
+            directive_name.to_owned(),
+            CustomDirectiveBinding::RuntimeResolved(Box::new(resolve_identifier.to_owned())),
+        );
+
+        Expr::Ident(resolve_identifier)
     }
 
     pub fn generate_directive_resolves(&mut self) -> Vec<VarDeclarator> {
         let mut result = Vec::new();
 
-        if self.directives.len() == 0 {
+        if self.bindings_helper.custom_directives.len() == 0 {
             return result;
         }
 
         let resolve_directive_ident = self.get_and_add_import_ident(VueImports::ResolveDirective);
 
         // We need sorted entries for stable output.
-        // Entries are sorted by Js identifier (second element of tuple in hashmap entry)
-        let mut sorted_directives: Vec<(&FervidAtom, &FervidAtom)> = self
-            .directives
+        // Entries are sorted by directive name (first element of tuple in hashmap entry)
+        let mut sorted_directives: Vec<(&FervidAtom, &Ident)> = self
+            .bindings_helper
+            .custom_directives
             .iter()
-            .map(|(directive_name, directive_ident)| (directive_name, directive_ident))
+            .filter_map(
+                |(directive_name, directive_resolution)| match directive_resolution {
+                    CustomDirectiveBinding::RuntimeResolved(ident) => {
+                        Some((directive_name, ident.as_ref()))
+                    }
+                    _ => None,
+                },
+            )
             .collect();
 
-        sorted_directives.sort_by(|a, b| a.1.cmp(b.1));
+        sorted_directives.sort_by(|a, b| a.0.cmp(b.0));
 
         // Key is a component as used in template, value is the assigned Js identifier
-        for (directive_name, identifier) in sorted_directives.iter() {
+        for (directive_name, directive_identifier) in sorted_directives.iter() {
             // _directive_ident_name = resolveDirective("directive-template-name")
             result.push(VarDeclarator {
                 span: DUMMY_SP,
                 name: Pat::Ident(BindingIdent {
-                    id: Ident {
-                        span: DUMMY_SP,
-                        sym: (*identifier).to_owned(),
-                        optional: false,
-                    },
+                    id: (*directive_identifier).to_owned(),
                     type_ann: None,
                 }),
                 init: Some(Box::new(Expr::Call(CallExpr {

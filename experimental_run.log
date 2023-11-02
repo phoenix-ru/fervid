@@ -1,20 +1,8 @@
 
 [Real File Compile Result]
-import { defineComponent, ref } from 'vue';
 import { ref } from 'vue';
 import { createBlock as _createBlock, createCommentVNode as _createCommentVNode, createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createTextVNode as _createTextVNode, createVNode as _createVNode, Fragment as _Fragment, normalizeClass as _normalizeClass, normalizeStyle as _normalizeStyle, openBlock as _openBlock, renderList as _renderList, renderSlot as _renderSlot, resolveComponent as _resolveComponent, resolveDirective as _resolveDirective, toDisplayString as _toDisplayString, useModel as _useModel, vModelText as _vModelText, vShow as _vShow, withCtx as _withCtx, withDirectives as _withDirectives, withModifiers as _withModifiers } from "vue";
 export default {
-    setup () {
-        return {
-            inputModel: ref(''),
-            modelValue: ref(''),
-            list: [
-                1,
-                2,
-                3
-            ]
-        };
-    },
     emits: [
         'emit-change',
         "update:modelValue"
@@ -167,9 +155,15 @@ export default {
     setup (__props, { expose: __expose }) {
         const foo = '123';
         const bar = ref(456);
+        const inputModel = ref('');
+        const list = [
+            1,
+            2,
+            3
+        ];
         __expose('foo', 'bar');
         const modelValue = _useModel(__props, "modelValue");
     }
 };
 
-Time took: 700.954µs
+Time took: 705.644µs
