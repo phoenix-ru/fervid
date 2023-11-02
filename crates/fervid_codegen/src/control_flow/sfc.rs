@@ -3,9 +3,9 @@ use swc_core::{
     common::{FileName, SourceMap, DUMMY_SP},
     ecma::{
         ast::{
-            BindingIdent, BlockStmt, Decl, ExportDefaultExpr, Expr, Function,
-            Ident, ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit, Param, Pat,
-            Prop, PropName, PropOrSpread, ReturnStmt, Stmt, Str, VarDecl, VarDeclKind, ArrowExpr, BlockStmtOrExpr,
+            ArrowExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, Decl, ExportDefaultExpr, Expr,
+            Function, Ident, ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit,
+            Param, Pat, Prop, PropName, PropOrSpread, ReturnStmt, Stmt, Str, VarDecl, VarDeclKind,
         },
         atoms::JsWord,
     },
@@ -68,6 +68,26 @@ impl CodegenContext {
                 // `render(_ctx, _cache, $props, $setup, $data, $options) { /*...*/ }`
                 TemplateGenerationMode::RenderFn => {
                     let render_fn = self.generate_render_fn(template_expr);
+
+                    // When a synthetic setup function is present,
+                    // we need to return bindings as its last statement
+                    'return_bindings: {
+                        let Some(ref mut setup_fn) = synthetic_setup_fn else {
+                            break 'return_bindings;
+                        };
+
+                        let Some(ref mut setup_body) = setup_fn.body else {
+                            break 'return_bindings;
+                        };
+
+                        let return_bindings = self.generate_return_bindings();
+                        if !return_bindings.props.is_empty() {
+                            setup_body.stmts.push(Stmt::Return(ReturnStmt {
+                                span: DUMMY_SP,
+                                arg: Some(Box::new(Expr::Object(return_bindings))),
+                            }));
+                        }
+                    }
 
                     sfc_export_obj
                         .props
@@ -166,7 +186,10 @@ impl CodegenContext {
                 span: DUMMY_SP,
             }));
 
-            Box::new(BlockStmtOrExpr::BlockStmt(BlockStmt { span: DUMMY_SP, stmts }))
+            Box::new(BlockStmtOrExpr::BlockStmt(BlockStmt {
+                span: DUMMY_SP,
+                stmts,
+            }))
         };
 
         macro_rules! param {
@@ -259,6 +282,26 @@ impl CodegenContext {
             is_async: false,
             type_params: None,
             return_type: None,
+        }
+    }
+
+    /// Generates bindings for a synthetic setup function when used in combination
+    /// with `TemplateGenerationMode::RenderFn`.
+    pub fn generate_return_bindings(&self) -> ObjectLit {
+        let mut props =
+            Vec::<PropOrSpread>::with_capacity(self.bindings_helper.used_bindings.len());
+
+        for used_binding in self.bindings_helper.used_bindings.keys() {
+            props.push(PropOrSpread::Prop(Box::new(Prop::Shorthand(Ident {
+                span: DUMMY_SP,
+                sym: used_binding.to_owned(),
+                optional: false,
+            }))));
+        }
+
+        ObjectLit {
+            span: DUMMY_SP,
+            props,
         }
     }
 

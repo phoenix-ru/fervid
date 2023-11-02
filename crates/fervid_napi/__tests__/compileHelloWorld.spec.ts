@@ -28,6 +28,9 @@ test('should work', () => {
         },
         setup () {
             const compilerName = ref('fervid');
+            return {
+                compilerName
+            };
         }
     };
     "

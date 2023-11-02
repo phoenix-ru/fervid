@@ -120,7 +120,7 @@ Code generator
 - [x] Processing `<style scoped>`
 - [ ] `<script setup>` support
   - [x] Bindings collection;
-  - [ ] Return statement: inline vs render function;
+  - [x] Return statement: inline vs render function;
   - [x] defineProps
   - [x] defineEmits
   - [x] defineExpose
