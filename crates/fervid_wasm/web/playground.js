@@ -8,12 +8,10 @@ const INITIAL =
     </div>
 </template>
 
-<script>
-export default {
-    data: () => ({
-        name: 'fervid'
-    })
-}
+<script setup>
+import { ref } from 'vue'
+
+const name = ref('fervid')
 </script>
 `
 
