@@ -337,6 +337,11 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                         continue;
                     }
 
+                    // Skip `key` prop
+                    if argument == "key" {
+                        continue;
+                    }
+
                     // Adding `class` and `style` bindings depends on `is_component`
                     // They are added to PROPS for the components.
                     if is_component {

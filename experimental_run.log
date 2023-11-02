@@ -85,9 +85,7 @@ export default {
                     true ? (_openBlock(), _createElementBlock("div", null, "if div")) : false ? (_openBlock(), _createElementBlock("span", null, "else-if span")) : _createCommentVNode("v-if"),
                     (_openBlock(), _createElementBlock(_Fragment, null, _renderList($setup.list, (i)=>_createElementVNode("span", {
                             key: i
-                        }, "hey", 8, [
-                            "key"
-                        ])), 128)),
+                        }, "hey")), 128)),
                     _withDirectives(_createElementVNode("br"), [
                         [
                             _vShow,
@@ -97,9 +95,7 @@ export default {
                     (_openBlock(), _createElementBlock(_Fragment, null, _renderList(3, (i)=>_createVNode(_component_another_element, {
                             key: i,
                             textContent: $setup.foo + $setup.bar
-                        }, null, 8, [
-                            "key"
-                        ])), 64)),
+                        })), 64)),
                     (_openBlock(), _createElementBlock(_Fragment, null, _renderList($setup.list, (([
                         item1,
                         item2
@@ -107,9 +103,7 @@ export default {
                             _createTextVNode(" hey "),
                             _createElementVNode("span", {
                                 key: index
-                            }, _toDisplayString(item1) + _toDisplayString(index), 9, [
-                                "key"
-                            ]),
+                            }, _toDisplayString(item1) + _toDisplayString(index), 1),
                             _createElementVNode("div", {
                                 key: index,
                                 class: _normalizeClass([
@@ -119,15 +113,11 @@ export default {
                                         index
                                     ]
                                 ])
-                            }, null, 10, [
-                                "key"
-                            ]),
+                            }, null, 2),
                             _createElementVNode("div", {
                                 key: index,
                                 class: "just regular class"
-                            }, null, 8, [
-                                "key"
-                            ]),
+                            }),
                             _createElementVNode("div", {
                                 key: index,
                                 class: _normalizeClass([
@@ -136,9 +126,7 @@ export default {
                                     item2,
                                     index
                                 ])
-                            }, null, 10, [
-                                "key"
-                            ])
+                            }, null, 2)
                         ])), 256)),
                     false ? (_openBlock(), _createElementBlock(_Fragment, null, [
                         _createTextVNode(" this is a v-if template ")
