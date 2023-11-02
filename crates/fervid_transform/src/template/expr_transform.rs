@@ -1,4 +1,4 @@
-use fervid_core::{BindingTypes, FervidAtom, TemplateGenerationMode, VueImports};
+use fervid_core::{BindingTypes, BindingsHelper, FervidAtom, TemplateGenerationMode, VueImports};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
@@ -11,7 +11,7 @@ use swc_core::{
     },
 };
 
-use crate::{structs::BindingsHelper, template::js_builtins::JS_BUILTINS};
+use crate::template::js_builtins::JS_BUILTINS;
 
 struct TransformVisitor<'s> {
     current_scope: u32,
@@ -21,10 +21,15 @@ struct TransformVisitor<'s> {
     is_write: bool,
 }
 
-impl BindingsHelper {
+pub trait BindingsHelperTransform {
+    fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> bool;
+    fn get_var_binding_type(&mut self, starting_scope: u32, variable: &str) -> BindingTypes;
+}
+
+impl BindingsHelperTransform for BindingsHelper {
     // TODO This function needs to be invoked when an AST is being optimized
     // TODO Support transformation modes (e.g. `inline`, `renderFn`)
-    pub fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> bool {
+    fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> bool {
         let is_inline = matches!(
             self.template_generation_mode,
             TemplateGenerationMode::Inline
@@ -41,7 +46,7 @@ impl BindingsHelper {
         visitor.has_js_bindings
     }
 
-    pub fn get_var_binding_type(&mut self, starting_scope: u32, variable: &str) -> BindingTypes {
+    fn get_var_binding_type(&mut self, starting_scope: u32, variable: &str) -> BindingTypes {
         if JS_BUILTINS.contains(variable) {
             return BindingTypes::JsGlobal;
         }
@@ -317,11 +322,8 @@ pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<JsWord
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        structs::{BindingsHelper, TemplateScope},
-        template::js_builtins::JS_BUILTINS,
-    };
-    use fervid_core::{BindingTypes, TemplateGenerationMode};
+    use crate::template::{expr_transform::BindingsHelperTransform, js_builtins::JS_BUILTINS};
+    use fervid_core::{BindingTypes, BindingsHelper, TemplateGenerationMode, TemplateScope};
     use smallvec::SmallVec;
     use swc_core::ecma::atoms::JsWord;
 

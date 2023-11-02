@@ -1,4 +1,4 @@
-use fervid_core::VueImports;
+use fervid_core::{BindingsHelper, VueImports};
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
@@ -15,7 +15,7 @@ use crate::{
         DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_MODEL, DEFINE_PROPS, EMIT_HELPER, EXPOSE_HELPER,
         MERGE_MODELS_HELPER, MODEL_VALUE, PROPS_HELPER, USE_MODEL_HELPER,
     },
-    structs::{SfcDefineModel, SfcExportedObjectHelper, BindingsHelper},
+    structs::{SfcDefineModel, SfcExportedObjectHelper},
 };
 
 /// Tries to transform a Vue compiler macro.\
@@ -178,7 +178,10 @@ pub fn transform_script_setup_macro_expr(
 }
 
 /// Mainly used to process `models` by adding them to `props` and `emits`
-pub fn postprocess_macros(bindings_helper: &mut BindingsHelper, sfc_object_helper: &mut SfcExportedObjectHelper) {
+pub fn postprocess_macros(
+    bindings_helper: &mut BindingsHelper,
+    sfc_object_helper: &mut SfcExportedObjectHelper,
+) {
     let len = sfc_object_helper.models.len();
     if len == 0 {
         return;

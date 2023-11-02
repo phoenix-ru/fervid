@@ -1,4 +1,4 @@
-use fervid_core::SfcScriptBlock;
+use fervid_core::{BindingsHelper, SfcScriptBlock};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
@@ -9,7 +9,7 @@ use swc_core::{
 
 use crate::{
     atoms::{EMIT, EMITS, EMIT_HELPER, EXPOSE, EXPOSE_HELPER, PROPS, PROPS_HELPER},
-    structs::{BindingsHelper, SfcExportedObjectHelper, VueResolvedImports},
+    structs::{SfcExportedObjectHelper, VueResolvedImports},
 };
 
 mod imports;
@@ -187,11 +187,8 @@ fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        structs::{BindingsHelper, SetupBinding},
-        test_utils::parser::*,
-    };
-    use fervid_core::{BindingTypes, SfcScriptBlock};
+    use crate::test_utils::parser::*;
+    use fervid_core::{BindingTypes, SfcScriptBlock, SetupBinding, BindingsHelper};
     use swc_core::ecma::atoms::JsWord;
 
     use super::transform_and_record_script_setup;
@@ -250,12 +247,11 @@ mod tests {
                 SetupBinding(JsWord::from("bar"), BindingTypes::SetupRef),
                 SetupBinding(JsWord::from("baz"), BindingTypes::SetupRef),
                 SetupBinding(JsWord::from("qux"), BindingTypes::SetupRef),
-            ]
-            // vue_imports: VueResolvedImports {
-            //     ref_import: Some((JsWord::from("ref"), SyntaxContext::default())),
-            //     computed: Some((JsWord::from("computed"), SyntaxContext::default())),
-            //     reactive: None
-            // },
+            ] // vue_imports: VueResolvedImports {
+              //     ref_import: Some((JsWord::from("ref"), SyntaxContext::default())),
+              //     computed: Some((JsWord::from("computed"), SyntaxContext::default())),
+              //     reactive: None
+              // },
         );
     }
 

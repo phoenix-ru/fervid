@@ -1,14 +1,12 @@
 use fervid_core::{
     is_from_default_slot, is_html_tag, AttributeOrBinding, Conditional, ConditionalNodeSequence,
     ElementKind, ElementNode, Interpolation, Node, PatchFlags, SfcTemplateBlock, StartingTag,
-    StrOrExpr, VBindDirective, VOnDirective, VSlotDirective, VUE_BUILTINS,
+    StrOrExpr, VBindDirective, VOnDirective, VSlotDirective, VUE_BUILTINS, BindingsHelper, TemplateScope,
 };
 use smallvec::SmallVec;
 use swc_core::ecma::atoms::{JsWord, js_word};
 
-use crate::structs::{BindingsHelper, TemplateScope};
-
-use super::collect_vars::collect_variables;
+use super::{collect_vars::collect_variables, expr_transform::BindingsHelperTransform};
 
 struct TemplateVisitor<'s> {
     scope_helper: &'s mut BindingsHelper,

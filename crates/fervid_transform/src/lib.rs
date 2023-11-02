@@ -1,8 +1,10 @@
-use fervid_core::{SfcDescriptor, SfcTemplateBlock, VueImportsSet, BindingTypes, FervidAtom, TemplateGenerationMode};
+use fervid_core::{
+    BindingTypes, BindingsHelper, FervidAtom, SfcDescriptor, SfcTemplateBlock,
+    TemplateGenerationMode, VueImportsSet,
+};
 use fxhash::FxHashMap as HashMap;
 use script::transform_and_record_scripts;
-use structs::BindingsHelper;
-use swc_core::ecma::ast::{Module, ObjectLit, Function};
+use swc_core::ecma::ast::{Function, Module, ObjectLit};
 use template::transform_and_record_template;
 
 #[macro_use]
@@ -32,7 +34,7 @@ pub struct TransformSfcResult {
     /// In which mode should the template be generated:
     /// - inline as last statement of `setup` or
     /// - as a `render` function.
-    pub template_generation_mode: TemplateGenerationMode
+    pub template_generation_mode: TemplateGenerationMode,
 }
 
 /// Applies all the necessary transformations to the SFC.

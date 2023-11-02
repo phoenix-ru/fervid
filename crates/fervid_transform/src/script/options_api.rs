@@ -1,6 +1,7 @@
+use fervid_core::OptionsApiBindings;
 use swc_core::{ecma::ast::{Module, ObjectLit, ModuleItem, ModuleDecl, Expr, PropOrSpread, SpreadElement, ExprOrSpread, Callee}, common::DUMMY_SP};
 
-use crate::structs::{ScriptLegacyVars, VueResolvedImports};
+use crate::structs::VueResolvedImports;
 
 mod analyzer;
 mod components;
@@ -30,7 +31,7 @@ pub struct AnalyzeOptions {
 }
 
 pub struct ScriptOptionsTransformResult {
-    pub vars: Box<ScriptLegacyVars>,
+    pub vars: Box<OptionsApiBindings>,
     pub resolved_vue_imports: Box<VueResolvedImports>,
     pub default_export_obj: Option<ObjectLit>,
 }
@@ -44,7 +45,7 @@ pub fn transform_and_record_script_options_api(
     let maybe_default_export = find_default_export_obj(module);
 
     // This is where we collect all the analyzed stuff
-    let mut script_legacy_vars = ScriptLegacyVars::default();
+    let mut script_legacy_vars = OptionsApiBindings::default();
     let mut vue_imports = VueResolvedImports::default();
 
     // Analyze the imports and top level items
@@ -164,8 +165,8 @@ fn unroll_default_export_expr(mut expr: Expr) -> Expr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{structs::SetupBinding, test_utils::parser::*};
-    use fervid_core::BindingTypes;
+    use crate::test_utils::parser::*;
+    use fervid_core::{BindingTypes, SetupBinding};
     use swc_core::{common::SyntaxContext, ecma::atoms::JsWord};
 
     fn analyze_js(input: &str, opts: AnalyzeOptions) -> ScriptOptionsTransformResult {
@@ -203,7 +204,7 @@ mod tests {
     #[test]
     fn it_detects_export_default() {
         // Empty bindings are expected when empty `export default` is found
-        let no_bindings = ScriptLegacyVars::default();
+        let no_bindings = OptionsApiBindings::default();
         test_js_and_ts!("export default {}", no_bindings);
         test_js_and_ts!("export default defineComponent({})", no_bindings);
         test_js_and_ts!(
@@ -278,7 +279,7 @@ mod tests {
 
     #[test]
     fn it_sees_name() {
-        let test_name = ScriptLegacyVars {
+        let test_name = OptionsApiBindings {
             name: Some(JsWord::from("TestComponent")),
             ..Default::default()
         };
@@ -305,7 +306,7 @@ mod tests {
                 }
             }
             ",
-            ScriptLegacyVars {
+            OptionsApiBindings {
                 components: vec![
                     JsWord::from("Foo"),
                     JsWord::from("FooBar"),
@@ -334,7 +335,7 @@ mod tests {
                 }
             }
             ",
-            ScriptLegacyVars {
+            OptionsApiBindings {
                 computed: vec![
                     JsWord::from("foo"),
                     JsWord::from("bar"),
@@ -348,7 +349,7 @@ mod tests {
 
     #[test]
     fn it_analyzes_data() {
-        let expected = ScriptLegacyVars {
+        let expected = OptionsApiBindings {
             data: vec![
                 JsWord::from("foo"),
                 JsWord::from("bar"),
@@ -400,7 +401,7 @@ mod tests {
                 directives: { foo, bar: {} }
             }
             ",
-            ScriptLegacyVars {
+            OptionsApiBindings {
                 directives: vec![JsWord::from("foo"), JsWord::from("bar")],
                 ..Default::default()
             }
@@ -415,7 +416,7 @@ mod tests {
                 emits: ['foo', "bar", `baz`, `non${'trivial'}`]
             }
             "#,
-            ScriptLegacyVars {
+            OptionsApiBindings {
                 emits: vec![
                     JsWord::from("foo"),
                     JsWord::from("bar"),
@@ -431,7 +432,7 @@ mod tests {
                 emits: { foo: null, bar: (v) => !!v }
             }
             "#,
-            ScriptLegacyVars {
+            OptionsApiBindings {
                 emits: vec![JsWord::from("foo"), JsWord::from("bar")],
                 ..Default::default()
             }
@@ -446,7 +447,7 @@ mod tests {
                 expose: ['foo', "bar", `baz`, `non${'trivial'}`]
             }
             "#,
-            ScriptLegacyVars {
+            OptionsApiBindings {
                 expose: vec![
                     JsWord::from("foo"),
                     JsWord::from("bar"),
@@ -465,7 +466,7 @@ mod tests {
                 inject: ['foo', "bar", `baz`, `non${'trivial'}`]
             }
             "#,
-            ScriptLegacyVars {
+            OptionsApiBindings {
                 inject: vec![
                     JsWord::from("foo"),
                     JsWord::from("bar"),
@@ -481,7 +482,7 @@ mod tests {
                 inject: { foo: 'foo', bar: { from: 'baz' } }
             }
             "#,
-            ScriptLegacyVars {
+            OptionsApiBindings {
                 inject: vec![JsWord::from("foo"), JsWord::from("bar")],
                 ..Default::default()
             }
@@ -501,7 +502,7 @@ mod tests {
                 }
             }
             ",
-            ScriptLegacyVars {
+            OptionsApiBindings {
                 methods: vec![JsWord::from("foo"), JsWord::from("bar")],
                 ..Default::default()
             }
@@ -510,7 +511,7 @@ mod tests {
 
     #[test]
     fn it_analyzes_props() {
-        let expected = ScriptLegacyVars {
+        let expected = OptionsApiBindings {
             props: vec![
                 JsWord::from("foo"),
                 JsWord::from("bar"),
@@ -584,13 +585,13 @@ mod tests {
         test_js_and_ts!(
             r#"
             export default {
-                props: ['foo', "bar", `baz`, `non${'trivial'}`, Symbol()]
+                props: ['foo', "bar", `baz`, variable, `non${'trivial'}`, Symbol()]
             }"#,
             expected
         );
 
         // No props
-        let no_bindings = ScriptLegacyVars::default();
+        let no_bindings = OptionsApiBindings::default();
 
         test_js_and_ts!(
             r"
@@ -607,11 +608,19 @@ mod tests {
             }",
             no_bindings
         );
+
+        test_js_and_ts!(
+            r"
+            export default {
+                props: () => {}
+            }",
+            no_bindings
+        );
     }
 
     #[test]
     fn it_analyzes_setup() {
-        let expected = ScriptLegacyVars {
+        let expected = OptionsApiBindings {
             setup: vec![
                 SetupBinding(JsWord::from("foo"), BindingTypes::SetupMaybeRef),
                 SetupBinding(JsWord::from("bar"), BindingTypes::SetupMaybeRef),
@@ -749,7 +758,7 @@ mod tests {
 
         test_js_and_ts!(
             input,
-            ScriptLegacyVars {
+            OptionsApiBindings {
                 props: vec![JsWord::from("foo"), JsWord::from("bar")],
                 data: vec![JsWord::from("hello")],
                 setup: vec![
@@ -778,7 +787,7 @@ mod tests {
             const bar = computed(() => 'vue computed')
             const baz = reactive({ qux: true })
             ",
-            ScriptLegacyVars {
+            OptionsApiBindings {
                 setup: vec![
                     SetupBinding(JsWord::from("foo"), BindingTypes::SetupRef),
                     SetupBinding(JsWord::from("bar"), BindingTypes::SetupRef),
@@ -798,7 +807,7 @@ mod tests {
             const bar = cm(() => 'vue computed')
             const baz = ra({ qux: true })
             ",
-            ScriptLegacyVars {
+            OptionsApiBindings {
                 setup: vec![
                     SetupBinding(JsWord::from("foo"), BindingTypes::SetupRef),
                     SetupBinding(JsWord::from("bar"), BindingTypes::SetupRef),
@@ -820,7 +829,7 @@ mod tests {
             const bar = computed(() => 'vue computed')
             const baz = reactive({ qux: true })
             ",
-            ScriptLegacyVars {
+            OptionsApiBindings {
                 setup: vec![
                     SetupBinding(JsWord::from("foo"), BindingTypes::SetupMaybeRef),
                     SetupBinding(JsWord::from("bar"), BindingTypes::SetupMaybeRef),
@@ -851,7 +860,7 @@ mod tests {
             // export bar from 'mod-bar' // is this a valid syntax?
             export { default as baz, qux } from './rest'
             ",
-            ScriptLegacyVars {
+            OptionsApiBindings {
                 setup: vec![
                     SetupBinding(JsWord::from("foo"), BindingTypes::SetupMaybeRef),
                     SetupBinding(JsWord::from("baz"), BindingTypes::SetupMaybeRef),
@@ -873,7 +882,7 @@ mod tests {
                 ",
                 opts
             ).vars,
-            ScriptLegacyVars::default()
+            OptionsApiBindings::default()
         );
     }
 }

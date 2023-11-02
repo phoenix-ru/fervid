@@ -1,7 +1,7 @@
-use fervid_core::BindingTypes;
+use fervid_core::{BindingTypes, SetupBinding};
 use swc_core::ecma::ast::{ExportDecl, ExportSpecifier, ModuleExportName, NamedExport};
 
-use crate::structs::{SetupBinding, VueResolvedImports};
+use crate::structs::VueResolvedImports;
 
 use super::analyzer::analyze_decl;
 

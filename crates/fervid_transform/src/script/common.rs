@@ -1,7 +1,7 @@
-use fervid_core::BindingTypes;
+use fervid_core::{BindingTypes, SetupBinding};
 use swc_core::ecma::ast::{ClassDecl, FnDecl, VarDeclarator, Pat, Expr, Callee, ObjectPatProp, RestPat};
 
-use crate::{structs::{SetupBinding, VueResolvedImports}, script::utils::unroll_paren_seq};
+use crate::{structs::VueResolvedImports, script::utils::unroll_paren_seq};
 
 /// Javascript class declaration is always constant.
 /// ```js

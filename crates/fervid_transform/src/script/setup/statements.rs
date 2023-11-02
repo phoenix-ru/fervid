@@ -1,9 +1,9 @@
-use fervid_core::BindingTypes;
+use fervid_core::{BindingTypes, BindingsHelper, SetupBinding};
 use swc_core::ecma::ast::{Decl, ExprStmt, Stmt, VarDeclKind};
 
 use crate::{
     script::common::{categorize_class, categorize_fn_decl, categorize_var_declarator},
-    structs::{BindingsHelper, SetupBinding, SfcExportedObjectHelper, VueResolvedImports},
+    structs::{SfcExportedObjectHelper, VueResolvedImports},
 };
 
 use super::macros::transform_script_setup_macro_expr;

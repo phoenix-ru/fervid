@@ -1,8 +1,8 @@
-use fervid_core::BindingTypes;
+use fervid_core::{BindingTypes, OptionsApiBindings, SetupBinding};
 use swc_core::ecma::{
     ast::{
-        ArrayLit, ArrowExpr, BlockStmtOrExpr, Expr, Function, Lit, Module, ModuleDecl, ModuleItem,
-        ObjectLit, Prop, PropName, PropOrSpread, Tpl, Decl, VarDeclKind, Stmt,
+        ArrayLit, ArrowExpr, BlockStmtOrExpr, Decl, Expr, Function, Lit, Module, ModuleDecl,
+        ModuleItem, ObjectLit, Prop, PropName, PropOrSpread, Stmt, Tpl, VarDeclKind,
     },
     atoms::JsWord,
 };
@@ -10,10 +10,11 @@ use swc_core::ecma::{
 use crate::{
     atoms::*,
     script::{
+        common::{categorize_class, categorize_fn_decl, categorize_var_declarator},
         setup::collect_imports,
-        utils::get_string_tpl, common::{categorize_class, categorize_fn_decl, categorize_var_declarator},
+        utils::get_string_tpl,
     },
-    structs::{ScriptLegacyVars, VueResolvedImports, SetupBinding},
+    structs::VueResolvedImports,
 };
 
 use super::{
@@ -32,7 +33,7 @@ use super::{
 
 /// Analyzes all the fields of `export default` according to Options API.\
 /// tl;dr Visit every method, arrow function, object or array and forward control
-pub fn analyze_default_export(default_export: &ObjectLit, out: &mut ScriptLegacyVars) {
+pub fn analyze_default_export(default_export: &ObjectLit, out: &mut OptionsApiBindings) {
     for field in default_export.props.iter() {
         let PropOrSpread::Prop(prop) = field else {
             continue;
@@ -86,7 +87,7 @@ pub fn analyze_default_export(default_export: &ObjectLit, out: &mut ScriptLegacy
 /// i.e. when both `<script>` and `<script setup>` are present.
 pub fn analyze_top_level_items(
     module: &Module,
-    out: &mut ScriptLegacyVars,
+    out: &mut OptionsApiBindings,
     vue_imports: &mut VueResolvedImports,
 ) {
     for module_item in module.body.iter() {
@@ -110,22 +111,24 @@ pub fn analyze_top_level_items(
                 }
             }
 
-            ModuleItem::Stmt(ref stmt) => {
-                match stmt {
-                    Stmt::Decl(decl) => {
-                        analyze_decl(decl, &mut out.setup, vue_imports);
-                    }
-            
-                    _ => {}
+            ModuleItem::Stmt(ref stmt) => match stmt {
+                Stmt::Decl(decl) => {
+                    analyze_decl(decl, &mut out.setup, vue_imports);
                 }
-            }
+
+                _ => {}
+            },
         }
     }
 }
 
 /// Analyzes the declaration in Options API top-level context.
 /// These are typically `var`/`let`/`const` declarations, function declarations, etc.
-pub fn analyze_decl(decl: &Decl, out: &mut Vec<SetupBinding>, vue_imports: &mut VueResolvedImports) {
+pub fn analyze_decl(
+    decl: &Decl,
+    out: &mut Vec<SetupBinding>,
+    vue_imports: &mut VueResolvedImports,
+) {
     match decl {
         Decl::Class(class) => out.push(categorize_class(class)),
 
@@ -137,7 +140,7 @@ pub fn analyze_decl(decl: &Decl, out: &mut Vec<SetupBinding>, vue_imports: &mut 
             for decl in var_decl.decls.iter() {
                 categorize_var_declarator(&decl, out, vue_imports, is_const);
             }
-        },
+        }
 
         Decl::TsEnum(ts_enum) => {
             // Ambient enums are also included, this is intentional
@@ -160,7 +163,7 @@ pub fn analyze_decl(decl: &Decl, out: &mut Vec<SetupBinding>, vue_imports: &mut 
 fn handle_options_array(
     field: &JsWord,
     array_lit: &ArrayLit,
-    script_legacy_vars: &mut ScriptLegacyVars,
+    script_legacy_vars: &mut OptionsApiBindings,
 ) {
     if *field == *PROPS {
         collect_prop_bindings_array(array_lit, script_legacy_vars)
@@ -177,7 +180,7 @@ fn handle_options_array(
 fn handle_options_arrow_function(
     field: &JsWord,
     arrow_expr: &ArrowExpr,
-    script_legacy_vars: &mut ScriptLegacyVars,
+    script_legacy_vars: &mut OptionsApiBindings,
 ) {
     // Arrow functions may either have a body or an expression
     // `() => {}` is a body which returns nothing
@@ -212,7 +215,7 @@ fn handle_options_arrow_function(
 fn handle_options_function(
     field: &JsWord,
     function: &Function,
-    script_legacy_vars: &mut ScriptLegacyVars,
+    script_legacy_vars: &mut OptionsApiBindings,
 ) {
     let Some(ref function_body) = function.body else {
         return;
@@ -226,7 +229,7 @@ fn handle_options_function(
 }
 
 /// `name`
-fn handle_options_lit(field: &JsWord, lit: &Lit, script_legacy_vars: &mut ScriptLegacyVars) {
+fn handle_options_lit(field: &JsWord, lit: &Lit, script_legacy_vars: &mut OptionsApiBindings) {
     if *field == *NAME {
         if let Lit::Str(name) = lit {
             script_legacy_vars.name = Some(name.value.to_owned())
@@ -235,7 +238,7 @@ fn handle_options_lit(field: &JsWord, lit: &Lit, script_legacy_vars: &mut Script
 }
 
 /// `name`
-fn handle_options_tpl(field: &JsWord, tpl: &Tpl, script_legacy_vars: &mut ScriptLegacyVars) {
+fn handle_options_tpl(field: &JsWord, tpl: &Tpl, script_legacy_vars: &mut OptionsApiBindings) {
     if *field == *NAME {
         script_legacy_vars.name = get_string_tpl(tpl);
     }
@@ -245,7 +248,7 @@ fn handle_options_tpl(field: &JsWord, tpl: &Tpl, script_legacy_vars: &mut Script
 fn handle_options_obj(
     field: &JsWord,
     obj_lit: &ObjectLit,
-    script_legacy_vars: &mut ScriptLegacyVars,
+    script_legacy_vars: &mut OptionsApiBindings,
 ) {
     if *field == *PROPS {
         collect_prop_bindings_object(obj_lit, script_legacy_vars)

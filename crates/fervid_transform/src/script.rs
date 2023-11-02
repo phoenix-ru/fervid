@@ -1,6 +1,6 @@
 //! Responsible for `<script>` and `<script setup>` transformations and analysis.
 
-use fervid_core::{SfcScriptBlock, TemplateGenerationMode};
+use fervid_core::{SfcScriptBlock, TemplateGenerationMode, BindingsHelper};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
@@ -8,7 +8,7 @@ use swc_core::{
     },
 };
 
-use crate::structs::{BindingsHelper, TransformScriptsResult};
+use crate::structs::TransformScriptsResult;
 
 use self::{
     options_api::{transform_and_record_script_options_api, AnalyzeOptions},
