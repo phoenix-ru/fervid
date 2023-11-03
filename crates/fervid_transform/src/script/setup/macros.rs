@@ -12,8 +12,9 @@ use swc_core::{
 
 use crate::{
     atoms::{
-        DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_MODEL, DEFINE_PROPS, EMIT_HELPER, EXPOSE_HELPER,
-        MERGE_MODELS_HELPER, MODEL_VALUE, PROPS_HELPER, USE_MODEL_HELPER,
+        DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_MODEL, DEFINE_OPTIONS, DEFINE_PROPS, DEFINE_SLOTS,
+        EMIT_HELPER, EXPOSE_HELPER, MERGE_MODELS_HELPER, MODEL_VALUE, PROPS_HELPER,
+        USE_MODEL_HELPER,
     },
     structs::{SfcDefineModel, SfcExportedObjectHelper},
 };
@@ -53,9 +54,12 @@ pub fn transform_script_setup_macro_expr(
     };
 
     // TODO We can also strip out `onMounted` and `onUnmounted` for SSR here
+    // Not only that, but we can remove any DOM-related listeners in template,
+    // e.g. `<button @click="onClick">`. This should apply to all Node::Element (not components).
 
     // We do a bit of a juggle here to use `string_cache`s fast comparisons
     let sym = &callee_ident.sym;
+    let span = call_expr.span;
     if DEFINE_PROPS.eq(sym) {
         if let Some(arg0) = &call_expr.args.get(0) {
             // TODO Check if this was re-assigned before
@@ -67,7 +71,7 @@ pub fn transform_script_setup_macro_expr(
             sfc_object_helper.is_setup_props_referenced = true;
 
             Some(Expr::Ident(Ident {
-                span: call_expr.span,
+                span,
                 sym: PROPS_HELPER.to_owned(),
                 optional: false,
             }))
@@ -84,7 +88,7 @@ pub fn transform_script_setup_macro_expr(
             sfc_object_helper.is_setup_emit_referenced = true;
 
             Some(Expr::Ident(Ident {
-                span: call_expr.span,
+                span,
                 sym: EMIT_HELPER.to_owned(),
                 optional: false,
             }))
@@ -103,17 +107,18 @@ pub fn transform_script_setup_macro_expr(
 
         // __expose(%call_expr.args%)
         Some(Expr::Call(CallExpr {
-            span: call_expr.span,
+            span,
             callee: Callee::Expr(Box::new(Expr::Ident(new_callee_ident))),
             args: call_expr.args.to_owned(),
             type_args: None,
         }))
     } else if DEFINE_MODEL.eq(sym) {
         let define_model = read_define_model(&call_expr.args);
-        let span = call_expr.span;
 
         // Add to imports
         bindings_helper.vue_imports |= VueImports::UseModel;
+
+        // TODO Add model identifier as a binding (when `is_var_decl == true`)
 
         let use_model_ident = Ident {
             span,
@@ -172,6 +177,52 @@ pub fn transform_script_setup_macro_expr(
             args: use_model_args,
             type_args: None,
         }))
+    } else if DEFINE_SLOTS.eq(sym) {
+        // Without a variable to bind to this macro means nothing
+        if !is_var_decl {
+            return None;
+        }
+
+        // Add to imports and get the identifier
+        bindings_helper.vue_imports |= VueImports::UseSlots;
+        let use_slots_ident = Ident {
+            span,
+            sym: VueImports::UseSlots.as_atom(),
+            optional: false,
+        };
+
+        // Add a binding
+        // TODO Integrate closer with `categorize_var_declarator`
+
+        // _useSlots()
+        Some(Expr::Call(CallExpr {
+            span,
+            callee: Callee::Expr(Box::new(Expr::Ident(use_slots_ident))),
+            args: vec![],
+            type_args: None,
+        }))
+    } else if DEFINE_OPTIONS.eq(sym) {
+        let Some(ExprOrSpread { spread: None, expr }) = call_expr.args.get(0) else {
+            return None;
+        };
+
+        // Try to take out object, otherwise just use spread
+        let Expr::Object(ref options_object) = **expr else {
+            sfc_object_helper.untyped_fields.push(PropOrSpread::Spread(
+                swc_core::ecma::ast::SpreadElement {
+                    dot3_token: DUMMY_SP,
+                    expr: expr.to_owned(),
+                },
+            ));
+            return None;
+        };
+
+        // Copy the fields
+        sfc_object_helper
+            .untyped_fields
+            .extend(options_object.props.iter().cloned());
+
+        None
     } else {
         bail!();
     }

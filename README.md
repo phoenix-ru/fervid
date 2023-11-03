@@ -7,7 +7,7 @@ All-In-One Vue compiler written in Rust.
 
 Currently in early development, and the closest goal is to reach feature-parity with the current [Vue SFC compiler](https://sfc.vuejs.org).
 
-## Progress till MVP ![](https://geps.dev/progress/70)
+## Progress till MVP ![](https://geps.dev/progress/72)
 A minimal target of this project includes:
 - Vue 3 code generation;
 - [unplugin](https://github.com/unjs/unplugin) integration;
@@ -124,8 +124,8 @@ Code generator
   - [x] defineProps
   - [x] defineEmits
   - [x] defineExpose
-  - [ ] defineOptions
-  - [ ] defineSlots
+  - [x] defineOptions
+  - [x] defineSlots
   - [x] defineModel
   - [ ] Tests
 - [x] DEV/PROD mode

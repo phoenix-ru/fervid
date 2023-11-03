@@ -23,7 +23,9 @@ lazy_static! {
     pub static ref DEFINE_EMITS: JsWord = JsWord::from("defineEmits");
     pub static ref DEFINE_EXPOSE: JsWord = JsWord::from("defineExpose");
     pub static ref DEFINE_MODEL: JsWord = JsWord::from("defineModel");
+    pub static ref DEFINE_OPTIONS: JsWord = JsWord::from("defineOptions");
     pub static ref DEFINE_PROPS: JsWord = JsWord::from("defineProps");
+    pub static ref DEFINE_SLOTS: JsWord = JsWord::from("defineSlots");
     pub static ref REACTIVE: JsWord = JsWord::from("reactive");
     pub static ref REF: JsWord = JsWord::from("ref");
 
