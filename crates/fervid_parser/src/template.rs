@@ -1,8 +1,7 @@
-use fervid_core::{ElementNode, FervidAtom, Interpolation, Node, PatchHints, SfcTemplateBlock};
-use swc_core::{
-    common::{BytePos, Span},
-    ecma::atoms::js_word,
+use fervid_core::{
+    fervid_atom, ElementNode, FervidAtom, Interpolation, Node, PatchHints, SfcTemplateBlock,
 };
+use swc_core::common::{BytePos, Span};
 use swc_ecma_parser::{Syntax, TsConfig};
 use swc_html_ast::{Child, Element, Text};
 
@@ -22,13 +21,13 @@ pub fn parse_template_to_ir(
         .attributes
         .iter()
         .find_map(|attr| {
-            if attr.name == js_word!("lang") {
+            if attr.name == fervid_atom!("lang") {
                 Some(attr.name.to_owned())
             } else {
                 None
             }
         })
-        .unwrap_or_else(|| js_word!("html"));
+        .unwrap_or_else(|| fervid_atom!("html"));
 
     // <template> technically has a `content`
     let children: Vec<Child> = root_element

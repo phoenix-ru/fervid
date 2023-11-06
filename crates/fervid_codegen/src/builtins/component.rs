@@ -1,10 +1,11 @@
 //! This module covers the `<component>` Vue builtin.
 //! Please do not confuse with the user components.
 
-use fervid_core::{AttributeOrBinding, ElementNode, StrOrExpr, VBindDirective, VueImports};
-use swc_core::ecma::{
-    ast::{CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, ObjectLit, PropOrSpread, Str},
-    atoms::js_word,
+use fervid_core::{
+    check_attribute_name, AttributeOrBinding, ElementNode, StrOrExpr, VBindDirective, VueImports,
+};
+use swc_core::ecma::ast::{
+    CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, ObjectLit, PropOrSpread, Str,
 };
 
 use crate::CodegenContext;
@@ -20,23 +21,14 @@ impl CodegenContext {
         // Find the `is` or `:is` attribute of the `<component>`
         let component_is_attribute_idx = attributes
             .iter()
-            .position(|attr| {
-                matches!(
-                    attr,
-                    AttributeOrBinding::RegularAttribute { name: js_word!("is"), .. }
-                        | AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some(StrOrExpr::Str(js_word!("is"))),
-                            ..
-                        })
-                )
-            })
+            .position(|attr| check_attribute_name(attr, "is"))
             .expect("<component> should always have `is` attribute");
 
         let component_is_attribute = &attributes[component_is_attribute_idx];
 
         // Expression to put as the first argument to `resolveDynamicComponent()`
         let is_attribute_expr = match component_is_attribute {
-            AttributeOrBinding::RegularAttribute { name: js_word!("is"), value } => {
+            AttributeOrBinding::RegularAttribute { name, value } if name == "is" => {
                 Expr::Lit(Lit::Str(Str {
                     span,
                     value: value.to_owned(),
@@ -45,10 +37,10 @@ impl CodegenContext {
             }
 
             AttributeOrBinding::VBind(VBindDirective {
-                argument: Some(StrOrExpr::Str(js_word!("is"))),
+                argument: Some(StrOrExpr::Str(name)),
                 value,
                 ..
-            }) => (**value).to_owned(),
+            }) if name == "is" => (**value).to_owned(),
 
             _ => unreachable!(),
         };

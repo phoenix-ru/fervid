@@ -1,11 +1,8 @@
 use fervid_core::{
     AttributeOrBinding, FervidAtom, StrOrExpr, VBindDirective, VCustomDirective, VForDirective,
-    VModelDirective, VOnDirective, VSlotDirective, VueDirectives,
+    VModelDirective, VOnDirective, VSlotDirective, VueDirectives, fervid_atom,
 };
-use swc_core::{
-    common::{BytePos, Span},
-    ecma::atoms::js_word,
-};
+use swc_core::common::{BytePos, Span};
 use swc_ecma_parser::Syntax;
 use swc_html_ast::Attribute;
 
@@ -39,7 +36,7 @@ pub fn parse_raw_attribute(
             // parse as a raw attribute
             attrs_or_bindings.push(AttributeOrBinding::RegularAttribute {
                 name: raw_attribute.name,
-                value: raw_attribute.value.unwrap_or_else(|| js_word!("")),
+                value: raw_attribute.value.unwrap_or_else(|| fervid_atom!("")),
             })
         }
     }

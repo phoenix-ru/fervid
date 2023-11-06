@@ -1,13 +1,9 @@
 use fervid_core::{CustomDirectiveBinding, FervidAtom, StrOrExpr, VueDirectives, VueImports};
 use swc_core::{
     common::{Span, DUMMY_SP},
-    ecma::{
-        ast::{
-            ArrayLit, BindingIdent, Bool, CallExpr, Callee, Expr, ExprOrSpread, Ident,
-            KeyValueProp, Lit, Number, ObjectLit, Pat, Prop, PropOrSpread, Str, UnaryExpr, UnaryOp,
-            VarDeclarator,
-        },
-        atoms::JsWord,
+    ecma::ast::{
+        ArrayLit, BindingIdent, Bool, CallExpr, Callee, Expr, ExprOrSpread, Ident, KeyValueProp,
+        Lit, Number, ObjectLit, Pat, Prop, PropOrSpread, Str, UnaryExpr, UnaryOp, VarDeclarator,
     },
 };
 
@@ -233,7 +229,7 @@ impl CodegenContext {
         // _directive_ prefix plus directive name
         let mut directive_ident_raw = directive_name.replace('-', "_");
         directive_ident_raw.insert_str(0, "_directive_");
-        let directive_ident_atom = JsWord::from(directive_ident_raw);
+        let directive_ident_atom = FervidAtom::from(directive_ident_raw);
 
         // Directive will be resolved during runtime, this provides a variable name,
         // e.g. `const _directive_custom = resolveDirective('custom')`
@@ -300,7 +296,7 @@ impl CodegenContext {
                         spread: None,
                         expr: Box::new(Expr::Lit(Lit::Str(Str {
                             span: DUMMY_SP,
-                            value: JsWord::from(*directive_name),
+                            value: (**directive_name).to_owned(),
                             raw: None,
                         }))),
                     }],

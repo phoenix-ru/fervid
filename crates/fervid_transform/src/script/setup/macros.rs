@@ -1,12 +1,9 @@
-use fervid_core::{BindingsHelper, VueImports};
+use fervid_core::{fervid_atom, BindingsHelper, FervidAtom, VueImports};
 use swc_core::{
     common::DUMMY_SP,
-    ecma::{
-        ast::{
-            ArrayLit, Bool, CallExpr, Callee, Expr, ExprOrSpread, Ident, KeyValueProp, Lit,
-            ObjectLit, Prop, PropName, PropOrSpread, Str,
-        },
-        atoms::{js_word, JsWord},
+    ecma::ast::{
+        ArrayLit, Bool, CallExpr, Callee, Expr, ExprOrSpread, Ident, KeyValueProp, Lit, ObjectLit,
+        Prop, PropName, PropOrSpread, Str,
     },
 };
 
@@ -25,7 +22,7 @@ use crate::{
 ///
 /// See https://vuejs.org/api/sfc-script-setup.html#defineprops-defineemits
 pub fn transform_script_setup_macro_expr(
-    expr: &Expr,
+    expr: Expr,
     bindings_helper: &mut BindingsHelper,
     sfc_object_helper: &mut SfcExportedObjectHelper,
     is_var_decl: bool,
@@ -35,7 +32,7 @@ pub fn transform_script_setup_macro_expr(
 
     macro_rules! bail {
         () => {
-            return Some(expr.to_owned());
+            return Some(expr);
         };
     }
 
@@ -159,7 +156,7 @@ pub fn transform_script_setup_macro_expr(
                     props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
                         key: PropName::Ident(Ident {
                             span,
-                            sym: js_word!("local"),
+                            sym: fervid_atom!("local"),
                             optional: false,
                         }),
                         value: Box::new(Expr::Lit(Lit::Bool(Bool { span, value: true }))),
@@ -180,7 +177,7 @@ pub fn transform_script_setup_macro_expr(
     } else if DEFINE_SLOTS.eq(sym) {
         // Without a variable to bind to this macro means nothing
         if !is_var_decl {
-            return None;
+            bail!();
         }
 
         // Add to imports and get the identifier
@@ -202,6 +199,11 @@ pub fn transform_script_setup_macro_expr(
             type_args: None,
         }))
     } else if DEFINE_OPTIONS.eq(sym) {
+        // A variable is not a correct usage
+        if is_var_decl {
+            bail!();
+        }
+
         let Some(ExprOrSpread { spread: None, expr }) = call_expr.args.get(0) else {
             return None;
         };
@@ -259,7 +261,7 @@ pub fn postprocess_macros(
             spread: None,
             expr: Box::new(Expr::Lit(Lit::Str(Str {
                 span: DUMMY_SP,
-                value: JsWord::from(model_update_evt_name),
+                value: FervidAtom::from(model_update_evt_name),
                 raw: None,
             }))),
         }));
@@ -420,11 +422,11 @@ fn is_local(options: Option<&ExprOrSpread>) -> bool {
             };
 
             match key_value.key {
-                PropName::Ident(ref ident) if ident.sym == js_word!("local") => {
+                PropName::Ident(ref ident) if ident.sym == fervid_atom!("local") => {
                     Some(&key_value.value)
                 }
 
-                PropName::Str(ref s) if s.value == js_word!("local") => Some(&key_value.value),
+                PropName::Str(ref s) if s.value == fervid_atom!("local") => Some(&key_value.value),
 
                 _ => None,
             }

@@ -1,14 +1,14 @@
-use fervid_core::{AttributeOrBinding, VBindDirective, VOnDirective, StrOrExpr, VueImports, FervidAtom};
+use fervid_core::{
+    fervid_atom, AttributeOrBinding, FervidAtom, StrOrExpr, VBindDirective, VOnDirective,
+    VueImports,
+};
 use regex::Regex;
 use swc_core::{
     common::{Span, Spanned, DUMMY_SP},
-    ecma::{
-        ast::{
-            ArrayLit, ArrowExpr, BinExpr, BinaryOp, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
-            ComputedPropName, Expr, ExprOrSpread, Ident, KeyValueProp, Lit, ObjectLit,
-            Prop, PropName, PropOrSpread, Str,
-        },
-        atoms::{js_word, JsWord},
+    ecma::ast::{
+        ArrayLit, ArrowExpr, BinExpr, BinaryOp, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
+        ComputedPropName, Expr, ExprOrSpread, Ident, KeyValueProp, Lit, ObjectLit, Prop, PropName,
+        PropOrSpread, Str,
     },
 };
 
@@ -74,18 +74,12 @@ impl CodegenContext {
             match attribute {
                 // First, we check the special case: `class` and `style` attributes
                 // class
-                AttributeOrBinding::RegularAttribute {
-                    name: js_word!("class"),
-                    value,
-                } => {
+                AttributeOrBinding::RegularAttribute { name, value } if name == "class" => {
                     class_regular_attr = Some((value, span));
                 }
 
                 // style
-                AttributeOrBinding::RegularAttribute {
-                    name: js_word!("style"),
-                    value,
-                } => {
+                AttributeOrBinding::RegularAttribute { name, value } if name == "style" => {
                     style_regular_attr = Some((value, span));
                 }
 
@@ -112,19 +106,19 @@ impl CodegenContext {
 
                 // :class
                 AttributeOrBinding::VBind(VBindDirective {
-                    argument: Some(StrOrExpr::Str(js_word!("class"))),
+                    argument: Some(StrOrExpr::Str(argument)),
                     value,
                     ..
-                }) => {
+                }) if argument == "class" => {
                     class_bound = Some((value.to_owned(), span));
                 }
 
                 // :style
                 AttributeOrBinding::VBind(VBindDirective {
-                    argument: Some(StrOrExpr::Str(js_word!("style"))),
+                    argument: Some(StrOrExpr::Str(argument)),
                     value,
                     ..
-                }) => {
+                }) if argument == "style" => {
                     style_bound = Some((value.to_owned(), span));
                 }
 
@@ -161,9 +155,7 @@ impl CodegenContext {
                         result_hints.props_patch_flag || was_transformed;
 
                     let key = match argument {
-                        StrOrExpr::Str(s) => {
-                            str_to_propname(s, span)
-                        }
+                        StrOrExpr::Str(s) => str_to_propname(s, span),
                         StrOrExpr::Expr(expr) => {
                             // Dynamic prop needs a `_normalizeProps` call
                             // TODO Take from patch flags?
@@ -178,7 +170,7 @@ impl CodegenContext {
                                     left: expr.to_owned(), // ?
                                     right: Box::from(Expr::Lit(Lit::Str(Str {
                                         span,
-                                        value: JsWord::from(""),
+                                        value: FervidAtom::from(""),
                                         raw: None,
                                     }))),
                                 })),
@@ -332,8 +324,8 @@ impl CodegenContext {
                     spread: None,
                     expr: Box::from(Expr::Lit(Lit::Str(Str {
                         span: regular_span,
-                        value: regular_value.into(),
-                        raw: None //Some(Atom::from(regular_value.as_ref())),
+                        value: regular_value.to_owned(),
+                        raw: None, //Some(Atom::from(regular_value.as_ref())),
                     }))),
                 }));
 
@@ -370,7 +362,7 @@ impl CodegenContext {
             (Some((regular_value, span)), None) => {
                 expr = Some(Expr::Lit(Lit::Str(Str {
                     raw: None, // Some(Atom::from(regular_value.as_ref())),
-                    value: regular_value.into(),
+                    value: regular_value.to_owned(),
                     span,
                 })));
             }
@@ -407,7 +399,7 @@ impl CodegenContext {
         if let Some(expr) = expr {
             out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                 KeyValueProp {
-                    key: PropName::Ident(Ident::new(js_word!("class"), expr.span())),
+                    key: PropName::Ident(Ident::new(fervid_atom!("class"), expr.span())),
                     value: Box::from(expr),
                 },
             ))));
@@ -498,7 +490,7 @@ impl CodegenContext {
                     }))),
                     args: vec![ExprOrSpread {
                         spread: None,
-                        expr: bound_value
+                        expr: bound_value,
                     }],
                     type_args: None,
                 }));
@@ -513,7 +505,7 @@ impl CodegenContext {
         if let Some(expr) = expr {
             out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                 KeyValueProp {
-                    key: PropName::Ident(Ident::new(js_word!("style"), expr.span())),
+                    key: PropName::Ident(Ident::new(fervid_atom!("style"), expr.span())),
                     value: Box::from(expr),
                 },
             ))));
@@ -549,7 +541,7 @@ fn generate_regular_style(style: &str, span: Span) -> ObjectLit {
                     value: Box::from(Expr::Lit(Lit::Str(Str {
                         span,
                         value: style_value.into(),
-                        raw: None // Some(style_value.into()),
+                        raw: None, // Some(style_value.into()),
                     }))),
                 },
             ))));
@@ -560,7 +552,7 @@ fn generate_regular_style(style: &str, span: Span) -> ObjectLit {
 
 /// Converts event names with dashes to camelcase identifiers,
 /// e.g. `click` -> `onClick`, `state-changed` -> `onStateChanged`
-fn event_name_to_handler(event_name: &StrOrExpr) -> JsWord {
+fn event_name_to_handler(event_name: &StrOrExpr) -> FervidAtom {
     let StrOrExpr::Str(event_name) = event_name else {
         todo!("event_name_to_handler is not yet implemented for dynamic events")
     };
@@ -571,7 +563,7 @@ fn event_name_to_handler(event_name: &StrOrExpr) -> JsWord {
     // ignore error, idk what to do if writing to String fails
     let _ = to_pascalcase(event_name, &mut result);
 
-    JsWord::from(result)
+    FervidAtom::from(result)
 }
 
 /// Generates () => {}

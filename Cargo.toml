@@ -2,6 +2,17 @@
 members = ["crates/*"]
 resolver = "2"
 
+[workspace.dependencies]
+fxhash = "0.2.1"
+lazy_static = "1.4.0"
+phf = { version = "0.11", features = ["macros"] }
+smallvec = "1.10.0"
+swc_core = { version = "0.86.*", features = ["ecma_ast"] }
+swc_ecma_codegen = "0.146.*"
+swc_ecma_parser = "0.141.*"
+swc_html_ast = "0.33.*"
+swc_html_parser = "0.39.*"
+
 [profile.release]
 # Configurations explicitly listed here for clarity.
 # Using the best options for performance.

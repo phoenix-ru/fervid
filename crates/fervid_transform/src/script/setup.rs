@@ -188,8 +188,7 @@ fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param
 #[cfg(test)]
 mod tests {
     use crate::test_utils::parser::*;
-    use fervid_core::{BindingTypes, SfcScriptBlock, SetupBinding, BindingsHelper};
-    use swc_core::ecma::atoms::JsWord;
+    use fervid_core::{BindingTypes, SfcScriptBlock, SetupBinding, BindingsHelper, FervidAtom};
 
     use super::transform_and_record_script_setup;
 
@@ -243,13 +242,13 @@ mod tests {
             const qux = computed(() => 42)
             ",
             vec![
-                SetupBinding(JsWord::from("foo"), BindingTypes::SetupRef),
-                SetupBinding(JsWord::from("bar"), BindingTypes::SetupRef),
-                SetupBinding(JsWord::from("baz"), BindingTypes::SetupRef),
-                SetupBinding(JsWord::from("qux"), BindingTypes::SetupRef),
+                SetupBinding(FervidAtom::from("foo"), BindingTypes::SetupRef),
+                SetupBinding(FervidAtom::from("bar"), BindingTypes::SetupRef),
+                SetupBinding(FervidAtom::from("baz"), BindingTypes::SetupRef),
+                SetupBinding(FervidAtom::from("qux"), BindingTypes::SetupRef),
             ] // vue_imports: VueResolvedImports {
-              //     ref_import: Some((JsWord::from("ref"), SyntaxContext::default())),
-              //     computed: Some((JsWord::from("computed"), SyntaxContext::default())),
+              //     ref_import: Some((FervidAtom::from("ref"), SyntaxContext::default())),
+              //     computed: Some((FervidAtom::from("computed"), SyntaxContext::default())),
               //     reactive: None
               // },
         );
@@ -271,17 +270,17 @@ mod tests {
             const reb = reactive({})
             ",
             // imports: vec![
-            //     (JsWord::from("ref"), SyntaxContext::default()),
-            //     (JsWord::from("computed"), SyntaxContext::default()),
-            //     (JsWord::from("reactive"), SyntaxContext::default()),
+            //     (FervidAtom::from("ref"), SyntaxContext::default()),
+            //     (FervidAtom::from("computed"), SyntaxContext::default()),
+            //     (FervidAtom::from("reactive"), SyntaxContext::default()),
             // ],
             vec![
-                SetupBinding(JsWord::from("foo"), BindingTypes::SetupMaybeRef),
-                SetupBinding(JsWord::from("bar"), BindingTypes::SetupMaybeRef),
-                SetupBinding(JsWord::from("baz"), BindingTypes::SetupMaybeRef),
-                SetupBinding(JsWord::from("qux"), BindingTypes::SetupMaybeRef),
-                SetupBinding(JsWord::from("rea"), BindingTypes::SetupMaybeRef),
-                SetupBinding(JsWord::from("reb"), BindingTypes::SetupMaybeRef),
+                SetupBinding(FervidAtom::from("foo"), BindingTypes::SetupMaybeRef),
+                SetupBinding(FervidAtom::from("bar"), BindingTypes::SetupMaybeRef),
+                SetupBinding(FervidAtom::from("baz"), BindingTypes::SetupMaybeRef),
+                SetupBinding(FervidAtom::from("qux"), BindingTypes::SetupMaybeRef),
+                SetupBinding(FervidAtom::from("rea"), BindingTypes::SetupMaybeRef),
+                SetupBinding(FervidAtom::from("reb"), BindingTypes::SetupMaybeRef),
             ]
         );
     }
@@ -308,10 +307,10 @@ mod tests {
             "
             ),
             vec![
-                SetupBinding(JsWord::from("Foo"), BindingTypes::LiteralConst),
-                SetupBinding(JsWord::from("Bar"), BindingTypes::LiteralConst),
-                SetupBinding(JsWord::from("Baz"), BindingTypes::LiteralConst),
-                SetupBinding(JsWord::from("Qux"), BindingTypes::LiteralConst),
+                SetupBinding(FervidAtom::from("Foo"), BindingTypes::LiteralConst),
+                SetupBinding(FervidAtom::from("Bar"), BindingTypes::LiteralConst),
+                SetupBinding(FervidAtom::from("Baz"), BindingTypes::LiteralConst),
+                SetupBinding(FervidAtom::from("Qux"), BindingTypes::LiteralConst),
             ]
         )
     }
@@ -338,20 +337,20 @@ mod tests {
                 varBaz = reactive({ qux: true })
             ",
             // vue_imports: VueResolvedImports {
-            //     ref_import: Some((JsWord::from("ref"), SyntaxContext::default())),
-            //     computed: Some((JsWord::from("computed"), SyntaxContext::default())),
-            //     reactive: Some((JsWord::from("reactive"), SyntaxContext::default()))
+            //     ref_import: Some((FervidAtom::from("ref"), SyntaxContext::default())),
+            //     computed: Some((FervidAtom::from("computed"), SyntaxContext::default())),
+            //     reactive: Some((FervidAtom::from("reactive"), SyntaxContext::default()))
             // },
             vec![
-                SetupBinding(JsWord::from("cstFoo"), BindingTypes::SetupRef),
-                SetupBinding(JsWord::from("cstBar"), BindingTypes::SetupRef),
-                SetupBinding(JsWord::from("cstBaz"), BindingTypes::SetupReactiveConst),
-                SetupBinding(JsWord::from("letFoo"), BindingTypes::SetupLet),
-                SetupBinding(JsWord::from("letBar"), BindingTypes::SetupLet),
-                SetupBinding(JsWord::from("letBaz"), BindingTypes::SetupLet),
-                SetupBinding(JsWord::from("varFoo"), BindingTypes::SetupLet),
-                SetupBinding(JsWord::from("varBar"), BindingTypes::SetupLet),
-                SetupBinding(JsWord::from("varBaz"), BindingTypes::SetupLet),
+                SetupBinding(FervidAtom::from("cstFoo"), BindingTypes::SetupRef),
+                SetupBinding(FervidAtom::from("cstBar"), BindingTypes::SetupRef),
+                SetupBinding(FervidAtom::from("cstBaz"), BindingTypes::SetupReactiveConst),
+                SetupBinding(FervidAtom::from("letFoo"), BindingTypes::SetupLet),
+                SetupBinding(FervidAtom::from("letBar"), BindingTypes::SetupLet),
+                SetupBinding(FervidAtom::from("letBaz"), BindingTypes::SetupLet),
+                SetupBinding(FervidAtom::from("varFoo"), BindingTypes::SetupLet),
+                SetupBinding(FervidAtom::from("varBar"), BindingTypes::SetupLet),
+                SetupBinding(FervidAtom::from("varBaz"), BindingTypes::SetupLet),
             ]
         );
     }

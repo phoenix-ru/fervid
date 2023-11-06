@@ -1,18 +1,16 @@
-use fervid_core::{VModelDirective, FervidAtom, StrOrExpr};
+use fervid_core::{FervidAtom, StrOrExpr, VModelDirective};
 use swc_core::{
     common::Span,
-    ecma::{
-        ast::{
-            ArrowExpr, AssignExpr, AssignOp, BindingIdent, BlockStmtOrExpr, Bool, Expr, Ident,
-            KeyValueProp, Lit, ObjectLit, ParenExpr, Pat, PatOrExpr, Prop, PropOrSpread, BinExpr, BinaryOp, Str, PropName, ComputedPropName,
-        },
-        atoms::JsWord,
+    ecma::ast::{
+        ArrowExpr, AssignExpr, AssignOp, BinExpr, BinaryOp, BindingIdent, BlockStmtOrExpr, Bool,
+        ComputedPropName, Expr, Ident, KeyValueProp, Lit, ObjectLit, ParenExpr, Pat, PatOrExpr,
+        Prop, PropName, PropOrSpread, Str,
     },
 };
 
 use crate::{
     context::CodegenContext,
-    utils::{str_to_propname, to_camelcase, str_or_expr_to_propname},
+    utils::{str_or_expr_to_propname, str_to_propname, to_camelcase},
 };
 
 impl CodegenContext {
@@ -27,7 +25,10 @@ impl CodegenContext {
         let mut buf = String::new();
 
         // `v-model="smth"` is same as `v-model:modelValue="smth"`
-        let bound_attribute = v_model.argument.to_owned().unwrap_or_else(|| "modelValue".into());
+        let bound_attribute = v_model
+            .argument
+            .to_owned()
+            .unwrap_or_else(|| "modelValue".into());
 
         // 1. Transform the binding
         // let (transformed, has_js_bindings) =
@@ -57,7 +58,7 @@ impl CodegenContext {
                     op: BinaryOp::Add,
                     left: Box::new(Expr::Lit(Lit::Str(Str {
                         span,
-                        value: JsWord::from("onUpdate:"),
+                        value: FervidAtom::from("onUpdate:"),
                         raw: None,
                     }))),
                     right: expr.to_owned(),
@@ -90,7 +91,7 @@ impl CodegenContext {
                 // Because we already used buffer for `event_listener`,
                 // we can safely reuse it without allocating a new buffer
                 buf.clear();
-        
+
                 // This is weird, but that's how the official compiler is implemented
                 // modelValue => modelModifiers
                 // users-argument => "users-argumentModifiers"
@@ -111,7 +112,7 @@ impl CodegenContext {
                     left: expr.to_owned(),
                     right: Box::new(Expr::Lit(Lit::Str(Str {
                         span,
-                        value: JsWord::from("Modifiers"),
+                        value: FervidAtom::from("Modifiers"),
                         raw: None,
                     }))),
                 });
@@ -171,7 +172,7 @@ impl CodegenContext {
             params: vec![Pat::Ident(BindingIdent {
                 id: Ident {
                     span,
-                    sym: JsWord::from("$event"),
+                    sym: FervidAtom::from("$event"),
                     optional: false,
                 },
                 type_ann: None,
@@ -187,7 +188,7 @@ impl CodegenContext {
                     }))),
                     right: Box::new(Expr::Ident(Ident {
                         span,
-                        sym: JsWord::from("$event"),
+                        sym: FervidAtom::from("$event"),
                         optional: false,
                     })),
                 })),

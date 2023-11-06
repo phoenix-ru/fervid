@@ -1,10 +1,7 @@
-use fervid_core::VueImports;
+use fervid_core::{FervidAtom, VueImports};
 use swc_core::{
     common::Span,
-    ecma::{
-        ast::{CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, Str},
-        atoms::JsWord,
-    },
+    ecma::ast::{CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, Str},
 };
 
 use crate::context::CodegenContext;
@@ -25,7 +22,7 @@ impl CodegenContext {
                 spread: None,
                 expr: Box::new(Expr::Lit(Lit::Str(Str {
                     span,
-                    value: JsWord::from(comment),
+                    value: FervidAtom::from(comment),
                     raw: None,
                 }))),
             }],
@@ -44,7 +41,7 @@ mod tests {
     fn it_generates_comment() {
         test_out(
             "hi, this is some comment",
-            r#"_createCommentVNode("hi, this is some comment")"#
+            r#"_createCommentVNode("hi, this is some comment")"#,
         );
     }
 
@@ -52,7 +49,7 @@ mod tests {
     fn it_generates_quotes() {
         test_out(
             r#"In 'this' "string" `there` 'are" "multiple' `weird' 'quotes`"#,
-            r#"_createCommentVNode("In 'this' \"string\" `there` 'are\" \"multiple' `weird' 'quotes`")"#
+            r#"_createCommentVNode("In 'this' \"string\" `there` 'are\" \"multiple' `weird' 'quotes`")"#,
         );
     }
 

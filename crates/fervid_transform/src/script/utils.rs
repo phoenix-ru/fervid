@@ -1,16 +1,14 @@
 //! A collection of utils for working with SWC structs
 
-use swc_core::ecma::{
-    ast::{
-        BlockStmt, Callee, Expr, Function, Module, ModuleDecl, ModuleItem, ObjectLit, Prop,
-        PropName, PropOrSpread, ReturnStmt, Stmt, ArrayLit, ExprOrSpread, Lit, Tpl,
-    },
-    atoms::JsWord,
+use fervid_core::{fervid_atom, FervidAtom};
+use swc_core::ecma::ast::{
+    ArrayLit, BlockStmt, Callee, Expr, ExprOrSpread, Function, Lit, Module, ModuleDecl, ModuleItem,
+    ObjectLit, Prop, PropName, PropOrSpread, ReturnStmt, Stmt, Tpl,
 };
 
 #[deprecated]
 pub fn find_default_export(module: &Module) -> Option<&ObjectLit> {
-    let define_component = JsWord::from("defineComponent");
+    let define_component = fervid_atom!("defineComponent");
 
     module.body.iter().rev().find_map(|module_item| {
         let ModuleItem::ModuleDecl(module_decl) = module_item else {
@@ -60,7 +58,7 @@ pub fn find_default_export(module: &Module) -> Option<&ObjectLit> {
 }
 
 /// Finds a function in the object by a given name
-pub fn find_function(object: &ObjectLit, name: JsWord) -> Option<&Function> {
+pub fn find_function(object: &ObjectLit, name: FervidAtom) -> Option<&Function> {
     object.props.iter().find_map(|prop| match prop {
         PropOrSpread::Prop(prop) => {
             let Prop::Method(ref method) = **prop else {
@@ -89,7 +87,7 @@ pub fn find_return(block_stmt: &BlockStmt) -> Option<&ReturnStmt> {
 }
 
 /// Collects all the field keys in the return object of a [BlockStmt]
-pub fn collect_block_stmt_return_fields(block_stmt: &BlockStmt, out: &mut Vec<JsWord>) {
+pub fn collect_block_stmt_return_fields(block_stmt: &BlockStmt, out: &mut Vec<FervidAtom>) {
     let Some(return_stmt) = find_return(block_stmt) else {
         return;
     };
@@ -108,14 +106,14 @@ pub fn collect_block_stmt_return_fields(block_stmt: &BlockStmt, out: &mut Vec<Js
 }
 
 /// Collects all the field keys of the object
-pub fn collect_obj_fields(object: &ObjectLit, out: &mut Vec<JsWord>) {
+pub fn collect_obj_fields(object: &ObjectLit, out: &mut Vec<FervidAtom>) {
     for prop in object.props.iter() {
         collect_obj_prop_or_spread(prop, out)
     }
 }
 
 /// Collects the single field of an object
-pub fn collect_obj_prop_or_spread(prop_or_spread: &PropOrSpread, out: &mut Vec<JsWord>) {
+pub fn collect_obj_prop_or_spread(prop_or_spread: &PropOrSpread, out: &mut Vec<FervidAtom>) {
     let PropOrSpread::Prop(prop) = prop_or_spread else {
         return;
     };
@@ -125,13 +123,9 @@ pub fn collect_obj_prop_or_spread(prop_or_spread: &PropOrSpread, out: &mut Vec<J
             out.push(ident.sym.to_owned());
         }
 
-        Prop::KeyValue(ref key_value) => {
-            collect_obj_propname(&key_value.key, out)
-        }
+        Prop::KeyValue(ref key_value) => collect_obj_propname(&key_value.key, out),
 
-        Prop::Method(ref method) => {
-            collect_obj_propname(&method.key, out)
-        }
+        Prop::Method(ref method) => collect_obj_propname(&method.key, out),
 
         // Prop::Assign(_) => todo!(),
         // Prop::Getter(_) => todo!(),
@@ -142,23 +136,20 @@ pub fn collect_obj_prop_or_spread(prop_or_spread: &PropOrSpread, out: &mut Vec<J
 
 /// Collects the property name of an object, e.g. `foo` in `{ foo: 'bar' }`
 #[inline]
-pub fn collect_obj_propname(prop_name: &PropName, out: &mut Vec<JsWord>) {
+pub fn collect_obj_propname(prop_name: &PropName, out: &mut Vec<FervidAtom>) {
     match prop_name {
         PropName::Ident(ref ident) => out.push(ident.sym.to_owned()),
-        PropName::Str(ref s) => {
-            out.push(s.value.to_owned())
-        }
+        PropName::Str(ref s) => out.push(s.value.to_owned()),
 
         // I am not really sure how computed keys (e.g. `foo` in `{ [foo]: bar }`)
         // should be recognized. I believe they should not.
         // PropName::Computed(_) => todo!()
-
         _ => {}
     }
 }
 
 /// Collects all the string literals from a `string[]`
-pub fn collect_string_arr(arr: &ArrayLit, out: &mut Vec<JsWord>) {
+pub fn collect_string_arr(arr: &ArrayLit, out: &mut Vec<FervidAtom>) {
     // We expect to collect all the props
     out.reserve(arr.elems.len());
 
@@ -179,25 +170,21 @@ pub fn collect_string_arr(arr: &ArrayLit, out: &mut Vec<JsWord>) {
 }
 
 /// Gets a `string` value from expr, either `'literal'` or from <code>\`template string\`</code>
-pub fn get_string_expr(expr: &Expr) -> Option<JsWord> {
+pub fn get_string_expr(expr: &Expr) -> Option<FervidAtom> {
     match *expr {
-        Expr::Lit(Lit::Str(ref s)) => {
-            Some(s.value.to_owned())
-        }
+        Expr::Lit(Lit::Str(ref s)) => Some(s.value.to_owned()),
 
         // Js template string: `foo` (with backticks)
-        Expr::Tpl(ref tpl) => {
-            get_string_tpl(tpl)
-        }
+        Expr::Tpl(ref tpl) => get_string_tpl(tpl),
 
-        _ => None
+        _ => None,
     }
 }
 
 /// Gets the template string if it is simple:
-/// - <code>\`something simple\`</code> is trivial and returns `Some(JsWord::from("something simple"))`;
+/// - <code>\`something simple\`</code> is trivial and returns `Some(FervidAtom::from("something simple"))`;
 /// - <code>\`something ${notSoSimple}\`</code> is not trivial and will return `None`.
-pub fn get_string_tpl(tpl: &Tpl) -> Option<JsWord> {
+pub fn get_string_tpl(tpl: &Tpl) -> Option<FervidAtom> {
     // This is not a js runtime, only simple template strings are supported
     if tpl.exprs.len() > 0 || tpl.quasis.len() != 1 {
         return None;
@@ -224,22 +211,21 @@ pub fn get_string_tpl(tpl: &Tpl) -> Option<JsWord> {
 /// ```
 /// # use swc_core::{
 /// #     common::DUMMY_SP,
-/// #     ecma::{
-/// #         ast::{Ident, Expr, Lit, Number, ParenExpr, SeqExpr, Str},
-/// #         atoms::JsWord,
-/// #     }
+/// #     ecma::ast::{Ident, Expr, Lit, Number, ParenExpr, SeqExpr, Str},
 /// # };
 /// # use fervid_transform::script::utils::unroll_paren_seq;
+/// # use fervid_core::FervidAtom;
+///
 /// let expr = Expr::Paren(ParenExpr {
 ///     span: DUMMY_SP,
 ///     expr: Expr::Seq(SeqExpr {
 ///         exprs: vec![
-///             Expr::Ident(Ident::new(JsWord::from("a"), DUMMY_SP)).into(),
+///             Expr::Ident(Ident::new(FervidAtom::from("a"), DUMMY_SP)).into(),
 ///             Expr::Paren(ParenExpr {
 ///                 expr: Expr::Seq(SeqExpr {
 ///                     span: DUMMY_SP,
 ///                     exprs: vec![
-///                         Expr::Lit(Lit::Str(Str::from(JsWord::from("b")))).into(),
+///                         Expr::Lit(Lit::Str(Str::from(FervidAtom::from("b")))).into(),
 ///                         Expr::Lit(Lit::Num(Number {
 ///                             span: DUMMY_SP,
 ///                             value: 42.0,
@@ -256,13 +242,13 @@ pub fn get_string_tpl(tpl: &Tpl) -> Option<JsWord> {
 ///     })
 ///     .into(),
 /// });
-/// 
+///
 /// let expr = unroll_paren_seq(&expr);
 ///
 /// let Expr::Lit(lit) = expr else {
 ///     panic!("Not a literal!")
 /// };
-/// 
+///
 /// let Lit::Num(num) = lit else {
 ///     panic!("Not a number!");
 /// };

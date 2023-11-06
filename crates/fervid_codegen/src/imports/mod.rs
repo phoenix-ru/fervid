@@ -1,13 +1,7 @@
-use fervid_core::VueImports;
+use fervid_core::{FervidAtom, VueImports};
 use swc_core::{
     common::DUMMY_SP,
-    ecma::{
-        ast::{
-            Ident, ImportNamedSpecifier, ImportSpecifier,
-            ModuleExportName,
-        },
-        atoms::JsWord,
-    },
+    ecma::ast::{Ident, ImportNamedSpecifier, ImportSpecifier, ModuleExportName},
 };
 
 use super::context::CodegenContext;
@@ -22,7 +16,7 @@ impl CodegenContext {
         vue_import.as_str()
     }
 
-    pub fn get_and_add_import_ident(&mut self, vue_import: VueImports) -> JsWord {
+    pub fn get_and_add_import_ident(&mut self, vue_import: VueImports) -> FervidAtom {
         self.add_to_imports(vue_import);
         vue_import.as_atom()
     }
@@ -42,7 +36,7 @@ impl CodegenContext {
 
             let import_vue = Some(ModuleExportName::Ident(Ident {
                 span: DUMMY_SP,
-                sym: JsWord::from(&import_raw[1..]),
+                sym: FervidAtom::from(&import_raw[1..]),
                 optional: false,
             }));
 
@@ -61,7 +55,7 @@ impl CodegenContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use swc_core::ecma::ast::{Str, ImportDecl};
+    use swc_core::ecma::ast::{ImportDecl, Str};
 
     #[test]
     fn it_remembers_added_imports() {

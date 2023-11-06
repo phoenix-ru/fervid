@@ -1,8 +1,5 @@
-use fervid_core::{FervidAtom, SfcCustomBlock, SfcDescriptor, SfcStyleBlock};
-use swc_core::{
-    common::{BytePos, Span, DUMMY_SP},
-    ecma::atoms::js_word,
-};
+use fervid_core::{fervid_atom, FervidAtom, SfcCustomBlock, SfcDescriptor, SfcStyleBlock};
+use swc_core::common::{BytePos, Span, DUMMY_SP};
 use swc_ecma_parser::StringInput;
 use swc_html_ast::{Child, DocumentFragment, DocumentMode, Element, Namespace};
 use swc_html_parser::{
@@ -17,10 +14,7 @@ use crate::{
     template::parse_template_to_ir,
 };
 
-pub fn parse_sfc(
-    input: &str,
-    errors: &mut Vec<ParseError>,
-) -> Result<SfcDescriptor, ParseError> {
+pub fn parse_sfc(input: &str, errors: &mut Vec<ParseError>) -> Result<SfcDescriptor, ParseError> {
     // TODO When should it fail? What do we do with errors?..
     // I was thinking of 4 strategies:
     // `HARD_FAIL_ON_ERROR` (any error = fail (incl. recoverable), stop at the first error),
@@ -46,7 +40,10 @@ pub fn parse_sfc(
     errors.reserve(html_parse_errors.len());
     for html_parse_error in html_parse_errors {
         let e = html_parse_error.into_inner();
-        errors.push(ParseError { kind: ParseErrorKind::InvalidHtml(e.1), span: e.0 })
+        errors.push(ParseError {
+            kind: ParseErrorKind::InvalidHtml(e.1),
+            span: e.0,
+        })
     }
 
     let mut sfc_descriptor = SfcDescriptor::default();
@@ -59,7 +56,7 @@ pub fn parse_sfc(
 
         let tag_name = &root_element.tag_name;
 
-        if tag_name.eq(&js_word!("template")) {
+        if tag_name.eq("template") {
             if sfc_descriptor.template.is_some() {
                 // Duplicate template, bail
                 // TODO Error
@@ -73,7 +70,7 @@ pub fn parse_sfc(
             };
 
             sfc_descriptor.template = template_result;
-        } else if tag_name.eq(&js_word!("script")) {
+        } else if tag_name.eq("script") {
             let Some(sfc_script_block) = parse_sfc_script_element(root_element) else {
                 continue;
             };
@@ -95,7 +92,7 @@ pub fn parse_sfc(
                 }
                 sfc_descriptor.script_legacy = Some(sfc_script_block);
             }
-        } else if tag_name.eq(&js_word!("style")) {
+        } else if tag_name.eq("style") {
             // Check that `<style>` is not empty
             let Some(Child::Text(style_content)) = root_element.children.get(0) else {
                 continue;
@@ -163,7 +160,7 @@ pub fn parse_html_document_fragment(
 
     let ctx_element = Element {
         span: DUMMY_SP,
-        tag_name: js_word!("div"),
+        tag_name: fervid_atom!("div"),
         namespace: Namespace::HTML,
         attributes: vec![],
         children: vec![],

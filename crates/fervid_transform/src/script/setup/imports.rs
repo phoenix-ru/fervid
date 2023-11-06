@@ -4,7 +4,7 @@ use swc_core::ecma::{
 };
 
 use crate::{
-    atoms::{VUE, REF, COMPUTED, REACTIVE},
+    atoms::{COMPUTED, REACTIVE, REF, VUE},
     structs::VueResolvedImports,
 };
 
@@ -70,7 +70,11 @@ fn collect_vue_import(imported_word: &JsWord, used_as: Id, vue_imports: &mut Vue
 
 #[cfg(test)]
 mod tests {
-    use swc_core::{ecma::ast::{Module, ModuleDecl, ModuleItem}, common::SyntaxContext};
+    use fervid_core::fervid_atom;
+    use swc_core::{
+        common::SyntaxContext,
+        ecma::ast::{Module, ModuleDecl, ModuleItem},
+    };
 
     use crate::test_utils::parser::{parse_javascript_module, parse_typescript_module};
 
@@ -133,9 +137,9 @@ mod tests {
             ",
             MockAnalysisResult {
                 vue_user_imports: VueResolvedImports {
-                    ref_import: Some((JsWord::from("ref"), SyntaxContext::default())),
-                    computed: Some((JsWord::from("computed"), SyntaxContext::default())),
-                    reactive: Some((JsWord::from("reactive"), SyntaxContext::default()))
+                    ref_import: Some((fervid_atom!("ref"), SyntaxContext::default())),
+                    computed: Some((fervid_atom!("computed"), SyntaxContext::default())),
+                    reactive: Some((fervid_atom!("reactive"), SyntaxContext::default()))
                 },
                 ..Default::default()
             }
@@ -148,9 +152,9 @@ mod tests {
             ",
             MockAnalysisResult {
                 vue_user_imports: VueResolvedImports {
-                    ref_import: Some((JsWord::from("foo"), SyntaxContext::default())),
-                    computed: Some((JsWord::from("bar"), SyntaxContext::default())),
-                    reactive: Some((JsWord::from("baz"), SyntaxContext::default()))
+                    ref_import: Some((fervid_atom!("foo"), SyntaxContext::default())),
+                    computed: Some((fervid_atom!("bar"), SyntaxContext::default())),
+                    reactive: Some((fervid_atom!("baz"), SyntaxContext::default()))
                 },
                 ..Default::default()
             }
@@ -171,13 +175,13 @@ mod tests {
             ",
             MockAnalysisResult {
                 imports: vec![
-                    (JsWord::from("ref"), SyntaxContext::default()),
-                    (JsWord::from("computed"), SyntaxContext::default()),
-                    (JsWord::from("reactive"), SyntaxContext::default()),
-                    (JsWord::from("foo"), SyntaxContext::default()),
-                    (JsWord::from("Bar"), SyntaxContext::default()),
-                    (JsWord::from("baz"), SyntaxContext::default()),
-                    (JsWord::from("qux"), SyntaxContext::default()),
+                    (fervid_atom!("ref"), SyntaxContext::default()),
+                    (fervid_atom!("computed"), SyntaxContext::default()),
+                    (fervid_atom!("reactive"), SyntaxContext::default()),
+                    (fervid_atom!("foo"), SyntaxContext::default()),
+                    (fervid_atom!("Bar"), SyntaxContext::default()),
+                    (fervid_atom!("baz"), SyntaxContext::default()),
+                    (fervid_atom!("qux"), SyntaxContext::default()),
                 ],
                 ..Default::default()
             }
@@ -196,15 +200,15 @@ mod tests {
             ",
             MockAnalysisResult {
                 imports: vec![
-                    (JsWord::from("foo"), SyntaxContext::default()),
-                    (JsWord::from("Bar"), SyntaxContext::default()),
-                    (JsWord::from("baz"), SyntaxContext::default()),
-                    (JsWord::from("qux"), SyntaxContext::default()),
+                    (fervid_atom!("foo"), SyntaxContext::default()),
+                    (fervid_atom!("Bar"), SyntaxContext::default()),
+                    (fervid_atom!("baz"), SyntaxContext::default()),
+                    (fervid_atom!("qux"), SyntaxContext::default()),
                 ],
                 vue_user_imports: VueResolvedImports {
-                    ref_import: Some((JsWord::from("ref"), SyntaxContext::default())),
-                    computed: Some((JsWord::from("computed"), SyntaxContext::default())),
-                    reactive: Some((JsWord::from("reactive"), SyntaxContext::default()))
+                    ref_import: Some((fervid_atom!("ref"), SyntaxContext::default())),
+                    computed: Some((fervid_atom!("computed"), SyntaxContext::default())),
+                    reactive: Some((fervid_atom!("reactive"), SyntaxContext::default()))
                 },
                 ..Default::default()
             }

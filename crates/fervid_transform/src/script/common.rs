@@ -52,6 +52,13 @@ pub fn categorize_var_declarator(
         return;
     };
 
+    // TODO This needs to be separate for Options API and for Composition API
+    // Collecting variables is one thing (destructure is also different, TODO there we need to care about `toRefs`)
+    // Figuring out `initExpr` is different, it can be linked later, because we may not have a variable to bind to in some cases.
+    // So, in short, I should write an `initExpr` recognizer+transformer for Composition API (with macros support),
+    // and also write a function which understands `VarDeclarator`, and only then write a glue function which combines results of both,
+    // this glue function must be different across setup/non-setup.
+
     macro_rules! push {
         ($typ: expr) => {
             out.push(SetupBinding(decl_ident.sym.to_owned(), $typ))

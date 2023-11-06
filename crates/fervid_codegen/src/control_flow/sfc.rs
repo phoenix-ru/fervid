@@ -1,13 +1,10 @@
-use fervid_core::{SfcTemplateBlock, TemplateGenerationMode};
+use fervid_core::{FervidAtom, SfcTemplateBlock, TemplateGenerationMode};
 use swc_core::{
     common::{FileName, SourceMap, DUMMY_SP},
-    ecma::{
-        ast::{
-            ArrowExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, Decl, ExportDefaultExpr, Expr,
-            Function, Ident, ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit,
-            Param, Pat, Prop, PropName, PropOrSpread, ReturnStmt, Stmt, Str, VarDecl, VarDeclKind,
-        },
-        atoms::JsWord,
+    ecma::ast::{
+        ArrowExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, Decl, ExportDefaultExpr, Expr,
+        Function, Ident, ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit, Param,
+        Pat, Prop, PropName, PropOrSpread, ReturnStmt, Stmt, Str, VarDecl, VarDeclKind,
     },
 };
 use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
@@ -94,7 +91,7 @@ impl CodegenContext {
                         .push(PropOrSpread::Prop(Box::new(Prop::Method(MethodProp {
                             key: PropName::Ident(Ident {
                                 span: DUMMY_SP,
-                                sym: JsWord::from("render"),
+                                sym: FervidAtom::from("render"),
                                 optional: false,
                             }),
                             function: Box::new(render_fn),
@@ -113,7 +110,7 @@ impl CodegenContext {
                         .push(PropOrSpread::Prop(Box::new(Prop::Method(MethodProp {
                             key: PropName::Ident(Ident {
                                 span: DUMMY_SP,
-                                sym: JsWord::from("setup"),
+                                sym: FervidAtom::from("setup"),
                                 optional: false,
                             }),
                             function: setup_fn,
@@ -135,7 +132,7 @@ impl CodegenContext {
                     specifiers: used_imports,
                     src: Box::new(Str {
                         span: DUMMY_SP,
-                        value: JsWord::from("vue"),
+                        value: FervidAtom::from("vue"),
                         raw: None,
                     }),
                     type_only: false,
@@ -197,7 +194,7 @@ impl CodegenContext {
                 Pat::Ident(BindingIdent {
                     id: Ident {
                         span: DUMMY_SP,
-                        sym: JsWord::from($ident),
+                        sym: FervidAtom::from($ident),
                         optional: false,
                     },
                     type_ann: None,
@@ -253,7 +250,7 @@ impl CodegenContext {
                     pat: Pat::Ident(BindingIdent {
                         id: Ident {
                             span: DUMMY_SP,
-                            sym: JsWord::from($ident),
+                            sym: FervidAtom::from($ident),
                             optional: false,
                         },
                         type_ann: None,

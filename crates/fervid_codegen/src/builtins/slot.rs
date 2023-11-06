@@ -1,10 +1,7 @@
-use fervid_core::{AttributeOrBinding, ElementNode, StrOrExpr, VBindDirective, VueImports};
-use swc_core::ecma::{
-    ast::{
-        ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, MemberExpr, MemberProp,
-        ObjectLit, Str,
-    },
-    atoms::{js_word, JsWord},
+use fervid_core::{check_attribute_name, fervid_atom, AttributeOrBinding, ElementNode, VueImports};
+use swc_core::ecma::ast::{
+    ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, MemberExpr, MemberProp, ObjectLit,
+    Str,
 };
 
 use crate::CodegenContext;
@@ -28,16 +25,7 @@ impl CodegenContext {
             .starting_tag
             .attributes
             .iter()
-            .position(|attr| {
-                matches!(
-                    attr,
-                    AttributeOrBinding::RegularAttribute { name: js_word!("name"), .. }
-                        | AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some(StrOrExpr::Str(js_word!("name"))),
-                            ..
-                        })
-                )
-            });
+            .position(|attr| check_attribute_name(attr, "name"));
 
         // Determine the args length (remember, we exclude `name` from attrs length)
         let has_children = element_node.children.len() > 0;
@@ -61,12 +49,12 @@ impl CodegenContext {
                 span,
                 obj: Box::new(Expr::Ident(Ident {
                     span,
-                    sym: JsWord::from("_ctx"),
+                    sym: fervid_atom!("_ctx"),
                     optional: false,
                 })),
                 prop: MemberProp::Ident(Ident {
                     span,
-                    sym: JsWord::from("$slots"),
+                    sym: fervid_atom!("$slots"),
                     optional: false,
                 }),
             })),
@@ -89,7 +77,7 @@ impl CodegenContext {
         } else {
             Expr::Lit(Lit::Str(Str {
                 span,
-                value: js_word!("default"),
+                value: fervid_atom!("default"),
                 raw: None,
             }))
         };
@@ -180,7 +168,7 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{BuiltinType, ElementKind, Node, StartingTag};
+    use fervid_core::{BuiltinType, ElementKind, Node, StartingTag, VBindDirective, StrOrExpr};
     use swc_core::common::DUMMY_SP;
 
     use crate::test_utils::js;

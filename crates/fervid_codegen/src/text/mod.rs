@@ -1,4 +1,8 @@
-use swc_core::{ecma::{ast::{Expr, Lit, Str}, atoms::JsWord}, common::Span};
+use fervid_core::FervidAtom;
+use swc_core::{
+    common::Span,
+    ecma::ast::{Expr, Lit, Str},
+};
 
 use crate::context::CodegenContext;
 
@@ -10,7 +14,8 @@ impl CodegenContext {
 
         let value = if needs_shortening {
             let trimmed = contents.trim();
-            let new_len = trimmed.len() + (has_start_whitespace as usize) + (has_end_whitespace as usize);
+            let new_len =
+                trimmed.len() + (has_start_whitespace as usize) + (has_end_whitespace as usize);
 
             // Re-create a string with all start and end whitespace replaced by a single space
             let mut shortened = String::with_capacity(new_len);
@@ -22,15 +27,15 @@ impl CodegenContext {
                 shortened.push(' ');
             }
 
-            JsWord::from(shortened)
+            FervidAtom::from(shortened)
         } else {
-            JsWord::from(contents)
+            FervidAtom::from(contents)
         };
 
         Expr::Lit(Lit::Str(Str {
             span,
             value,
-            raw: None
+            raw: None,
         }))
     }
 }

@@ -1,5 +1,3 @@
-use swc_core::ecma::atoms::js_word;
-
 use crate::{ElementNode, Node, StrOrExpr};
 
 /// Checks whether a Node is from the component's default slot or not
@@ -29,7 +27,7 @@ pub fn is_from_default_slot(node: &Node) -> bool {
 
     match v_slot.slot_name.as_ref() {
         None => true,
-        Some(StrOrExpr::Str(js_word!("default"))) => true,
+        Some(StrOrExpr::Str(s)) if s == "default" => true,
         Some(_) => false,
     }
 }

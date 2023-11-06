@@ -11,7 +11,7 @@ license = "Apache-2.0"
 
 [dependencies]
 flagset = "0.4.3"
-fxhash = "0.2.1"
-phf = { version = "0.11", features = ["macros"] }
-smallvec = "1.10.0"
-swc_core = { version = "0.83.*", features = ["common", "ecma_ast"] }
+fxhash = { workspace = true }
+phf = { workspace = true }
+smallvec = { workspace = true }
+swc_core = { workspace = true, features = ["common", "ecma_ast"] }

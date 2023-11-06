@@ -8,7 +8,7 @@ use swc_core::{
             ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, Null, Number, ObjectLit,
             PropOrSpread, Str,
         },
-        atoms::{JsWord, js_word},
+        atoms::JsWord,
     },
 };
 
@@ -36,7 +36,7 @@ impl CodegenContext {
 
         // There is a special case here: `<template>` with `v-if`/`v-else-if`/`v-else`/`v-for`
         let should_generate_fragment_instead = (wrap_in_block
-            && element_node.starting_tag.tag_name == js_word!("template"))
+            && element_node.starting_tag.tag_name == "template")
             || self.should_generate_fragment(element_node);
 
         // Generate children
@@ -322,30 +322,32 @@ impl CodegenContext {
         // input :type=* -> vModelDynamic
         // select -> vModelSelect
         // textarea -> vModelText
-        match starting_tag.tag_name {
-            js_word!("input") => {
+        match starting_tag.tag_name.as_ref() {
+            "input" => {
                 // Find `type` attribute
                 for attr in starting_tag.attributes.iter() {
                     match attr {
                         // type="smth"
-                        AttributeOrBinding::RegularAttribute {
-                            name: js_word!("type"),
-                            value,
-                        } => match value.as_ref() {
-                            "checkbox" => {
-                                return self.get_and_add_import_ident(VueImports::VModelCheckbox)
+                        AttributeOrBinding::RegularAttribute { name, value } if name == "type" => {
+                            match value.as_ref() {
+                                "checkbox" => {
+                                    return self
+                                        .get_and_add_import_ident(VueImports::VModelCheckbox)
+                                }
+                                "radio" => {
+                                    return self.get_and_add_import_ident(VueImports::VModelRadio)
+                                }
+                                _ => return self.get_and_add_import_ident(VueImports::VModelText),
                             }
-                            "radio" => {
-                                return self.get_and_add_import_ident(VueImports::VModelRadio)
-                            }
-                            _ => return self.get_and_add_import_ident(VueImports::VModelText),
-                        },
+                        }
 
                         // :type="smth"
                         AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some(StrOrExpr::Str(js_word!("type"))),
+                            argument: Some(StrOrExpr::Str(s)),
                             ..
-                        }) => return self.get_and_add_import_ident(VueImports::VModelDynamic),
+                        }) if s == "type" => {
+                            return self.get_and_add_import_ident(VueImports::VModelDynamic)
+                        }
 
                         _ => continue,
                     }
@@ -354,7 +356,7 @@ impl CodegenContext {
                 self.get_and_add_import_ident(VueImports::VModelText)
             }
 
-            js_word!("select") => self.get_and_add_import_ident(VueImports::VModelSelect),
+            "select" => self.get_and_add_import_ident(VueImports::VModelSelect),
 
             // TODO Clean up such usage (except "textarea")? Or just use `VModelText`?
             _ => self.get_and_add_import_ident(VueImports::VModelText),

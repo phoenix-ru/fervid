@@ -1,16 +1,13 @@
 use fervid_core::{
-    ComponentBinding, ElementNode, FervidAtom, Node, PatchHints, StartingTag, StrOrExpr,
-    VSlotDirective, VueDirectives, VueImports,
+    fervid_atom, ComponentBinding, ElementNode, FervidAtom, Node, PatchHints, StartingTag,
+    StrOrExpr, VSlotDirective, VueDirectives, VueImports,
 };
 use swc_core::{
     common::{Span, DUMMY_SP},
-    ecma::{
-        ast::{
-            ArrayLit, ArrowExpr, BindingIdent, BlockStmtOrExpr, CallExpr, Callee, Expr,
-            ExprOrSpread, Ident, KeyValueProp, Lit, Null, Number, ObjectLit, Pat, Prop,
-            PropOrSpread, Str, VarDeclarator,
-        },
-        atoms::{js_word, JsWord},
+    ecma::ast::{
+        ArrayLit, ArrowExpr, BindingIdent, BlockStmtOrExpr, CallExpr, Callee, Expr, ExprOrSpread,
+        Ident, KeyValueProp, Lit, Null, Number, ObjectLit, Pat, Prop, PropOrSpread, Str,
+        VarDeclarator,
     },
 };
 
@@ -232,7 +229,7 @@ impl CodegenContext {
                         spread: None,
                         expr: Box::new(Expr::Lit(Lit::Str(Str {
                             span: DUMMY_SP,
-                            value: JsWord::from(*component_name),
+                            value: (*component_name).to_owned(),
                             raw: None,
                         }))),
                     }],
@@ -364,7 +361,7 @@ impl CodegenContext {
                 let Node::Element(ElementNode {
                     starting_tag:
                         StartingTag {
-                            tag_name: js_word!("template"),
+                            tag_name,
                             directives: Some(directives),
                             ..
                         },
@@ -374,6 +371,10 @@ impl CodegenContext {
                 else {
                     not_in_a_template_v_slot!();
                 };
+
+                if tag_name != "template" {
+                    not_in_a_template_v_slot!();
+                }
 
                 // Check `v-slot` existence
                 let Some(ref v_slot_directive) = directives.v_slot else {
@@ -433,7 +434,7 @@ impl CodegenContext {
         if default_slot_children.len() != 0 {
             // withCtx(() => [child1, child2, child3])
             result_static_slots.push(self.generate_slot_shell(
-                StrOrExpr::Str(js_word!("default")),
+                StrOrExpr::Str(fervid_atom!("default")),
                 default_slot_children,
                 None, // todo get the binding for `<template v-slot="binding"`
                 component_span,
@@ -498,7 +499,7 @@ impl CodegenContext {
             let slot_name = v_slot
                 .slot_name
                 .to_owned()
-                .unwrap_or_else(|| StrOrExpr::Str(js_word!("default")));
+                .unwrap_or_else(|| StrOrExpr::Str(fervid_atom!("default")));
             let span = DUMMY_SP; // todo?
 
             out_static_slots.push(self.generate_slot_shell(
@@ -529,7 +530,7 @@ impl CodegenContext {
         component_name.insert_str(0, "_component_");
 
         // To create an identifier, we need to convert it to an SWC JsWord
-        let component_name = JsWord::from(component_name);
+        let component_name = FervidAtom::from(component_name);
 
         // Directive will be resolved during runtime, this provides a variable name,
         // e.g. `const _component_custom = resolveComponent('custom')`

@@ -6,7 +6,6 @@ use nom::error::{ErrorKind, ParseError};
 use nom::multi::many0;
 use nom::sequence::{delimited, preceded};
 use nom::{bytes::complete::tag, sequence::tuple, IResult};
-use swc_core::ecma::atoms::js_word;
 use std::str;
 use swc_core::common::DUMMY_SP;
 use swc_core::ecma::ast::Module;
@@ -15,8 +14,9 @@ use super::attributes::parse_attributes;
 use super::ecma::{parse_js, parse_js_module};
 use super::html_utils::{classify_element_kind, html_name, space0, TagKind};
 use fervid_core::{
-    AttributeOrBinding, ElementKind, ElementNode, Interpolation, Node, SfcCustomBlock,
-    SfcDescriptor, SfcScriptBlock, SfcScriptLang, SfcStyleBlock, SfcTemplateBlock, StartingTag, FervidAtom,
+    fervid_atom, AttributeOrBinding, ElementKind, ElementNode, FervidAtom, Interpolation, Node,
+    SfcCustomBlock, SfcDescriptor, SfcScriptBlock, SfcScriptLang, SfcStyleBlock, SfcTemplateBlock,
+    StartingTag,
 };
 
 /// Parses the Vue Single-File Component
@@ -63,9 +63,9 @@ fn parse_root_block<'a>(
     let (input, (starting_tag, is_self_closing)) = parse_element_starting_tag(input)?;
 
     // Mutually exclusive flags
-    let is_script = starting_tag.tag_name == js_word!("script");
-    let is_template = !is_script && starting_tag.tag_name == js_word!("template");
-    let is_style = !is_template && starting_tag.tag_name == js_word!("style");
+    let is_script = starting_tag.tag_name == fervid_atom!("script");
+    let is_template = !is_script && starting_tag.tag_name == fervid_atom!("template");
+    let is_style = !is_template && starting_tag.tag_name == fervid_atom!("style");
 
     // Helper fn
     let read_raw_text = |input: &'a str| {
@@ -106,17 +106,16 @@ fn parse_root_block<'a>(
 
     // Get `lang` attribute, which is common for all the Vue root blocks
     let lang = starting_tag.attributes.iter().find_map(|attr| match attr {
-        AttributeOrBinding::RegularAttribute {
-            name: js_word!("lang"),
-            value,
-        } => Some(value.to_owned()),
+        AttributeOrBinding::RegularAttribute { name, value } if name == "lang" => {
+            Some(value.to_owned())
+        }
         _ => None,
     });
 
     // Parse children only for `<template>` root block
     if is_template {
         // Parser does not really look at it currently
-        let lang = lang.unwrap_or(js_word!("html"));
+        let lang = lang.unwrap_or(fervid_atom!("html"));
 
         // Check for self-closing `<template />`. I see no reason why someone might do it, but still
         if is_self_closing {

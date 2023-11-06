@@ -1,6 +1,14 @@
-use swc_core::{ecma::{ast::{Expr, Pat}, atoms::JsWord}, common::Span};
+use swc_core::{ecma::{ast::{Expr, Pat}, atoms::{JsWord, Atom}}, common::Span};
 
-pub type FervidAtom = JsWord;
+pub type FervidAtom = Atom;
+
+// TODO Add some known atoms here with lazy evaluation?
+#[macro_export]
+macro_rules! fervid_atom {
+    ($lit: literal) => {
+        fervid_core::FervidAtom::from($lit)
+    };
+}
 
 /// A Node represents a part of the Abstract Syntax Tree (AST).
 #[derive(Debug, Clone)]

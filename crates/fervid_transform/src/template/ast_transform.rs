@@ -1,10 +1,10 @@
 use fervid_core::{
-    is_from_default_slot, is_html_tag, AttributeOrBinding, Conditional, ConditionalNodeSequence,
-    ElementKind, ElementNode, Interpolation, Node, PatchFlags, SfcTemplateBlock, StartingTag,
-    StrOrExpr, VBindDirective, VOnDirective, VSlotDirective, VUE_BUILTINS, BindingsHelper, TemplateScope,
+    fervid_atom, is_from_default_slot, is_html_tag, AttributeOrBinding, BindingsHelper,
+    Conditional, ConditionalNodeSequence, ElementKind, ElementNode, Interpolation, Node,
+    PatchFlags, SfcTemplateBlock, StartingTag, StrOrExpr, TemplateScope, VOnDirective,
+    VSlotDirective, VUE_BUILTINS, check_attribute_name,
 };
 use smallvec::SmallVec;
-use swc_core::ecma::atoms::{JsWord, js_word};
 
 use super::{collect_vars::collect_variables, expr_transform::BindingsHelperTransform};
 
@@ -37,7 +37,7 @@ pub fn transform_and_record_template(
         let new_root = Node::Element(ElementNode {
             kind: ElementKind::Element,
             starting_tag: StartingTag {
-                tag_name: js_word!("template"),
+                tag_name: fervid_atom!("template"),
                 attributes: vec![],
                 directives: None,
             },
@@ -268,19 +268,11 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                     v_for.patch_flags |= PatchFlags::StableFragment;
                 } else {
                     // Look for `key`. Fragment is either keyed or unkeyed.
-                    let has_key =
-                        element_node
-                            .starting_tag
-                            .attributes
-                            .iter()
-                            .any(|attr| match attr {
-                                AttributeOrBinding::RegularAttribute { name: js_word!("key"), .. } => true,
-                                AttributeOrBinding::VBind(VBindDirective {
-                                    argument: Some(StrOrExpr::Str(js_word!("key"))),
-                                    ..
-                                }) => true,
-                                _ => false,
-                            });
+                    let has_key = element_node
+                        .starting_tag
+                        .attributes
+                        .iter()
+                        .any(|attr| check_attribute_name(attr, "key"));
 
                     v_for.patch_flags |= if has_key {
                         PatchFlags::KeyedFragment
@@ -346,17 +338,17 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                     // They are added to PROPS for the components.
                     if is_component {
                         patch_hints.flags |= PatchFlags::Props;
-                        patch_hints.props.push(JsWord::from(argument));
+                        patch_hints.props.push(argument.to_owned());
                         continue;
                     }
 
-                    if argument == &js_word!("class") {
+                    if argument == "class" {
                         patch_hints.flags |= PatchFlags::Class;
-                    } else if argument == &js_word!("style") {
+                    } else if argument == "style" {
                         patch_hints.flags |= PatchFlags::Style;
                     } else {
                         patch_hints.flags |= PatchFlags::Props;
-                        patch_hints.props.push(JsWord::from(argument));
+                        patch_hints.props.push(argument.to_owned());
                     }
                 }
 
@@ -393,7 +385,8 @@ impl<'a> Visitor for TemplateVisitor<'_> {
         // Patch flag for HTML elements which only contain interpolation and text,
         // e.g. `<p>{{ msg }}</p>`.
         // Does not apply to components or child-less elements
-        let mut is_children_text_only = matches!(element_kind, ElementKind::Element) && !element_node.children.is_empty();
+        let mut is_children_text_only =
+            matches!(element_kind, ElementKind::Element) && !element_node.children.is_empty();
         let mut has_dynamic_interpolation = false;
 
         // Recursively visit children
@@ -465,16 +458,10 @@ impl TemplateVisitor<'_> {
         if let Some(builtin_type) = VUE_BUILTINS.get(&tag_name) {
             // Special case for `<component>`. If it does not have `is`, this is not a built-in
             if tag_name.eq("component") {
-                let has_is = starting_tag.attributes.iter().any(|attr| {
-                    matches!(
-                        attr,
-                        AttributeOrBinding::RegularAttribute { name: js_word!("is"), .. }
-                            | AttributeOrBinding::VBind(VBindDirective {
-                                argument: Some(StrOrExpr::Str(js_word!("is"))),
-                                ..
-                            })
-                    )
-                });
+                let has_is = starting_tag
+                    .attributes
+                    .iter()
+                    .any(|attr| check_attribute_name(attr, "is"));
 
                 if !has_is {
                     return ElementKind::Component;
@@ -815,7 +802,7 @@ mod tests {
     }
 
     fn check_text_node(node: &Node) {
-        assert!(matches!(node, Node::Text(js_word!("text"), DUMMY_SP)));
+        assert!(matches!(node, Node::Text(text, DUMMY_SP) if text == "text"));
     }
 
     // <h1 v-if="true">if</h1>
@@ -840,11 +827,14 @@ mod tests {
     fn check_if_node(if_node: &Conditional) {
         assert_eq!("true", to_str(&if_node.condition));
         assert!(matches!(
-            if_node.node,
+            &if_node.node,
             ElementNode {
-                starting_tag: StartingTag { tag_name: js_word!("h1"), .. },
+                starting_tag: StartingTag {
+                    tag_name,
+                    ..
+                },
                 ..
-            }
+            } if tag_name == "h1"
         ));
     }
 
@@ -871,11 +861,14 @@ mod tests {
         // condition, then node
         assert_eq!("_ctx.foo", to_str(&else_if_node.condition));
         assert!(matches!(
-            else_if_node.node,
+            &else_if_node.node,
             ElementNode {
-                starting_tag: StartingTag { tag_name: js_word!("h2"), .. },
+                starting_tag: StartingTag {
+                    tag_name,
+                    ..
+                },
                 ..
-            }
+            } if tag_name == "h2"
         ));
     }
 
@@ -901,11 +894,14 @@ mod tests {
     fn check_else_node(else_node: Option<&Box<ElementNode>>) {
         let else_node = else_node.expect("Must have else node");
         assert!(matches!(
-            **else_node,
+            &**else_node,
             ElementNode {
-                starting_tag: StartingTag { tag_name: js_word!("h3"), .. },
+                starting_tag: StartingTag {
+                    tag_name,
+                    ..
+                },
                 ..
-            }
+            } if tag_name == "h3"
         ));
     }
 

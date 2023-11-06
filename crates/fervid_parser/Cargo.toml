@@ -11,7 +11,7 @@ license = "Apache-2.0"
 
 [dependencies]
 fervid_core = { path = "../fervid_core" }
-swc_core = { version = "0.83.*", features = ["common", "ecma_ast"] }
-swc_ecma_parser = "0.140.*"
-swc_html_ast = "0.32.*"
-swc_html_parser = "0.38.*"
+swc_core = { workspace = true , features = ["common", "ecma_ast"] }
+swc_ecma_parser = { workspace = true }
+swc_html_ast = { workspace = true }
+swc_html_parser = { workspace = true }

@@ -1,5 +1,11 @@
 use fervid_core::OptionsApiBindings;
-use swc_core::{ecma::ast::{Module, ObjectLit, ModuleItem, ModuleDecl, Expr, PropOrSpread, SpreadElement, ExprOrSpread, Callee}, common::DUMMY_SP};
+use swc_core::{
+    common::DUMMY_SP,
+    ecma::ast::{
+        Callee, Expr, ExprOrSpread, Module, ModuleDecl, ModuleItem, ObjectLit, PropOrSpread,
+        SpreadElement,
+    },
+};
 
 use crate::structs::VueResolvedImports;
 
@@ -82,7 +88,9 @@ fn find_default_export_obj(module: &mut Module) -> Option<ObjectLit> {
 
     let item = module.body.remove(idx);
     // TODO What to do with weird default exports?
-    let ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(expr)) = item else { unreachable!() };
+    let ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(expr)) = item else {
+        unreachable!()
+    };
 
     // TODO Unroll paren/seq, unroll `defineComponent` as in `fervid_script`
     let expr = unroll_default_export_expr(*expr.expr);
@@ -115,7 +123,7 @@ fn find_default_export_obj(module: &mut Module) -> Option<ObjectLit> {
 
         // Everything else is invalid and should not be generated
         // TODO It would be better to also emit a hard error here
-        _ => None
+        _ => None,
     }
 }
 
@@ -166,8 +174,8 @@ fn unroll_default_export_expr(mut expr: Expr) -> Expr {
 mod tests {
     use super::*;
     use crate::test_utils::parser::*;
-    use fervid_core::{BindingTypes, SetupBinding};
-    use swc_core::{common::SyntaxContext, ecma::atoms::JsWord};
+    use fervid_core::{BindingTypes, FervidAtom, SetupBinding};
+    use swc_core::common::SyntaxContext;
 
     fn analyze_js(input: &str, opts: AnalyzeOptions) -> ScriptOptionsTransformResult {
         let mut parsed = parse_javascript_module(input, 0, Default::default())
@@ -239,7 +247,8 @@ mod tests {
                             require_default_export: true,
                             ..Default::default()
                         }
-                    ).default_export_obj,
+                    )
+                    .default_export_obj,
                     None
                 );
 
@@ -253,7 +262,8 @@ mod tests {
                             require_default_export: true,
                             ..Default::default()
                         }
-                    ).default_export_obj,
+                    )
+                    .default_export_obj,
                     None
                 )
             };
@@ -280,7 +290,7 @@ mod tests {
     #[test]
     fn it_sees_name() {
         let test_name = OptionsApiBindings {
-            name: Some(JsWord::from("TestComponent")),
+            name: Some(FervidAtom::from("TestComponent")),
             ..Default::default()
         };
 
@@ -308,9 +318,9 @@ mod tests {
             ",
             OptionsApiBindings {
                 components: vec![
-                    JsWord::from("Foo"),
-                    JsWord::from("FooBar"),
-                    JsWord::from("Baz")
+                    FervidAtom::from("Foo"),
+                    FervidAtom::from("FooBar"),
+                    FervidAtom::from("Baz")
                 ],
                 ..Default::default()
             }
@@ -337,10 +347,10 @@ mod tests {
             ",
             OptionsApiBindings {
                 computed: vec![
-                    JsWord::from("foo"),
-                    JsWord::from("bar"),
-                    JsWord::from("lorem"),
-                    JsWord::from("getterSetter")
+                    FervidAtom::from("foo"),
+                    FervidAtom::from("bar"),
+                    FervidAtom::from("lorem"),
+                    FervidAtom::from("getterSetter")
                 ],
                 ..Default::default()
             }
@@ -351,10 +361,10 @@ mod tests {
     fn it_analyzes_data() {
         let expected = OptionsApiBindings {
             data: vec![
-                JsWord::from("foo"),
-                JsWord::from("bar"),
-                JsWord::from("baz"),
-                JsWord::from("qux"),
+                FervidAtom::from("foo"),
+                FervidAtom::from("bar"),
+                FervidAtom::from("baz"),
+                FervidAtom::from("qux"),
             ],
             ..Default::default()
         };
@@ -402,7 +412,7 @@ mod tests {
             }
             ",
             OptionsApiBindings {
-                directives: vec![JsWord::from("foo"), JsWord::from("bar")],
+                directives: vec![FervidAtom::from("foo"), FervidAtom::from("bar")],
                 ..Default::default()
             }
         );
@@ -418,9 +428,9 @@ mod tests {
             "#,
             OptionsApiBindings {
                 emits: vec![
-                    JsWord::from("foo"),
-                    JsWord::from("bar"),
-                    JsWord::from("baz")
+                    FervidAtom::from("foo"),
+                    FervidAtom::from("bar"),
+                    FervidAtom::from("baz")
                 ],
                 ..Default::default()
             }
@@ -433,7 +443,7 @@ mod tests {
             }
             "#,
             OptionsApiBindings {
-                emits: vec![JsWord::from("foo"), JsWord::from("bar")],
+                emits: vec![FervidAtom::from("foo"), FervidAtom::from("bar")],
                 ..Default::default()
             }
         );
@@ -449,9 +459,9 @@ mod tests {
             "#,
             OptionsApiBindings {
                 expose: vec![
-                    JsWord::from("foo"),
-                    JsWord::from("bar"),
-                    JsWord::from("baz")
+                    FervidAtom::from("foo"),
+                    FervidAtom::from("bar"),
+                    FervidAtom::from("baz")
                 ],
                 ..Default::default()
             }
@@ -468,9 +478,9 @@ mod tests {
             "#,
             OptionsApiBindings {
                 inject: vec![
-                    JsWord::from("foo"),
-                    JsWord::from("bar"),
-                    JsWord::from("baz")
+                    FervidAtom::from("foo"),
+                    FervidAtom::from("bar"),
+                    FervidAtom::from("baz")
                 ],
                 ..Default::default()
             }
@@ -483,7 +493,7 @@ mod tests {
             }
             "#,
             OptionsApiBindings {
-                inject: vec![JsWord::from("foo"), JsWord::from("bar")],
+                inject: vec![FervidAtom::from("foo"), FervidAtom::from("bar")],
                 ..Default::default()
             }
         );
@@ -503,7 +513,7 @@ mod tests {
             }
             ",
             OptionsApiBindings {
-                methods: vec![JsWord::from("foo"), JsWord::from("bar")],
+                methods: vec![FervidAtom::from("foo"), FervidAtom::from("bar")],
                 ..Default::default()
             }
         );
@@ -513,9 +523,9 @@ mod tests {
     fn it_analyzes_props() {
         let expected = OptionsApiBindings {
             props: vec![
-                JsWord::from("foo"),
-                JsWord::from("bar"),
-                JsWord::from("baz"),
+                FervidAtom::from("foo"),
+                FervidAtom::from("bar"),
+                FervidAtom::from("baz"),
             ],
             ..Default::default()
         };
@@ -622,10 +632,10 @@ mod tests {
     fn it_analyzes_setup() {
         let expected = OptionsApiBindings {
             setup: vec![
-                SetupBinding(JsWord::from("foo"), BindingTypes::SetupMaybeRef),
-                SetupBinding(JsWord::from("bar"), BindingTypes::SetupMaybeRef),
-                SetupBinding(JsWord::from("baz"), BindingTypes::SetupMaybeRef),
-                SetupBinding(JsWord::from("pi"), BindingTypes::SetupMaybeRef),
+                SetupBinding(FervidAtom::from("foo"), BindingTypes::SetupMaybeRef),
+                SetupBinding(FervidAtom::from("bar"), BindingTypes::SetupMaybeRef),
+                SetupBinding(FervidAtom::from("baz"), BindingTypes::SetupMaybeRef),
+                SetupBinding(FervidAtom::from("pi"), BindingTypes::SetupMaybeRef),
             ],
             ..Default::default()
         };
@@ -759,12 +769,12 @@ mod tests {
         test_js_and_ts!(
             input,
             OptionsApiBindings {
-                props: vec![JsWord::from("foo"), JsWord::from("bar")],
-                data: vec![JsWord::from("hello")],
+                props: vec![FervidAtom::from("foo"), FervidAtom::from("bar")],
+                data: vec![FervidAtom::from("hello")],
                 setup: vec![
-                    SetupBinding(JsWord::from("inputModel"), BindingTypes::SetupMaybeRef),
-                    SetupBinding(JsWord::from("modelValue"), BindingTypes::SetupMaybeRef),
-                    SetupBinding(JsWord::from("list"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(FervidAtom::from("inputModel"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(FervidAtom::from("modelValue"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(FervidAtom::from("list"), BindingTypes::SetupMaybeRef),
                 ],
                 ..Default::default()
             }
@@ -789,9 +799,9 @@ mod tests {
             ",
             OptionsApiBindings {
                 setup: vec![
-                    SetupBinding(JsWord::from("foo"), BindingTypes::SetupRef),
-                    SetupBinding(JsWord::from("bar"), BindingTypes::SetupRef),
-                    SetupBinding(JsWord::from("baz"), BindingTypes::SetupReactiveConst),
+                    SetupBinding(FervidAtom::from("foo"), BindingTypes::SetupRef),
+                    SetupBinding(FervidAtom::from("bar"), BindingTypes::SetupRef),
+                    SetupBinding(FervidAtom::from("baz"), BindingTypes::SetupReactiveConst),
                 ],
                 ..Default::default()
             },
@@ -809,9 +819,9 @@ mod tests {
             ",
             OptionsApiBindings {
                 setup: vec![
-                    SetupBinding(JsWord::from("foo"), BindingTypes::SetupRef),
-                    SetupBinding(JsWord::from("bar"), BindingTypes::SetupRef),
-                    SetupBinding(JsWord::from("baz"), BindingTypes::SetupReactiveConst),
+                    SetupBinding(FervidAtom::from("foo"), BindingTypes::SetupRef),
+                    SetupBinding(FervidAtom::from("bar"), BindingTypes::SetupRef),
+                    SetupBinding(FervidAtom::from("baz"), BindingTypes::SetupReactiveConst),
                 ],
                 ..Default::default()
             },
@@ -831,14 +841,14 @@ mod tests {
             ",
             OptionsApiBindings {
                 setup: vec![
-                    SetupBinding(JsWord::from("foo"), BindingTypes::SetupMaybeRef),
-                    SetupBinding(JsWord::from("bar"), BindingTypes::SetupMaybeRef),
-                    SetupBinding(JsWord::from("baz"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(FervidAtom::from("foo"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(FervidAtom::from("bar"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(FervidAtom::from("baz"), BindingTypes::SetupMaybeRef),
                 ],
                 imports: vec![
-                    (JsWord::from("ref"), SyntaxContext::default()),
-                    (JsWord::from("computed"), SyntaxContext::default()),
-                    (JsWord::from("reactive"), SyntaxContext::default()),
+                    (FervidAtom::from("ref"), SyntaxContext::default()),
+                    (FervidAtom::from("computed"), SyntaxContext::default()),
+                    (FervidAtom::from("reactive"), SyntaxContext::default()),
                 ],
                 ..Default::default()
             },
@@ -862,9 +872,9 @@ mod tests {
             ",
             OptionsApiBindings {
                 setup: vec![
-                    SetupBinding(JsWord::from("foo"), BindingTypes::SetupMaybeRef),
-                    SetupBinding(JsWord::from("baz"), BindingTypes::SetupMaybeRef),
-                    SetupBinding(JsWord::from("qux"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(FervidAtom::from("foo"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(FervidAtom::from("baz"), BindingTypes::SetupMaybeRef),
+                    SetupBinding(FervidAtom::from("qux"), BindingTypes::SetupMaybeRef),
                 ],
 
                 ..Default::default()
@@ -881,7 +891,8 @@ mod tests {
                 export { type default as baz, type qux } from './rest'
                 ",
                 opts
-            ).vars,
+            )
+            .vars,
             OptionsApiBindings::default()
         );
     }

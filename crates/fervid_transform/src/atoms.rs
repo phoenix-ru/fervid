@@ -1,40 +1,40 @@
-//! Helper module to provide commonly used Vue words as static symbols (`JsWord`)
+//! Helper module to provide commonly used Vue words as static symbols (`FervidAtom`)
 
-use swc_core::ecma::atoms::{JsWord, js_word};
+use fervid_core::{fervid_atom, FervidAtom};
 
 lazy_static! {
-    pub static ref VUE: JsWord = JsWord::from("vue");
+    pub static ref VUE: FervidAtom = fervid_atom!("vue");
 
     // Options API atoms
-    pub static ref DATA: JsWord = js_word!("data");
-    pub static ref SETUP: JsWord = JsWord::from("setup");
-    pub static ref PROPS: JsWord = JsWord::from("props");
-    pub static ref COMPUTED: JsWord = JsWord::from("computed");
-    pub static ref INJECT: JsWord = JsWord::from("inject");
-    pub static ref EMITS: JsWord = JsWord::from("emits");
-    pub static ref COMPONENTS: JsWord = JsWord::from("components");
-    pub static ref METHODS: JsWord = JsWord::from("methods");
-    pub static ref EXPOSE: JsWord = JsWord::from("expose");
-    pub static ref NAME: JsWord = js_word!("name");
-    pub static ref DIRECTIVES: JsWord = JsWord::from("directives");
+    pub static ref DATA: FervidAtom = fervid_atom!("data");
+    pub static ref SETUP: FervidAtom = fervid_atom!("setup");
+    pub static ref PROPS: FervidAtom = fervid_atom!("props");
+    pub static ref COMPUTED: FervidAtom = fervid_atom!("computed");
+    pub static ref INJECT: FervidAtom = fervid_atom!("inject");
+    pub static ref EMITS: FervidAtom = fervid_atom!("emits");
+    pub static ref COMPONENTS: FervidAtom = fervid_atom!("components");
+    pub static ref METHODS: FervidAtom = fervid_atom!("methods");
+    pub static ref EXPOSE: FervidAtom = fervid_atom!("expose");
+    pub static ref NAME: FervidAtom = fervid_atom!("name");
+    pub static ref DIRECTIVES: FervidAtom = fervid_atom!("directives");
 
     // Composition API atoms
-    // pub static ref COMPUTED: JsWord = JsWord::from("computed");
-    pub static ref DEFINE_EMITS: JsWord = JsWord::from("defineEmits");
-    pub static ref DEFINE_EXPOSE: JsWord = JsWord::from("defineExpose");
-    pub static ref DEFINE_MODEL: JsWord = JsWord::from("defineModel");
-    pub static ref DEFINE_OPTIONS: JsWord = JsWord::from("defineOptions");
-    pub static ref DEFINE_PROPS: JsWord = JsWord::from("defineProps");
-    pub static ref DEFINE_SLOTS: JsWord = JsWord::from("defineSlots");
-    pub static ref REACTIVE: JsWord = JsWord::from("reactive");
-    pub static ref REF: JsWord = JsWord::from("ref");
+    // pub static ref COMPUTED: FervidAtom = fervid_atom!("computed");
+    pub static ref DEFINE_EMITS: FervidAtom = fervid_atom!("defineEmits");
+    pub static ref DEFINE_EXPOSE: FervidAtom = fervid_atom!("defineExpose");
+    pub static ref DEFINE_MODEL: FervidAtom = fervid_atom!("defineModel");
+    pub static ref DEFINE_OPTIONS: FervidAtom = fervid_atom!("defineOptions");
+    pub static ref DEFINE_PROPS: FervidAtom = fervid_atom!("defineProps");
+    pub static ref DEFINE_SLOTS: FervidAtom = fervid_atom!("defineSlots");
+    pub static ref REACTIVE: FervidAtom = fervid_atom!("reactive");
+    pub static ref REF: FervidAtom = fervid_atom!("ref");
 
     // Helper atoms
-    pub static ref EMIT: JsWord = JsWord::from("emit");
-    pub static ref EMIT_HELPER: JsWord = JsWord::from("__emit");
-    pub static ref EXPOSE_HELPER: JsWord = JsWord::from("__expose");
-    pub static ref MERGE_MODELS_HELPER: JsWord = JsWord::from("_mergeModels");
-    pub static ref MODEL_VALUE: JsWord = JsWord::from("modelValue");
-    pub static ref PROPS_HELPER: JsWord = JsWord::from("__props");
-    pub static ref USE_MODEL_HELPER: JsWord = JsWord::from("_useModel");
+    pub static ref EMIT: FervidAtom = fervid_atom!("emit");
+    pub static ref EMIT_HELPER: FervidAtom = fervid_atom!("__emit");
+    pub static ref EXPOSE_HELPER: FervidAtom = fervid_atom!("__expose");
+    pub static ref MERGE_MODELS_HELPER: FervidAtom = fervid_atom!("_mergeModels");
+    pub static ref MODEL_VALUE: FervidAtom = fervid_atom!("modelValue");
+    pub static ref PROPS_HELPER: FervidAtom = fervid_atom!("__props");
+    pub static ref USE_MODEL_HELPER: FervidAtom = fervid_atom!("_useModel");
 }

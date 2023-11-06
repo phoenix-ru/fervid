@@ -1,9 +1,7 @@
+use fervid_core::fervid_atom;
 use swc_core::{
     common::DUMMY_SP,
-    ecma::{
-        ast::{Expr, Ident, KeyValueProp, Prop, PropName, PropOrSpread},
-        atoms::JsWord,
-    },
+    ecma::ast::{Expr, Ident, KeyValueProp, Prop, PropName, PropOrSpread},
 };
 
 use crate::CodegenContext;
@@ -17,7 +15,7 @@ impl CodegenContext {
         PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
             key: PropName::Ident(Ident {
                 span: DUMMY_SP, // TODO
-                sym: JsWord::from("textContent"),
+                sym: fervid_atom!("textContent"),
                 optional: false,
             }),
             value: Box::new(expr.to_owned()),
@@ -50,12 +48,12 @@ mod tests {
                             op: swc_core::ecma::ast::BinaryOp::Add,
                             left: Box::new(Expr::Ident(Ident {
                                 span: DUMMY_SP,
-                                sym: JsWord::from("foo"),
+                                sym: fervid_atom!("foo"),
                                 optional: false,
                             })),
                             right: Box::new(Expr::Ident(Ident {
                                 span: DUMMY_SP,
-                                sym: JsWord::from("bar"),
+                                sym: fervid_atom!("bar"),
                                 optional: false,
                             })),
                         }))),

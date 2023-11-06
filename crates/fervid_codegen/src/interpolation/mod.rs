@@ -23,7 +23,7 @@ impl CodegenContext {
         //             (
         //                 Box::new(Expr::Lit(Lit::Str(Str {
         //                     span,
-        //                     value: JsWord::from(value),
+        //                     value: FervidAtom::from(value),
         //                     raw: None,
         //                 }))),
         //                 false,

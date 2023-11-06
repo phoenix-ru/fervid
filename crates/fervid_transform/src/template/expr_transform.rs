@@ -297,25 +297,25 @@ pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<JsWord
     if is_inline {
         return match binding_type {
             BindingTypes::Data | BindingTypes::Options | BindingTypes::Unresolved => {
-                Some(JsWord::from("_ctx"))
+                Some(FervidAtom::from("_ctx"))
             }
-            BindingTypes::Props => Some(JsWord::from("__props")),
+            BindingTypes::Props => Some(FervidAtom::from("__props")),
             // TODO This is not correct. The transform implementation must handle `unref`
             _ => None,
         };
     }
 
     match binding_type {
-        BindingTypes::Data => Some(JsWord::from("$data")),
-        BindingTypes::Props => Some(JsWord::from("$props")),
-        BindingTypes::Options => Some(JsWord::from("$options")),
+        BindingTypes::Data => Some(FervidAtom::from("$data")),
+        BindingTypes::Props => Some(FervidAtom::from("$props")),
+        BindingTypes::Options => Some(FervidAtom::from("$options")),
         BindingTypes::TemplateLocal | BindingTypes::JsGlobal | BindingTypes::LiteralConst => None,
         BindingTypes::SetupConst
         | BindingTypes::SetupLet
         | BindingTypes::SetupMaybeRef
         | BindingTypes::SetupReactiveConst
-        | BindingTypes::SetupRef => Some(JsWord::from("$setup")),
-        BindingTypes::Unresolved => Some(JsWord::from("_ctx")),
+        | BindingTypes::SetupRef => Some(FervidAtom::from("$setup")),
+        BindingTypes::Unresolved => Some(FervidAtom::from("_ctx")),
         BindingTypes::PropsAliased => unimplemented!(),
     }
 }
@@ -323,9 +323,8 @@ pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<JsWord
 #[cfg(test)]
 mod tests {
     use crate::template::{expr_transform::BindingsHelperTransform, js_builtins::JS_BUILTINS};
-    use fervid_core::{BindingTypes, BindingsHelper, TemplateGenerationMode, TemplateScope};
+    use fervid_core::{BindingTypes, BindingsHelper, TemplateGenerationMode, TemplateScope, FervidAtom};
     use smallvec::SmallVec;
-    use swc_core::ecma::atoms::JsWord;
 
     #[test]
     fn it_acknowledges_builtins() {
@@ -350,28 +349,28 @@ mod tests {
 
     #[test]
     fn it_works_with_template_scope_hierarchy() {
-        let v_root = JsWord::from("root");
+        let v_root = FervidAtom::from("root");
         let root_scope = TemplateScope {
             parent: 0,
             variables: SmallVec::from([v_root.to_owned()]),
         };
 
-        let v_child1 = JsWord::from("child1");
-        let v_child2 = JsWord::from("child2");
+        let v_child1 = FervidAtom::from("child1");
+        let v_child2 = FervidAtom::from("child2");
         let child_scope = TemplateScope {
             parent: 0,
             variables: SmallVec::from_vec(vec![v_child1.to_owned(), v_child2.to_owned()]),
         };
 
-        let v_grand1_1 = JsWord::from("grand1_1");
-        let v_grand1_2 = JsWord::from("grand1_2");
+        let v_grand1_1 = FervidAtom::from("grand1_1");
+        let v_grand1_2 = FervidAtom::from("grand1_2");
         let grandchild1_scope = TemplateScope {
             parent: 1,
             variables: SmallVec::from_vec(vec![v_grand1_1.to_owned(), v_grand1_2.to_owned()]),
         };
 
-        let v_grand2_1 = JsWord::from("grand2_1");
-        let v_grand2_2 = JsWord::from("grand2_2");
+        let v_grand2_1 = FervidAtom::from("grand2_1");
+        let v_grand2_2 = FervidAtom::from("grand2_2");
         let grandchild2_scope = TemplateScope {
             parent: 1,
             variables: SmallVec::from_vec(vec![v_grand2_1.to_owned(), v_grand2_2.to_owned()]),
