@@ -29,16 +29,33 @@ Please note that "correctness" of output will depend on the version of Vue, as V
 ## Is it fast?
 Yes, it is incredibly fast. In fact, below are the parsing/compilation times benchmarked for a [test component](crates/fervid/benches/fixtures/input.vue).
 
+```
+  @vue/compiler-sfc:
+    1 644 ops/s, ±0.78%   | slowest, 97.2% slower
+
+  @fervid/napi sync:
+    6 240 ops/s, ±0.44%   | 89.36% slower
+
+  @fervid/napi async (4 threads):
+    12 856 ops/s, ±1.53%  | 78.08% slower
+
+  @fervid/napi async CPUS (23 threads):
+    58 650 ops/s, ±1.25%  | fastest
+```
+
+<!-- 
 | Action                     | Mean time    |
 |----------------------------|--------------|
 | Parsing                    | 5.58µs       |
-| Code generation: CSR + DEV | 16.26µs      |
+| Code generation: CSR + DEV | 16.26µs      | -->
 
-> Note: results are for AMD Ryzen 9 5900HX running on Fedora 37 with kernel version 6.1.6
+> Note: results are for AMD Ryzen 9 7900X running on Fedora 38 with kernel version 6.5.9
 
-Micro-benchmarking has been done using Criterion, code for benchmarks can be found in `benches` directory.
+<!-- Micro-benchmarking has been done using Criterion, code for benchmarks can be found in `benches` directory. -->
+Benchmarking in Node.js has been done using [`benny`](https://github.com/caderek/benny), slightly modified to take `libuv` threads into consideration.
+[Source code for a benchmark](crates/fervid_napi/benchmark/bench.ts).
 
-Actual benchmarking is a TODO and has much lower priority compared to feature-completeness and usability in real-world scenarios, so **Pull Requests are welcome**.
+Better benchmarking is a TODO and has a lower priority compared to feature-completeness and usability in real-world scenarios, so **Pull Requests are welcome**.
 
 ## Crates
 
