@@ -16,28 +16,44 @@ use crate::{
     structs::{SfcDefineModel, SfcExportedObjectHelper},
 };
 
+pub enum TransformMacroResult {
+    NotAMacro,
+    ValidMacro(Option<Box<Expr>>)
+}
+
 /// Tries to transform a Vue compiler macro.\
 /// When `is_var_decl` is `true`, this function is guaranteed to return an `Expr`.
 /// In case the macro transform does not return anything, an `Expr` containing `undefined` is returned instead.
 ///
 /// See https://vuejs.org/api/sfc-script-setup.html#defineprops-defineemits
 pub fn transform_script_setup_macro_expr(
-    expr: Expr,
+    expr: &Expr,
     bindings_helper: &mut BindingsHelper,
     sfc_object_helper: &mut SfcExportedObjectHelper,
     is_var_decl: bool,
-) -> Option<Expr> {
+) -> TransformMacroResult {
     // `defineExpose` and `defineModel` actually generate something
     // https://play.vuejs.org/#eNp9kE1LxDAQhv/KmEtXWOphb8sqqBRU8AMVveRS2mnNmiYhk66F0v/uJGVXD8ueEt7nTfJkRnHtXL7rUazFhiqvXADC0LsraVTnrA8wgscGJmi87SDjaiaNNJU1FKCjFi4jX2R3qLWFT+t1fZadx0qNjTJYDM4SLsbUnRjM8aOtUS+yLi4fpeZbGW0uZgV+XCxFIH6kUW2+JWvYb5QGQIrKdk5p9M8uKJaQYg2JRFayw89DyoLvcbnPqy+svo/kWxpiJsWLR0K/QykOLJS+xTDj4u0JB94fIHv3mtsn4CuS1X10nGs3valZ+18v2d6nKSvTvlMxBDS0/1QUjc0p9aXgyd+e+Pqf7ipfpXPSTGL6BRH3n+Q=
 
+    /// Signify that this is not a macro
     macro_rules! bail {
         () => {
-            return Some(expr);
+            return TransformMacroResult::NotAMacro;
+        };
+    }
+
+    /// Signify that macro is valid.
+    /// Value provided is the substitution that will be made instead of a macro call expression.
+    /// `None` means macro does not produce code in-place, e.g. `defineOptions(/*...*/)` produces nothing.
+    macro_rules! valid_macro {
+        // TODO Handle `None` + `is_var_decl == true` case because it clears var declaration RHS (init expr).
+        ($return_value: expr) => {
+            TransformMacroResult::ValidMacro($return_value)
         };
     }
 
     // Script setup macros are calls
-    let Expr::Call(ref call_expr) = expr else {
+    let Expr::Call(ref call_expr) = *expr else {
         bail!();
     };
 
@@ -67,13 +83,13 @@ pub fn transform_script_setup_macro_expr(
         if is_var_decl {
             sfc_object_helper.is_setup_props_referenced = true;
 
-            Some(Expr::Ident(Ident {
+            valid_macro!(Some(Box::new(Expr::Ident(Ident {
                 span,
                 sym: PROPS_HELPER.to_owned(),
                 optional: false,
-            }))
+            }))))
         } else {
-            None
+            valid_macro!(None)
         }
     } else if DEFINE_EMITS.eq(sym) {
         if let Some(arg0) = &call_expr.args.get(0) {
@@ -84,13 +100,13 @@ pub fn transform_script_setup_macro_expr(
         if is_var_decl {
             sfc_object_helper.is_setup_emit_referenced = true;
 
-            Some(Expr::Ident(Ident {
+            valid_macro!(Some(Box::new(Expr::Ident(Ident {
                 span,
                 sym: EMIT_HELPER.to_owned(),
                 optional: false,
-            }))
+            }))))
         } else {
-            None
+            valid_macro!(None)
         }
     } else if DEFINE_EXPOSE.eq(sym) {
         sfc_object_helper.is_setup_expose_referenced = true;
@@ -103,12 +119,12 @@ pub fn transform_script_setup_macro_expr(
         };
 
         // __expose(%call_expr.args%)
-        Some(Expr::Call(CallExpr {
+        valid_macro!(Some(Box::new(Expr::Call(CallExpr {
             span,
             callee: Callee::Expr(Box::new(Expr::Ident(new_callee_ident))),
             args: call_expr.args.to_owned(),
             type_args: None,
-        }))
+        }))))
     } else if DEFINE_MODEL.eq(sym) {
         let define_model = read_define_model(&call_expr.args);
 
@@ -168,12 +184,12 @@ pub fn transform_script_setup_macro_expr(
         sfc_object_helper.models.push(define_model);
 
         // _useModel(__props, "model-name", %model options%)
-        Some(Expr::Call(CallExpr {
+        valid_macro!(Some(Box::new(Expr::Call(CallExpr {
             span,
             callee: Callee::Expr(Box::new(Expr::Ident(use_model_ident))),
             args: use_model_args,
             type_args: None,
-        }))
+        }))))
     } else if DEFINE_SLOTS.eq(sym) {
         // Without a variable to bind to this macro means nothing
         if !is_var_decl {
@@ -192,20 +208,21 @@ pub fn transform_script_setup_macro_expr(
         // TODO Integrate closer with `categorize_var_declarator`
 
         // _useSlots()
-        Some(Expr::Call(CallExpr {
+        valid_macro!(Some(Box::new(Expr::Call(CallExpr {
             span,
             callee: Callee::Expr(Box::new(Expr::Ident(use_slots_ident))),
             args: vec![],
             type_args: None,
-        }))
+        }))))
     } else if DEFINE_OPTIONS.eq(sym) {
         // A variable is not a correct usage
         if is_var_decl {
             bail!();
         }
 
+        // `defineOptions()` without arguments
         let Some(ExprOrSpread { spread: None, expr }) = call_expr.args.get(0) else {
-            return None;
+            return valid_macro!(None);
         };
 
         // Try to take out object, otherwise just use spread
@@ -216,7 +233,7 @@ pub fn transform_script_setup_macro_expr(
                     expr: expr.to_owned(),
                 },
             ));
-            return None;
+            return valid_macro!(None);
         };
 
         // Copy the fields
@@ -224,7 +241,7 @@ pub fn transform_script_setup_macro_expr(
             .untyped_fields
             .extend(options_object.props.iter().cloned());
 
-        None
+        valid_macro!(None)
     } else {
         bail!();
     }

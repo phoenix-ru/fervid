@@ -1,7 +1,7 @@
 use fervid_core::{BindingTypes, SetupBinding};
-use swc_core::ecma::ast::{ClassDecl, FnDecl, VarDeclarator, Pat, Expr, Callee, ObjectPatProp, RestPat};
+use swc_core::ecma::ast::{Callee, ClassDecl, Expr, FnDecl, ObjectPatProp, Pat, RestPat};
 
-use crate::{structs::VueResolvedImports, script::utils::unroll_paren_seq};
+use crate::{script::utils::unroll_paren_seq, structs::VueResolvedImports};
 
 /// Javascript class declaration is always constant.
 /// ```js
@@ -23,11 +23,11 @@ pub fn categorize_fn_decl(fn_decl: &FnDecl) -> SetupBinding {
     SetupBinding(fn_decl.ident.sym.to_owned(), BindingTypes::SetupConst)
 }
 
-/// Collects the identifiers from `foo = 42` and `bar = 'baz'` separately in `const foo = 42, bar = 'baz'`.
+/// Categorizes the binding type of an expression (typically RHS).
+/// This is specifically made separate from `<script setup>` macros,
+/// in order to also work in Options API context.
 ///
-/// Categorizes `var`/`let`/`const` declaration block
-/// which may include multiple variables.
-/// Categorization strongly depends on the previously analyzed `vue_imports`.
+/// Categorization strongly depends on the previously analyzed `vue_user_imports`.
 ///
 /// ## Examples
 /// ```js
@@ -40,47 +40,16 @@ pub fn categorize_fn_decl(fn_decl: &FnDecl) -> SetupBinding {
 ///     baz = computed(() => 3),        // BindingTypes::SetupRef
 ///     qux = reactive({ x: 4 }),       // BindingTypes::SetupReactiveConst
 /// ```
-pub fn categorize_var_declarator(
-    var_decl: &VarDeclarator,
-    out: &mut Vec<SetupBinding>,
-    vue_imports: &VueResolvedImports,
-    is_const: bool,
-) {
-    // Handle destructures separately. Rest of this function does not care about them.
-    let Pat::Ident(ref decl_ident) = var_decl.name else {
-        collect_destructure(&var_decl.name, out, is_const);
-        return;
-    };
+pub fn categorize_expr(
+    expr: &Expr,
+    vue_user_imports: &VueResolvedImports,
+    is_await_used: &mut bool,
+) -> BindingTypes {
+    // Unroll an expression from all possible parenthesis and commas,
+    // e.g. `(foo, bar)` -> `bar`
+    let expr = unroll_paren_seq(expr);
 
-    // TODO This needs to be separate for Options API and for Composition API
-    // Collecting variables is one thing (destructure is also different, TODO there we need to care about `toRefs`)
-    // Figuring out `initExpr` is different, it can be linked later, because we may not have a variable to bind to in some cases.
-    // So, in short, I should write an `initExpr` recognizer+transformer for Composition API (with macros support),
-    // and also write a function which understands `VarDeclarator`, and only then write a glue function which combines results of both,
-    // this glue function must be different across setup/non-setup.
-
-    macro_rules! push {
-        ($typ: expr) => {
-            out.push(SetupBinding(decl_ident.sym.to_owned(), $typ))
-        };
-    }
-
-    // For `let` and `var` type is always BindingTypes::SetupLet
-    if !is_const {
-        push!(BindingTypes::SetupLet);
-        return;
-    }
-
-    // If no init expr, that means this is not a const anyways
-    // `let tmp;` is valid, but `const tmp;` is not
-    let Some(ref init_expr) = var_decl.init else {
-        push!(BindingTypes::SetupLet);
-        return;
-    };
-
-    let init_expr = unroll_paren_seq(init_expr);
-
-    match init_expr {
+    match expr {
         // We only support Vue's function calls.
         // If this is not a Vue function, it is either SetupMaybeRef or SetupLet
         Expr::Call(call_expr) => {
@@ -94,67 +63,112 @@ pub fn categorize_var_declarator(
                     // Use PartialEq on Option<Id> for convenience
                     let callee_ident_option = Some(callee_ident.to_id());
 
-                    if callee_ident_option == vue_imports.ref_import {
-                        push!(BindingTypes::SetupRef)
-                    } else if callee_ident_option == vue_imports.computed {
-                        push!(BindingTypes::SetupRef)
-                    } else if callee_ident_option == vue_imports.reactive {
-                        push!(BindingTypes::SetupReactiveConst)
+                    if callee_ident_option == vue_user_imports.ref_import {
+                        BindingTypes::SetupRef
+                    } else if callee_ident_option == vue_user_imports.computed {
+                        BindingTypes::SetupRef
+                    } else if callee_ident_option == vue_user_imports.reactive {
+                        BindingTypes::SetupReactiveConst
                     } else {
-                        push!(BindingTypes::SetupMaybeRef)
+                        BindingTypes::SetupMaybeRef
                     }
                 }
 
                 // This is something unsupported, just add a MaybeRef binding
-                _ => {
-                    push!(BindingTypes::SetupMaybeRef);
-                    return;
-                }
+                _ => BindingTypes::SetupMaybeRef,
             }
-        },
+        }
+
+        Expr::Await(await_expr) => {
+            *is_await_used = true; // only first-level await is recognized
+            categorize_expr(&await_expr.arg, vue_user_imports, is_await_used)
+        }
 
         // MaybeRef binding
-        // Expr::Await(_) => todo!(),
-        Expr::Ident(_) => {
-            push!(BindingTypes::SetupMaybeRef);
+        Expr::Ident(_) | Expr::Cond(_) | Expr::Member(_) | Expr::OptChain(_) | Expr::Assign(_) => {
+            BindingTypes::SetupMaybeRef
+        }
+
+        //
+        // TS expressions
+        //
+        Expr::TsTypeAssertion(type_assertion_expr) => {
+            categorize_expr(&type_assertion_expr.expr, vue_user_imports, is_await_used)
+        }
+
+        Expr::TsConstAssertion(const_assertion_expr) => {
+            categorize_expr(&const_assertion_expr.expr, vue_user_imports, is_await_used)
+        }
+
+        Expr::TsNonNull(non_null_expr) => {
+            categorize_expr(&non_null_expr.expr, vue_user_imports, is_await_used)
+        }
+
+        Expr::TsInstantiation(instantiation_expr) => {
+            categorize_expr(&instantiation_expr.expr, vue_user_imports, is_await_used)
+        }
+
+        Expr::TsAs(as_expr) => categorize_expr(&as_expr.expr, vue_user_imports, is_await_used),
+
+        Expr::TsSatisfies(satisfies_expr) => {
+            categorize_expr(&satisfies_expr.expr, vue_user_imports, is_await_used)
         }
 
         // The other variants are never refs
-        _ => {
-            push!(BindingTypes::SetupConst)
-        }
-
-        // Idk what to do with these
-        // Expr::TsTypeAssertion(_) => todo!(),
-        // Expr::TsConstAssertion(_) => todo!(),
-        // Expr::TsNonNull(_) => todo!(),
-        // Expr::TsAs(_) => todo!(),
-        // Expr::TsInstantiation(_) => todo!(),
-        // Expr::TsSatisfies(_) => todo!(),
+        // TODO Write tests and check difficult cases, there would be exceptions
+        _ => BindingTypes::SetupConst,
     }
 }
 
-/// Collects the destructures, e.g. `foo` in `const { foo = 123 } = {}` or `bar` in `let [bar] = [123]`
-fn collect_destructure(dest: &Pat, out: &mut Vec<SetupBinding>, is_const: bool) {
-    match dest {
+/// Enriches binding types with additional information obtained from analyzing RHS
+#[inline]
+pub fn enrich_binding_types(
+    collected_bindings: &mut Vec<SetupBinding>,
+    rhs_type: BindingTypes,
+    is_const: bool,
+    is_ident: bool,
+) {
+    // Skip work when it is not an identifier or a constant (these are good already).
+    // This check is needed to ensure consumers don't accidentally call a function
+    // and overwrite good values.
+    if !is_const || !is_ident {
+        return;
+    }
+
+    for binding in collected_bindings.iter_mut() {
+        binding.1 = rhs_type;
+    }
+}
+
+/// Extracts the variables from the declarator, e.g.
+/// - `foo = 'bar'` -> `foo`;
+/// - `{ baz, qux }` -> `baz`, `qux`.
+///
+/// This also suggests possible binding types `SetupMaybeRef` and `SetupLet`.
+/// The suggestions are not final, as this function does not know about the RHS of a variable declaration.
+pub fn extract_variables_from_pat(pat: &Pat, out: &mut Vec<SetupBinding>, is_const: bool) {
+    match pat {
         // Base case for recursion
-        Pat::Ident(ident) => out.push(SetupBinding(
-            ident.sym.to_owned(),
-            if is_const {
+        // Idents are easy to collect
+        Pat::Ident(ref decl_ident) => {
+            let binding_type = if is_const {
                 BindingTypes::SetupMaybeRef
             } else {
                 BindingTypes::SetupLet
-            },
-        )),
+            };
+
+            out.push(SetupBinding(decl_ident.sym.to_owned(), binding_type));
+        }
+
+        // The rest of the function collects the destructures,
+        // e.g. `foo` in `const { foo = 123 } = {}` or `bar` in `let [bar] = [123]`
 
         // `[foo, bar]` in `const [foo, bar] = []
         Pat::Array(arr_destr) => {
             for arr_destr_elem in arr_destr.elems.iter() {
-                let Some(arr_destr_elem) = arr_destr_elem else {
-                    continue;
-                };
-
-                collect_destructure(arr_destr_elem, out, is_const)
+                if let Some(pat) = arr_destr_elem {
+                    extract_variables_from_pat(pat, out, is_const);
+                }
             }
         }
 
@@ -167,7 +181,7 @@ fn collect_destructure(dest: &Pat, out: &mut Vec<SetupBinding>, is_const: bool) 
                 match obj_destr_prop {
                     // `foo: bar` in `const { foo: bar } = {}`
                     ObjectPatProp::KeyValue(key_val_destr) => {
-                        collect_destructure(&key_val_destr.value, out, is_const)
+                        extract_variables_from_pat(&key_val_destr.value, out, is_const);
                     }
 
                     // `foo` in `const { foo } = {}` and in `const { foo = 'bar' } = {}`
@@ -186,7 +200,9 @@ fn collect_destructure(dest: &Pat, out: &mut Vec<SetupBinding>, is_const: bool) 
             }
         }
 
-        Pat::Assign(assign_destr) => collect_destructure(&assign_destr.left, out, is_const),
+        Pat::Assign(assign_destr) => {
+            extract_variables_from_pat(&assign_destr.left, out, is_const);
+        }
 
         Pat::Invalid(_) | Pat::Expr(_) => {}
     }
@@ -196,10 +212,8 @@ fn collect_destructure(dest: &Pat, out: &mut Vec<SetupBinding>, is_const: bool) 
 fn collect_rest_pat(rest_pat: &RestPat, out: &mut Vec<SetupBinding>) {
     // Only `...ident` is supported.
     // Current Vue js compiler has a bug, it returns `undefined` for `...[bar]`
-    let Some(ident) = rest_pat.arg.as_ident() else {
-        return;
+    if let Some(ident) = rest_pat.arg.as_ident() {
+        // Binding type is always `SetupConst` because of the nature of rest operator
+        out.push(SetupBinding(ident.sym.to_owned(), BindingTypes::SetupConst))
     };
-
-    // Binding type is always `SetupConst` because of the nature of rest operator
-    out.push(SetupBinding(ident.sym.to_owned(), BindingTypes::SetupConst))
 }

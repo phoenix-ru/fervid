@@ -10,7 +10,10 @@ use swc_core::ecma::{
 use crate::{
     atoms::*,
     script::{
-        common::{categorize_class, categorize_fn_decl, categorize_var_declarator},
+        common::{
+            categorize_class, categorize_expr, categorize_fn_decl, enrich_binding_types,
+            extract_variables_from_pat,
+        },
         setup::collect_imports,
         utils::get_string_tpl,
     },
@@ -23,7 +26,7 @@ use super::{
     data::{collect_data_bindings_block_stmt, collect_data_bindings_expr},
     directives::collect_directives_object,
     emits::{collect_emits_bindings_array, collect_emits_bindings_object},
-    exports::{collect_exports_decl, collect_exports_named},
+    exports::collect_exports_named,
     expose::collect_expose_bindings_array,
     inject::{collect_inject_bindings_array, collect_inject_bindings_object},
     methods::collect_methods_object,
@@ -90,6 +93,8 @@ pub fn analyze_top_level_items(
     out: &mut OptionsApiBindings,
     vue_imports: &mut VueResolvedImports,
 ) {
+    let mut is_await_used = false; // ignored
+
     for module_item in module.body.iter() {
         match *module_item {
             ModuleItem::ModuleDecl(ref module_decl) => {
@@ -102,8 +107,14 @@ pub fn analyze_top_level_items(
                         collect_exports_named(named_exports, &mut out.setup)
                     }
 
+                    // Collects an export from e.g. `export function foo() {}` or `export const bar = 'baz'`
                     ModuleDecl::ExportDecl(ref export_decl) => {
-                        collect_exports_decl(export_decl, &mut out.setup, vue_imports)
+                        analyze_top_level_decl(
+                            &export_decl.decl,
+                            &mut out.setup,
+                            vue_imports,
+                            &mut is_await_used,
+                        );
                     }
 
                     // Other types are ignored (ModuleDecl::Export* and ModuleDecl::Ts*)
@@ -111,23 +122,26 @@ pub fn analyze_top_level_items(
                 }
             }
 
-            ModuleItem::Stmt(ref stmt) => match stmt {
-                Stmt::Decl(decl) => {
-                    analyze_decl(decl, &mut out.setup, vue_imports);
-                }
+            ModuleItem::Stmt(Stmt::Decl(ref decl)) => {
+                analyze_top_level_decl(decl, &mut out.setup, vue_imports, &mut is_await_used);
+            }
 
-                _ => {}
-            },
+            _ => {}
         }
     }
 }
 
 /// Analyzes the declaration in Options API top-level context.
 /// These are typically `var`/`let`/`const` declarations, function declarations, etc.
-pub fn analyze_decl(
+///
+/// Because this function is always called in a dual-script context,
+/// i.e. when both `<script>` and `<script setup>` are present,
+/// it will use the same analysis as in `<script setup>` except for macros.
+fn analyze_top_level_decl(
     decl: &Decl,
     out: &mut Vec<SetupBinding>,
-    vue_imports: &mut VueResolvedImports,
+    vue_user_imports: &mut VueResolvedImports,
+    is_await_used: &mut bool,
 ) {
     match decl {
         Decl::Class(class) => out.push(categorize_class(class)),
@@ -137,8 +151,27 @@ pub fn analyze_decl(
         Decl::Var(var_decl) => {
             let is_const = matches!(var_decl.kind, VarDeclKind::Const);
 
-            for decl in var_decl.decls.iter() {
-                categorize_var_declarator(&decl, out, vue_imports, is_const);
+            // Collected bindings cache
+            let mut collected_bindings = Vec::<SetupBinding>::with_capacity(2);
+
+            for var_declarator in var_decl.decls.iter() {
+                // LHS is just an identifier, e.g. in `const foo = 'bar'`
+                let is_ident = var_declarator.name.is_ident();
+
+                extract_variables_from_pat(&var_declarator.name, &mut collected_bindings, is_const);
+
+                // Process RHS
+                if is_const && is_ident {
+                    if let Some(ref init_expr) = var_declarator.init {
+                        // Resolve only when this is a constant identifier.
+                        // For destructures correct bindings are already assigned.
+                        let rhs_type = categorize_expr(init_expr, vue_user_imports, is_await_used);
+
+                        enrich_binding_types(&mut collected_bindings, rhs_type, is_const, is_ident);
+                    }
+                }
+
+                out.extend(collected_bindings.drain(..));
             }
         }
 

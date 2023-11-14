@@ -21,6 +21,8 @@ pub struct SfcDefineModel {
 pub struct SfcExportedObjectHelper {
     /// `emits` property
     pub emits: Option<Box<Expr>>,
+    /// Should `async setup` be generated (when `await` was used)
+    pub is_async_setup: bool,
     /// Whether `__emit` was referenced (e.g. as a result of `const foo = defineEmits()`)
     pub is_setup_emit_referenced: bool,
     /// Whether `__expose` was referenced (e.g. as a result of `defineExpose()`)

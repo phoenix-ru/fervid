@@ -27,7 +27,7 @@ To check correctness of fervid, you can compare the [run log](run.log) to the ou
 Please note that "correctness" of output will depend on the version of Vue, as Vue team may change the output and/or behaviour of the compiler. This is a big challenge for fervid.
 
 ## Is it fast?
-Yes, it is incredibly fast. In fact, below are the parsing/compilation times benchmarked for a [test component](crates/fervid/benches/fixtures/input.vue).
+Yes, it is incredibly fast. In fact, below is a benchmark run for a [test component](crates/fervid/benches/fixtures/input.vue).
 
 ```
   @vue/compiler-sfc:

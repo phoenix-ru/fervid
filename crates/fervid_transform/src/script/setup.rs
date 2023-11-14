@@ -1,25 +1,31 @@
-use fervid_core::{BindingsHelper, SfcScriptBlock};
+use fervid_core::{BindingTypes, BindingsHelper, SetupBinding, SfcScriptBlock};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
-        BindingIdent, BlockStmt, Function, Id, Ident, KeyValuePatProp, KeyValueProp, ModuleDecl,
-        ModuleItem, ObjectPat, ObjectPatProp, Param, Pat, Prop, PropName, PropOrSpread, Stmt,
+        BindingIdent, BlockStmt, Decl, ExprStmt, Function, Id, Ident, KeyValuePatProp,
+        KeyValueProp, ModuleDecl, ModuleItem, ObjectPat, ObjectPatProp, Param, Pat, Prop, PropName,
+        PropOrSpread, Stmt, VarDeclKind,
     },
 };
 
 use crate::{
     atoms::{EMIT, EMITS, EMIT_HELPER, EXPOSE, EXPOSE_HELPER, PROPS, PROPS_HELPER},
+    script::{
+        common::{
+            categorize_class, categorize_expr, categorize_fn_decl, enrich_binding_types,
+            extract_variables_from_pat,
+        },
+        setup::macros::TransformMacroResult,
+    },
     structs::{SfcExportedObjectHelper, VueResolvedImports},
 };
 
 mod imports;
 mod macros;
-mod statements;
 
 pub use imports::*;
-pub use statements::*;
 
-use self::macros::postprocess_macros;
+use self::macros::{postprocess_macros, transform_script_setup_macro_expr};
 
 pub struct TransformScriptSetupResult {
     /// All the imports (and maybe exports) of the `<script setup>`
@@ -30,6 +36,7 @@ pub struct TransformScriptSetupResult {
     pub setup_fn: Option<Box<Function>>,
 }
 
+/// Transforms the `<script setup>` block and records its bindings
 pub fn transform_and_record_script_setup(
     script_setup: SfcScriptBlock,
     bindings_helper: &mut BindingsHelper,
@@ -57,12 +64,43 @@ pub fn transform_and_record_script_setup(
             }
 
             ModuleItem::Stmt(stmt) => {
-                if let Some(transformed_stmt) = transform_and_record_stmt(
-                    stmt,
-                    bindings_helper,
-                    &vue_user_imports,
-                    &mut sfc_object_helper,
-                ) {
+                let transformed = match stmt {
+                    Stmt::Expr(expr_stmt) => {
+                        let span = expr_stmt.span;
+
+                        let transform_macro_result = transform_script_setup_macro_expr(
+                            &expr_stmt.expr,
+                            bindings_helper,
+                            &mut sfc_object_helper,
+                            false,
+                        );
+
+                        match transform_macro_result {
+                            TransformMacroResult::ValidMacro(transformed_expr) => {
+                                // A macro may overwrite the statement
+                                transformed_expr.map(|expr| Stmt::Expr(ExprStmt { span, expr }))
+                            }
+
+                            TransformMacroResult::NotAMacro => {
+                                // No analysis necessary, return the same statement
+                                Some(Stmt::Expr(expr_stmt))
+                            }
+                        }
+                    }
+
+                    Stmt::Decl(decl) => transform_decl_stmt(
+                        decl,
+                        bindings_helper,
+                        &vue_user_imports,
+                        &mut sfc_object_helper,
+                    )
+                    .map(Stmt::Decl),
+
+                    // By default, just return the same statement
+                    _ => Some(stmt),
+                };
+
+                if let Some(transformed_stmt) = transformed {
                     setup_body_stmts.push(transformed_stmt);
                 }
             }
@@ -82,7 +120,7 @@ pub fn transform_and_record_script_setup(
             stmts: setup_body_stmts,
         }),
         is_generator: false,
-        is_async: false, // TODO
+        is_async: sfc_object_helper.is_async_setup,
         type_params: None,
         return_type: None,
     }));
@@ -91,6 +129,97 @@ pub fn transform_and_record_script_setup(
         module_decls,
         sfc_object_helper,
         setup_fn,
+    }
+}
+
+/// Analyzes the declaration in `script setup` context.
+/// These are typically `var`/`let`/`const` declarations, function declarations, etc.
+fn transform_decl_stmt(
+    decl: Decl,
+    bindings_helper: &mut BindingsHelper,
+    vue_user_imports: &VueResolvedImports,
+    sfc_object_helper: &mut SfcExportedObjectHelper,
+) -> Option<Decl> {
+    /// Pushes the binding type and returns the same passed `Decl`
+    macro_rules! push_return {
+        ($binding: expr) => {
+            bindings_helper.setup_bindings.push($binding);
+            // By default, just return the same declaration
+            return Some(decl);
+        };
+    }
+
+    match decl {
+        Decl::Class(ref class) => {
+            push_return!(categorize_class(class));
+        }
+
+        Decl::Fn(ref fn_decl) => {
+            push_return!(categorize_fn_decl(fn_decl));
+        }
+
+        Decl::Var(mut var_decl) => {
+            let is_const = matches!(var_decl.kind, VarDeclKind::Const);
+
+            // Collected bindings cache
+            let mut collected_bindings = Vec::<SetupBinding>::with_capacity(2);
+
+            for var_declarator in var_decl.as_mut().decls.iter_mut() {
+                // LHS is just an identifier, e.g. in `const foo = 'bar'`
+                let is_ident = var_declarator.name.is_ident();
+
+                // Extract all the variables from the LHS (these are mostly suggestions)
+                extract_variables_from_pat(&var_declarator.name, &mut collected_bindings, is_const);
+
+                // Process RHS
+                if let Some(ref init_expr) = var_declarator.init {
+                    let transform_macro_result = transform_script_setup_macro_expr(
+                        init_expr,
+                        bindings_helper,
+                        sfc_object_helper,
+                        true,
+                    );
+
+                    if let TransformMacroResult::ValidMacro(transformed_expr) =
+                        transform_macro_result
+                    {
+                        // Macros always overwrite the RHS
+                        var_declarator.init = transformed_expr;
+                    } else if is_const && is_ident {
+                        // Resolve only when this is a constant identifier.
+                        // For destructures correct bindings are already assigned.
+                        let rhs_type = categorize_expr(
+                            init_expr,
+                            vue_user_imports,
+                            &mut sfc_object_helper.is_async_setup,
+                        );
+
+                        enrich_binding_types(&mut collected_bindings, rhs_type, is_const, is_ident);
+                    }
+                }
+
+                bindings_helper
+                    .setup_bindings
+                    .extend(collected_bindings.drain(..));
+            }
+
+            Some(Decl::Var(var_decl))
+        }
+
+        Decl::TsEnum(ref ts_enum) => {
+            // Ambient enums are also included, this is intentional
+            // I am not sure about `const enum`s though
+            push_return!(SetupBinding(
+                ts_enum.id.sym.to_owned(),
+                BindingTypes::LiteralConst,
+            ));
+        }
+
+        // TODO: What?
+        // Decl::TsInterface(_) => todo!(),
+        // Decl::TsTypeAlias(_) => todo!(),
+        // Decl::TsModule(_) => todo!(),
+        _ => Some(decl),
     }
 }
 
@@ -188,7 +317,7 @@ fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param
 #[cfg(test)]
 mod tests {
     use crate::test_utils::parser::*;
-    use fervid_core::{BindingTypes, SfcScriptBlock, SetupBinding, BindingsHelper, FervidAtom};
+    use fervid_core::{BindingTypes, BindingsHelper, FervidAtom, SetupBinding, SfcScriptBlock};
 
     use super::transform_and_record_script_setup;
 
