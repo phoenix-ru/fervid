@@ -3,9 +3,10 @@ import * as monaco from 'https://cdn.jsdelivr.net/npm/monaco-editor@0.41.0/esm/v
 
 const INITIAL =
     `<template>
-    <div>
+    <h1>
         Hello {{ name }}!
-    </div>
+    </h1>
+    <input v-model="name">
 </template>
 
 <script setup>
