@@ -251,11 +251,7 @@ impl CodegenContext {
         if let Some(ref directives) = component_node.starting_tag.directives {
             // `v-model`s
             for v_model in directives.v_model.iter() {
-                self.generate_v_model_for_component(
-                    v_model,
-                    &mut result_props,
-                    component_node.template_scope,
-                );
+                self.generate_v_model_for_component(v_model, &mut result_props);
             }
 
             // Process `v-text`

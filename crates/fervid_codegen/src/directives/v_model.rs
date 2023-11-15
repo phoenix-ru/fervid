@@ -2,9 +2,8 @@ use fervid_core::{FervidAtom, StrOrExpr, VModelDirective};
 use swc_core::{
     common::Span,
     ecma::ast::{
-        ArrowExpr, AssignExpr, AssignOp, BinExpr, BinaryOp, BindingIdent, BlockStmtOrExpr, Bool,
-        ComputedPropName, Expr, Ident, KeyValueProp, Lit, ObjectLit, ParenExpr, Pat, PatOrExpr,
-        Prop, PropName, PropOrSpread, Str,
+        BinExpr, BinaryOp, Bool, ComputedPropName, Expr, KeyValueProp, Lit, ObjectLit, Prop,
+        PropName, PropOrSpread, Str,
     },
 };
 
@@ -19,7 +18,6 @@ impl CodegenContext {
         &self,
         v_model: &VModelDirective,
         out: &mut Vec<PropOrSpread>,
-        scope_to_use: u32,
     ) -> bool {
         let span = v_model.span;
         let mut buf = String::new();
@@ -39,7 +37,7 @@ impl CodegenContext {
         // e.g. `v-model="smth"` -> `modelValue: _ctx.smth`
         out.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
             key: str_or_expr_to_propname(bound_attribute.to_owned(), span),
-            value: Box::new(v_model.value.to_owned()),
+            value: v_model.value.to_owned(),
         }))));
 
         // 3. Generate event name, e.g. `onUpdate:modelValue` or `onUpdate:usersArgument`
@@ -74,10 +72,12 @@ impl CodegenContext {
         // 4. Push the update code,
         // e.g. `v-model="smth"` -> `"onUpdate:modelValue": $event => ((_ctx.smth) = $event)`
         // TODO Cache like so `_cache[1] || (_cache[1] = `
-        out.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-            key: event_listener_propname,
-            value: self.generate_v_model_update_fn(&v_model.value, scope_to_use, span),
-        }))));
+        if let Some(ref update_handler) = v_model.update_handler {
+            out.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                key: event_listener_propname,
+                value: update_handler.to_owned(),
+            }))));
+        }
 
         // 5. Optionally generate modifiers
         if v_model.modifiers.len() == 0 {
@@ -134,71 +134,6 @@ impl CodegenContext {
 
         has_js_bindings
     }
-
-    /// Transforms the binding of `v-model`.
-    /// Because the rules of transformation differ a lot depending on the `BindingType`,
-    /// transformed expression may also differ a lot.
-    fn transform_v_model_value(
-        &self,
-        value: &Expr,
-        scope_to_use: u32,
-        _span: Span,
-    ) -> (Box<Expr>, bool) {
-        // Polyfill
-
-        // TODO Maybe transform the `v-model` to an object in the `fervid_transform`
-        // and just unwrap the object to a props object?
-        // Or better yet, type VModelDirective value to have `Expr` and `Bindings` variants (VModelValue)
-        // `Expr` variant can be used in `withDirectives` call,
-        // while `Bindings` variant is used in component code
-
-        // TODO Implement the correct transformation based on BindingTypes
-        // let has_js = transform_scoped(&mut expr, &self.scope_helper, scope_to_use);
-        (Box::new(value.to_owned()), true)
-    }
-
-    /// Generates the update code for the `v-model`.
-    /// Same as [`transform_v_model_value`], logic may differ a lot.
-    fn generate_v_model_update_fn(&self, value: &Expr, scope_to_use: u32, span: Span) -> Box<Expr> {
-        // TODO Actual implementation
-
-        // todo maybe re-use the previously generated expression from generate_v_model_for_component?
-        let (transformed_v_model, _was_transformed) =
-            self.transform_v_model_value(value, scope_to_use, span);
-
-        // $event => ((_ctx.modelValue) = $event)
-        Box::new(Expr::Arrow(ArrowExpr {
-            span,
-            params: vec![Pat::Ident(BindingIdent {
-                id: Ident {
-                    span,
-                    sym: FervidAtom::from("$event"),
-                    optional: false,
-                },
-                type_ann: None,
-            })],
-            body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::Paren(ParenExpr {
-                span,
-                expr: Box::new(Expr::Assign(AssignExpr {
-                    span,
-                    op: AssignOp::Assign,
-                    left: PatOrExpr::Expr(Box::new(Expr::Paren(ParenExpr {
-                        span,
-                        expr: transformed_v_model,
-                    }))),
-                    right: Box::new(Expr::Ident(Ident {
-                        span,
-                        sym: FervidAtom::from("$event"),
-                        optional: false,
-                    })),
-                })),
-            })))),
-            is_async: false,
-            is_generator: false,
-            type_params: None,
-            return_type: None,
-        }))
-    }
 }
 
 fn generate_v_model_modifiers(modifiers: &[FervidAtom], span: Span) -> ObjectLit {
@@ -230,7 +165,8 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: None,
-                value: *js("foo"),
+                value: js("foo"),
+                update_handler: js("$event=>((foo)=$event)").into(),
                 modifiers: Vec::new(),
                 span: DUMMY_SP,
             }],
@@ -244,7 +180,8 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: Some("simple".into()),
-                value: *js("foo"),
+                value: js("foo"),
+                update_handler: js("$event=>((foo)=$event)").into(),
                 modifiers: Vec::new(),
                 span: DUMMY_SP,
             }],
@@ -255,7 +192,8 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: Some("modelValue".into()),
-                value: *js("bar"),
+                value: js("bar"),
+                update_handler: js("$event=>((bar)=$event)").into(),
                 modifiers: Vec::new(),
                 span: DUMMY_SP,
             }],
@@ -266,7 +204,8 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: Some("model-value".into()),
-                value: *js("baz"),
+                value: js("baz"),
+                update_handler: js("$event=>((baz)=$event)").into(),
                 modifiers: Vec::new(),
                 span: DUMMY_SP,
             }],
@@ -280,7 +219,8 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: None,
-                value: *js("foo"),
+                value: js("foo"),
+                update_handler: js("$event=>((foo)=$event)").into(),
                 modifiers: vec!["lazy".into(), "trim".into()],
                 span: DUMMY_SP,
             }],
@@ -291,7 +231,8 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: None,
-                value: *js("foo"),
+                value: js("foo"),
+                update_handler: js("$event=>((foo)=$event)").into(),
                 modifiers: vec!["custom-modifier".into()],
                 span: DUMMY_SP,
             }],
@@ -302,7 +243,8 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: Some("foo-bar".into()),
-                value: *js("bazQux"),
+                value: js("bazQux"),
+                update_handler: js("$event=>((bazQux)=$event)").into(),
                 modifiers: vec!["custom-modifier".into()],
                 span: DUMMY_SP,
             }],
@@ -316,7 +258,8 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: Some(StrOrExpr::Expr(js("foo"))),
-                value: *js("bar"),
+                value: js("bar"),
+                update_handler: js("$event=>((bar)=$event)").into(),
                 modifiers: Vec::new(),
                 span: DUMMY_SP,
             }],
@@ -327,7 +270,8 @@ mod tests {
         test_out(
             vec![VModelDirective {
                 argument: Some(StrOrExpr::Expr(js("foo"))),
-                value: *js("bar"),
+                value: js("bar"),
+                update_handler: js("$event=>((bar)=$event)").into(),
                 modifiers: vec!["baz".into()],
                 span: DUMMY_SP,
             }],
@@ -342,7 +286,7 @@ mod tests {
             props: vec![],
         };
         for v_model in input.iter() {
-            ctx.generate_v_model_for_component(v_model, &mut out.props, 0);
+            ctx.generate_v_model_for_component(v_model, &mut out.props);
         }
         assert_eq!(crate::test_utils::to_str(out), expected)
     }

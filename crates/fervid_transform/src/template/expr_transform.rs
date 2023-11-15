@@ -1,34 +1,39 @@
-use fervid_core::{BindingTypes, BindingsHelper, FervidAtom, TemplateGenerationMode, VueImports};
+use fervid_core::{
+    BindingTypes, BindingsHelper, FervidAtom, SetupBinding, StrOrExpr, TemplateGenerationMode,
+    VModelDirective, VueImports,
+};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
         ast::{
-            CallExpr, Callee, Expr, ExprOrSpread, Ident, KeyValueProp, MemberExpr, MemberProp,
-            PatOrExpr, Prop, PropName, PropOrSpread,
+            ArrowExpr, AssignExpr, AssignOp, BindingIdent, BlockStmtOrExpr, CallExpr, Callee,
+            CondExpr, Expr, ExprOrSpread, Ident, KeyValueProp, Lit, MemberExpr, MemberProp, Null,
+            Pat, PatOrExpr, Prop, PropName, PropOrSpread,
         },
         atoms::JsWord,
         visit::{VisitMut, VisitMutWith},
     },
 };
 
-use crate::template::js_builtins::JS_BUILTINS;
+use crate::{script::common::extract_variables_from_pat, template::js_builtins::JS_BUILTINS};
 
 struct TransformVisitor<'s> {
     current_scope: u32,
-    scope_helper: &'s mut BindingsHelper,
+    bindings_helper: &'s mut BindingsHelper,
     has_js_bindings: bool,
     is_inline: bool,
-    is_write: bool,
+    // `SetupBinding` instead of `FervidAtom` to easier interface with `extract_variables_from_pat`
+    local_vars: Vec<SetupBinding>,
 }
 
 pub trait BindingsHelperTransform {
     fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> bool;
-    fn get_var_binding_type(&mut self, starting_scope: u32, variable: &str) -> BindingTypes;
+    fn transform_v_model(&mut self, v_model: &mut VModelDirective, scope_to_use: u32);
+    fn get_var_binding_type(&mut self, starting_scope: u32, variable: &FervidAtom) -> BindingTypes;
 }
 
 impl BindingsHelperTransform for BindingsHelper {
-    // TODO This function needs to be invoked when an AST is being optimized
-    // TODO Support transformation modes (e.g. `inline`, `renderFn`)
+    /// Transforms the template expression
     fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> bool {
         let is_inline = matches!(
             self.template_generation_mode,
@@ -36,17 +41,48 @@ impl BindingsHelperTransform for BindingsHelper {
         );
         let mut visitor = TransformVisitor {
             current_scope: scope_to_use,
-            scope_helper: self,
+            bindings_helper: self,
             has_js_bindings: false,
             is_inline,
-            is_write: false,
+            local_vars: Vec::new(),
         };
         expr.visit_mut_with(&mut visitor);
 
         visitor.has_js_bindings
     }
 
-    fn get_var_binding_type(&mut self, starting_scope: u32, variable: &str) -> BindingTypes {
+    /// Transforms `v-model` directive by producing
+    /// `:value` expression and
+    /// `@update:value` handler (`$event => modelValue = $event`).
+    fn transform_v_model(&mut self, v_model: &mut VModelDirective, scope_to_use: u32) {
+        // 1. Create handler: wrap in `$event => value = $event`
+        let event_expr = Box::new(Expr::Ident(Ident {
+            span: DUMMY_SP,
+            sym: FervidAtom::from("$event"),
+            optional: false,
+        }));
+        let mut handler =
+            wrap_in_event_arrow(wrap_in_assignment(v_model.value.to_owned(), event_expr));
+
+        // 2. Transform handler
+        self.transform_expr(&mut handler, scope_to_use);
+
+        // 3. Assign handler
+        v_model.update_handler = Some(handler);
+
+        // 4. Transform value
+        self.transform_expr(&mut v_model.value, scope_to_use);
+
+        // 5. (Optional) Transform dynamic argument
+        if let Some(StrOrExpr::Expr(ref mut expr)) = v_model.argument {
+            self.transform_expr(expr, scope_to_use);
+        }
+
+        // TODO Check that SetupConst or SetupReactiveConst are not used as a `v-model` value. Report hard error in this case.
+        // TODO Check in general in all cases
+    }
+
+    fn get_var_binding_type(&mut self, starting_scope: u32, variable: &FervidAtom) -> BindingTypes {
         if JS_BUILTINS.contains(variable) {
             return BindingTypes::JsGlobal;
         }
@@ -72,7 +108,7 @@ impl BindingsHelperTransform for BindingsHelper {
         }
 
         // Check hash-map for convenience (we may have found the reference previously)
-        let variable_atom = FervidAtom::from(variable);
+        let variable_atom = variable.to_owned();
         if let Some(binding_type) = self.used_bindings.get(&variable_atom) {
             return binding_type.to_owned();
         }
@@ -124,33 +160,98 @@ impl BindingsHelperTransform for BindingsHelper {
 }
 
 impl<'s> VisitMut for TransformVisitor<'s> {
-    fn visit_mut_assign_expr(&mut self, n: &mut swc_core::ecma::ast::AssignExpr) {
-        match n.left {
-            // Assignments must have their LHS correctly handled
-            // Especially `SetupLet`
-            PatOrExpr::Expr(ref e) if matches!(**e, Expr::Ident(_)) => {
-                let old_is_write = self.is_write;
-                self.is_write = true;
-                n.left.visit_mut_with(self);
-                self.is_write = old_is_write;
-                n.right.visit_mut_with(self);
+    fn visit_mut_expr(&mut self, n: &mut Expr) {
+        let ident_expr: &mut Ident = match n {
+            // Special treatment for assignment expression
+            Expr::Assign(assign_expr) => {
+                // Visit RHS first
+                assign_expr.right.visit_mut_with(self);
+
+                // Check for special case: LHS is an ident of type `SetupLet`
+                // This is only valid for Inline mode
+                let setup_let_ident = if self.is_inline {
+                    let ident = match assign_expr.left {
+                        PatOrExpr::Expr(ref e) => e.as_ident(),
+
+                        PatOrExpr::Pat(ref pat) => match **pat {
+                            Pat::Ident(ref binding_ident) => Some(&binding_ident.id),
+                            Pat::Expr(ref e) => e.as_ident(),
+                            _ => None,
+                        },
+                    };
+
+                    ident.and_then(|ident| {
+                        let binding_type = self
+                            .bindings_helper
+                            .get_var_binding_type(self.current_scope, &ident.sym);
+
+                        if let BindingTypes::SetupLet | BindingTypes::SetupMaybeRef = binding_type {
+                            Some((ident, binding_type))
+                        } else {
+                            None
+                        }
+                    })
+                } else {
+                    None
+                };
+
+                // Special case for `SetupLet` or `SetupMaybeRef`: generate `isRef` check
+                if let Some((ident, binding_type)) = setup_let_ident {
+                    // SetupMaybeRef is constant, reassignment is not possible
+                    let is_reassignable = matches!(binding_type, BindingTypes::SetupLet);
+
+                    *n = *generate_is_ref_check_assignment(
+                        ident,
+                        &assign_expr.right,
+                        self.bindings_helper,
+                        is_reassignable,
+                    );
+                } else {
+                    assign_expr.left.visit_mut_with(self);
+                }
+
+                return;
             }
 
-            _ => n.visit_mut_children_with(self),
-        }
-    }
+            // Arrow functions need params collection
+            Expr::Arrow(arrow_expr) => {
+                let old_len = self.local_vars.len();
 
-    fn visit_mut_expr(&mut self, n: &mut Expr) {
-        let Expr::Ident(ident_expr) = n else {
-            n.visit_mut_children_with(self);
-            return;
+                // Add the temporary variables
+                self.local_vars.reserve(arrow_expr.params.len());
+                for param in arrow_expr.params.iter() {
+                    extract_variables_from_pat(param, &mut self.local_vars, true);
+                }
+
+                // Transform the arrow body
+                arrow_expr.body.visit_mut_with(self);
+
+                // Clear the temporary variables
+                self.local_vars.drain(old_len..);
+
+                return;
+            }
+
+            // Identifier is what we need for the rest of the function
+            Expr::Ident(ident_expr) => ident_expr,
+
+            _ => {
+                n.visit_mut_children_with(self);
+                return;
+            }
         };
 
         let symbol = &ident_expr.sym;
         let span = ident_expr.span;
 
+        // Try to find variable in the local vars (e.g. arrow function params)
+        if let Some(_) = self.local_vars.iter().rfind(|it| &it.0 == symbol) {
+            self.has_js_bindings = true;
+            return;
+        }
+
         let binding_type = self
-            .scope_helper
+            .bindings_helper
             .get_var_binding_type(self.current_scope, symbol);
 
         // Template local binding doesn't need any processing
@@ -194,7 +295,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
         };
 
         let mut unref = |expr: &mut Expr, span: Span| {
-            self.scope_helper.vue_imports |= VueImports::Unref;
+            self.bindings_helper.vue_imports |= VueImports::Unref;
 
             *expr = Expr::Call(CallExpr {
                 span,
@@ -320,11 +421,110 @@ pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<JsWord
     }
 }
 
+/// Generates `_isRef(ident) ? (ident).value = rhs_expr : ident = rhs_expr`
+fn generate_is_ref_check_assignment(
+    lhs_ident: &Ident,
+    rhs_expr: &Expr,
+    bindings_helper: &mut BindingsHelper,
+    is_reassignable: bool,
+) -> Box<Expr> {
+    // Get `isRef` helper
+    let is_ref_ident = VueImports::IsRef.as_atom();
+    bindings_helper.vue_imports |= VueImports::IsRef;
+
+    // `ident` expression
+    let ident_expr = Box::new(Expr::Ident(lhs_ident.to_owned()));
+
+    // `isRef(ident)`
+    let condition = Box::new(Expr::Call(CallExpr {
+        span: DUMMY_SP,
+        callee: Callee::Expr(Box::new(Expr::Ident(Ident {
+            span: DUMMY_SP,
+            sym: is_ref_ident,
+            optional: false,
+        }))),
+        args: vec![ExprOrSpread {
+            spread: None,
+            expr: ident_expr.to_owned(),
+        }],
+        type_args: None,
+    }));
+
+    // `ident.value`
+    let ident_dot_value = Box::new(Expr::Member(MemberExpr {
+        span: DUMMY_SP,
+        obj: ident_expr.to_owned(),
+        prop: MemberProp::Ident(Ident {
+            span: DUMMY_SP,
+            sym: FervidAtom::from("value"),
+            optional: false,
+        }),
+    }));
+
+    // `ident.value = rhs_expr`
+    let positive_assign = wrap_in_assignment(ident_dot_value, Box::new(rhs_expr.to_owned()));
+
+    // `ident = rhs_expr` or `null`
+    let negative_assign = if is_reassignable {
+        wrap_in_assignment(ident_expr, Box::new(rhs_expr.to_owned()))
+    } else {
+        Box::new(Expr::Lit(Lit::Null(Null { span: DUMMY_SP })))
+    };
+
+    Box::new(Expr::Cond(CondExpr {
+        span: DUMMY_SP,
+        test: condition,
+        cons: positive_assign,
+        alt: negative_assign,
+    }))
+}
+
+/// Wraps `expr` to `$event => (expr)`
+#[inline]
+fn wrap_in_event_arrow(expr: Box<Expr>) -> Box<Expr> {
+    let evt_param = Pat::Ident(BindingIdent {
+        id: Ident {
+            span: DUMMY_SP,
+            sym: FervidAtom::from("$event"),
+            optional: false,
+        },
+        type_ann: None,
+    });
+
+    Box::new(Expr::Arrow(ArrowExpr {
+        span: DUMMY_SP,
+        params: vec![evt_param],
+        body: Box::new(BlockStmtOrExpr::Expr(expr)),
+        is_async: false,
+        is_generator: false,
+        type_params: None,
+        return_type: None,
+    }))
+}
+
+/// Wraps `expr` to `expr = $event`
+#[inline]
+fn wrap_in_assignment(expr: Box<Expr>, rhs_expr: Box<Expr>) -> Box<Expr> {
+    Box::new(Expr::Assign(AssignExpr {
+        span: DUMMY_SP,
+        op: AssignOp::Assign,
+        left: PatOrExpr::Expr(expr),
+        right: rhs_expr,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::template::{expr_transform::BindingsHelperTransform, js_builtins::JS_BUILTINS};
-    use fervid_core::{BindingTypes, BindingsHelper, TemplateGenerationMode, TemplateScope, FervidAtom};
+    use crate::{
+        template::{expr_transform::BindingsHelperTransform, js_builtins::JS_BUILTINS},
+        test_utils::{parser::parse_javascript_expr, to_str},
+    };
+    use fervid_core::{
+        BindingTypes, BindingsHelper, FervidAtom, SetupBinding, StrOrExpr, TemplateGenerationMode,
+        TemplateScope, VModelDirective,
+    };
     use smallvec::SmallVec;
+    use swc_core::common::DUMMY_SP;
 
     #[test]
     fn it_acknowledges_builtins() {
@@ -333,7 +533,7 @@ mod tests {
         for builtin in JS_BUILTINS.iter() {
             assert_eq!(
                 BindingTypes::JsGlobal,
-                helper.get_var_binding_type(0, builtin)
+                helper.get_var_binding_type(0, &FervidAtom::from(*builtin))
             );
         }
 
@@ -342,9 +542,207 @@ mod tests {
         for builtin in JS_BUILTINS.iter() {
             assert_eq!(
                 BindingTypes::JsGlobal,
-                helper.get_var_binding_type(0, builtin)
+                helper.get_var_binding_type(0, &FervidAtom::from(*builtin))
             );
         }
+    }
+
+    #[test]
+    fn it_acknowledges_local_vars() {
+        let mut helper = BindingsHelper::default();
+
+        macro_rules! test {
+            ($expr: literal, $expected: literal) => {
+                let mut expr = js($expr);
+                helper.transform_expr(&mut expr, 0);
+
+                assert_eq!(to_str(&expr), $expected);
+            };
+        }
+
+        test!(
+            "$event => console.log($event)",
+            "$event=>console.log($event)"
+        );
+        test!(
+            "$event => console.log($event, foo)",
+            "$event=>console.log($event,_ctx.foo)"
+        );
+        test!("x => y => doSmth(x, y, z)", "x=>y=>_ctx.doSmth(x,y,_ctx.z)");
+        test!(
+            "(x => doSmth(x), y => doSmth(x))",
+            "(x=>_ctx.doSmth(x),y=>_ctx.doSmth(_ctx.x))"
+        );
+        test!(
+            "(x => doSmth(x), () => doSmth(x))",
+            "(x=>_ctx.doSmth(x),()=>_ctx.doSmth(_ctx.x))"
+        );
+    }
+
+    #[test]
+    fn it_transforms_v_model() {
+        let mut helper = BindingsHelper::default();
+
+        // const Ref = ref('foo')
+        // const MaybeRef = useSomething()
+        // const Const = 123
+        // let Let = 123
+        // const Reactive = reactive({})
+        helper.setup_bindings.push(SetupBinding(
+            FervidAtom::from("Ref"),
+            BindingTypes::SetupRef,
+        ));
+        helper.setup_bindings.push(SetupBinding(
+            FervidAtom::from("MaybeRef"),
+            BindingTypes::SetupMaybeRef,
+        ));
+        helper.setup_bindings.push(SetupBinding(
+            FervidAtom::from("Const"),
+            BindingTypes::SetupConst,
+        ));
+        helper.setup_bindings.push(SetupBinding(
+            FervidAtom::from("Let"),
+            BindingTypes::SetupLet,
+        ));
+        helper.setup_bindings.push(SetupBinding(
+            FervidAtom::from("Reactive"),
+            BindingTypes::SetupReactiveConst,
+        ));
+
+        macro_rules! test {
+            ($value: literal, $expected_value: literal, $expected_handler: literal) => {
+                let mut v_model = VModelDirective {
+                    argument: None,
+                    value: js($value),
+                    update_handler: None,
+                    modifiers: vec![],
+                    span: DUMMY_SP,
+                };
+                helper.transform_v_model(&mut v_model, 0);
+                assert_eq!(to_str(&v_model.value), $expected_value);
+                assert_eq!(
+                    to_str(&v_model.update_handler.expect("Handler cannot be None")),
+                    $expected_handler
+                );
+            };
+        }
+
+        // Syntax is like that:
+        // first element is `$expr` in `v-model="$expr"`;
+        // second is the transformed value;
+        // third is the transformed update handler.
+
+        // DEV DIRECT
+        test!("Ref", "$setup.Ref", "$event=>$setup.Ref=$event");
+        test!(
+            "MaybeRef",
+            "$setup.MaybeRef",
+            "$event=>$setup.MaybeRef=$event"
+        ); // TODO must err?
+        test!("Const", "$setup.Const", "$event=>$setup.Const=$event"); // TODO must err
+        test!("Let", "$setup.Let", "$event=>$setup.Let=$event");
+        test!(
+            "Reactive",
+            "$setup.Reactive",
+            "$event=>$setup.Reactive=$event"
+        ); // TODO must err
+        test!("Unknown", "_ctx.Unknown", "$event=>_ctx.Unknown=$event");
+
+        // DEV INDIRECT
+        test!("Ref.x", "$setup.Ref.x", "$event=>$setup.Ref.x=$event");
+        test!(
+            "MaybeRef.x",
+            "$setup.MaybeRef.x",
+            "$event=>$setup.MaybeRef.x=$event"
+        );
+        test!("Const.x", "$setup.Const.x", "$event=>$setup.Const.x=$event");
+        test!("Let.x", "$setup.Let.x", "$event=>$setup.Let.x=$event");
+        test!(
+            "Reactive.x",
+            "$setup.Reactive.x",
+            "$event=>$setup.Reactive.x=$event"
+        );
+        test!(
+            "Unknown.x",
+            "_ctx.Unknown.x",
+            "$event=>_ctx.Unknown.x=$event"
+        );
+
+        // PROD DIRECT
+        helper.is_prod = true;
+        helper.template_generation_mode = TemplateGenerationMode::Inline;
+        test!("Ref", "Ref.value", "$event=>Ref.value=$event");
+        test!(
+            "MaybeRef",
+            "_unref(MaybeRef)",
+            "$event=>_isRef(MaybeRef)?MaybeRef.value=$event:null"
+        );
+        test!("Const", "Const", "$event=>Const=$event"); // TODO must err
+        test!(
+            "Let",
+            "_unref(Let)",
+            "$event=>_isRef(Let)?Let.value=$event:Let=$event"
+        );
+        test!("Reactive", "Reactive", "$event=>Reactive=$event"); // TODO must err
+        test!("Unknown", "_ctx.Unknown", "$event=>_ctx.Unknown=$event");
+
+        // PROD INDIRECT
+        test!("Ref.x", "Ref.value.x", "$event=>Ref.value.x=$event");
+        test!(
+            "MaybeRef.x",
+            "_unref(MaybeRef).x",
+            "$event=>_unref(MaybeRef).x=$event"
+        );
+        test!("Const.x", "Const.x", "$event=>Const.x=$event");
+        test!("Let.x", "_unref(Let).x", "$event=>_unref(Let).x=$event");
+        test!("Reactive.x", "Reactive.x", "$event=>Reactive.x=$event");
+        test!(
+            "Unknown.x",
+            "_ctx.Unknown.x",
+            "$event=>_ctx.Unknown.x=$event"
+        );
+    }
+
+    #[test]
+    fn it_transforms_v_model_arg() {
+        let mut helper = BindingsHelper::default();
+
+        // const Ref = ref('foo')
+        helper.setup_bindings.push(SetupBinding(
+            FervidAtom::from("Ref"),
+            BindingTypes::SetupRef,
+        ));
+
+        macro_rules! test {
+            ($argument: literal, $expected: literal) => {
+                let mut v_model = VModelDirective {
+                    argument: Some(StrOrExpr::Expr(js($argument))),
+                    value: js("dummy"),
+                    update_handler: None,
+                    modifiers: vec![],
+                    span: DUMMY_SP,
+                };
+                helper.transform_v_model(&mut v_model, 0);
+                let Some(StrOrExpr::Expr(arg_expr)) = v_model.argument else {
+                    unreachable!("This is something unexpected")
+                };
+                assert_eq!(to_str(&arg_expr), $expected);
+            };
+        }
+
+        // The first is `$expr` in `v-model:[$expr]="dummy"`, the second is expected
+
+        // DEV
+        test!("Ref", "$setup.Ref");
+        test!("Unknown", "_ctx.Unknown");
+        test!("\"string\"", "\"string\"");
+
+        // PROD
+        helper.is_prod = true;
+        helper.template_generation_mode = TemplateGenerationMode::Inline;
+        test!("Ref", "Ref.value");
+        test!("Unknown", "_ctx.Unknown");
+        test!("\"string\"", "\"string\"");
     }
 
     #[test]
@@ -352,7 +750,7 @@ mod tests {
         let v_root = FervidAtom::from("root");
         let root_scope = TemplateScope {
             parent: 0,
-            variables: SmallVec::from([v_root.to_owned()]),
+            variables: SmallVec::from(vec![v_root.to_owned()]),
         };
 
         let v_child1 = FervidAtom::from("child1");
@@ -516,5 +914,11 @@ mod tests {
         println!("Elapsed grand2: {:?}", st3.elapsed());
 
         println!("Elapsed total: {:?}", st0.elapsed())
+    }
+
+    fn js(input: &str) -> Box<swc_core::ecma::ast::Expr> {
+        parse_javascript_expr(input, 0, Default::default())
+            .expect("js expects the input to be parseable")
+            .0
     }
 }

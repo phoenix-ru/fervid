@@ -321,7 +321,9 @@ pub struct VModelDirective {
     /// What to apply v-model to, e.g. `first-name` in `v-model:first-name="first"`
     pub argument: Option<StrOrExpr>,
     /// The binding of a `v-model`, e.g. `userInput` in `v-model="userInput"`
-    pub value: Expr,
+    pub value: Box<Expr>,
+    /// The handler to generate for the directive, e.g. `$event => (msg.value = $event)`
+    pub update_handler: Option<Box<Expr>>,
     /// `lazy` and `trim` in `v-model.lazy.trim`
     pub modifiers: Vec<FervidAtom>,
     pub span: Span

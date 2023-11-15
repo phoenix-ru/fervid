@@ -363,7 +363,8 @@ fn parse_directive<'i>(
                     let directives = get_directives!();
                     directives.v_model.push(VModelDirective {
                         argument,
-                        value: *model_binding,
+                        value: model_binding,
+                        update_handler: None,
                         modifiers,
                         span: DUMMY_SP, // TODO
                     });

@@ -9,7 +9,7 @@ use smallvec::SmallVec;
 use super::{collect_vars::collect_variables, expr_transform::BindingsHelperTransform};
 
 struct TemplateVisitor<'s> {
-    scope_helper: &'s mut BindingsHelper,
+    bindings_helper: &'s mut BindingsHelper,
     current_scope: u32,
 }
 
@@ -50,7 +50,7 @@ pub fn transform_and_record_template(
     }
 
     let mut template_visitor = TemplateVisitor {
-        scope_helper: bindings_helper,
+        bindings_helper,
         current_scope: 0,
     };
 
@@ -244,8 +244,8 @@ impl<'a> Visitor for TemplateVisitor<'_> {
             // Create a new scope
             if v_for.is_some() || v_slot.is_some() {
                 // New scope will have ID equal to length
-                scope_to_use = self.scope_helper.template_scopes.len() as u32;
-                self.scope_helper.template_scopes.push(TemplateScope {
+                scope_to_use = self.bindings_helper.template_scopes.len() as u32;
+                self.bindings_helper.template_scopes.push(TemplateScope {
                     variables: SmallVec::new(),
                     parent: parent_scope,
                 });
@@ -253,12 +253,12 @@ impl<'a> Visitor for TemplateVisitor<'_> {
 
             if let Some(v_for) = v_for {
                 // Get the iterator variable and collect its variables
-                let mut scope = &mut self.scope_helper.template_scopes[scope_to_use as usize];
+                let mut scope = &mut self.bindings_helper.template_scopes[scope_to_use as usize];
                 collect_variables(&v_for.itervar, &mut scope);
 
                 // Transform the iterable
                 let is_dynamic = self
-                    .scope_helper
+                    .bindings_helper
                     .transform_expr(&mut v_for.iterable, scope_to_use);
 
                 // Add patch flags
@@ -288,7 +288,7 @@ impl<'a> Visitor for TemplateVisitor<'_> {
             }) = v_slot
             {
                 // Collect slot bindings
-                let mut scope = &mut self.scope_helper.template_scopes[scope_to_use as usize];
+                let mut scope = &mut self.bindings_helper.template_scopes[scope_to_use as usize];
                 collect_variables(v_slot_value, &mut scope);
                 // TODO transform slot?
             }
@@ -310,7 +310,7 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                 // 2. Check if
                 AttributeOrBinding::VBind(v_bind) => {
                     let has_bindings = self
-                        .scope_helper
+                        .bindings_helper
                         .transform_expr(&mut v_bind.value, scope_to_use);
 
                     let Some(StrOrExpr::Str(ref argument)) = v_bind.argument else {
@@ -356,7 +356,7 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                     handler: Some(ref mut handler),
                     ..
                 }) => {
-                    self.scope_helper.transform_expr(handler, scope_to_use);
+                    self.bindings_helper.transform_expr(handler, scope_to_use);
                 }
 
                 _ => {}
@@ -368,7 +368,7 @@ impl<'a> Visitor for TemplateVisitor<'_> {
             macro_rules! maybe_transform {
                 ($key: ident) => {
                     match directives.$key.as_mut() {
-                        Some(expr) => self.scope_helper.transform_expr(expr, scope_to_use),
+                        Some(expr) => self.bindings_helper.transform_expr(expr, scope_to_use),
                         None => false,
                     }
                 };
@@ -377,6 +377,10 @@ impl<'a> Visitor for TemplateVisitor<'_> {
             maybe_transform!(v_memo);
             maybe_transform!(v_show);
             maybe_transform!(v_text);
+
+            for v_model in directives.v_model.iter_mut() {
+                self.bindings_helper.transform_v_model(v_model, scope_to_use);
+            }
         }
 
         // Merge conditional nodes and clean up whitespace
@@ -424,12 +428,12 @@ impl<'a> Visitor for TemplateVisitor<'_> {
         // wraps around the node (`condition ? if_node : else_node`).
         // However, I am not too sure about the `v-if` & `v-slot` combined usage.
 
-        self.scope_helper
+        self.bindings_helper
             .transform_expr(&mut conditional_node.if_node.condition, self.current_scope);
         self.visit_element_node(&mut conditional_node.if_node.node);
 
         for else_if_node in conditional_node.else_if_nodes.iter_mut() {
-            self.scope_helper
+            self.bindings_helper
                 .transform_expr(&mut else_if_node.condition, self.current_scope);
             self.visit_element_node(&mut else_if_node.node);
         }
@@ -443,7 +447,7 @@ impl<'a> Visitor for TemplateVisitor<'_> {
         interpolation.template_scope = self.current_scope;
 
         let has_js = self
-            .scope_helper
+            .bindings_helper
             .transform_expr(&mut interpolation.value, self.current_scope);
 
         interpolation.patch_flag = has_js;
@@ -509,9 +513,9 @@ mod tests {
             directives: None,
         };
 
-        let mut scope_helper = Default::default();
+        let mut bindings_helper = Default::default();
         let template_visitor = TemplateVisitor {
-            scope_helper: &mut scope_helper,
+            bindings_helper: &mut bindings_helper,
             current_scope: 0,
         };
         assert!(matches!(

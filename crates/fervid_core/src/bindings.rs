@@ -86,6 +86,6 @@ pub struct SetupBinding(pub FervidAtom, pub BindingTypes);
 
 #[derive(Debug)]
 pub struct TemplateScope {
-    pub variables: SmallVec<[FervidAtom; 1]>,
+    pub variables: SmallVec<[FervidAtom; 2]>,
     pub parent: u32,
 }
