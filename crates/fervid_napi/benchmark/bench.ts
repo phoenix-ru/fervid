@@ -9,7 +9,8 @@ import { compileTemplate } from '@vue/compiler-sfc'
 
 import { compileAsync, compileSync } from '../index'
 
-// Increase libuv thread pool for a better async result
+// Increase libuv thread pool for a better async result.
+// 4 threads is a default thread pool size.
 const CPUS = cpus().length - 1
 process.env.UV_THREADPOOL_SIZE = CPUS.toString()
 
@@ -32,6 +33,22 @@ async function run() {
     b.add('@fervid/napi sync', () => {
       compileSync(input)
     }),
+
+    // The code below makes sure that async framework is not flawed.
+    // On my PC `sync promise` benches produce results close to a `sync` bench,
+    // which is expected, because `compileSync` is blocking.
+    // The `async` benches are properly multithreaded, thus they achieve much higher ops/sec.
+    // BEGIN
+
+    b.add('@fervid/napi sync promise (4 threads)', () => {
+      return Promise.allSettled(Array.from({ length: 4 }, _ => new Promise<void>(resolve => (compileSync(input), resolve()))))
+    }),
+
+    b.add(`@fervid/napi sync promise (${CPUS} threads)`, () => {
+      return Promise.allSettled(Array.from({ length: CPUS }, _ => new Promise<void>(resolve => (compileSync(input), resolve()))))
+    }),
+
+    // END
 
     b.add('@fervid/napi async (4 threads)', () => {
       return Promise.allSettled(Array.from({ length: 4 }, _ => compileAsync(input)))
