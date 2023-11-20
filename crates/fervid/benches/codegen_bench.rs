@@ -8,7 +8,8 @@ fn codegen_benchmark(c: &mut Criterion) {
     for (name, component) in FIXTURES {
         c.bench_with_input(BenchmarkId::new("codegen: generate CSR+DEV", name), &component, |b, component| {
             let mut errors = Vec::new();
-            let res = fervid_parser::parse_sfc(component, &mut errors);
+            let mut parser = fervid_parser::SfcParser::new(&component, &mut errors);
+            let res = parser.parse_sfc();
             let sfc_blocks = res.unwrap();
             let mut template_block = sfc_blocks.template;
             let Some(ref mut template_block) = template_block else {

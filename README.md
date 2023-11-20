@@ -121,7 +121,7 @@ Code generator
     - [x] v-html
     - [ ] v-memo
     - [ ] v-once
-    - [ ] v-pre
+    - [x] v-pre
     - [x] v-text
     - [x] Custom directives
   - [x] Built-in components

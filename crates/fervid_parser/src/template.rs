@@ -1,219 +1,341 @@
 use fervid_core::{
-    fervid_atom, ElementNode, FervidAtom, Interpolation, Node, PatchHints, SfcTemplateBlock,
+    fervid_atom, AttributeOrBinding, ElementNode, FervidAtom, Interpolation, Node, PatchHints,
+    SfcTemplateBlock, StartingTag, VueDirectives,
 };
 use swc_core::common::{BytePos, Span};
 use swc_ecma_parser::{Syntax, TsConfig};
 use swc_html_ast::{Child, Element, Text};
 
-use crate::{common::process_element_starting_tag, error::ParseError, script::parse_expr};
+use crate::{script::parse_expr, SfcParser};
 
-// Default patterns, this will be moved to the config area in the future
-const INTERPOLATION_START_PAT: &str = "{{";
-const INTERPOLATION_END_PAT: &str = "}}";
+impl SfcParser<'_, '_, '_> {
+    pub fn parse_template_to_ir(&mut self, root_element: Element) -> Option<SfcTemplateBlock> {
+        // TODO Errors in template
 
-pub fn parse_template_to_ir(
-    root_element: Element,
-    errors: &mut Vec<ParseError>,
-) -> Option<SfcTemplateBlock> {
-    // TODO Errors in template
+        let lang = root_element
+            .attributes
+            .iter()
+            .find_map(|attr| {
+                if attr.name == fervid_atom!("lang") {
+                    Some(attr.name.to_owned())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| fervid_atom!("html"));
 
-    let lang = root_element
-        .attributes
-        .iter()
-        .find_map(|attr| {
-            if attr.name == fervid_atom!("lang") {
-                Some(attr.name.to_owned())
-            } else {
-                None
-            }
+        // <template> technically has a `content`
+        let children: Vec<Child> = root_element
+            .content
+            .map(|c| c.children)
+            .unwrap_or_else(|| root_element.children);
+
+        Some(SfcTemplateBlock {
+            lang,
+            roots: self.process_element_children(children),
+            span: root_element.span,
         })
-        .unwrap_or_else(|| fervid_atom!("html"));
-
-    // <template> technically has a `content`
-    let children: Vec<Child> = root_element
-        .content
-        .map(|c| c.children)
-        .unwrap_or_else(|| root_element.children);
-
-    Some(SfcTemplateBlock {
-        lang,
-        roots: process_element_children(children, errors),
-        span: root_element.span,
-    })
-}
-
-fn process_element(element: Element, errors: &mut Vec<ParseError>) -> Node {
-    let children: Vec<Child> = element
-        .content
-        .map(|c| c.children)
-        .unwrap_or_else(|| element.children);
-
-    Node::Element(ElementNode {
-        kind: fervid_core::ElementKind::Element,
-        starting_tag: process_element_starting_tag(element.tag_name, element.attributes, errors),
-        children: process_element_children(children, errors),
-        template_scope: 0,
-        patch_hints: PatchHints::default(),
-        span: element.span,
-    })
-}
-
-fn process_element_children(children: Vec<Child>, errors: &mut Vec<ParseError>) -> Vec<Node> {
-    let mut out = Vec::with_capacity(children.len());
-
-    for child in children {
-        match child {
-            Child::DocumentType(_) => unimplemented!("Doctype is unsupported"),
-            Child::Element(element) => out.push(process_element(element, errors)),
-            Child::Text(text) => process_text(
-                text,
-                &mut out,
-                errors,
-                INTERPOLATION_START_PAT,
-                INTERPOLATION_END_PAT,
-            ),
-            Child::Comment(comment) => out.push(Node::Comment(comment.data, comment.span)),
-        }
     }
 
-    out
-}
+    fn process_element(&mut self, element: Element) -> Node {
+        let children: Vec<Child> = element
+            .content
+            .map(|c| c.children)
+            .unwrap_or_else(|| element.children);
 
-/// Separates a raw text into `Node::Text`s and `Node::Interpolation`s
-fn process_text(
-    text: Text,
-    out: &mut Vec<Node>,
-    errors: &mut Vec<ParseError>,
-    interpolation_start_pat: &str,
-    interpolation_end_pat: &str,
-) {
-    let Text { span, data, .. } = text;
-    let raw: &str = &data;
-    let interpolation_start_pat_len = interpolation_start_pat.len();
-    let interpolation_end_pat_len = interpolation_end_pat.len();
+        // Save old `v-pre` (restored at the end of the function)
+        let old_is_pre = self.is_pre;
 
-    // let mut curr_text = "";
-    // let mut curr_text_start_idx = 0;
-    // let mut curr_text_end_idx = 0;
-    let mut text_start_idx = 0;
+        // Pre-allocate with excess, assuming all the attributes are not directives
+        let mut attributes: Vec<AttributeOrBinding> = Vec::with_capacity(element.attributes.len());
+        let mut directives: Option<Box<VueDirectives>> = None;
 
-    // Find interpolation start - `{{` by default
-    for (match_idx, _) in raw.match_indices(interpolation_start_pat) {
-        let interpolation_start_idx = match_idx + interpolation_start_pat_len;
+        // Process the attributes
+        let has_v_pre =
+            self.process_element_attributes(element.attributes, &mut attributes, &mut directives);
 
-        // Find interpolation end - `}}` by default
-        let Some(interpolation_end_idx) =
-            raw[interpolation_start_idx..].find(interpolation_end_pat)
-        else {
-            continue;
+        // Add an indicator directive for `v-pre`
+        if has_v_pre {
+            let directives = directives.get_or_insert_with(|| Box::new(VueDirectives::default()));
+            directives.v_pre = Some(());
+            self.is_pre = true;
+        }
+
+        let starting_tag = StartingTag {
+            tag_name: element.tag_name,
+            attributes,
+            directives,
         };
 
-        // Offset, because we did offset while `find`ing previously
-        let interpolation_end_idx = interpolation_end_idx + interpolation_start_idx;
+        let result = Node::Element(ElementNode {
+            kind: fervid_core::ElementKind::Element,
+            starting_tag,
+            children: self.process_element_children(children),
+            template_scope: 0,
+            patch_hints: PatchHints::default(),
+            span: element.span,
+        });
 
-        // Add any previous text
-        if text_start_idx < match_idx {
-            let offset = span.lo.0 + text_start_idx as u32;
-            let text = &raw[text_start_idx..match_idx];
-            let text_span = Span {
-                lo: BytePos(offset),
-                hi: BytePos(offset + text.len() as u32),
-                ctxt: Default::default(),
+        self.is_pre = old_is_pre;
+        result
+    }
+
+    fn process_element_children(&mut self, children: Vec<Child>) -> Vec<Node> {
+        let mut out = Vec::with_capacity(children.len());
+
+        for child in children {
+            match child {
+                Child::DocumentType(_) => unimplemented!("Doctype is unsupported"),
+                Child::Element(element) => out.push(self.process_element(element)),
+                Child::Text(text) => self.process_text(text, &mut out),
+                Child::Comment(comment) => out.push(Node::Comment(comment.data, comment.span)),
+            }
+        }
+
+        out
+    }
+
+    /// Separates a raw text into `Node::Text`s and `Node::Interpolation`s
+    fn process_text(&mut self, text: Text, out: &mut Vec<Node>) {
+        // `v-pre` logic
+        if self.is_pre {
+            out.push(Node::Text(text.data, text.span));
+            return;
+        }
+
+        let interpolation_start_pat = self.interpolation_start_pat;
+        let interpolation_end_pat = self.interpolation_end_pat;
+        let Text { span, data, .. } = text;
+        let raw: &str = &data;
+        let interpolation_start_pat_len = interpolation_start_pat.len();
+        let interpolation_end_pat_len = interpolation_end_pat.len();
+
+        // let mut curr_text = "";
+        // let mut curr_text_start_idx = 0;
+        // let mut curr_text_end_idx = 0;
+        let mut text_start_idx = 0;
+
+        // Find interpolation start - `{{` by default
+        for (match_idx, _) in raw.match_indices(interpolation_start_pat) {
+            let interpolation_start_idx = match_idx + interpolation_start_pat_len;
+
+            // Find interpolation end - `}}` by default
+            let Some(interpolation_end_idx) =
+                raw[interpolation_start_idx..].find(interpolation_end_pat)
+            else {
+                continue;
             };
 
-            out.push(Node::Text(FervidAtom::from(text), text_span));
+            // Offset, because we did offset while `find`ing previously
+            let interpolation_end_idx = interpolation_end_idx + interpolation_start_idx;
+
+            // Add any previous text
+            if text_start_idx < match_idx {
+                let offset = span.lo.0 + text_start_idx as u32;
+                let text = &raw[text_start_idx..match_idx];
+                let text_span = Span {
+                    lo: BytePos(offset),
+                    hi: BytePos(offset + text.len() as u32),
+                    ctxt: Default::default(),
+                };
+
+                out.push(Node::Text(FervidAtom::from(text), text_span));
+            }
+            text_start_idx = interpolation_end_idx + interpolation_end_pat_len;
+
+            // Get the interpolation &str
+            let interpolation = &raw[interpolation_start_idx..interpolation_end_idx];
+
+            // Span stuff
+            let offset = span.lo.0 + interpolation_start_idx as u32;
+            let interpolation_span = Span::new(
+                BytePos(offset),
+                BytePos(offset + interpolation.len() as u32),
+                Default::default(),
+            );
+
+            match parse_expr(
+                interpolation,
+                Syntax::Typescript(TsConfig::default()),
+                interpolation_span,
+            ) {
+                Ok(parsed_interpolation) => out.push(Node::Interpolation(Interpolation {
+                    value: parsed_interpolation,
+                    template_scope: 0,
+                    patch_flag: false,
+                })),
+                Err(expr_err) => self.errors.push(expr_err.into()),
+            }
         }
-        text_start_idx = interpolation_end_idx + interpolation_end_pat_len;
 
-        // Get the interpolation &str
-        let interpolation = &raw[interpolation_start_idx..interpolation_end_idx];
-
-        // Span stuff
-        let offset = span.lo.0 + interpolation_start_idx as u32;
-        let interpolation_span = Span::new(
-            BytePos(offset),
-            BytePos(offset + interpolation.len() as u32),
-            Default::default(),
-        );
-
-        match parse_expr(
-            interpolation,
-            Syntax::Typescript(TsConfig::default()),
-            interpolation_span,
-        ) {
-            Ok(parsed_interpolation) => out.push(Node::Interpolation(Interpolation {
-                value: parsed_interpolation,
-                template_scope: 0,
-                patch_flag: false,
-            })),
-            Err(expr_err) => errors.push(expr_err.into()),
+        // Add the remaining text if any
+        if text_start_idx < raw.len() {
+            let text_span = Span::new(
+                BytePos(span.lo.0 + text_start_idx as u32),
+                span.hi,
+                span.ctxt,
+            );
+            out.push(Node::Text(
+                FervidAtom::from(&raw[text_start_idx..]),
+                text_span,
+            ));
         }
+
+        // let mut remaining = raw;
+        // let mut remaining_start_idx = 0;
+
+        // // Find interpolation start - `{{` by default
+        // for (match_idx, _) in raw.match_indices(interpolation_start_pat) {
+        //     let interpolation_start_idx = match_idx + interpolation_start_pat_len;
+
+        //     // Find interpolation end - `}}` by default
+        //     if let Some(interpolation_end_idx) =
+        //         raw[interpolation_start_idx..].find(interpolation_end_pat)
+        //     {
+        //         // Offset
+        //         let interpolation_end_idx = interpolation_end_idx + interpolation_start_idx;
+        //         let interpolation = &raw[interpolation_start_idx..interpolation_end_idx];
+
+        //         // Include everything prior to interpolation
+
+        //         // Span stuff
+        //         let offset = span.lo.0 + interpolation_start_idx as u32;
+        //         let interpolation_span = Span::new(
+        //             BytePos(offset),
+        //             BytePos(offset + interpolation.len() as u32),
+        //             Default::default(),
+        //         );
+
+        //         match parse_expr(
+        //             interpolation,
+        //             Syntax::Typescript(TsConfig::default()),
+        //             interpolation_span,
+        //         ) {
+        //             Ok(parsed_interpolation) => out.push(Node::Interpolation(Interpolation {
+        //                 value: parsed_interpolation,
+        //                 template_scope: 0,
+        //                 patch_flag: false,
+        //             })),
+        //             Err(expr_err) => errors.push(expr_err.into()),
+        //         }
+
+        //         // Advance
+        //         remaining_start_idx = interpolation_end_idx + interpolation_end_pat_len;
+        //         remaining = &raw[remaining_start_idx..];
+        //     }
+        // }
+
+        // if !remaining.is_empty() {
+        //     let offset = span.lo.0 + remaining_start_idx as u32;
+        //     let new_span = Span::new(
+        //         BytePos(offset),
+        //         BytePos(offset + remaining.len() as u32),
+        //         Default::default(),
+        //     );
+        //     out.push(Node::Text(FervidAtom::from(remaining), new_span));
+        // }
     }
+}
 
-    // Add the remaining text if any
-    if text_start_idx < raw.len() {
-        let text_span = Span::new(
-            BytePos(span.lo.0 + text_start_idx as u32),
-            span.hi,
-            span.ctxt,
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_acknowledges_v_pre() {
+        let mut errors = Vec::new();
+        let mut parser = SfcParser::new(
+            r#"
+        <template><div :parse-this="false" v-pre><h1>  {{ msg }}  </h1><input v-model="msg" v-pre></div></template>"#,
+            &mut errors,
         );
-        out.push(Node::Text(
-            FervidAtom::from(&raw[text_start_idx..]),
-            text_span,
+
+        let parsed = parser.parse_sfc().expect("Should parse");
+        let template = parsed.template.expect("Should have template");
+        let first_root = template.roots.first().expect("Should have one root");
+        let Node::Element(first_div) = first_root else {
+            panic!("Root is not an element")
+        };
+
+        // Check the presence of a directive
+        let first_div_directives = first_div
+            .starting_tag
+            .directives
+            .as_ref()
+            .expect("Should have directives");
+        assert!(first_div_directives.v_pre.is_some());
+
+        // Check that exactly one attribute is there, and it is regular (not parsed)
+        assert_eq!(1, first_div.starting_tag.attributes.len());
+        assert!(matches!(
+            first_div.starting_tag.attributes.first(),
+            Some(AttributeOrBinding::RegularAttribute { name, value }) if name == ":parse-this" && value == "false"
         ));
+
+        // Check the <h1>
+        let Some(Node::Element(h1)) = first_div.children.first() else {
+            panic!("First child of div is not h1")
+        };
+        assert!(h1.starting_tag.attributes.is_empty());
+        assert_eq!(1, h1.children.len());
+        let Some(Node::Text(h1_text, _)) = h1.children.first() else {
+            panic!("First child of h1 is not text")
+        };
+        assert!(h1_text.trim() == "{{ msg }}");
+
+        // Check the <input>
+        let Some(Node::Element(input)) = first_div.children.last() else {
+            panic!("Last child of div is not input")
+        };
+        assert!(input.starting_tag.directives.is_none());
+        assert_eq!(2, input.starting_tag.attributes.len());
+
+        // Check the <input> attrs
+        let input_attr_1 = input.starting_tag.attributes.first().unwrap();
+        let input_attr_2 = input.starting_tag.attributes.get(1).unwrap();
+        assert!(
+            matches!(input_attr_1, AttributeOrBinding::RegularAttribute { name, value } if name == "v-model" && value == "msg")
+        );
+        assert!(
+            // Second v-pre should not be recognized as a directive, because it is inside the first
+            matches!(input_attr_2, AttributeOrBinding::RegularAttribute { name, value } if name == "v-pre" && value == "")
+        );
     }
 
-    // let mut remaining = raw;
-    // let mut remaining_start_idx = 0;
+    #[test]
+    fn it_resets_state_after_v_pre() {
+        let mut errors = Vec::new();
+        let mut parser = SfcParser::new(
+            r#"
+        <template><div v-pre></div><h1>{{ msg }}</h1></template>"#,
+            &mut errors,
+        );
 
-    // // Find interpolation start - `{{` by default
-    // for (match_idx, _) in raw.match_indices(interpolation_start_pat) {
-    //     let interpolation_start_idx = match_idx + interpolation_start_pat_len;
+        let parsed = parser.parse_sfc().expect("Should parse");
+        let template = parsed.template.expect("Should have template");
 
-    //     // Find interpolation end - `}}` by default
-    //     if let Some(interpolation_end_idx) =
-    //         raw[interpolation_start_idx..].find(interpolation_end_pat)
-    //     {
-    //         // Offset
-    //         let interpolation_end_idx = interpolation_end_idx + interpolation_start_idx;
-    //         let interpolation = &raw[interpolation_start_idx..interpolation_end_idx];
+        // Check div
+        let Some(Node::Element(div)) = template.roots.first() else {
+            panic!("First child of root is not div")
+        };
+        let div_directives = div
+            .starting_tag
+            .directives
+            .as_ref()
+            .expect("Should have directives");
+        assert!(div_directives.v_pre.is_some());
 
-    //         // Include everything prior to interpolation
+        // Check h1
+        let Some(Node::Element(h1)) = template.roots.last() else {
+            panic!("Last child of root is not h1")
+        };
+        assert!(h1.starting_tag.directives.is_none());
+        assert_eq!(1, h1.children.len());
 
-    //         // Span stuff
-    //         let offset = span.lo.0 + interpolation_start_idx as u32;
-    //         let interpolation_span = Span::new(
-    //             BytePos(offset),
-    //             BytePos(offset + interpolation.len() as u32),
-    //             Default::default(),
-    //         );
-
-    //         match parse_expr(
-    //             interpolation,
-    //             Syntax::Typescript(TsConfig::default()),
-    //             interpolation_span,
-    //         ) {
-    //             Ok(parsed_interpolation) => out.push(Node::Interpolation(Interpolation {
-    //                 value: parsed_interpolation,
-    //                 template_scope: 0,
-    //                 patch_flag: false,
-    //             })),
-    //             Err(expr_err) => errors.push(expr_err.into()),
-    //         }
-
-    //         // Advance
-    //         remaining_start_idx = interpolation_end_idx + interpolation_end_pat_len;
-    //         remaining = &raw[remaining_start_idx..];
-    //     }
-    // }
-
-    // if !remaining.is_empty() {
-    //     let offset = span.lo.0 + remaining_start_idx as u32;
-    //     let new_span = Span::new(
-    //         BytePos(offset),
-    //         BytePos(offset + remaining.len() as u32),
-    //         Default::default(),
-    //     );
-    //     out.push(Node::Text(FervidAtom::from(remaining), new_span));
-    // }
+        // Check h1 child
+        let Some(Node::Interpolation(interpolation)) = h1.children.first() else {
+            panic!("First child of h1 is not interpolation")
+        };
+        assert!(interpolation.value.is_ident());
+    }
 }

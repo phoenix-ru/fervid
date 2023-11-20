@@ -13,9 +13,9 @@ pub enum ParseErrorKind {
     /// Unclosed dynamic argument, e.g. `:[dynamic`
     DynamicArgument,
     /// Error while parsing EcmaScript/TypeScript
-    BadExpr(swc_ecma_parser::error::SyntaxError),
+    BadExpr(Box<swc_ecma_parser::error::SyntaxError>),
     /// Unrecoverable error while parsing HTML
-    InvalidHtml(swc_html_parser::error::ErrorKind),
+    InvalidHtml(Box<swc_html_parser::error::ErrorKind>),
 }
 
 impl From<swc_ecma_parser::error::Error> for ParseError {
@@ -23,7 +23,7 @@ impl From<swc_ecma_parser::error::Error> for ParseError {
         let span = value.span();
 
         ParseError {
-            kind: ParseErrorKind::BadExpr(value.into_kind()),
+            kind: ParseErrorKind::BadExpr(Box::new(value.into_kind())),
             span,
         }
     }

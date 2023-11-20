@@ -11,7 +11,8 @@ fn parser_benchmark(c: &mut Criterion) {
             |b, component| {
                 let mut errors = Vec::new();
                 b.iter(|| {
-                    let _ = fervid_parser::parse_sfc(black_box(component), &mut errors);
+                    let mut parser = fervid_parser::SfcParser::new(black_box(&component), &mut errors);
+                    let _ = parser.parse_sfc();
                     errors.clear();
                 })
             },

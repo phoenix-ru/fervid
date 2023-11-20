@@ -60,7 +60,8 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
     // })?;
 
     let mut errors = Vec::new();
-    let sfc = fervid_parser::parse_sfc(&source, &mut errors).map_err(|err| {
+    let mut parser = fervid_parser::SfcParser::new(source, &mut errors);
+    let sfc = parser.parse_sfc().map_err(|err| {
         return err.to_string();
     })?;
 

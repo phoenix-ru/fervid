@@ -1,6 +1,6 @@
 use fervid_core::{
-    AttributeOrBinding, FervidAtom, StrOrExpr, VBindDirective, VCustomDirective, VForDirective,
-    VModelDirective, VOnDirective, VSlotDirective, VueDirectives, fervid_atom,
+    AttributeOrBinding, FervidAtom, StrOrExpr, VBindDirective, VCustomDirective,
+    VForDirective, VModelDirective, VOnDirective, VSlotDirective, VueDirectives,
 };
 use swc_core::common::{BytePos, Span};
 use swc_ecma_parser::Syntax;
@@ -9,416 +9,440 @@ use swc_html_ast::Attribute;
 use crate::{
     error::{ParseError, ParseErrorKind},
     script::{parse_expr, parse_pat},
+    SfcParser,
 };
 
-pub fn process_element_attributes(
-    raw_attributes: Vec<Attribute>,
-    attrs_or_bindings: &mut Vec<AttributeOrBinding>,
-    vue_directives: &mut Option<Box<VueDirectives>>,
-    errors: &mut Vec<ParseError>,
-) {
-    for raw_attr in raw_attributes.into_iter() {
-        parse_raw_attribute(raw_attr, attrs_or_bindings, vue_directives, errors);
-    }
-}
-
-pub fn parse_raw_attribute(
-    raw_attribute: Attribute,
-    attrs_or_bindings: &mut Vec<AttributeOrBinding>,
-    vue_directives: &mut Option<Box<VueDirectives>>,
-    errors: &mut Vec<ParseError>,
-) {
-    match try_parse_directive(raw_attribute, attrs_or_bindings, vue_directives, errors) {
-        Ok(()) => {
-            // do nothing, we are good already
+impl SfcParser<'_, '_, '_> {
+    /// Returns `true` when `v-pre` is discovered
+    pub fn process_element_attributes(
+        &mut self,
+        raw_attributes: Vec<Attribute>,
+        attrs_or_bindings: &mut Vec<AttributeOrBinding>,
+        vue_directives: &mut Option<Box<VueDirectives>>,
+    ) -> bool {
+        // Skip any kind of processing for `v-pre` mode
+        if self.is_pre {
+            attrs_or_bindings.extend(raw_attributes.into_iter().map(create_regular_attribute));
+            return false;
         }
-        Err(raw_attribute) => {
-            // parse as a raw attribute
-            attrs_or_bindings.push(AttributeOrBinding::RegularAttribute {
-                name: raw_attribute.name,
-                value: raw_attribute.value.unwrap_or_else(|| fervid_atom!("")),
-            })
+
+        // Check existence of `v-pre` in attributes
+        let has_v_pre = raw_attributes.iter().any(|attr| attr.name == "v-pre");
+        if has_v_pre {
+            attrs_or_bindings.extend(
+                raw_attributes
+                    .into_iter()
+                    .filter(|attr| attr.name != "v-pre")
+                    .map(create_regular_attribute),
+            );
+            return true;
         }
-    }
-}
 
-/// Returns `true` if it was recognized as a directive (regardless if it was successfully parsed)
-pub fn try_parse_directive(
-    raw_attribute: Attribute,
-    attrs_or_bindings: &mut Vec<AttributeOrBinding>,
-    vue_directives: &mut Option<Box<VueDirectives>>,
-    errors: &mut Vec<ParseError>,
-) -> Result<(), Attribute> {
-    macro_rules! bail {
-        // Everything is okay, this is just not a directive
-        () => {
-            return Err(raw_attribute);
-        };
-        // Parsing directive failed
-        ($err_kind: expr) => {
-            errors.push(ParseError {
-                kind: $err_kind,
-                span: raw_attribute.span,
-            });
-            return Err(raw_attribute);
-        };
-        (js, $parse_error: expr) => {
-            errors.push($parse_error);
-            return Err(raw_attribute);
-        };
-    }
+        for raw_attribute in raw_attributes.into_iter() {
+            match self.try_parse_directive(raw_attribute, attrs_or_bindings, vue_directives) {
+                Ok(()) => {
+                    // do nothing, we are good already
+                }
 
-    macro_rules! ts {
-        () => {
-            Syntax::Typescript(Default::default())
-        };
-    }
-
-    // TODO Fix and test parsing of directives
-
-    // TODO Should the span be narrower? (It can be narrowed with lo = lo + name.len() + 1 and hi = hi - 1)
-    let span = raw_attribute.span;
-    let raw_name: &str = &raw_attribute.name;
-    let mut chars_iter = raw_name.chars().enumerate().peekable();
-
-    // Every directive starts with a prefix: `@`, `:`, `.`, `#` or `v-`
-    let Some((_, prefix)) = chars_iter.next() else {
-        bail!(ParseErrorKind::DirectiveSyntax);
-    };
-
-    // https://vuejs.org/api/built-in-directives.html#v-bind
-    let mut is_bind_prop = false;
-    let mut expect_argument = true;
-    let mut argument_start = 0;
-    let mut argument_end = raw_name.len();
-
-    let directive_name = match prefix {
-        '@' => "on",
-        ':' => "bind",
-        '.' => {
-            is_bind_prop = true;
-            "bind"
+                // parse as a raw attribute
+                Err(raw_attribute) => {
+                    attrs_or_bindings.push(create_regular_attribute(raw_attribute))
+                }
+            }
         }
-        '#' => "slot",
-        'v' if matches!(chars_iter.next(), Some((_, '-'))) => {
-            // Read directive name
-            let mut start = 0;
-            let mut end = raw_name.len();
+
+        // No `v-pre` found in attributes
+        false
+    }
+
+    /// Returns `true` if it was recognized as a directive (regardless if it was successfully parsed)
+    pub fn try_parse_directive(
+        &mut self,
+        raw_attribute: Attribute,
+        attrs_or_bindings: &mut Vec<AttributeOrBinding>,
+        vue_directives: &mut Option<Box<VueDirectives>>,
+    ) -> Result<(), Attribute> {
+        macro_rules! bail {
+            // Everything is okay, this is just not a directive
+            () => {
+                return Err(raw_attribute);
+            };
+            // Parsing directive failed
+            ($err_kind: expr) => {
+                self.errors.push(ParseError {
+                    kind: $err_kind,
+                    span: raw_attribute.span,
+                });
+                return Err(raw_attribute);
+            };
+            (js, $parse_error: expr) => {
+                self.errors.push($parse_error);
+                return Err(raw_attribute);
+            };
+        }
+
+        macro_rules! ts {
+            () => {
+                Syntax::Typescript(Default::default())
+            };
+        }
+
+        // TODO Fix and test parsing of directives
+
+        // TODO Should the span be narrower? (It can be narrowed with lo = lo + name.len() + 1 and hi = hi - 1)
+        let span = raw_attribute.span;
+        let raw_name: &str = &raw_attribute.name;
+        let mut chars_iter = raw_name.chars().enumerate().peekable();
+
+        // Every directive starts with a prefix: `@`, `:`, `.`, `#` or `v-`
+        let Some((_, prefix)) = chars_iter.next() else {
+            bail!(ParseErrorKind::DirectiveSyntax);
+        };
+
+        // https://vuejs.org/api/built-in-directives.html#v-bind
+        let mut is_bind_prop = false;
+        let mut expect_argument = true;
+        let mut argument_start = 0;
+        let mut argument_end = raw_name.len();
+
+        let directive_name = match prefix {
+            '@' => "on",
+            ':' => "bind",
+            '.' => {
+                is_bind_prop = true;
+                "bind"
+            }
+            '#' => "slot",
+            'v' if matches!(chars_iter.next(), Some((_, '-'))) => {
+                // Read directive name
+                let mut start = 0;
+                let mut end = raw_name.len();
+                while let Some((idx, c)) = chars_iter.next() {
+                    if c == '.' {
+                        expect_argument = false;
+                        argument_end = idx;
+                        end = idx;
+                        break;
+                    }
+                    if c == ':' {
+                        end = idx;
+                        break;
+                    }
+                    if start == 0 {
+                        // `idx` is never 0 because zero-th char is `prefix`
+                        start = idx;
+                    }
+                }
+
+                // Directive syntax is bad if we could not read the directive name
+                if start == 0 {
+                    bail!(ParseErrorKind::DirectiveSyntax);
+                }
+
+                &raw_name[start..end]
+            }
+            _ => {
+                bail!();
+            }
+        };
+
+        // Try parsing argument (it is optional and may be empty though)
+        let mut argument: Option<StrOrExpr> = None;
+        if expect_argument {
             while let Some((idx, c)) = chars_iter.next() {
                 if c == '.' {
-                    expect_argument = false;
                     argument_end = idx;
-                    end = idx;
                     break;
                 }
-                if c == ':' {
-                    end = idx;
-                    break;
-                }
-                if start == 0 {
-                    // `idx` is never 0 because zero-th char is `prefix`
-                    start = idx;
+                if argument_start == 0 {
+                    argument_start = idx;
                 }
             }
 
-            // Directive syntax is bad if we could not read the directive name
-            if start == 0 {
-                bail!(ParseErrorKind::DirectiveSyntax);
-            }
+            if argument_start != 0 {
+                let mut raw_argument = &raw_name[argument_start..argument_end];
+                let mut is_dynamic_argument = false;
 
-            &raw_name[start..end]
+                // Dynamic argument: `:[dynamic-argument]`
+                if raw_argument.starts_with('[') {
+                    // Check syntax
+                    if !raw_argument.ends_with(']') {
+                        bail!(ParseErrorKind::DynamicArgument);
+                    }
+
+                    raw_argument =
+                        &raw_argument['['.len_utf8()..(raw_argument.len() - ']'.len_utf8())];
+                    if raw_argument.is_empty() {
+                        bail!(ParseErrorKind::DynamicArgument);
+                    }
+
+                    is_dynamic_argument = true;
+                }
+
+                if is_dynamic_argument {
+                    // TODO Narrower span?
+                    let parsed_argument = match parse_expr(raw_argument, ts!(), span) {
+                        Ok(parsed) => parsed,
+                        Err(expr_err) => {
+                            bail!(js, expr_err.into());
+                        }
+                    };
+
+                    argument = Some(StrOrExpr::Expr(parsed_argument));
+                } else {
+                    argument = Some(StrOrExpr::Str(FervidAtom::from(raw_argument)));
+                }
+            }
         }
-        _ => {
-            bail!();
-        }
-    };
 
-    // Try parsing argument (it is optional and may be empty though)
-    let mut argument: Option<StrOrExpr> = None;
-    if expect_argument {
-        while let Some((idx, c)) = chars_iter.next() {
-            if c == '.' {
-                argument_end = idx;
-                break;
-            }
-            if argument_start == 0 {
-                argument_start = idx;
+        // Try parsing modifiers, it is a simple string split
+        let mut modifiers = Vec::<FervidAtom>::new();
+        if argument_end != 0 {
+            for modifier in raw_name[argument_end..]
+                .split('.')
+                .filter(|m| !m.is_empty())
+            {
+                modifiers.push(FervidAtom::from(modifier));
             }
         }
 
-        if argument_start != 0 {
-            let mut raw_argument = &raw_name[argument_start..argument_end];
-            let mut is_dynamic_argument = false;
+        /// Unwrapping the value or failing
+        macro_rules! expect_value {
+            () => {
+                if let Some(ref value) = raw_attribute.value {
+                    value
+                } else {
+                    bail!(ParseErrorKind::DirectiveSyntax);
+                }
+            };
+        }
 
-            // Dynamic argument: `:[dynamic-argument]`
-            if raw_argument.starts_with('[') {
-                // Check syntax
-                if !raw_argument.ends_with(']') {
-                    bail!(ParseErrorKind::DynamicArgument);
+        macro_rules! get_directives {
+            () => {
+                vue_directives.get_or_insert_with(|| Box::new(VueDirectives::default()))
+            };
+        }
+
+        macro_rules! push_directive {
+            ($key: ident, $value: expr) => {
+                let directives = get_directives!();
+                directives.$key = Some($value);
+            };
+        }
+
+        macro_rules! push_directive_js {
+            ($key: ident, $value: expr) => {
+                match parse_expr($value, ts!(), span) {
+                    Ok(parsed) => {
+                        let directives = get_directives!();
+                        directives.$key = Some(parsed);
+                    }
+                    Result::Err(_) => {}
+                }
+            };
+        }
+
+        // Construct the directives from parts
+        match directive_name {
+            // Directives arranged by estimated usage frequency
+            "bind" => {
+                // Get flags
+                let mut is_camel = false;
+                let mut is_prop = is_bind_prop;
+                let mut is_attr = false;
+                for modifier in modifiers.iter() {
+                    match modifier.as_ref() {
+                        "camel" => is_camel = true,
+                        "prop" => is_prop = true,
+                        "attr" => is_attr = true,
+                        _ => {}
+                    }
                 }
 
-                raw_argument = &raw_argument['['.len_utf8()..(raw_argument.len() - ']'.len_utf8())];
-                if raw_argument.is_empty() {
-                    bail!(ParseErrorKind::DynamicArgument);
-                }
+                let value = expect_value!();
 
-                is_dynamic_argument = true;
-            }
-
-            if is_dynamic_argument {
-                // TODO Narrower span?
-                let parsed_argument = match parse_expr(raw_argument, ts!(), span) {
+                let parsed_expr = match parse_expr(&value, ts!(), span) {
                     Ok(parsed) => parsed,
                     Err(expr_err) => {
                         bail!(js, expr_err.into());
                     }
                 };
 
-                argument = Some(StrOrExpr::Expr(parsed_argument));
-            } else {
-                argument = Some(StrOrExpr::Str(FervidAtom::from(raw_argument)));
-            }
-        }
-    }
-
-    // Try parsing modifiers, it is a simple string split
-    let mut modifiers = Vec::<FervidAtom>::new();
-    if argument_end != 0 {
-        for modifier in raw_name[argument_end..]
-            .split('.')
-            .filter(|m| !m.is_empty())
-        {
-            modifiers.push(FervidAtom::from(modifier));
-        }
-    }
-
-    /// Unwrapping the value or failing
-    macro_rules! expect_value {
-        () => {
-            if let Some(ref value) = raw_attribute.value {
-                value
-            } else {
-                bail!(ParseErrorKind::DirectiveSyntax);
-            }
-        };
-    }
-
-    macro_rules! get_directives {
-        () => {
-            vue_directives.get_or_insert_with(|| Box::new(VueDirectives::default()))
-        };
-    }
-
-    macro_rules! push_directive {
-        ($key: ident, $value: expr) => {
-            let directives = get_directives!();
-            directives.$key = Some($value);
-        };
-    }
-
-    macro_rules! push_directive_js {
-        ($key: ident, $value: expr) => {
-            match parse_expr($value, ts!(), span) {
-                Ok(parsed) => {
-                    let directives = get_directives!();
-                    directives.$key = Some(parsed);
-                }
-                Result::Err(_) => {}
-            }
-        };
-    }
-
-    // Construct the directives from parts
-    match directive_name {
-        // Directives arranged by estimated usage frequency
-        "bind" => {
-            // Get flags
-            let mut is_camel = false;
-            let mut is_prop = is_bind_prop;
-            let mut is_attr = false;
-            for modifier in modifiers.iter() {
-                match modifier.as_ref() {
-                    "camel" => is_camel = true,
-                    "prop" => is_prop = true,
-                    "attr" => is_attr = true,
-                    _ => {}
-                }
+                attrs_or_bindings.push(AttributeOrBinding::VBind(VBindDirective {
+                    argument,
+                    value: parsed_expr,
+                    is_camel,
+                    is_prop,
+                    is_attr,
+                }));
             }
 
-            let value = expect_value!();
+            "on" => {
+                let handler = match raw_attribute.value {
+                    Some(ref value) => match parse_expr(&value, ts!(), span) {
+                        Ok(parsed) => Some(parsed),
+                        Err(expr_err) => {
+                            bail!(js, expr_err.into());
+                        }
+                    },
+                    None => None,
+                };
 
-            let parsed_expr = match parse_expr(&value, ts!(), span) {
-                Ok(parsed) => parsed,
-                Err(expr_err) => {
-                    bail!(js, expr_err.into());
-                }
-            };
+                attrs_or_bindings.push(AttributeOrBinding::VOn(VOnDirective {
+                    event: argument,
+                    handler,
+                    modifiers,
+                }));
+            }
 
-            attrs_or_bindings.push(AttributeOrBinding::VBind(VBindDirective {
-                argument,
-                value: parsed_expr,
-                is_camel,
-                is_prop,
-                is_attr,
-            }));
-        }
+            "if" => {
+                let value = expect_value!();
+                push_directive_js!(v_if, &value);
+            }
 
-        "on" => {
-            let handler = match raw_attribute.value {
-                Some(ref value) => match parse_expr(&value, ts!(), span) {
-                    Ok(parsed) => Some(parsed),
-                    Err(expr_err) => {
-                        bail!(js, expr_err.into());
-                    }
-                },
-                None => None,
-            };
+            "else-if" => {
+                let value = expect_value!();
+                push_directive_js!(v_else_if, &value);
+            }
 
-            attrs_or_bindings.push(AttributeOrBinding::VOn(VOnDirective {
-                event: argument,
-                handler,
-                modifiers,
-            }));
-        }
+            "else" => {
+                push_directive!(v_else, ());
+            }
 
-        "if" => {
-            let value = expect_value!();
-            push_directive_js!(v_if, &value);
-        }
+            "for" => {
+                let value = expect_value!();
 
-        "else-if" => {
-            let value = expect_value!();
-            push_directive_js!(v_else_if, &value);
-        }
+                let Some(((itervar, itervar_span), (iterable, iterable_span))) =
+                    split_itervar_and_iterable(&value, span)
+                else {
+                    bail!(ParseErrorKind::DirectiveSyntax);
+                };
 
-        "else" => {
-            push_directive!(v_else, ());
-        }
+                match parse_expr(itervar, ts!(), itervar_span) {
+                    Ok(itervar) => match parse_expr(iterable, ts!(), iterable_span) {
+                        Ok(iterable) => {
+                            push_directive!(
+                                v_for,
+                                VForDirective {
+                                    iterable,
+                                    itervar,
+                                    patch_flags: Default::default()
+                                }
+                            );
+                        }
+                        Result::Err(_) => {}
+                    },
+                    Result::Err(_) => {}
+                };
+            }
 
-        "for" => {
-            let value = expect_value!();
+            "model" => {
+                let value = expect_value!();
 
-            let Some(((itervar, itervar_span), (iterable, iterable_span))) =
-                split_itervar_and_iterable(&value, span)
-            else {
-                bail!(ParseErrorKind::DirectiveSyntax);
-            };
-
-            match parse_expr(itervar, ts!(), itervar_span) {
-                Ok(itervar) => match parse_expr(iterable, ts!(), iterable_span) {
-                    Ok(iterable) => {
-                        push_directive!(
-                            v_for,
-                            VForDirective {
-                                iterable,
-                                itervar,
-                                patch_flags: Default::default()
-                            }
-                        );
+                match parse_expr(&value, ts!(), span) {
+                    Ok(model_binding) => {
+                        let directives = get_directives!();
+                        directives.v_model.push(VModelDirective {
+                            argument,
+                            value: model_binding,
+                            update_handler: None,
+                            modifiers,
+                            span,
+                        });
                     }
                     Result::Err(_) => {}
-                },
-                Result::Err(_) => {}
-            };
-        }
-
-        "model" => {
-            let value = expect_value!();
-
-            match parse_expr(&value, ts!(), span) {
-                Ok(model_binding) => {
-                    let directives = get_directives!();
-                    directives.v_model.push(VModelDirective {
-                        argument,
-                        value: model_binding,
-                        update_handler: None,
-                        modifiers,
-                        span,
-                    });
                 }
-                Result::Err(_) => {}
             }
-        }
 
-        "slot" => {
-            let value = raw_attribute
-                .value
-                .and_then(|v| match parse_pat(&v, ts!(), span) {
-                    Ok(value) => Some(Box::new(value)),
-                    Result::Err(_) => None,
-                });
-            push_directive!(
-                v_slot,
-                VSlotDirective {
-                    slot_name: argument,
-                    value,
-                }
-            );
-        }
+            "slot" => {
+                let value = raw_attribute
+                    .value
+                    .and_then(|v| match parse_pat(&v, ts!(), span) {
+                        Ok(value) => Some(Box::new(value)),
+                        Result::Err(_) => None,
+                    });
+                push_directive!(
+                    v_slot,
+                    VSlotDirective {
+                        slot_name: argument,
+                        value,
+                    }
+                );
+            }
 
-        "show" => {
-            let value = expect_value!();
-            push_directive_js!(v_show, &value);
-        }
+            "show" => {
+                let value = expect_value!();
+                push_directive_js!(v_show, &value);
+            }
 
-        "html" => {
-            let value = expect_value!();
-            push_directive_js!(v_html, &value);
-        }
+            "html" => {
+                let value = expect_value!();
+                push_directive_js!(v_html, &value);
+            }
 
-        "text" => {
-            let value = expect_value!();
-            push_directive_js!(v_text, &value);
-        }
+            "text" => {
+                let value = expect_value!();
+                push_directive_js!(v_text, &value);
+            }
 
-        "once" => {
-            push_directive!(v_once, ());
-        }
+            "once" => {
+                push_directive!(v_once, ());
+            }
 
-        "pre" => {
-            push_directive!(v_pre, ());
-        }
+            "pre" => {
+                push_directive!(v_pre, ());
+            }
 
-        "memo" => {
-            let value = expect_value!();
-            push_directive_js!(v_memo, &value);
-        }
+            "memo" => {
+                let value = expect_value!();
+                push_directive_js!(v_memo, &value);
+            }
 
-        "cloak" => {
-            push_directive!(v_cloak, ());
-        }
+            "cloak" => {
+                push_directive!(v_cloak, ());
+            }
 
-        // Custom
-        _ => 'custom: {
-            // If no value, include as is
-            let Some(value) = raw_attribute.value else {
-                let directives = get_directives!();
-                directives.custom.push(VCustomDirective {
-                    name: directive_name.into(),
-                    argument,
-                    modifiers,
-                    value: None,
-                });
-                break 'custom;
-            };
-
-            // If there is a value, try parsing it and only include the successfully parsed values
-            match parse_expr(&value, ts!(), span) {
-                Ok(parsed) => {
+            // Custom
+            _ => 'custom: {
+                // If no value, include as is
+                let Some(value) = raw_attribute.value else {
                     let directives = get_directives!();
                     directives.custom.push(VCustomDirective {
                         name: directive_name.into(),
                         argument,
                         modifiers,
-                        value: Some(parsed),
+                        value: None,
                     });
+                    break 'custom;
+                };
+
+                // If there is a value, try parsing it and only include the successfully parsed values
+                match parse_expr(&value, ts!(), span) {
+                    Ok(parsed) => {
+                        let directives = get_directives!();
+                        directives.custom.push(VCustomDirective {
+                            name: directive_name.into(),
+                            argument,
+                            modifiers,
+                            value: Some(parsed),
+                        });
+                    }
+                    Result::Err(_) => {}
                 }
-                Result::Err(_) => {}
             }
         }
-    }
 
-    Ok(())
+        Ok(())
+    }
+}
+
+/// Creates `AttributeOrBinding::RegularAttribute`
+#[inline]
+pub fn create_regular_attribute(raw_attribute: Attribute) -> AttributeOrBinding {
+    AttributeOrBinding::RegularAttribute {
+        name: raw_attribute.name,
+        value: raw_attribute.value.unwrap_or_default(),
+    }
 }
 
 fn split_itervar_and_iterable<'a>(
