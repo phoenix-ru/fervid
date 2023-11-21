@@ -5,7 +5,7 @@ import kleur from 'kleur'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cpus } from 'node:os'
-import { compileTemplate } from '@vue/compiler-sfc'
+import { compileScript, parse } from '@vue/compiler-sfc'
 
 import { compileAsync, compileSync } from '../index'
 
@@ -23,10 +23,12 @@ async function run() {
     'compile sfc',
 
     b.add('@vue/compiler-sfc', () => {
-      compileTemplate({
-        filename: 'input.vue',
-        source: input,
-        id: '',
+      const descriptor = parse(input, { filename: 'input.vue' })
+      compileScript(descriptor.descriptor, {
+        id: 'abc',
+        isProd: true,
+        inlineTemplate: true,
+        defineModel: true
       })
     }),
 

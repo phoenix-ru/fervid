@@ -49,12 +49,12 @@
     <br v-show="false">
     <another-element v-for="i in 3" :key="i" v-text="foo + bar"></another-element>
 
-    <template v-for="([item1, item2], index) in list">
+    <template v-for="([item1, item2], index) in list" :key="index">
       hey
-      <span :key="index">{{ item1 }}{{ index }}</span>
-      <div  :key="index" class="both regular and bound" :class="[item2, index]"></div>
-      <div  :key="index" class="just regular class"></div>
-      <div  :key="index" :class="[member.expr, globalIdent, item2, index]"></div>
+      <span>{{ item1 }}{{ index }}</span>
+      <div class="both regular and bound" :class="[item2, index]"></div>
+      <div class="just regular class"></div>
+      <div :class="[member.expr, globalIdent, item2, index]"></div>
     </template>
 
     <template v-if="false">

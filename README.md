@@ -32,16 +32,16 @@ Yes, it is incredibly fast. In fact, below is a benchmark run for a [test compon
 
 ```
   @vue/compiler-sfc:
-    1 644 ops/s, ±0.78%   | slowest, 97.2% slower
+    954 ops/s, ±1.15%     | slowest, 98.42% slower
 
   @fervid/napi sync:
-    6 240 ops/s, ±0.44%   | 89.36% slower
+    6 464 ops/s, ±0.08%   | 89.29% slower
 
   @fervid/napi async (4 threads):
-    12 856 ops/s, ±1.53%  | 78.08% slower
+    11 624 ops/s, ±2.12%  | 80.73% slower
 
   @fervid/napi async CPUS (23 threads):
-    58 650 ops/s, ±1.25%  | fastest
+    60 329 ops/s, ±0.67%  | fastest
 ```
 
 <!-- 
