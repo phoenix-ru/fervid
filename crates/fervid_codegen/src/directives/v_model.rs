@@ -18,20 +18,16 @@ impl CodegenContext {
         &self,
         v_model: &VModelDirective,
         out: &mut Vec<PropOrSpread>,
-    ) -> bool {
+    ) {
         let span = v_model.span;
         let mut buf = String::new();
 
+        // 1. Get bound attribute (part after `:` or `modelValue`).
         // `v-model="smth"` is same as `v-model:modelValue="smth"`
         let bound_attribute = v_model
             .argument
             .to_owned()
             .unwrap_or_else(|| "modelValue".into());
-
-        // 1. Transform the binding
-        // let (transformed, has_js_bindings) =
-        //     self.transform_v_model_value(v_model.value, scope_to_use, span);
-        let has_js_bindings = true; // TODO
 
         // 2. Push model attribute and its binding,
         // e.g. `v-model="smth"` -> `modelValue: _ctx.smth`
@@ -40,48 +36,22 @@ impl CodegenContext {
             value: v_model.value.to_owned(),
         }))));
 
-        // 3. Generate event name, e.g. `onUpdate:modelValue` or `onUpdate:usersArgument`
-        // For dynamic model args, `["onUpdate:" + <model arg>]` will be generated
-        let event_listener_propname = match bound_attribute {
-            StrOrExpr::Str(ref s) => {
-                buf.reserve(9 + s.len());
-                buf.push_str("onUpdate:");
-                let _ = to_camelcase(&s, &mut buf); // ignore fault
-                str_to_propname(&buf, span)
-            }
-
-            StrOrExpr::Expr(ref expr) => {
-                let addition = Expr::Bin(BinExpr {
-                    span,
-                    op: BinaryOp::Add,
-                    left: Box::new(Expr::Lit(Lit::Str(Str {
-                        span,
-                        value: FervidAtom::from("onUpdate:"),
-                        raw: None,
-                    }))),
-                    right: expr.to_owned(),
-                });
-
-                PropName::Computed(ComputedPropName {
-                    span,
-                    expr: Box::new(addition),
-                })
-            }
-        };
+        // 3. Generate event handler propname
+        let event_handler_propname = generate_v_model_handler_propname(&bound_attribute, &mut buf, span);
 
         // 4. Push the update code,
         // e.g. `v-model="smth"` -> `"onUpdate:modelValue": $event => ((_ctx.smth) = $event)`
         // TODO Cache like so `_cache[1] || (_cache[1] = `
         if let Some(ref update_handler) = v_model.update_handler {
             out.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                key: event_listener_propname,
+                key: event_handler_propname,
                 value: update_handler.to_owned(),
             }))));
         }
 
         // 5. Optionally generate modifiers
         if v_model.modifiers.len() == 0 {
-            return has_js_bindings;
+            return;
         }
 
         // For regular model values, `<model name>Modifiers` is generated.
@@ -124,6 +94,7 @@ impl CodegenContext {
             }
         };
 
+        // Push modifiers
         out.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
             key: modifiers_propname,
             value: Box::new(Expr::Object(generate_v_model_modifiers(
@@ -131,8 +102,68 @@ impl CodegenContext {
                 span,
             ))),
         }))));
+    }
 
-        has_js_bindings
+    /// Generates the `v-model` for an element.
+    /// This generates the update handler
+    pub fn generate_v_model_for_element(&self, v_model: &VModelDirective, out: &mut Vec<PropOrSpread>) {
+        let span = v_model.span;
+        let mut buf = String::new();
+
+        // 1. Get bound attribute.
+        // `v-model="smth"` is same as `v-model:modelValue="smth"`
+        let bound_attribute = v_model
+            .argument
+            .to_owned()
+            .unwrap_or_else(|| "modelValue".into());
+
+        // 2. Generate event handler propname
+        let event_handler_propname = generate_v_model_handler_propname(&bound_attribute, &mut buf, span);
+
+        // 3. Push the update handler code,
+        // e.g. `v-model="smth"` -> `"onUpdate:modelValue": $event => ((_ctx.smth) = $event)`
+        // TODO Cache like so `_cache[1] || (_cache[1] = `
+        if let Some(ref update_handler) = v_model.update_handler {
+            out.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                key: event_handler_propname,
+                value: update_handler.to_owned(),
+            }))));
+        }
+    }
+}
+
+/// Generates the propname for `v-model` update handler.
+/// For dynamic model args, `["onUpdate:" + <model arg>]` will be generated.
+///
+/// ## Examples
+/// - `v-model="smth"` -> `"onUpdate:modelValue"`;
+/// - `v-model:users-argument="smth"` -> `"onUpdate:usersArgument"`.
+fn generate_v_model_handler_propname(bound_attribute: &StrOrExpr, buf: &mut String, span: Span) -> PropName {
+    match bound_attribute {
+        StrOrExpr::Str(ref s) => {
+            buf.reserve(9 + s.len());
+            buf.push_str("onUpdate:");
+            let _ = to_camelcase(&s, buf); // ignore fault
+            str_to_propname(&buf, span)
+        }
+
+        StrOrExpr::Expr(ref expr) => {
+            let addition = Expr::Bin(BinExpr {
+                span,
+                op: BinaryOp::Add,
+                left: Box::new(Expr::Lit(Lit::Str(Str {
+                    span,
+                    value: FervidAtom::from("onUpdate:"),
+                    raw: None,
+                }))),
+                right: expr.to_owned(),
+            });
+
+            PropName::Computed(ComputedPropName {
+                span,
+                expr: Box::new(addition),
+            })
+        }
     }
 }
 

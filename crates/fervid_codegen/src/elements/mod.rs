@@ -231,6 +231,10 @@ impl CodegenContext {
             if let Some(ref v_html) = directives.v_html {
                 result_props.push(self.generate_v_html(&v_html));
             }
+
+            for v_model in directives.v_model.iter() {
+                self.generate_v_model_for_element(v_model, &mut result_props);
+            }
         }
 
         result_props

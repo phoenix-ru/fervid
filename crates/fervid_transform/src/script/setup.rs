@@ -41,7 +41,7 @@ pub fn transform_and_record_script_setup(
     script_setup: SfcScriptBlock,
     bindings_helper: &mut BindingsHelper,
 ) -> TransformScriptSetupResult {
-    let span = DUMMY_SP; // TODO
+    let span = script_setup.content.span;
 
     let mut module_decls = Vec::<ModuleDecl>::new();
     let mut sfc_object_helper = SfcExportedObjectHelper::default();

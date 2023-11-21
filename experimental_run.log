@@ -65,7 +65,9 @@ export default {
                         _createCommentVNode(" Comment "),
                         _createVNode(_component_another_element),
                         _createTextVNode(" yet another text "),
-                        _withDirectives(_createElementVNode("input"), [
+                        _withDirectives(_createElementVNode("input", {
+                            "onUpdate:modelValue": ($event)=>inputModel.value = $event
+                        }), [
                             [
                                 _vModelText,
                                 inputModel.value
