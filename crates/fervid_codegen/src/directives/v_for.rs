@@ -8,16 +8,14 @@ use crate::CodegenContext;
 
 impl CodegenContext {
     /// Generates `(openBlock(true), createElementBlock(Fragment, null, renderList(<list>, (<item>) => (<expr>)), <patch flag>))`
-    pub fn generate_v_for(&mut self, v_for: &VForDirective, item_render_expr: Expr) -> Expr {
+    pub fn generate_v_for(&mut self, v_for: &VForDirective, item_render_expr: Box<Expr>) -> Expr {
         let span = DUMMY_SP; // TODO
 
         // Arrow function which renders each individual item
         let render_list_arrow = Expr::Arrow(ArrowExpr {
             span,
             params: vec![Pat::Expr(v_for.itervar.to_owned())],
-            body: Box::new(swc_core::ecma::ast::BlockStmtOrExpr::Expr(Box::new(
-                item_render_expr,
-            ))),
+            body: Box::new(swc_core::ecma::ast::BlockStmtOrExpr::Expr(item_render_expr)),
             is_async: false,
             is_generator: false,
             type_params: None,

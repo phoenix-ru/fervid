@@ -120,7 +120,7 @@ Code generator
     - [x] v-cloak
     - [x] v-html
     - [ ] v-memo
-    - [ ] v-once
+    - [x] v-once
     - [x] v-pre
     - [x] v-text
     - [x] Custom directives

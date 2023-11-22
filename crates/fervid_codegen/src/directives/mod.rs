@@ -12,6 +12,7 @@ use crate::{utils::str_to_propname, CodegenContext};
 mod v_for;
 mod v_html;
 mod v_model;
+mod v_once;
 mod v_text;
 
 impl CodegenContext {

@@ -29,11 +29,26 @@ impl CodegenContext {
         }
     }
 
+    /// Generates the HTML element, component or a Vue built-in.
     pub fn generate_element_or_component(
         &mut self,
         element_node: &ElementNode,
         wrap_in_block: bool,
     ) -> Expr {
+        // `v-once` logic is common for all
+        let has_v_once = element_node
+            .starting_tag
+            .directives
+            .as_ref()
+            .and_then(|directives| directives.v_once)
+            .is_some();
+
+        // Disable caching if `v-once` is present
+        let old_is_cache_disabled = self.is_cache_disabled;
+        if has_v_once {
+            self.is_cache_disabled = true;
+        }
+
         let mut result = match element_node.kind {
             ElementKind::Builtin(builtin_type) => self.generate_builtin(element_node, builtin_type),
 
@@ -45,8 +60,16 @@ impl CodegenContext {
         // Generate `v-for` if it is present
         if let Some(ref directives) = element_node.starting_tag.directives {
             if let Some(ref v_for) = directives.v_for {
-                result = self.generate_v_for(v_for, result);
+                result = self.generate_v_for(v_for, Box::new(result));
             }
+        }
+
+        // Generate `v-once` if needed
+        if has_v_once {
+            result = self.generate_v_once(Box::new(result));
+
+            // Restore caching
+            self.is_cache_disabled = old_is_cache_disabled;
         }
 
         result
@@ -170,6 +193,14 @@ impl CodegenContext {
                 }
                 None => false,
             }
+    }
+
+    /// Produce the index for a next `cache[idx]` entry.
+    /// This is useful for a `v-once` or event handlers.
+    pub fn allocate_next_cache_entry(&mut self) -> u8 {
+        let idx = self.next_cache_index;
+        self.next_cache_index += 1;
+        idx
     }
 
     fn concatenate_text_nodes(
