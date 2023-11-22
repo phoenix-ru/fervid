@@ -103,6 +103,7 @@ pub struct Interpolation {
     pub value: Box<Expr>,
     pub template_scope: u32,
     pub patch_flag: bool,
+    pub span: Span
 }
 
 /// Starting tag represents [`ElementNode`]'s tag name and attributes

@@ -163,6 +163,7 @@ impl SfcParser<'_, '_, '_> {
                     value: parsed_interpolation,
                     template_scope: 0,
                     patch_flag: false,
+                    span: interpolation_span
                 })),
                 Err(expr_err) => self.errors.push(expr_err.into()),
             }

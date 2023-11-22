@@ -528,6 +528,7 @@ mod tests {
                         value: js("true"),
                         template_scope: 0,
                         patch_flag: false,
+                        span: DUMMY_SP
                     }),
                     Node::Text(" bye!".into(), DUMMY_SP),
                 ],
@@ -557,6 +558,7 @@ mod tests {
                         value: js("true"),
                         template_scope: 0,
                         patch_flag: false,
+                        span: DUMMY_SP
                     }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {

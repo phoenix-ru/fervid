@@ -885,6 +885,7 @@ mod tests {
                                 value: js("one"),
                                 template_scope: 0,
                                 patch_flag: true,
+                                span: DUMMY_SP
                             }),
                         ],
                         template_scope: 0,
