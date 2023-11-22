@@ -13,7 +13,10 @@ use crate::{
 };
 
 impl CodegenContext {
-    /// Returns true when v-model value was transformed
+    /// Generates the `v-model` parts for a component:
+    /// 1. Binding, e.g. `modelValue: smth` for `v-model="smth"`;
+    /// 2. Update handler, e.g. `"onUpdate:modelValue": $event => smth.value = $event`;
+    /// 3. (Optional) Modifiers, e.g. `modelModifiers: { lazy: true }` for `v-model.lazy="smth"`.
     pub fn generate_v_model_for_component(
         &self,
         v_model: &VModelDirective,

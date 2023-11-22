@@ -224,16 +224,16 @@ impl CodegenContext {
 
         // Directives
         if let Some(ref directives) = element_node.starting_tag.directives {
+            for v_model in directives.v_model.iter() {
+                self.generate_v_model_for_element(v_model, &mut result_props);
+            }
+
             if let Some(ref v_text) = directives.v_text {
                 result_props.push(self.generate_v_text(&v_text));
             }
 
             if let Some(ref v_html) = directives.v_html {
                 result_props.push(self.generate_v_html(&v_html));
-            }
-
-            for v_model in directives.v_model.iter() {
-                self.generate_v_model_for_element(v_model, &mut result_props);
             }
         }
 
