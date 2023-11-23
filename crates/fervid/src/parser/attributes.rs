@@ -344,7 +344,8 @@ fn parse_directive<'i>(
                             VForDirective {
                                 iterable,
                                 itervar,
-                                patch_flags: Default::default()
+                                patch_flags: Default::default(),
+                                span: DUMMY_SP
                             }
                         );
                     }

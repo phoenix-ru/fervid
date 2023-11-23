@@ -12,6 +12,7 @@ flags! {
         CreateTextVNode,
         CreateVNode,
         Fragment,
+        IsMemoSame,
         IsRef,
         KeepAlive,
         MergeModels,
@@ -40,6 +41,7 @@ flags! {
         VShow,
         WithCtx,
         WithDirectives,
+        WithMemo,
         WithModifiers,
     }
 }
@@ -55,6 +57,7 @@ impl VueImports {
             VueImports::CreateTextVNode => "_createTextVNode",
             VueImports::CreateVNode => "_createVNode",
             VueImports::Fragment => "_Fragment",
+            VueImports::IsMemoSame => "_isMemoSame",
             VueImports::IsRef => "_isRef",
             VueImports::KeepAlive => "_KeepAlive",
             VueImports::MergeModels => "_mergeModels",
@@ -83,6 +86,7 @@ impl VueImports {
             VueImports::VShow => "_vShow",
             VueImports::WithCtx => "_withCtx",
             VueImports::WithDirectives => "_withDirectives",
+            VueImports::WithMemo => "_withMemo",
             VueImports::WithModifiers => "_withModifiers",
         }
     }

@@ -326,7 +326,8 @@ impl SfcParser<'_, '_, '_> {
                                 VForDirective {
                                     iterable,
                                     itervar,
-                                    patch_flags: Default::default()
+                                    patch_flags: Default::default(),
+                                    span
                                 }
                             );
                         }

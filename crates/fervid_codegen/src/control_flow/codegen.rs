@@ -49,22 +49,32 @@ impl CodegenContext {
             self.is_cache_disabled = true;
         }
 
+        // Generate the relevant render code depending on ElementKind
         let mut result = match element_node.kind {
             ElementKind::Builtin(builtin_type) => self.generate_builtin(element_node, builtin_type),
-
             ElementKind::Element => self.generate_element_vnode(element_node, wrap_in_block),
-
             ElementKind::Component => self.generate_component_vnode(element_node, wrap_in_block),
         };
 
-        // Generate `v-for` if it is present
+        // Generate directives operating on render code
         if let Some(ref directives) = element_node.starting_tag.directives {
-            if let Some(ref v_for) = directives.v_for {
-                result = self.generate_v_for(v_for, Box::new(result));
+            // This block generates `v-for` and `v-memo`.
+            // These are dependent on each other, therefore need to be generated like that.
+            match (directives.v_for.as_ref(), directives.v_memo.as_ref()) {
+                (None, None) => {}
+                (None, Some(v_memo)) => {
+                    result = self.generate_v_memo(v_memo.to_owned(), Box::new(result));
+                }
+                (Some(v_for), None) => {
+                    result = self.generate_v_for(v_for, Box::new(result));
+                }
+                (Some(v_for), Some(v_memo)) => {
+                    result = self.generate_v_for_memoized(v_for, Box::new(result), v_memo.to_owned());
+                }
             }
         }
 
-        // Generate `v-once` if needed
+        // Generate `v-once` if needed (also operates on render code)
         if has_v_once {
             result = self.generate_v_once(Box::new(result));
 

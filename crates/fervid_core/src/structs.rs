@@ -290,7 +290,8 @@ pub struct VForDirective {
     pub iterable: Box<Expr>,
     /// `foo` in `v-for="foo in bar"`
     pub itervar: Box<Expr>,
-    pub patch_flags: PatchFlagsSet
+    pub patch_flags: PatchFlagsSet,
+    pub span: Span
 }
 
 #[derive(Clone, Debug)]
