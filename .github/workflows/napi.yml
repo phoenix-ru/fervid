@@ -118,6 +118,7 @@ jobs:
           name: bindings-${{ matrix.settings.target }}
           path: ${{ env.WORKING_DIR_PATH }}/${{ env.APP_NAME }}.*.node
           if-no-files-found: error
+
   test-macOS-windows-binding:
     name: Test bindings on ${{ matrix.settings.target }} - node@${{ matrix.node }}
     needs:
@@ -151,12 +152,13 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: bindings-${{ matrix.settings.target }}
-          path: .
+          path: ${{ env.WORKING_DIR_PATH }}
       - name: List packages
         run: ls -R .
         shell: bash
       - name: Test bindings
         run: yarn test
+
   test-linux-x64-gnu-binding:
     name: Test bindings on Linux-x64-gnu - node@${{ matrix.node }}
     needs:
@@ -185,12 +187,13 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: bindings-x86_64-unknown-linux-gnu
-          path: .
+          path: ${{ env.WORKING_DIR_PATH }}
       - name: List packages
         run: ls -R .
         shell: bash
       - name: Test bindings
         run: docker run --rm -v $(pwd):/build -w /build node:${{ matrix.node }}-slim yarn test
+
   publish:
     name: Publish
     runs-on: ubuntu-latest
@@ -213,7 +216,7 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v3
         with:
-          path: artifacts
+          path: ${{ env.WORKING_DIR_PATH }}/artifacts
       - name: Move artifacts
         run: yarn artifacts
       - name: List packages
