@@ -35,7 +35,7 @@ jobs:
             target: x86_64-apple-darwin
             build: |
               yarn build
-              strip -x @fervid/*.node
+              strip -x *.node
           - host: windows-latest
             build: yarn build
             target: x86_64-pc-windows-msvc
@@ -45,7 +45,7 @@ jobs:
             build: |-
               set -e &&
               yarn build --target x86_64-unknown-linux-gnu &&
-              strip @fervid/*.node
+              strip *.node
     defaults:
       run:
         working-directory: ${{ env.WORKING_DIR_PATH }}
@@ -113,7 +113,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: bindings-${{ matrix.settings.target }}
-          path: '@fervid/${{ env.APP_NAME }}.*.node'
+          path: ${{ env.APP_NAME }}.*.node
           if-no-files-found: error
   test-macOS-windows-binding:
     name: Test bindings on ${{ matrix.settings.target }} - node@${{ matrix.node }}
