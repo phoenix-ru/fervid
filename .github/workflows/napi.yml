@@ -4,6 +4,7 @@ env:
   APP_NAME: napi
   MACOSX_DEPLOYMENT_TARGET: '10.13'
   WORKING_DIR_PATH: ${{ github.workspace }}/crates/fervid_napi
+  CI: true
 permissions:
   contents: write
   id-token: write
@@ -192,7 +193,7 @@ jobs:
         run: ls -R .
         shell: bash
       - name: Test bindings
-        run: docker run --rm -v $(pwd):/build -w /build node:${{ matrix.node }}-slim yarn test
+        run: docker run --rm -e CI=true -v $(pwd):/build -w /build node:${{ matrix.node }}-slim yarn test
 
   publish:
     name: Publish
