@@ -439,7 +439,6 @@ dependencies = [
  "criterion",
  "fervid_codegen",
  "fervid_core",
- "fervid_css",
  "fervid_parser",
  "fervid_transform",
  "fxhash",
@@ -454,7 +453,7 @@ dependencies = [
 
 [[package]]
 name = "fervid_codegen"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "fervid_core",
  "flagset",
@@ -470,7 +469,7 @@ dependencies = [
 
 [[package]]
 name = "fervid_core"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "flagset",
  "fxhash",
@@ -503,7 +502,7 @@ dependencies = [
 
 [[package]]
 name = "fervid_parser"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "fervid_core",
  "swc_core",
@@ -514,7 +513,7 @@ dependencies = [
 
 [[package]]
 name = "fervid_transform"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "fervid_core",
  "fxhash",
