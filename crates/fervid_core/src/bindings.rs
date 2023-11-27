@@ -4,6 +4,9 @@ use swc_core::ecma::ast::{Expr, Id, Ident};
 
 use crate::{BuiltinType, FervidAtom, BindingTypes, TemplateGenerationMode, VueImportsSet};
 
+/// A helper which encompasses all the logic related to bindings,
+/// such as their types, which of them were used, what components and directives
+/// were seen in the template, etc.
 #[derive(Debug, Default)]
 pub struct BindingsHelper {
     /// All components present in the `<template>`
@@ -29,6 +32,7 @@ pub struct BindingsHelper {
     pub vue_imports: VueImportsSet
 }
 
+/// A binding of a component which was found in the template
 #[derive(Debug, Default)]
 pub enum ComponentBinding {
     /// Component was resolved to something specific, e.g. an import.
@@ -40,7 +44,8 @@ pub enum ComponentBinding {
     /// e.g. `_component_custom` in `const _component_custom = resolveComponent('custom')`
     RuntimeResolved(Box<Ident>),
 
-    /// Component was not resolved and would need to be resolved in runtime
+    /// Component was not resolved and would need to be
+    /// either transformed (this is default from parser) or ignored
     #[default]
     Unresolved,
 
@@ -48,6 +53,7 @@ pub enum ComponentBinding {
     Builtin(BuiltinType)
 }
 
+/// A binding of a directive which was found in the template
 #[derive(Debug, Default)]
 pub enum CustomDirectiveBinding {
     /// Custom directive was resolved,
@@ -81,9 +87,12 @@ pub struct OptionsApiBindings {
     pub imports: Vec<Id>
 }
 
+/// Identifier plus a binding type
 #[derive(Debug, PartialEq)]
 pub struct SetupBinding(pub FervidAtom, pub BindingTypes);
 
+/// Template scope is for a proper handling of variables introduced in the template
+/// by directives like `v-for` and `v-slot`
 #[derive(Debug)]
 pub struct TemplateScope {
     pub variables: SmallVec<[FervidAtom; 2]>,

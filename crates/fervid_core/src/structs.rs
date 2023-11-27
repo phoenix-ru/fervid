@@ -80,7 +80,8 @@ pub enum BuiltinType {
 }
 
 /// This is a synthetic node type only available after AST optimizations.
-/// Its purpose is to make conditional code generation trivial.\
+/// Its purpose is to make conditional code generation trivial.
+///
 /// The `ConditionalNodeSequence` consists of:
 /// - exactly one `v-if` `ElementNode`;
 /// - 0 or more `v-else-if` `ElementNode`s;
@@ -92,12 +93,16 @@ pub struct ConditionalNodeSequence {
     pub else_node: Option<Box<ElementNode>>,
 }
 
+/// A wrapper around an `ElementNode` with a condition attached to it.
+/// This is used in `v-if` and `v-else-if` nodes.
 #[derive(Debug, Clone)]
 pub struct Conditional {
     pub condition: Expr,
     pub node: ElementNode,
 }
 
+/// A special Vue `{{ expression }}`,
+/// which would be rendered as a stringified value of executing said expression.
 #[derive(Debug, Clone)]
 pub struct Interpolation {
     pub value: Box<Expr>,
@@ -145,6 +150,8 @@ impl<'s> From<&'s str> for StrOrExpr {
     }
 }
 
+/// A helper structure attached to `ElementNode`s to handle Patch Flags
+/// and contain the list of dynamic props.
 #[derive(Debug, Default, Clone)]
 pub struct PatchHints {
     /// Patch flags
@@ -266,6 +273,7 @@ flagset::flags! {
 
 pub type PatchFlagsSet = flagset::FlagSet<PatchFlags>;
 
+/// A structure which stores all the Vue directives of an `ElementNode`.
 #[derive(Clone, Debug, Default)]
 pub struct VueDirectives {
     pub custom: Vec<VCustomDirective>,
@@ -284,6 +292,7 @@ pub struct VueDirectives {
     pub v_text: Option<Box<Expr>>,
 }
 
+/// `v-for`
 #[derive(Clone, Debug)]
 pub struct VForDirective {
     /// `bar` in `v-for="foo in bar"`
@@ -294,6 +303,7 @@ pub struct VForDirective {
     pub span: Span
 }
 
+/// `v-on` and its shorthand `@`
 #[derive(Clone, Debug)]
 pub struct VOnDirective {
     /// What event to listen to. If None, it is equivalent to `v-on="..."`.
@@ -304,6 +314,7 @@ pub struct VOnDirective {
     pub modifiers: Vec<FervidAtom>,
 }
 
+/// `v-bind` and its shorthand `:`
 #[derive(Clone, Debug)]
 pub struct VBindDirective {
     /// Attribute name to bind. If None, it is equivalent to `v-bind="..."`.
@@ -318,6 +329,7 @@ pub struct VBindDirective {
     pub is_attr: bool,
 }
 
+/// `v-model`
 #[derive(Clone, Debug)]
 pub struct VModelDirective {
     /// What to apply v-model to, e.g. `first-name` in `v-model:first-name="first"`
@@ -331,6 +343,7 @@ pub struct VModelDirective {
     pub span: Span
 }
 
+/// `v-slot`
 #[derive(Clone, Debug)]
 pub struct VSlotDirective {
     pub slot_name: Option<StrOrExpr>,
@@ -338,6 +351,7 @@ pub struct VSlotDirective {
     pub value: Option<Box<Pat>>,
 }
 
+/// A custom directive defined by a user.
 #[derive(Debug, Default, Clone)]
 pub struct VCustomDirective {
     /// `foo` in `v-foo`
@@ -350,6 +364,9 @@ pub struct VCustomDirective {
     pub value: Option<Box<Expr>>,
 }
 
+/// The type of a binding (or identifier) which is used to show where this binding came from,
+/// e.g. `Data` is for Options API `data()`, `SetupRef` if for `ref`s and `computed`s in Composition API.
+///
 /// <https://github.com/vuejs/core/blob/020851e57d9a9f727c6ea07e9c1575430af02b73/packages/compiler-core/src/options.ts#L76>
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BindingTypes {
@@ -384,6 +401,7 @@ pub enum BindingTypes {
     Unresolved,
 }
 
+/// Mode with which the template is attached to the exported SFC object.
 #[derive(Debug, Default)]
 pub enum TemplateGenerationMode {
     /// Applies the transformation as if the template is rendered inline
