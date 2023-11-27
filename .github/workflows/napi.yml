@@ -59,7 +59,8 @@ jobs:
         with:
           node-version: 18
           cache: yarn
-      - name: Install
+          cache-dependency-path: ${{ env.WORKING_DIR }}/yarn.lock
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         if: ${{ !matrix.settings.docker }}
         with:
@@ -88,7 +89,7 @@ jobs:
         run: yarn config set supportedArchitectures.cpu "ia32"
         shell: bash
       - name: Install dependencies
-        run: yarn install
+        run: corepack enable; yarn install
       - name: Setup node x86
         uses: actions/setup-node@v4
         if: matrix.settings.target == 'i686-pc-windows-msvc'
@@ -96,6 +97,7 @@ jobs:
           node-version: 18
           cache: yarn
           architecture: x86
+          cache-dependency-path: ${{ env.WORKING_DIR }}/yarn.lock
       - name: Build in docker
         uses: addnab/docker-run-action@v3
         if: ${{ matrix.settings.docker }}
@@ -139,8 +141,9 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: yarn
+          cache-dependency-path: ${{ env.WORKING_DIR }}/yarn.lock
       - name: Install dependencies
-        run: yarn install
+        run: corepack enable; yarn install
       - name: Download artifacts
         uses: actions/download-artifact@v3
         with:
@@ -172,8 +175,9 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: yarn
+          cache-dependency-path: ${{ env.WORKING_DIR }}/yarn.lock
       - name: Install dependencies
-        run: yarn install
+        run: corepack enable; yarn install
       - name: Download artifacts
         uses: actions/download-artifact@v3
         with:
@@ -200,8 +204,9 @@ jobs:
         with:
           node-version: 18
           cache: yarn
+          cache-dependency-path: ${{ env.WORKING_DIR }}/yarn.lock
       - name: Install dependencies
-        run: yarn install
+        run: corepack enable; yarn install
       - name: Download all artifacts
         uses: actions/download-artifact@v3
         with:
