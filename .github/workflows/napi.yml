@@ -3,6 +3,7 @@ env:
   DEBUG: napi:*
   APP_NAME: napi
   MACOSX_DEPLOYMENT_TARGET: '10.13'
+  WORKING_DIR: './crates/fervid_napi'
 permissions:
   contents: write
   id-token: write
@@ -45,6 +46,9 @@ jobs:
               set -e &&
               yarn build --target x86_64-unknown-linux-gnu &&
               strip *.node
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
     name: stable - ${{ matrix.settings.target }} - node@18
     runs-on: ${{ matrix.settings.host }}
     steps:
@@ -124,6 +128,9 @@ jobs:
         node:
           - '18'
           - '20'
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v4
@@ -154,6 +161,9 @@ jobs:
         node:
           - '18'
           - '20'
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -180,6 +190,9 @@ jobs:
     needs:
       - test-macOS-windows-binding
       - test-linux-x64-gnu-binding
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
     steps:
       - uses: actions/checkout@v4
       - name: Setup node
