@@ -3,7 +3,7 @@ env:
   DEBUG: napi:*
   APP_NAME: napi
   MACOSX_DEPLOYMENT_TARGET: '10.13'
-  WORKING_DIR: './crates/fervid_napi'
+  WORKING_DIR_PATH: ${{ github.workspace }}/crates/fervid_napi
 permissions:
   contents: write
   id-token: write
@@ -48,7 +48,7 @@ jobs:
               strip *.node
     defaults:
       run:
-        working-directory: ${{ env.WORKING_DIR }}
+        working-directory: ${{ env.WORKING_DIR_PATH }}
     name: stable - ${{ matrix.settings.target }} - node@18
     runs-on: ${{ matrix.settings.host }}
     steps:
@@ -58,8 +58,8 @@ jobs:
         if: ${{ !matrix.settings.docker }}
         with:
           node-version: 18
-          cache: yarn
-          cache-dependency-path: ${{ env.WORKING_DIR }}/yarn.lock
+          # cache: yarn
+          # cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         if: ${{ !matrix.settings.docker }}
@@ -95,15 +95,15 @@ jobs:
         if: matrix.settings.target == 'i686-pc-windows-msvc'
         with:
           node-version: 18
-          cache: yarn
+          # cache: yarn
           architecture: x86
-          cache-dependency-path: ${{ env.WORKING_DIR }}/yarn.lock
+          # cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Build in docker
         uses: addnab/docker-run-action@v3
         if: ${{ matrix.settings.docker }}
         with:
           image: ${{ matrix.settings.docker }}
-          options: '--user 0:0 -v ${{ github.workspace }}/.cargo-cache/git/db:/usr/local/cargo/git/db -v ${{ github.workspace }}/.cargo/registry/cache:/usr/local/cargo/registry/cache -v ${{ github.workspace }}/.cargo/registry/index:/usr/local/cargo/registry/index -v ${{ github.workspace }}:/build -w /build'
+          options: '--user 0:0 -v ${{ github.workspace }}/.cargo-cache/git/db:/usr/local/cargo/git/db -v ${{ github.workspace }}/.cargo/registry/cache:/usr/local/cargo/registry/cache -v ${{ github.workspace }}/.cargo/registry/index:/usr/local/cargo/registry/index -v ${{ env.WORKING_DIR_PATH }}:/build -w /build'
           run: ${{ matrix.settings.build }}
       - name: Build
         run: ${{ matrix.settings.build }}
@@ -132,7 +132,7 @@ jobs:
           - '20'
     defaults:
       run:
-        working-directory: ${{ env.WORKING_DIR }}
+        working-directory: ${{ env.WORKING_DIR_PATH }}
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v4
@@ -140,8 +140,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-          cache: yarn
-          cache-dependency-path: ${{ env.WORKING_DIR }}/yarn.lock
+          # cache: yarn
+          # cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Install dependencies
         run: corepack enable; yarn install
       - name: Download artifacts
@@ -166,7 +166,7 @@ jobs:
           - '20'
     defaults:
       run:
-        working-directory: ${{ env.WORKING_DIR }}
+        working-directory: ${{ env.WORKING_DIR_PATH }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -174,8 +174,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-          cache: yarn
-          cache-dependency-path: ${{ env.WORKING_DIR }}/yarn.lock
+          # cache: yarn
+          # cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Install dependencies
         run: corepack enable; yarn install
       - name: Download artifacts
@@ -196,15 +196,15 @@ jobs:
       - test-linux-x64-gnu-binding
     defaults:
       run:
-        working-directory: ${{ env.WORKING_DIR }}
+        working-directory: ${{ env.WORKING_DIR_PATH }}
     steps:
       - uses: actions/checkout@v4
       - name: Setup node
         uses: actions/setup-node@v4
         with:
           node-version: 18
-          cache: yarn
-          cache-dependency-path: ${{ env.WORKING_DIR }}/yarn.lock
+          # cache: yarn
+          # cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Install dependencies
         run: corepack enable; yarn install
       - name: Download all artifacts
