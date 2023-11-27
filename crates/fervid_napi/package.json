@@ -114,5 +114,8 @@
     "@fervid/napi-win32-ia32-msvc": "0.1.0",
     "@fervid/napi-win32-x64-msvc": "0.1.0"
   },
-  "packageManager": "yarn@4.0.2"
+  "packageManager": "yarn@4.0.2",
+  "workspaces": [
+    "npm/*"
+  ]
 }

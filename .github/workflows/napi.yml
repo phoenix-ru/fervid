@@ -1,4 +1,4 @@
-name: CI
+name: Build NAPI
 env:
   DEBUG: napi:*
   APP_NAME: napi
@@ -19,6 +19,10 @@ permissions:
       - .editorconfig
       - docs/**
   pull_request: null
+
+defaults:
+  run:
+    working-directory: './crates/fervid_napi'
 
 jobs:
   build:
