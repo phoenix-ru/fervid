@@ -1,15 +1,15 @@
 {
   "name": "@fervid/napi-win32-ia32-msvc",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "os": [
     "win32"
   ],
   "cpu": [
     "ia32"
   ],
-  "main": "@fervid/napi.win32-ia32-msvc.node",
+  "main": "napi.win32-ia32-msvc.node",
   "files": [
-    "@fervid/napi.win32-ia32-msvc.node"
+    "napi.win32-ia32-msvc.node"
   ],
   "description": "All-in-One Vue compiler written in Rust",
   "keywords": [

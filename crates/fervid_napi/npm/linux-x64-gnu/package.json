@@ -1,15 +1,15 @@
 {
   "name": "@fervid/napi-linux-x64-gnu",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "os": [
     "linux"
   ],
   "cpu": [
     "x64"
   ],
-  "main": "@fervid/napi.linux-x64-gnu.node",
+  "main": "napi.linux-x64-gnu.node",
   "files": [
-    "@fervid/napi.linux-x64-gnu.node"
+    "napi.linux-x64-gnu.node"
   ],
   "description": "All-in-One Vue compiler written in Rust",
   "keywords": [

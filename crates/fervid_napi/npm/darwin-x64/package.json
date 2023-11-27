@@ -1,15 +1,15 @@
 {
   "name": "@fervid/napi-darwin-x64",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "os": [
     "darwin"
   ],
   "cpu": [
     "x64"
   ],
-  "main": "@fervid/napi.darwin-x64.node",
+  "main": "napi.darwin-x64.node",
   "files": [
-    "@fervid/napi.darwin-x64.node"
+    "napi.darwin-x64.node"
   ],
   "description": "All-in-One Vue compiler written in Rust",
   "keywords": [

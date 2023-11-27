@@ -1,6 +1,6 @@
 {
   "name": "@fervid/napi",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "All-in-One Vue compiler written in Rust",
   "main": "index.js",
   "repository": "git@github.com:phoenix-ru/fervid.git",
