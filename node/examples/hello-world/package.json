@@ -1,0 +1,29 @@
+{
+  "name": "hello-world",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "serve": "webpack serve"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@fervid/unplugin": "^0.0.1",
+    "html-webpack-plugin": "^5.5.3",
+    "rollup": "^4.6.0",
+    "unplugin": "^1.5.1",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  },
+  "dependencies": {
+    "vue": "^3.3.9"
+  },
+  "pnpm": {
+    "overrides": {
+      "@fervid/unplugin": "../../unplugin"
+    }
+  }
+}

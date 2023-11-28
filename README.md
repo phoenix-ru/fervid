@@ -147,13 +147,14 @@ Code generator
   - [x] defineModel
   - [ ] Tests
 - [x] DEV/PROD mode
+- [x] Hot Module Replacement (HMR)
 - [ ] Vue 2.7 support
 - [ ] SSR with inline critical CSS support
 - [ ] Eager pre-compilation of Vue imports (avoid unneccessary bundler->compiler calls)
 
 Integrations
 - [x] WASM binary (unpublished)
-- [x] NAPI binary (unpublished)
-- [ ] [unplugin](https://github.com/unjs/unplugin)
+- [x] NAPI binary [@fervid/napi](https://www.npmjs.com/package/@fervid/napi)
+- [x] [unplugin](https://github.com/unjs/unplugin) (in progress)
 - [ ] [Farm](https://github.com/farm-fe/farm) native plugin
 - [ ] [Turbopack](https://github.com/vercel/turbo) plugin (when plugin system is defined)
