@@ -1,6 +1,6 @@
 use fervid_core::{
-    BindingTypes, BindingsHelper, FervidAtom, SetupBinding, StrOrExpr, TemplateGenerationMode,
-    VModelDirective, VueImports,
+    fervid_atom, BindingTypes, BindingsHelper, FervidAtom, PatchFlags, PatchHints, SetupBinding,
+    StrOrExpr, TemplateGenerationMode, VModelDirective, VueImports,
 };
 use swc_core::{
     common::{Span, DUMMY_SP},
@@ -28,7 +28,12 @@ struct TransformVisitor<'s> {
 
 pub trait BindingsHelperTransform {
     fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> bool;
-    fn transform_v_model(&mut self, v_model: &mut VModelDirective, scope_to_use: u32);
+    fn transform_v_model(
+        &mut self,
+        v_model: &mut VModelDirective,
+        scope_to_use: u32,
+        patch_hints: &mut PatchHints,
+    );
     fn get_var_binding_type(&mut self, starting_scope: u32, variable: &FervidAtom) -> BindingTypes;
 }
 
@@ -54,7 +59,12 @@ impl BindingsHelperTransform for BindingsHelper {
     /// Transforms `v-model` directive by producing
     /// `:value` expression and
     /// `@update:value` handler (`$event => modelValue = $event`).
-    fn transform_v_model(&mut self, v_model: &mut VModelDirective, scope_to_use: u32) {
+    fn transform_v_model(
+        &mut self,
+        v_model: &mut VModelDirective,
+        scope_to_use: u32,
+        patch_hints: &mut PatchHints,
+    ) {
         // 1. Create handler: wrap in `$event => value = $event`
         let event_expr = Box::new(Expr::Ident(Ident {
             span: DUMMY_SP,
@@ -73,9 +83,22 @@ impl BindingsHelperTransform for BindingsHelper {
         // 4. Transform value
         self.transform_expr(&mut v_model.value, scope_to_use);
 
-        // 5. (Optional) Transform dynamic argument
-        if let Some(StrOrExpr::Expr(ref mut expr)) = v_model.argument {
-            self.transform_expr(expr, scope_to_use);
+        // 5. (Optional) Transform dynamic argument and set patch hints
+        match v_model.argument {
+            Some(StrOrExpr::Expr(ref mut expr)) => {
+                self.transform_expr(expr, scope_to_use);
+                patch_hints.flags |= PatchFlags::FullProps;
+            }
+
+            Some(StrOrExpr::Str(ref argument)) => {
+                patch_hints.flags |= PatchFlags::Props;
+                patch_hints.props.push(argument.to_owned());
+            }
+
+            None => {
+                patch_hints.flags |= PatchFlags::Props;
+                patch_hints.props.push(fervid_atom!("modelValue"));
+            }
         }
 
         // TODO Check that SetupConst or SetupReactiveConst are not used as a `v-model` value. Report hard error in this case.
@@ -520,8 +543,8 @@ mod tests {
         test_utils::{parser::parse_javascript_expr, to_str},
     };
     use fervid_core::{
-        BindingTypes, BindingsHelper, FervidAtom, SetupBinding, StrOrExpr, TemplateGenerationMode,
-        TemplateScope, VModelDirective,
+        BindingTypes, BindingsHelper, FervidAtom, PatchHints, SetupBinding, StrOrExpr,
+        TemplateGenerationMode, TemplateScope, VModelDirective,
     };
     use smallvec::SmallVec;
     use swc_core::common::DUMMY_SP;
@@ -618,7 +641,8 @@ mod tests {
                     modifiers: vec![],
                     span: DUMMY_SP,
                 };
-                helper.transform_v_model(&mut v_model, 0);
+                let mut patch_hints = PatchHints::default();
+                helper.transform_v_model(&mut v_model, 0, &mut patch_hints);
                 assert_eq!(to_str(&v_model.value), $expected_value);
                 assert_eq!(
                     to_str(&v_model.update_handler.expect("Handler cannot be None")),
@@ -722,7 +746,8 @@ mod tests {
                     modifiers: vec![],
                     span: DUMMY_SP,
                 };
-                helper.transform_v_model(&mut v_model, 0);
+                let mut patch_hints = PatchHints::default();
+                helper.transform_v_model(&mut v_model, 0, &mut patch_hints);
                 let Some(StrOrExpr::Expr(arg_expr)) = v_model.argument else {
                     unreachable!("This is something unexpected")
                 };

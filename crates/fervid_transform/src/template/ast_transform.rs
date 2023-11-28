@@ -379,7 +379,7 @@ impl<'a> Visitor for TemplateVisitor<'_> {
             maybe_transform!(v_text);
 
             for v_model in directives.v_model.iter_mut() {
-                self.bindings_helper.transform_v_model(v_model, scope_to_use);
+                self.bindings_helper.transform_v_model(v_model, scope_to_use, patch_hints);
             }
         }
 
