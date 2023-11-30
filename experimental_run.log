@@ -67,7 +67,9 @@ export default {
                         _createTextVNode(" yet another text "),
                         _withDirectives(_createElementVNode("input", {
                             "onUpdate:modelValue": ($event)=>inputModel.value = $event
-                        }), [
+                        }, null, 8, [
+                            "modelValue"
+                        ]), [
                             [
                                 _vModelText,
                                 inputModel.value
@@ -149,7 +151,9 @@ export default {
                         }, null, 4)
                     ])
             }, 8, [
-                "test-bound"
+                "test-bound",
+                "modelValue",
+                "another-model-value"
             ])), [
                 [
                     _directive_test_directive,
