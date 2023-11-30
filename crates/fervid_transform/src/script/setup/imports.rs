@@ -1,5 +1,6 @@
+use fervid_core::{BindingTypes, SetupBinding};
 use swc_core::ecma::{
-    ast::{Id, ImportDecl, ImportSpecifier, ModuleExportName},
+    ast::{Id, Ident, ImportDecl, ImportSpecifier, ModuleExportName},
     atoms::JsWord,
 };
 
@@ -10,21 +11,42 @@ use crate::{
 
 pub fn collect_imports(
     import_decl: &ImportDecl,
-    out: &mut Vec<Id>,
+    out: &mut Vec<SetupBinding>,
     vue_imports: &mut VueResolvedImports,
 ) {
     if import_decl.type_only {
         return;
     }
 
+    // Checks if the import is of `.vue`, i.e. eligible to be a component
+    // Should this handle complex queries?
+    let is_dot_vue_import = import_decl.src.value.ends_with(".vue");
+
+    // Check if this is a `from 'vue'`
+    let is_from_vue_import = import_decl.src.value == *VUE;
+
     for specifier in import_decl.specifiers.iter() {
         // examples below are from SWC
         match specifier {
             // e.g. `import * as foo from 'mod.js'`
-            ImportSpecifier::Namespace(ns_spec) => out.push(ns_spec.local.to_id()),
+            // not a default export, thus never suitable to be a `Component`
+            ImportSpecifier::Namespace(ns_spec) => out.push(SetupBinding(
+                ns_spec.local.sym.to_owned(),
+                BindingTypes::Imported,
+            )),
 
             // e.g. `import foo from 'mod.js'`
-            ImportSpecifier::Default(default_spec) => out.push(default_spec.local.to_id()),
+            ImportSpecifier::Default(default_spec) => {
+                let binding_type = if is_dot_vue_import {
+                    BindingTypes::Component
+                } else {
+                    BindingTypes::Imported
+                };
+                out.push(SetupBinding(
+                    default_spec.local.sym.to_owned(),
+                    binding_type,
+                ));
+            }
 
             // e.g. `import { foo } from 'mod.js'` -> local = foo, imported = None
             // e.g. `import { foo as bar } from 'mod.js'` -> local = bar, imported = Some(foo)
@@ -33,31 +55,38 @@ pub fn collect_imports(
                     return;
                 }
 
-                if import_decl.src.value == *VUE {
-                    if let Some(ref was_renamed_from) = named_spec.imported {
-                        // Renamed: `import { ref as r }` or `import { "ref" as r }`
-                        let imported_word = match was_renamed_from {
-                            ModuleExportName::Ident(ident) => &ident.sym,
-                            ModuleExportName::Str(s) => &s.value,
-                        };
+                // `imported_as` is the variable name, `imported_word` is the imported symbol
+                // `import { foo as bar } from 'baz'` -> `imported_as` is `bar`, `imported_word` is `foo`
+                let imported_as: &Ident = &named_spec.local;
+                let imported_word = match named_spec.imported.as_ref() {
+                    // Renamed, e.g. `import { ref as r }` or `import { "ref" as r }`
+                    Some(ModuleExportName::Ident(ident)) => &ident.sym,
+                    Some(ModuleExportName::Str(s)) => &s.value,
+                    // Not renamed, e.g. `import { ref }`
+                    None => &imported_as.sym,
+                };
 
-                        collect_vue_import(imported_word, named_spec.local.to_id(), vue_imports)
-                    } else {
-                        // Just `import { ref }`
-                        collect_vue_import(
-                            &named_spec.local.sym,
-                            named_spec.local.to_id(),
-                            vue_imports,
-                        )
-                    }
+                if is_from_vue_import {
+                    collect_vue_import(imported_word, imported_as.to_id(), vue_imports);
+                } else if is_dot_vue_import && imported_word == "default" {
+                    // Only `import { default as Smth }` is supported.
+                    // `import { default }` is invalid, and SWC will catch that
+                    out.push(SetupBinding(
+                        imported_as.sym.to_owned(),
+                        BindingTypes::Component,
+                    ));
                 } else {
-                    out.push(named_spec.local.to_id())
+                    out.push(SetupBinding(
+                        imported_as.sym.to_owned(),
+                        BindingTypes::Imported,
+                    ));
                 }
             }
         }
     }
 }
 
+#[inline]
 fn collect_vue_import(imported_word: &JsWord, used_as: Id, vue_imports: &mut VueResolvedImports) {
     if *imported_word == *REF {
         vue_imports.ref_import = Some(used_as)
@@ -82,7 +111,7 @@ mod tests {
 
     #[derive(Debug, Default, PartialEq)]
     struct MockAnalysisResult {
-        imports: Vec<Id>,
+        imports: Vec<SetupBinding>,
         vue_user_imports: VueResolvedImports,
     }
 
@@ -175,13 +204,13 @@ mod tests {
             ",
             MockAnalysisResult {
                 imports: vec![
-                    (fervid_atom!("ref"), SyntaxContext::default()),
-                    (fervid_atom!("computed"), SyntaxContext::default()),
-                    (fervid_atom!("reactive"), SyntaxContext::default()),
-                    (fervid_atom!("foo"), SyntaxContext::default()),
-                    (fervid_atom!("Bar"), SyntaxContext::default()),
-                    (fervid_atom!("baz"), SyntaxContext::default()),
-                    (fervid_atom!("qux"), SyntaxContext::default()),
+                    SetupBinding(fervid_atom!("ref"), BindingTypes::Imported),
+                    SetupBinding(fervid_atom!("computed"), BindingTypes::Imported),
+                    SetupBinding(fervid_atom!("reactive"), BindingTypes::Imported),
+                    SetupBinding(fervid_atom!("foo"), BindingTypes::Imported),
+                    SetupBinding(fervid_atom!("Bar"), BindingTypes::Imported),
+                    SetupBinding(fervid_atom!("baz"), BindingTypes::Imported),
+                    SetupBinding(fervid_atom!("qux"), BindingTypes::Imported),
                 ],
                 ..Default::default()
             }
@@ -200,10 +229,10 @@ mod tests {
             ",
             MockAnalysisResult {
                 imports: vec![
-                    (fervid_atom!("foo"), SyntaxContext::default()),
-                    (fervid_atom!("Bar"), SyntaxContext::default()),
-                    (fervid_atom!("baz"), SyntaxContext::default()),
-                    (fervid_atom!("qux"), SyntaxContext::default()),
+                    SetupBinding(fervid_atom!("foo"), BindingTypes::Imported),
+                    SetupBinding(fervid_atom!("Bar"), BindingTypes::Imported),
+                    SetupBinding(fervid_atom!("baz"), BindingTypes::Imported),
+                    SetupBinding(fervid_atom!("qux"), BindingTypes::Imported),
                 ],
                 vue_user_imports: VueResolvedImports {
                     ref_import: Some((fervid_atom!("ref"), SyntaxContext::default())),

@@ -1,6 +1,6 @@
 use fervid_core::{
-    fervid_atom, AttributeOrBinding, ElementNode, FervidAtom, Interpolation, Node, PatchHints,
-    SfcTemplateBlock, StartingTag, VueDirectives,
+    fervid_atom, is_html_tag, AttributeOrBinding, ElementNode, FervidAtom, Interpolation, Node,
+    PatchHints, SfcTemplateBlock, StartingTag, VueDirectives,
 };
 use swc_core::common::{BytePos, Span};
 use swc_ecma_parser::{Syntax, TsConfig};
@@ -43,6 +43,20 @@ impl SfcParser<'_, '_, '_> {
             .map(|c| c.children)
             .unwrap_or_else(|| element.children);
 
+        // For finer-grained `Span`s and components
+        // TODO spans
+        let raw_idx_start = element.span.lo.0 as usize;
+        let raw_idx_end = element.span.lo.0 as usize + element.tag_name.len();
+
+        // Use raw names for custom HTML elements.
+        // Otherwise SWC renames `CustomComponent` to `customcomponent`
+        let tag_name = if is_html_tag(&element.tag_name) {
+            element.tag_name
+        } else {
+            let raw_name = &self.input[raw_idx_start..raw_idx_end];
+            raw_name.into()
+        };
+
         // Save old `v-pre` (restored at the end of the function)
         let old_is_pre = self.is_pre;
 
@@ -62,7 +76,7 @@ impl SfcParser<'_, '_, '_> {
         }
 
         let starting_tag = StartingTag {
-            tag_name: element.tag_name,
+            tag_name,
             attributes,
             directives,
         };
@@ -163,7 +177,7 @@ impl SfcParser<'_, '_, '_> {
                     value: parsed_interpolation,
                     template_scope: 0,
                     patch_flag: false,
-                    span: interpolation_span
+                    span: interpolation_span,
                 })),
                 Err(expr_err) => self.errors.push(expr_err.into()),
             }

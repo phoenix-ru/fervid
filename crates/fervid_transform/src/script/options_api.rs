@@ -175,7 +175,6 @@ mod tests {
     use super::*;
     use crate::test_utils::parser::*;
     use fervid_core::{BindingTypes, FervidAtom, SetupBinding};
-    use swc_core::common::SyntaxContext;
 
     fn analyze_js(input: &str, opts: AnalyzeOptions) -> ScriptOptionsTransformResult {
         let mut parsed = parse_javascript_module(input, 0, Default::default())
@@ -846,9 +845,9 @@ mod tests {
                     SetupBinding(FervidAtom::from("baz"), BindingTypes::SetupMaybeRef),
                 ],
                 imports: vec![
-                    (FervidAtom::from("ref"), SyntaxContext::default()),
-                    (FervidAtom::from("computed"), SyntaxContext::default()),
-                    (FervidAtom::from("reactive"), SyntaxContext::default()),
+                    SetupBinding(FervidAtom::from("ref"), BindingTypes::Imported),
+                    SetupBinding(FervidAtom::from("computed"), BindingTypes::Imported),
+                    SetupBinding(FervidAtom::from("reactive"), BindingTypes::Imported),
                 ],
                 ..Default::default()
             },

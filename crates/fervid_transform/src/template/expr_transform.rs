@@ -433,7 +433,11 @@ pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<JsWord
         BindingTypes::Data => Some(FervidAtom::from("$data")),
         BindingTypes::Props => Some(FervidAtom::from("$props")),
         BindingTypes::Options => Some(FervidAtom::from("$options")),
-        BindingTypes::TemplateLocal | BindingTypes::JsGlobal | BindingTypes::LiteralConst => None,
+        BindingTypes::TemplateLocal
+        | BindingTypes::JsGlobal
+        | BindingTypes::LiteralConst
+        | BindingTypes::Component
+        | BindingTypes::Imported => None,
         BindingTypes::SetupConst
         | BindingTypes::SetupLet
         | BindingTypes::SetupMaybeRef

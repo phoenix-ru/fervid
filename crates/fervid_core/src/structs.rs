@@ -393,6 +393,13 @@ pub enum BindingTypes {
     Options,
     /// a literal constant, e.g. 'foo', 1, true
     LiteralConst,
+
+    // Introduced by fervid:
+
+    /// a `.vue` import or `defineComponent` call
+    Component,
+    /// an import which is not a `.vue` or `from 'vue'`
+    Imported,
     /// a variable from the template
     TemplateLocal,
     /// a variable in the global Javascript context, e.g. `Array` or `undefined`

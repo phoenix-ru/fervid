@@ -7,7 +7,7 @@ All-In-One Vue compiler written in Rust.
 
 Currently in early development, and the closest goal is to reach feature-parity with the current [Vue SFC compiler](https://sfc.vuejs.org).
 
-## Progress till MVP ![](https://geps.dev/progress/78)
+## Progress till MVP ![](https://geps.dev/progress/80)
 A minimal target of this project includes:
 - Vue 3 code generation;
 - [unplugin](https://github.com/unjs/unplugin) integration;
@@ -93,7 +93,7 @@ Parser
 Transformer
 - [x] Template scope construction
 - [ ] Error reporting
-- [ ] JS/TS imports analysis (powered by swc_ecma_parser)
+- [x] JS/TS imports analysis (powered by swc_ecma_parser)
 - [x] `setup`/`data`/`props` analysis
 
 Code generator

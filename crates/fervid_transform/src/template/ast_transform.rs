@@ -1,10 +1,13 @@
+use std::borrow::Cow;
+
 use fervid_core::{
-    fervid_atom, is_from_default_slot, is_html_tag, AttributeOrBinding, BindingsHelper,
-    Conditional, ConditionalNodeSequence, ElementKind, ElementNode, Interpolation, Node,
-    PatchFlags, SfcTemplateBlock, StartingTag, StrOrExpr, TemplateScope, VOnDirective,
-    VSlotDirective, VUE_BUILTINS, check_attribute_name,
+    check_attribute_name, fervid_atom, is_from_default_slot, is_html_tag, AttributeOrBinding,
+    BindingTypes, BindingsHelper, ComponentBinding, Conditional, ConditionalNodeSequence,
+    ElementKind, ElementNode, FervidAtom, Interpolation, Node, PatchFlags, SfcTemplateBlock,
+    StartingTag, StrOrExpr, TemplateScope, VOnDirective, VSlotDirective, VUE_BUILTINS,
 };
 use smallvec::SmallVec;
+use swc_core::{common::DUMMY_SP, ecma::ast::Expr};
 
 use super::{collect_vars::collect_variables, expr_transform::BindingsHelperTransform};
 
@@ -234,6 +237,10 @@ impl<'a> Visitor for TemplateVisitor<'_> {
         let is_component = matches!(element_kind, ElementKind::Component);
         element_node.kind = element_kind;
 
+        if is_component {
+            self.maybe_resolve_component(&element_node.starting_tag.tag_name);
+        }
+
         // Check if there is a scoping directive
         // Finds a `v-for` or `v-slot` directive when in ElementNode
         // and collects their variables into the new template scope
@@ -379,7 +386,8 @@ impl<'a> Visitor for TemplateVisitor<'_> {
             maybe_transform!(v_text);
 
             for v_model in directives.v_model.iter_mut() {
-                self.bindings_helper.transform_v_model(v_model, scope_to_use, patch_hints);
+                self.bindings_helper
+                    .transform_v_model(v_model, scope_to_use, patch_hints);
             }
         }
 
@@ -455,6 +463,7 @@ impl<'a> Visitor for TemplateVisitor<'_> {
 }
 
 impl TemplateVisitor<'_> {
+    // TODO Maybe do this in parser instead, because it sometimes needs this info
     fn recognize_element_kind(&self, starting_tag: &StartingTag) -> ElementKind {
         let tag_name = &starting_tag.tag_name;
 
@@ -482,6 +491,70 @@ impl TemplateVisitor<'_> {
             ElementKind::Component
         }
     }
+
+    /// Fuzzy-matches the component name to a binding name
+    fn maybe_resolve_component(&mut self, tag_name: &FervidAtom) {
+        // Check the existing resolutions.
+        // Do nothing if found, regardless if it was previously resolved or not,
+        // because codegen will handle the runtime resolution.
+        if self.bindings_helper.components.contains_key(tag_name) {
+            return;
+        }
+
+        // `component-name`s like that should be transformed to `ComponentName`s
+        let searched: Cow<str> = if tag_name.contains('-') {
+            let mut transformed_name = String::with_capacity(tag_name.len());
+            for word in tag_name.split('-') {
+                let first_char = word.chars().next();
+                if let Some(ch) = first_char {
+                    // Uppercase the first char and append to buf
+                    for ch_component in ch.to_uppercase() {
+                        transformed_name.push(ch_component);
+                    }
+
+                    // Push the rest of the word
+                    transformed_name.push_str(&word[ch.len_utf8()..]);
+                }
+            }
+
+            Cow::Owned(transformed_name)
+        } else {
+            Cow::Borrowed(&tag_name)
+        };
+
+        let found = self
+            .bindings_helper
+            .setup_bindings
+            .iter()
+            .find(|binding| binding.0 == searched);
+
+        if let Some(found) = found {
+            let mut resolved_to = Expr::Ident(swc_core::ecma::ast::Ident {
+                span: DUMMY_SP,
+                sym: found.0.to_owned(),
+                optional: false,
+            });
+
+            // For `Component` binding types, do not transform.
+            // TODO I am not sure about `Imported` though,
+            // the official compiler sees them as if `SetupMaybeRef` and transforms.
+            if !matches!(found.1, BindingTypes::Component) {
+                self.bindings_helper
+                    .transform_expr(&mut resolved_to, self.current_scope);
+            }
+
+            // Was resolved
+            self.bindings_helper.components.insert(
+                tag_name.to_owned(),
+                ComponentBinding::Resolved(Box::new(resolved_to)),
+            );
+        } else {
+            // Was not resolved
+            self.bindings_helper
+                .components
+                .insert(tag_name.to_owned(), ComponentBinding::Unresolved);
+        }
+    }
 }
 
 impl VisitMut for Node {
@@ -497,7 +570,7 @@ impl VisitMut for Node {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{ElementKind, Node, VueDirectives};
+    use fervid_core::{ElementKind, Node, SetupBinding, VueDirectives};
     use swc_core::{common::DUMMY_SP, ecma::ast::Expr};
 
     use crate::test_utils::{parser::parse_javascript_expr, to_str};
@@ -798,6 +871,45 @@ mod tests {
             panic!("root is not an element")
         };
         assert_eq!(2, root.children.len());
+    }
+
+    #[test]
+    fn it_resolves_components() {
+        // `TestComponent` binding
+        let mut bindings_helper = BindingsHelper::default();
+        bindings_helper.setup_bindings.push(SetupBinding(
+            fervid_atom!("TestComponent"),
+            BindingTypes::Component,
+        ));
+
+        let mut template_visitor = TemplateVisitor {
+            bindings_helper: &mut bindings_helper,
+            current_scope: 0,
+        };
+
+        let kebab_case = fervid_atom!("test-component");
+        template_visitor.maybe_resolve_component(&kebab_case);
+        assert!(matches!(
+            template_visitor.bindings_helper.components.get(&kebab_case),
+            Some(ComponentBinding::Resolved(_))
+        ));
+
+        let pascal_case = fervid_atom!("TestComponent");
+        template_visitor.maybe_resolve_component(&pascal_case);
+        assert!(matches!(
+            template_visitor
+                .bindings_helper
+                .components
+                .get(&pascal_case),
+            Some(ComponentBinding::Resolved(_))
+        ));
+
+        let unresolved = fervid_atom!("UnresolvedComponent");
+        template_visitor.maybe_resolve_component(&unresolved);
+        assert!(matches!(
+            template_visitor.bindings_helper.components.get(&unresolved),
+            Some(ComponentBinding::Unresolved)
+        ));
     }
 
     // text

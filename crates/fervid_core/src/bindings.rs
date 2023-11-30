@@ -1,6 +1,6 @@
 use fxhash::FxHashMap as HashMap;
 use smallvec::SmallVec;
-use swc_core::ecma::ast::{Expr, Id, Ident};
+use swc_core::ecma::ast::{Expr, Ident};
 
 use crate::{BuiltinType, FervidAtom, BindingTypes, TemplateGenerationMode, VueImportsSet};
 
@@ -84,7 +84,8 @@ pub struct OptionsApiBindings {
     pub expose: Vec<FervidAtom>,
     pub name: Option<FervidAtom>,
     pub directives: Vec<FervidAtom>,
-    pub imports: Vec<Id>
+    /// `SetupBinding` is used to distinguish between `.vue` and other imports
+    pub imports: Vec<SetupBinding>
 }
 
 /// Identifier plus a binding type
