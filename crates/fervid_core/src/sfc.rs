@@ -30,6 +30,7 @@ pub struct SfcStyleBlock {
   pub lang: FervidAtom,
   pub content: FervidAtom,
   pub is_scoped: bool,
+  pub span: Span
 }
 
 #[derive(Clone, Debug)]

@@ -1,6 +1,6 @@
 mod codegen;
 mod conditional_seq;
-mod slotted_iterator;
 mod sfc;
+mod slotted_iterator;
 
-pub use slotted_iterator::{SlottedIterator, SlottedIteratorMode};
+pub use slotted_iterator::SlottedIterator;

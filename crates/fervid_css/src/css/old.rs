@@ -1,3 +1,7 @@
+//! This file is abandoned.
+//! It contains the `deep` transformations using `lightningcss`,
+//! which was later rewritten using `swc_css_parser`.
+
 use cssparser::CowRcStr;
 use lightningcss::{
     error::{Error, MinifyErrorKind, ParserError, PrinterErrorKind},
@@ -211,11 +215,11 @@ fn transform_cached_strategy<'i>(
                 //       `#bar baz`
                 //
                 //       And at step 3, we will append just like that
-                //         7   8   9  6  4   5            3 2   1 0
+                //         7   8   9  6  4   5            3 2  1 0
                 //       `.foo.bar.baz .qux:deep(#bar baz) #bar baz`
                 //
                 //       And, remember, we replaced `:deep` with `[data-v-smth]` at step 1
-                //         7   8   9  6  4   5            3 2   1 0
+                //         7   8   9  6  4   5          3 2  1 0
                 //       `.foo.bar.baz .qux[data-v-smth] #bar baz`
                 //
                 //    b) On its own (`.foo :deep`). Now this is a tricky part,

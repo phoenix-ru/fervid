@@ -1,5 +1,6 @@
 mod all_html_tags;
 mod bindings;
+pub mod error;
 mod sfc;
 mod structs;
 mod template;

@@ -231,6 +231,7 @@ fn parse_root_block<'a>(
         lang: lang.into(),
         content: content.into(),
         is_scoped,
+        span: DUMMY_SP
     });
 
     Ok(input)

@@ -106,6 +106,7 @@ impl SfcParser<'_, '_, '_> {
                     lang,
                     content: style_content.data.to_owned(),
                     is_scoped,
+                    span: style_content.span
                 })
             } else {
                 let attributes = root_element
