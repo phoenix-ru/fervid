@@ -17,7 +17,7 @@ const compilerName = ref('fervid')
 `
 
 test('should work', () => {
-  expect(compileSync(HELLO_WORLD)).toMatchInlineSnapshot(`
+  expect(compileSync(HELLO_WORLD).code).toMatchInlineSnapshot(`
     "import { ref } from 'vue';
     import { createElementBlock as _createElementBlock, openBlock as _openBlock, toDisplayString as _toDisplayString } from "vue";
     export default {
@@ -36,7 +36,7 @@ test('should work', () => {
     "
   `)
 
-  expect(compileSync(HELLO_WORLD, { isProd: true })).toMatchInlineSnapshot(`
+  expect(compileSync(HELLO_WORLD, { isProd: true }).code).toMatchInlineSnapshot(`
     "import { ref } from 'vue';
     import { createElementBlock as _createElementBlock, openBlock as _openBlock, toDisplayString as _toDisplayString } from "vue";
     export default {
