@@ -18,7 +18,8 @@
 //!
 //! // Do the necessary transformations
 //! let is_prod = true;
-//! let transform_result = fervid_transform::transform_sfc(sfc, is_prod, "filehash");
+//! let mut transform_errors = Vec::new();
+//! let transform_result = fervid_transform::transform_sfc(sfc, is_prod, "filehash", &mut transform_errors);
 //!
 //! // Create the context and generate the template block
 //! let mut ctx = fervid_codegen::CodegenContext::with_bindings_helper(transform_result.bindings_helper);
