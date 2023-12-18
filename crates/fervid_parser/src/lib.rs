@@ -4,7 +4,7 @@ mod script;
 mod sfc;
 mod template;
 
-use error::ParseError;
+pub use error::ParseError;
 
 // Default patterns for interpolation
 pub const INTERPOLATION_START_PAT_DEFAULT: &str = "{{";

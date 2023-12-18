@@ -37,6 +37,12 @@ impl SfcParser<'_, '_, '_> {
 
         let mut sfc_descriptor = SfcDescriptor::default();
 
+        macro_rules! report_error {
+            ($kind: ident, $span: expr) => {
+                self.errors.push(ParseError { kind: ParseErrorKind::$kind, span: $span });
+            };
+        }
+
         for root_node in parsed_html.children.into_iter() {
             // Only root elements are supported
             let Child::Element(root_element) = root_node else {
@@ -44,11 +50,12 @@ impl SfcParser<'_, '_, '_> {
             };
 
             let tag_name = &root_element.tag_name;
+            let root_node_span = root_element.span;
 
             if tag_name.eq("template") {
+                // Check duplicate
                 if sfc_descriptor.template.is_some() {
-                    // Duplicate template, bail
-                    // TODO Error
+                    report_error!(DuplicateTemplate, root_node_span);
                     continue;
                 }
 
@@ -67,16 +74,14 @@ impl SfcParser<'_, '_, '_> {
                 if sfc_script_block.is_setup {
                     // Check if already present
                     if sfc_descriptor.script_setup.is_some() {
-                        // Duplicate script setup, bail
-                        // TODO Error
+                        report_error!(DuplicateScriptSetup, root_node_span);
                         continue;
                     }
                     sfc_descriptor.script_setup = Some(sfc_script_block);
                 } else {
                     // Check if already present
                     if sfc_descriptor.script_legacy.is_some() {
-                        // Duplicate script legacy, bail
-                        // TODO Error
+                        report_error!(DuplicateScriptOptions, root_node_span);
                         continue;
                     }
                     sfc_descriptor.script_legacy = Some(sfc_script_block);

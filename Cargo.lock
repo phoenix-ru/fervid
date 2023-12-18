@@ -373,6 +373,7 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
+ "swc_core",
 ]
 
 [[package]]
@@ -391,6 +392,7 @@ name = "fervid_transform"
 version = "0.1.0"
 dependencies = [
  "fervid_core",
+ "fervid_css",
  "fxhash",
  "lazy_static",
  "phf 0.11.2",

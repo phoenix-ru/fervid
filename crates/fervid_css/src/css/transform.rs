@@ -314,13 +314,13 @@ fn process_pseudo_class_children(
     // Take errors, assume they are recoverable
     errors.reserve(parse_errors.len());
     for error in parse_errors {
-        errors.push(CssError::ParseDeepRecoverable(error));
+        errors.push(CssError::from_parse_error(error, true, true));
     }
 
     match result {
         Ok(complex_selector) => Some(complex_selector),
         Err(e) => {
-            errors.push(CssError::ParseDeepUnrecoverable(e));
+            errors.push(CssError::from_parse_error(e, false, true));
             None
         }
     }
@@ -354,13 +354,13 @@ fn process_pseudo_element_children(
     // Take errors, assume they are recoverable
     errors.reserve(parse_errors.len());
     for error in parse_errors {
-        errors.push(CssError::ParseDeepRecoverable(error));
+        errors.push(CssError::from_parse_error(error, true, true));
     }
 
     match result {
         Ok(complex_selector) => Some(complex_selector),
         Err(e) => {
-            errors.push(CssError::ParseDeepUnrecoverable(e));
+            errors.push(CssError::from_parse_error(e, false, true));
             None
         }
     }

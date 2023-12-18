@@ -10,6 +10,12 @@ pub struct ParseError {
 pub enum ParseErrorKind {
     /// Malformed directive (e.g. `:`, `@`)
     DirectiveSyntax,
+    /// More than one `<script>`
+    DuplicateScriptOptions,
+    /// More than one `<script setup>`
+    DuplicateScriptSetup,
+    /// More than one `<template>`
+    DuplicateTemplate,
     /// Unclosed dynamic argument, e.g. `:[dynamic`
     DynamicArgument,
     /// Error while parsing EcmaScript/TypeScript
@@ -38,5 +44,11 @@ impl std::fmt::Display for ParseErrorKind {
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
+    }
+}
+
+impl Spanned for ParseError {
+    fn span(&self) -> Span {
+        self.span
     }
 }

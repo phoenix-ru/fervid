@@ -4,7 +4,6 @@
   "description": "All-in-One Vue compiler written in Rust",
   "main": "index.js",
   "repository": "git@github.com:phoenix-ru/fervid.git",
-  "type": "module",
   "license": "MIT",
   "keywords": [
     "napi-rs",

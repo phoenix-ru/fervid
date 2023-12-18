@@ -31,11 +31,7 @@ pub fn transform_css(
     let parse_result = parse_stylesheet(content, span, config.parse, &mut parse_errors);
     let is_recoverable = parse_result.is_ok();
     errors.extend(parse_errors.into_iter().map(|e| {
-        if is_recoverable {
-            CssError::ParseRecoverable(e)
-        } else {
-            CssError::ParseUnrecoverable(e)
-        }
+        CssError::from_parse_error(e, is_recoverable, false)
     }));
 
     let Ok(mut stylesheet) = parse_result else {

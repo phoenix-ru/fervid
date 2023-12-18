@@ -20,6 +20,9 @@ dependencies:
   webpack:
     specifier: ^5.89.0
     version: 5.89.0
+  webpack-virtual-modules:
+    specifier: ^0.6.1
+    version: 0.6.1
 
 packages:
 

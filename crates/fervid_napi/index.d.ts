@@ -6,7 +6,30 @@
 export interface CompileSyncOptions {
   isProd: boolean
 }
-export function compileSync(source: string, options?: CompileSyncOptions | undefined | null): string
+export interface CompileResult {
+  code: string
+  styles: Array<Style>
+  errors: Array<SerializedError>
+  customBlocks: Array<CustomBlock>
+}
+export interface Style {
+  code: string
+  isCompiled: boolean
+  lang: string
+  isScoped: boolean
+}
+export interface CustomBlock {
+  content: string
+  lo: number
+  hi: number
+  tagName: string
+}
+export interface SerializedError {
+  lo: number
+  hi: number
+  message: string
+}
+export function compileSync(source: string, options?: CompileSyncOptions | undefined | null): CompileResult
 export function compileAsync(
   source: string,
   options?: CompileSyncOptions | undefined | null,

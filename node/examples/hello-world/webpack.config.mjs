@@ -6,6 +6,12 @@ export default {
     entry: {
         app: './index.js',
     },
+    module: {
+        rules: [{
+            test: /\.css/,
+            type: 'css/auto'
+        }]
+    },
     devServer: {
         static: './dist'
     },
@@ -18,5 +24,8 @@ export default {
             template: './index.html'
         }),
         VuePlugin({ hmr: true, mode: 'development' })
-    ]
+    ],
+    experiments: {
+        css: true
+    }
 }

@@ -22,6 +22,7 @@ mimalloc-rust = { version = "0.2", features = ["local-dynamic-tls"] }
 fervid = { path = "../fervid", version = "0.0.3" }
 fervid_codegen = { path = "../fervid_codegen", version = "0.1" }
 fervid_transform = { path = "../fervid_transform", version = "0.1" }
+swc_core = { workspace = true }
 
 napi = "2"
 napi-derive = "2"
