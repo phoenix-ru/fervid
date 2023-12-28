@@ -269,6 +269,7 @@ impl CodegenContext {
                 // Ignore named slots in the elements.
                 // These should be reported in the analyzer.
                 was_inlined = false;
+                slotted_iterator.advance();
             }
 
             slotted_iterator.toggle_mode();
