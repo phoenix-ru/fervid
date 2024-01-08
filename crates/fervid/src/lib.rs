@@ -49,7 +49,7 @@ use errors::CompileError;
 use fervid_codegen::CodegenContext;
 pub use fervid_core::*;
 use fervid_parser::SfcParser;
-use fervid_transform::{transform_sfc, style::should_transform_style_block};
+use fervid_transform::{style::should_transform_style_block, transform_sfc};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use swc_core::ecma::ast::Expr;
 

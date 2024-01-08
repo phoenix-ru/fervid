@@ -57,10 +57,8 @@ pub fn transform_and_record_template(
         current_scope: 0,
     };
 
-    // Optimize each root node separately
-    let ast = &mut template.roots;
-    let mut iter = ast.iter_mut();
-    while let Some(ref mut node) = iter.next() {
+    // Technically one root only
+    for node in template.roots.iter_mut() {
         node.visit_mut_with(&mut template_visitor);
     }
 }
@@ -75,13 +73,13 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
 
     // Filter out whitespace text nodes at the beginning and end of ElementNode
     match children.first() {
-        Some(Node::Text(v, _)) if v.trim().len() == 0 => {
+        Some(Node::Text(v, _)) if v.trim().is_empty() => {
             discard_mask |= 1 << 0;
         }
         _ => {}
     }
     match children.last() {
-        Some(Node::Text(v, _)) if v.trim().len() == 0 => {
+        Some(Node::Text(v, _)) if v.trim().is_empty() => {
             discard_mask |= 1 << (children_len - 1);
         }
         _ => {}
@@ -91,7 +89,7 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
     for (index, window) in children.windows(3).enumerate() {
         match window {
             [Node::Element(_) | Node::Comment(_, _), Node::Text(middle, _), Node::Element(_) | Node::Comment(_, _)]
-                if middle.trim().len() == 0 =>
+                if middle.trim().is_empty() =>
             {
                 discard_mask |= 1 << (index + 1);
             }
@@ -118,7 +116,7 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
     }
 
     // Merge multiple v-if/else-if/else nodes into a ConditionalNodeSequence
-    if children.len() != 0 {
+    if !children.is_empty() {
         let mut seq: Option<ConditionalNodeSequence> = None;
         let mut new_children = Vec::with_capacity(children.len());
 

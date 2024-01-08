@@ -39,7 +39,10 @@ impl SfcParser<'_, '_, '_> {
 
         macro_rules! report_error {
             ($kind: ident, $span: expr) => {
-                self.errors.push(ParseError { kind: ParseErrorKind::$kind, span: $span });
+                self.errors.push(ParseError {
+                    kind: ParseErrorKind::$kind,
+                    span: $span,
+                });
             };
         }
 
@@ -111,7 +114,7 @@ impl SfcParser<'_, '_, '_> {
                     lang,
                     content: style_content.data.to_owned(),
                     is_scoped,
-                    span: style_content.span
+                    span: style_content.span,
                 })
             } else {
                 let attributes = root_element
@@ -156,6 +159,7 @@ impl SfcParser<'_, '_, '_> {
         let parser_config = ParserConfig {
             scripting_enabled: false,
             iframe_srcdoc: false,
+            allow_self_closing: true,
         };
         let mut parser = Parser::new(lexer, parser_config);
 
