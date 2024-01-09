@@ -139,7 +139,8 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
                 let Node::Element(child_element) = $child else {
                     unreachable!()
                 };
-                child_element
+
+                optimize_v_if_plus_v_for(child_element)
             }};
         }
 
@@ -213,6 +214,55 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
 
         *children = new_children;
     }
+}
+
+// Optimize combined usage of conditional directives and `v-for`
+// https://github.com/vuejs/core/blob/438a74aad840183286fbdb488178510f37218a73/packages/compiler-core/src/transforms/vIf.ts#L260
+fn optimize_v_if_plus_v_for(mut parent: ElementNode) -> ElementNode {
+    // Check that work is needed
+    // This must be a `<template>` element with exactly one Element child
+    if parent.children.len() != 1 || parent.starting_tag.tag_name != "template" {
+        return parent;
+    }
+
+    let Some(Node::Element(child)) = parent.children.first_mut() else {
+        return parent;
+    };
+
+    // There must be at most one `v-for` for both parent and child
+    let parent_has_v_for = parent
+        .starting_tag
+        .directives
+        .as_ref()
+        .map_or(false, |d| d.v_for.is_some());
+    let child_has_v_for = child
+        .starting_tag
+        .directives
+        .as_ref()
+        .map_or(false, |d| d.v_for.is_some());
+    if parent_has_v_for && child_has_v_for {
+        return parent;
+    }
+
+    // Take parent's `v-for` and give it to the child
+    if parent_has_v_for {
+        let Some(mut parent_directives) = parent.starting_tag.directives.take() else {
+            unreachable!()
+        };
+
+        let child_directives = child
+            .starting_tag
+            .directives
+            .get_or_insert_with(Default::default);
+        child_directives.v_for = parent_directives.v_for.take();
+    }
+
+    // Take the child and return it instead
+    let Some(Node::Element(child)) = parent.children.pop() else {
+        unreachable!()
+    };
+
+    child
 }
 
 trait Visitor {
@@ -568,7 +618,7 @@ impl VisitMut for Node {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{ElementKind, Node, SetupBinding, VueDirectives};
+    use fervid_core::{ElementKind, Node, SetupBinding, VForDirective, VueDirectives};
     use swc_core::{common::DUMMY_SP, ecma::ast::Expr};
 
     use crate::test_utils::{parser::parse_javascript_expr, to_str};
@@ -869,6 +919,233 @@ mod tests {
             panic!("root is not an element")
         };
         assert_eq!(2, root.children.len());
+    }
+
+    #[test]
+    fn it_optimizes_nested_fragments() {
+        // For cloning
+        // <p>text</p>
+        let p = ElementNode {
+            kind: ElementKind::Element,
+            starting_tag: StartingTag {
+                tag_name: "p".into(),
+                attributes: vec![],
+                directives: Some(Default::default()),
+            },
+            children: vec![Node::Text("text".into(), DUMMY_SP)],
+            template_scope: 0,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
+        };
+        // <div v-if="false"></div>
+        let div = ElementNode {
+            kind: ElementKind::Element,
+            starting_tag: StartingTag {
+                tag_name: "div".into(),
+                attributes: vec![],
+                directives: Some(Box::new(VueDirectives {
+                    v_if: Some(js("false")),
+                    ..Default::default()
+                })),
+            },
+            children: vec![Node::Text("text".into(), DUMMY_SP)],
+            template_scope: 0,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
+        };
+        // <template></template>
+        let tmpl = ElementNode {
+            kind: ElementKind::Element,
+            starting_tag: StartingTag {
+                tag_name: "template".into(),
+                attributes: vec![],
+                directives: Some(Default::default()),
+            },
+            children: vec![],
+            template_scope: 0,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
+        };
+        let sfc_tmpl = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![],
+            span: DUMMY_SP,
+        };
+
+        // Convenience
+        let prepare = |template_directives: Option<Box<VueDirectives>>,
+                       p_directives: Option<Box<VueDirectives>>,
+                       include_div: bool| {
+            let mut p = p.clone();
+            p.starting_tag.directives = p_directives;
+
+            let mut template = tmpl.clone();
+            template.starting_tag.directives = template_directives;
+            template.children.push(Node::Element(p));
+
+            let mut sfc_template = sfc_tmpl.clone();
+            if include_div {
+                sfc_template.roots.push(Node::Element(div.clone()));
+            }
+            sfc_template.roots.push(Node::Element(template));
+            transform_and_record_template(&mut sfc_template, &mut Default::default());
+
+            let Some(Node::ConditionalSeq(cond)) = sfc_template.roots.pop() else {
+                panic!("root is not a conditional seq")
+            };
+
+            cond
+        };
+
+        // Convenience
+        macro_rules! directives {
+            ($($directive:ident: $value:expr),* $(,)?) => {
+                Box::new(VueDirectives {
+                    $($directive: $value,)*
+                    ..Default::default()
+                })
+            };
+        }
+
+        // <template v-if="val"><p>text</p></template>
+        {
+            let cond = prepare(Some(directives!(v_if: Some(js("val")))), None, false);
+
+            // Folded to `<p v-if="val">text</p>`
+            assert!(cond.if_node.node.starting_tag.tag_name == "p");
+            assert!(cond
+                .if_node
+                .node
+                .children
+                .first()
+                .is_some_and(|v| matches!(v, Node::Text(_, _))))
+        };
+
+        // <template v-if="val" v-for="i in 3"><p>text</p></template>
+        {
+            let cond = prepare(
+                Some(
+                    directives!(v_if: Some(js("val")), v_for: Some(VForDirective {
+                        iterable: js("3"),
+                        itervar: js("i"),
+                        patch_flags: Default::default(),
+                        span: DUMMY_SP,
+                    })),
+                ),
+                None,
+                false,
+            );
+
+            // Folded to `<p v-if="val" v-for="i in 3">text</p>`
+            let cond_node = &cond.if_node.node;
+            assert!(cond_node.starting_tag.tag_name == "p");
+            assert!(cond_node
+                .children
+                .first()
+                .is_some_and(|v| matches!(v, Node::Text(_, _))));
+            assert!(cond_node
+                .starting_tag
+                .directives
+                .as_ref()
+                .is_some_and(|d| d.v_for.is_some()));
+        };
+
+        // <template v-if="val"><p v-for="j in 3">text</p></template>
+        {
+            let cond = prepare(
+                Some(directives!(v_if: Some(js("val")))),
+                Some(directives!(v_for: Some(VForDirective {
+                    iterable: js("3"),
+                    itervar: js("j"),
+                    patch_flags: Default::default(),
+                    span: DUMMY_SP,
+                }))),
+                false,
+            );
+
+            // Folded to `<p v-if="val" v-for="i in 3">text</p>`
+            let cond_node = &cond.if_node.node;
+            assert!(cond_node.starting_tag.tag_name == "p");
+            assert!(cond_node
+                .children
+                .first()
+                .is_some_and(|v| matches!(v, Node::Text(_, _))));
+            assert!(cond_node
+                .starting_tag
+                .directives
+                .as_ref()
+                .is_some_and(|d| d.v_for.is_some()));
+        };
+
+        // <template v-if="val" v-for="i in 3"><p v-for="j in 3">text</p></template>
+        {
+            let cond = prepare(
+                Some(
+                    directives!(v_if: Some(js("val")), v_for: Some(VForDirective {
+                        iterable: js("3"),
+                        itervar: js("i"),
+                        patch_flags: Default::default(),
+                        span: DUMMY_SP,
+                    })),
+                ),
+                Some(directives!(v_for: Some(VForDirective {
+                    iterable: js("3"),
+                    itervar: js("j"),
+                    patch_flags: Default::default(),
+                    span: DUMMY_SP,
+                }))),
+                false,
+            );
+
+            // Not folded
+            let cond_node = &cond.if_node.node;
+            assert!(cond_node.starting_tag.tag_name == "template");
+            assert!(cond_node
+                .starting_tag
+                .directives
+                .as_ref()
+                .is_some_and(|d| d.v_for.is_some()));
+
+            let Some(Node::Element(first_child)) = cond_node.children.first() else {
+                panic!("First child should be an element")
+            };
+            assert!(first_child.starting_tag.tag_name == "p");
+            assert!(first_child
+                .starting_tag
+                .directives
+                .as_ref()
+                .is_some_and(|d| d.v_for.is_some()));
+        };
+
+        // <div v-if="false"></div>
+        // <template v-else-if="val"><p>text</p></template>
+        {
+            let cond = prepare(Some(directives!(v_else_if: Some(js("val")))), None, true);
+
+            // Folded to `<div v-if="false"></div><p v-else-if="val">text</p>`
+            assert!(cond.if_node.node.starting_tag.tag_name == "div");
+            let else_if_node = &cond.else_if_nodes.first().expect("Should exist").node;
+            assert!(else_if_node.starting_tag.tag_name == "p");
+            assert!(else_if_node
+                .children
+                .first()
+                .is_some_and(|v| matches!(v, Node::Text(_, _))));
+        };
+
+        // <div v-if="false"></div>
+        // <template v-else><p>text</p></template>
+        {
+            let cond = prepare(Some(directives!(v_else: Some(()))), None, true);
+
+            // Folded to `<div v-if="false"></div><p v-else-if="val">text</p>`
+            assert!(cond.if_node.node.starting_tag.tag_name == "div");
+            let else_node = cond.else_node.as_ref().expect("Should exist");
+            assert!(else_node.starting_tag.tag_name == "p");
+            assert!(else_node
+                .children
+                .first()
+                .is_some_and(|v| matches!(v, Node::Text(_, _))));
+        };
     }
 
     #[test]

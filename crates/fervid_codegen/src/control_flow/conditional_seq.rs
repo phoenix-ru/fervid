@@ -1,4 +1,4 @@
-use fervid_core::ConditionalNodeSequence;
+use fervid_core::{ConditionalNodeSequence, ElementNode};
 use swc_core::{
     common::{Spanned, DUMMY_SP},
     ecma::ast::{CondExpr, Expr},
@@ -17,7 +17,7 @@ impl CodegenContext {
         // let _has_js = transform_scoped(&mut if_expr, &self.scope_helper, if_element_node.template_scope);
         conditional_exprs.push(Box::new(if_expr.to_owned()));
         conditional_exprs.push(Box::new(
-            self.generate_element_or_component(if_element_node, true),
+            self.generate_element_or_component(if_element_node, should_wrap_in_block(if_element_node)),
         ));
 
         // Then, push all the `else-if` nodes
@@ -28,13 +28,13 @@ impl CodegenContext {
             // let _has_js = transform_scoped(&mut else_if_expr, &self.scope_helper, else_if_node.template_scope);
             conditional_exprs.push(Box::new(else_if_expr.to_owned()));
             conditional_exprs.push(Box::new(
-                self.generate_element_or_component(else_if_node, true),
+                self.generate_element_or_component(else_if_node, should_wrap_in_block(else_if_node)),
             ));
         }
 
         // Push either `else` or a comment node
         let else_expr = if let Some(ref else_node) = conditional_seq.else_node {
-            self.generate_element_or_component(else_node, true)
+            self.generate_element_or_component(else_node, should_wrap_in_block(&else_node))
         } else {
             self.generate_comment_vnode("v-if", DUMMY_SP)
         };
@@ -43,9 +43,15 @@ impl CodegenContext {
         // And lastly, fold the results in triplets from the back
         // (..., condition, pos_branch, neg_branch) -> (..., expr)
         while conditional_exprs.len() >= 3 {
-            let Some(negative_branch) = conditional_exprs.pop() else { unreachable!() };
-            let Some(positive_branch) = conditional_exprs.pop() else { unreachable!() };
-            let Some(condition) = conditional_exprs.pop() else { unreachable!() };
+            let Some(negative_branch) = conditional_exprs.pop() else {
+                unreachable!()
+            };
+            let Some(positive_branch) = conditional_exprs.pop() else {
+                unreachable!()
+            };
+            let Some(condition) = conditional_exprs.pop() else {
+                unreachable!()
+            };
 
             // Combine 3 expressions into one ternary
             let ternary_expr = Expr::Cond(CondExpr {
@@ -70,9 +76,18 @@ impl CodegenContext {
     }
 }
 
+/// Omits wrapping conditional node in block when `v-for` directive is present (it will create its own block)
+fn should_wrap_in_block(element_node: &ElementNode) -> bool {
+    element_node
+        .starting_tag
+        .directives
+        .as_ref()
+        .map_or(true, |d| d.v_for.is_none())
+}
+
 #[cfg(test)]
 mod tests {
-    use fervid_core::{ElementNode, Node, StartingTag, Conditional, ElementKind};
+    use fervid_core::{Conditional, ElementKind, ElementNode, Node, StartingTag};
 
     use crate::test_utils::js;
 
@@ -89,7 +104,7 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "h1".into(),
                             attributes: vec![],
-                            directives: None
+                            directives: None,
                         },
                         children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
@@ -117,7 +132,7 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "h1".into(),
                             attributes: vec![],
-                            directives: None
+                            directives: None,
                         },
                         children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
@@ -131,7 +146,7 @@ mod tests {
                     starting_tag: StartingTag {
                         tag_name: "h2".into(),
                         attributes: vec![],
-                        directives: None
+                        directives: None,
                     },
                     children: vec![Node::Text("bye".into(), DUMMY_SP)],
                     template_scope: 0,
@@ -157,7 +172,7 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "h1".into(),
                             attributes: vec![],
-                            directives: None
+                            directives: None,
                         },
                         children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
@@ -173,7 +188,7 @@ mod tests {
                             starting_tag: StartingTag {
                                 tag_name: "h2".into(),
                                 attributes: vec![],
-                                directives: None
+                                directives: None,
                             },
                             children: vec![Node::Text("hi".into(), DUMMY_SP)],
                             template_scope: 0,
@@ -188,7 +203,7 @@ mod tests {
                             starting_tag: StartingTag {
                                 tag_name: "h3".into(),
                                 attributes: vec![],
-                                directives: None
+                                directives: None,
                             },
                             children: vec![Node::Text("bye".into(), DUMMY_SP)],
                             template_scope: 0,
@@ -218,7 +233,7 @@ mod tests {
                         starting_tag: StartingTag {
                             tag_name: "h1".into(),
                             attributes: vec![],
-                            directives: None
+                            directives: None,
                         },
                         children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
@@ -234,7 +249,7 @@ mod tests {
                             starting_tag: StartingTag {
                                 tag_name: "h2".into(),
                                 attributes: vec![],
-                                directives: None
+                                directives: None,
                             },
                             children: vec![Node::Text("hi".into(), DUMMY_SP)],
                             template_scope: 0,
@@ -249,7 +264,7 @@ mod tests {
                             starting_tag: StartingTag {
                                 tag_name: "h3".into(),
                                 attributes: vec![],
-                                directives: None
+                                directives: None,
                             },
                             children: vec![Node::Text("good morning".into(), DUMMY_SP)],
                             template_scope: 0,
@@ -263,7 +278,7 @@ mod tests {
                     starting_tag: StartingTag {
                         tag_name: "h4".into(),
                         attributes: vec![],
-                        directives: None
+                        directives: None,
                     },
                     children: vec![Node::Text("bye".into(), DUMMY_SP)],
                     template_scope: 0,
