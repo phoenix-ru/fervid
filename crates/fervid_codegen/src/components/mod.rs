@@ -633,11 +633,9 @@ fn null(span: Span) -> Box<Expr> {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{
-        AttributeOrBinding, ElementKind, Interpolation, Node, StartingTag, VBindDirective,
-    };
+    use fervid_core::{ElementKind, Interpolation, Node, StartingTag};
 
-    use crate::test_utils::js;
+    use crate::test_utils::{js, regular_attribute, v_bind_attribute};
 
     use super::*;
 
@@ -688,17 +686,8 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "test-component".into(),
                     attributes: vec![
-                        AttributeOrBinding::RegularAttribute {
-                            name: "foo".into(),
-                            value: "bar".into(),
-                        },
-                        AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some("some-baz".into()),
-                            value: js("qux"),
-                            is_camel: false,
-                            is_prop: false,
-                            is_attr: false,
-                        }),
+                        regular_attribute("foo", "bar"),
+                        v_bind_attribute("some-baz", "qux"),
                     ],
                     directives: None,
                 },
@@ -885,7 +874,7 @@ mod tests {
                                 value: js("one"),
                                 template_scope: 0,
                                 patch_flag: true,
-                                span: DUMMY_SP
+                                span: DUMMY_SP,
                             }),
                         ],
                         template_scope: 0,

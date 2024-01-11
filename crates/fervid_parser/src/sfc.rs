@@ -123,6 +123,7 @@ impl SfcParser<'_, '_, '_> {
                     .map(|attr| AttributeOrBinding::RegularAttribute {
                         name: attr.name,
                         value: attr.value.unwrap_or_else(|| fervid_atom!("")),
+                        span: attr.span,
                     })
                     .collect();
 

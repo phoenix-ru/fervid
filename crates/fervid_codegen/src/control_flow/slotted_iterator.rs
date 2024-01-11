@@ -1,4 +1,4 @@
-use fervid_core::{Node, is_from_default_slot};
+use fervid_core::{is_from_default_slot, Node};
 
 #[derive(PartialEq)]
 pub enum SlottedIteratorMode {
@@ -105,12 +105,12 @@ impl<'n> SlottedIterator<'n> {
 #[cfg(test)]
 mod tests {
     use fervid_core::{
-        AttributeOrBinding, ElementKind, StartingTag, VBindDirective, VOnDirective, VSlotDirective,
-        VueDirectives, ElementNode,
+        AttributeOrBinding, ElementKind, ElementNode, StartingTag, VOnDirective, VSlotDirective,
+        VueDirectives,
     };
     use swc_core::common::DUMMY_SP;
 
-    use crate::test_utils::js;
+    use crate::test_utils::{js, regular_attribute, v_bind_attribute};
 
     use super::*;
 
@@ -222,17 +222,8 @@ mod tests {
             starting_tag: StartingTag {
                 tag_name: "div".into(),
                 attributes: vec![
-                    AttributeOrBinding::RegularAttribute {
-                        name: "class".into(),
-                        value: "regular".into(),
-                    },
-                    AttributeOrBinding::VBind(fervid_core::VBindDirective {
-                        argument: Some("disabled".into()),
-                        value: js("true"),
-                        is_camel: false,
-                        is_prop: false,
-                        is_attr: false,
-                    }),
+                    regular_attribute("class", "regular"),
+                    v_bind_attribute("disabled", "true"),
                 ],
                 directives: None,
             },
@@ -250,17 +241,12 @@ mod tests {
             starting_tag: StartingTag {
                 tag_name: "h1".into(),
                 attributes: vec![
-                    AttributeOrBinding::VBind(VBindDirective {
-                        argument: Some("disabled".into()),
-                        value: js("true"),
-                        is_camel: false,
-                        is_prop: false,
-                        is_attr: false,
-                    }),
+                    v_bind_attribute("disabled", "true"),
                     AttributeOrBinding::VOn(VOnDirective {
                         event: Some("event".into()),
                         handler: Some(js("baz")),
                         modifiers: vec![],
+                        span: DUMMY_SP,
                     }),
                 ],
                 directives: None,

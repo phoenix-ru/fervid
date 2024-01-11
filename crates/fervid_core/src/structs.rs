@@ -126,7 +126,7 @@ pub struct StartingTag {
 #[derive(Debug, Clone)]
 pub enum AttributeOrBinding {
     /// `RegularAttribute` is a plain HTML attribute without any associated logic
-    RegularAttribute { name: FervidAtom, value: FervidAtom },
+    RegularAttribute { name: FervidAtom, value: FervidAtom, span: Span },
     /// `v-bind` directive
     VBind(VBindDirective),
     /// `v-on` directive
@@ -312,6 +312,8 @@ pub struct VOnDirective {
     pub handler: Option<Box<Expr>>,
     /// A list of modifiers after the dot, e.g. `stop` and `prevent` in `@click.stop.prevent="handleClick"`
     pub modifiers: Vec<FervidAtom>,
+    /// Byte location in source
+    pub span: Span
 }
 
 /// `v-bind` and its shorthand `:`
@@ -327,6 +329,8 @@ pub struct VBindDirective {
     pub is_prop: bool,
     /// .attr modifier
     pub is_attr: bool,
+    /// Byte location in source
+    pub span: Span
 }
 
 /// `v-model`

@@ -168,10 +168,10 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{BuiltinType, ElementKind, Node, StartingTag, VBindDirective, StrOrExpr};
+    use fervid_core::{BuiltinType, ElementKind, Node, StartingTag};
     use swc_core::common::DUMMY_SP;
 
-    use crate::test_utils::js;
+    use crate::test_utils::{regular_attribute, v_bind_attribute};
 
     use super::*;
 
@@ -202,13 +202,7 @@ mod tests {
 
         // <slot name="default" />
         test_out(
-            slot!(
-                vec![AttributeOrBinding::RegularAttribute {
-                    name: "name".into(),
-                    value: "default".into()
-                }],
-                vec![]
-            ),
+            slot!(vec![regular_attribute("name", "default")], vec![]),
             r#"_renderSlot(_ctx.$slots,"default")"#,
         );
     }
@@ -217,13 +211,7 @@ mod tests {
     fn it_generates_named_slot() {
         // <slot name="test-slot" />
         test_out(
-            slot!(
-                vec![AttributeOrBinding::RegularAttribute {
-                    name: "name".into(),
-                    value: "test-slot".into()
-                }],
-                vec![]
-            ),
+            slot!(vec![regular_attribute("name", "test-slot")], vec![]),
             r#"_renderSlot(_ctx.$slots,"test-slot")"#,
         );
     }
@@ -232,16 +220,7 @@ mod tests {
     fn it_generates_dynamically_named_slot() {
         // <slot :name="slot + name" />
         test_out(
-            slot!(
-                vec![AttributeOrBinding::VBind(VBindDirective {
-                    argument: Some(StrOrExpr::Str("name".into())),
-                    value: js("slot + name"),
-                    is_camel: false,
-                    is_prop: false,
-                    is_attr: false
-                })],
-                vec![]
-            ),
+            slot!(vec![v_bind_attribute("name", "slot + name")], vec![]),
             r#"_renderSlot(_ctx.$slots,slot+name)"#,
         );
     }
@@ -252,17 +231,8 @@ mod tests {
         test_out(
             slot!(
                 vec![
-                    AttributeOrBinding::RegularAttribute {
-                        name: "foo".into(),
-                        value: "bar".into()
-                    },
-                    AttributeOrBinding::VBind(VBindDirective {
-                        argument: Some(StrOrExpr::Str("baz".into())),
-                        value: js("qux"),
-                        is_camel: false,
-                        is_prop: false,
-                        is_attr: false
-                    })
+                    regular_attribute("foo", "bar"),
+                    v_bind_attribute("baz", "qux"),
                 ],
                 vec![]
             ),
@@ -273,21 +243,9 @@ mod tests {
         test_out(
             slot!(
                 vec![
-                    AttributeOrBinding::RegularAttribute {
-                        name: "name".into(),
-                        value: "default".into()
-                    },
-                    AttributeOrBinding::RegularAttribute {
-                        name: "foo".into(),
-                        value: "bar".into()
-                    },
-                    AttributeOrBinding::VBind(VBindDirective {
-                        argument: Some(StrOrExpr::Str("baz".into())),
-                        value: js("qux"),
-                        is_camel: false,
-                        is_prop: false,
-                        is_attr: false
-                    })
+                    regular_attribute("name", "default"),
+                    regular_attribute("foo", "bar"),
+                    v_bind_attribute("baz", "qux"),
                 ],
                 vec![]
             ),
@@ -298,21 +256,9 @@ mod tests {
         test_out(
             slot!(
                 vec![
-                    AttributeOrBinding::RegularAttribute {
-                        name: "foo".into(),
-                        value: "bar".into()
-                    },
-                    AttributeOrBinding::RegularAttribute {
-                        name: "name".into(),
-                        value: "default".into()
-                    },
-                    AttributeOrBinding::VBind(VBindDirective {
-                        argument: Some(StrOrExpr::Str("baz".into())),
-                        value: js("qux"),
-                        is_camel: false,
-                        is_prop: false,
-                        is_attr: false
-                    })
+                    regular_attribute("foo", "bar"),
+                    regular_attribute("name", "default"),
+                    v_bind_attribute("baz", "qux"),
                 ],
                 vec![]
             ),
@@ -323,21 +269,9 @@ mod tests {
         test_out(
             slot!(
                 vec![
-                    AttributeOrBinding::RegularAttribute {
-                        name: "foo".into(),
-                        value: "bar".into()
-                    },
-                    AttributeOrBinding::VBind(VBindDirective {
-                        argument: Some(StrOrExpr::Str("baz".into())),
-                        value: js("qux"),
-                        is_camel: false,
-                        is_prop: false,
-                        is_attr: false
-                    }),
-                    AttributeOrBinding::RegularAttribute {
-                        name: "name".into(),
-                        value: "default".into()
-                    }
+                    regular_attribute("foo", "bar"),
+                    v_bind_attribute("baz", "qux"),
+                    regular_attribute("name", "default"),
                 ],
                 vec![]
             ),
@@ -394,21 +328,9 @@ mod tests {
         test_out(
             slot!(
                 vec![
-                    AttributeOrBinding::RegularAttribute {
-                        name: "name".into(),
-                        value: "test-slot".into()
-                    },
-                    AttributeOrBinding::RegularAttribute {
-                        name: "foo".into(),
-                        value: "bar".into()
-                    },
-                    AttributeOrBinding::VBind(VBindDirective {
-                        argument: Some(StrOrExpr::Str("baz".into())),
-                        value: js("qux"),
-                        is_camel: false,
-                        is_prop: false,
-                        is_attr: false
-                    })
+                    regular_attribute("name", "test-slot"),
+                    regular_attribute("foo", "bar"),
+                    v_bind_attribute("baz", "qux"),
                 ],
                 vec![
                     Node::Element(ElementNode {

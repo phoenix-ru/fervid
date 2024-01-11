@@ -333,7 +333,9 @@ impl CodegenContext {
                 for attr in starting_tag.attributes.iter() {
                     match attr {
                         // type="smth"
-                        AttributeOrBinding::RegularAttribute { name, value } if name == "type" => {
+                        AttributeOrBinding::RegularAttribute { name, value, .. }
+                            if name == "type" =>
+                        {
                             match value.as_ref() {
                                 "checkbox" => {
                                     return self
@@ -371,13 +373,10 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{
-        AttributeOrBinding, ElementKind, Interpolation, Node, StartingTag, VBindDirective,
-        VOnDirective,
-    };
+    use fervid_core::{ElementKind, Interpolation, Node, StartingTag};
 
     use super::*;
-    use crate::test_utils::js;
+    use crate::test_utils::{js, regular_attribute, v_bind_attribute, v_on_attribute};
 
     #[test]
     fn it_generates_basic_usage() {
@@ -392,29 +391,10 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "div".into(),
                     attributes: vec![
-                        AttributeOrBinding::RegularAttribute {
-                            name: "foo".into(),
-                            value: "bar".into(),
-                        },
-                        AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some("baz".into()),
-                            value: js("qux"),
-                            is_camel: false,
-                            is_prop: false,
-                            is_attr: false,
-                        }),
-                        AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some("readonly".into()),
-                            value: js("true"),
-                            is_camel: false,
-                            is_prop: false,
-                            is_attr: false,
-                        }),
-                        AttributeOrBinding::VOn(VOnDirective {
-                            event: Some("click".into()),
-                            handler: Some(js("handleClick")),
-                            modifiers: vec![],
-                        }),
+                        regular_attribute("foo", "bar"),
+                        v_bind_attribute("baz", "qux"),
+                        v_bind_attribute("readonly", "true"),
+                        v_on_attribute("click", "handleClick"),
                     ],
                     directives: None,
                 },
@@ -458,17 +438,8 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "div".into(),
                     attributes: vec![
-                        AttributeOrBinding::RegularAttribute {
-                            name: "foo".into(),
-                            value: "bar".into(),
-                        },
-                        AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some("some-baz".into()),
-                            value: js("qux"),
-                            is_camel: false,
-                            is_prop: false,
-                            is_attr: false,
-                        }),
+                        regular_attribute("foo", "bar"),
+                        v_bind_attribute("some-baz", "qux"),
                     ],
                     directives: None,
                 },
@@ -488,17 +459,8 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "div".into(),
                     attributes: vec![
-                        AttributeOrBinding::RegularAttribute {
-                            name: "foo".into(),
-                            value: "bar".into(),
-                        },
-                        AttributeOrBinding::VBind(VBindDirective {
-                            argument: Some("some-baz".into()),
-                            value: js("qux"),
-                            is_camel: false,
-                            is_prop: false,
-                            is_attr: false,
-                        }),
+                        regular_attribute("foo", "bar"),
+                        v_bind_attribute("some-baz", "qux"),
                     ],
                     directives: None,
                 },
@@ -529,7 +491,7 @@ mod tests {
                         value: js("true"),
                         template_scope: 0,
                         patch_flag: false,
-                        span: DUMMY_SP
+                        span: DUMMY_SP,
                     }),
                     Node::Text(" bye!".into(), DUMMY_SP),
                 ],
@@ -559,7 +521,7 @@ mod tests {
                         value: js("true"),
                         template_scope: 0,
                         patch_flag: false,
-                        span: DUMMY_SP
+                        span: DUMMY_SP,
                     }),
                     Node::Element(ElementNode {
                         starting_tag: StartingTag {

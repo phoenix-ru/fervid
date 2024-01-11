@@ -4,7 +4,7 @@ use fervid_core::{
 };
 use regex::Regex;
 use swc_core::{
-    common::{Span, Spanned, DUMMY_SP},
+    common::{Span, Spanned},
     ecma::ast::{
         ArrayLit, ArrowExpr, BinExpr, BinaryOp, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
         ComputedPropName, Expr, ExprOrSpread, Ident, KeyValueProp, Lit, ObjectLit, Prop, PropName,
@@ -68,31 +68,28 @@ impl CodegenContext {
         let mut result_hints = GenerateAttributesResultHints::default();
 
         for attribute in attributes {
-            // TODO Spans
-            let span = DUMMY_SP;
-
             match attribute {
                 // First, we check the special case: `class` and `style` attributes
                 // class
-                AttributeOrBinding::RegularAttribute { name, value } if name == "class" => {
-                    class_regular_attr = Some((value, span));
+                AttributeOrBinding::RegularAttribute { name, value, span } if name == "class" => {
+                    class_regular_attr = Some((value, *span));
                 }
 
                 // style
-                AttributeOrBinding::RegularAttribute { name, value } if name == "style" => {
-                    style_regular_attr = Some((value, span));
+                AttributeOrBinding::RegularAttribute { name, value, span } if name == "style" => {
+                    style_regular_attr = Some((value, *span));
                 }
 
                 // Any regular attribute will be added as an object entry,
                 // where key is attribute name and value is attribute value as string literal
-                AttributeOrBinding::RegularAttribute { name, value } => {
+                AttributeOrBinding::RegularAttribute { name, value, span } => {
                     // let raw = Some(Atom::from(value.as_ref()));
 
                     out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                         KeyValueProp {
-                            key: str_to_propname(&name, span),
+                            key: str_to_propname(&name, *span),
                             value: Box::from(Expr::Lit(Lit::Str(Str {
-                                span,
+                                span: span.to_owned(),
                                 value: value.to_owned(),
                                 raw: None,
                             }))),
@@ -108,18 +105,20 @@ impl CodegenContext {
                 AttributeOrBinding::VBind(VBindDirective {
                     argument: Some(StrOrExpr::Str(argument)),
                     value,
+                    span,
                     ..
                 }) if argument == "class" => {
-                    class_bound = Some((value.to_owned(), span));
+                    class_bound = Some((value.to_owned(), *span));
                 }
 
                 // :style
                 AttributeOrBinding::VBind(VBindDirective {
                     argument: Some(StrOrExpr::Str(argument)),
                     value,
+                    span,
                     ..
                 }) if argument == "style" => {
-                    style_bound = Some((value.to_owned(), span));
+                    style_bound = Some((value.to_owned(), *span));
                 }
 
                 // `v-bind` directive without argument needs its own processing
@@ -143,12 +142,14 @@ impl CodegenContext {
                 AttributeOrBinding::VBind(VBindDirective {
                     argument: Some(argument),
                     value,
+                    span,
                     ..
                 }) => {
                     // Transform the raw expression
                     // let was_transformed =
                     //     transform_scoped(&mut value, &self.scope_helper, template_scope_id);
                     let was_transformed = true; // todo
+                    let span = *span;
 
                     // Add the PROPS patch flag
                     result_hints.props_patch_flag =
@@ -191,8 +192,10 @@ impl CodegenContext {
                     event: Some(event),
                     handler,
                     modifiers,
+                    span,
                 }) => {
                     // TODO Use _cache
+                    let span = *span;
 
                     // Transform or default to () => {}
                     // The patch flag does not apply to v-on
@@ -584,33 +587,18 @@ fn empty_arrow_expr(span: Span) -> Expr {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{AttributeOrBinding, VBindDirective, VOnDirective};
+    use fervid_core::{AttributeOrBinding, VOnDirective};
     use swc_core::{common::DUMMY_SP, ecma::ast::ObjectLit};
 
-    use crate::{context::CodegenContext, test_utils::js};
-
-    macro_rules! v_bind {
-        {
-            argument: $argument: expr,
-            value: $value: expr
-        } => {
-            VBindDirective {
-                argument: $argument,
-                value: $value,
-                is_camel: Default::default(),
-                is_prop: Default::default(),
-                is_attr: Default::default(),
-            }
-        };
-    }
+    use crate::{
+        context::CodegenContext,
+        test_utils::{js, regular_attribute, v_bind_attribute, v_on_attribute},
+    };
 
     #[test]
     fn it_generates_class_regular() {
         test_out(
-            vec![AttributeOrBinding::RegularAttribute {
-                name: "class".into(),
-                value: "both regular and bound".into(),
-            }],
+            vec![regular_attribute("class", "both regular and bound")],
             r#"{class:"both regular and bound"}"#,
         );
     }
@@ -618,10 +606,7 @@ mod tests {
     #[test]
     fn it_generates_class_bound() {
         test_out(
-            vec![AttributeOrBinding::VBind(v_bind! {
-                argument: Some("class".into()),
-                value: js("[item2, index]")
-            })],
+            vec![v_bind_attribute("class", "[item2, index]")],
             r#"{class:_normalizeClass([item2,index])}"#,
         );
     }
@@ -630,14 +615,8 @@ mod tests {
     fn it_generates_both_classes() {
         test_out(
             vec![
-                AttributeOrBinding::RegularAttribute {
-                    name: "class".into(),
-                    value: "both regular and bound".into(),
-                },
-                AttributeOrBinding::VBind(v_bind! {
-                    argument: Some("class".into()),
-                    value: js("[item2, index]")
-                }),
+                regular_attribute("class", "both regular and bound"),
+                v_bind_attribute("class", "[item2, index]"),
             ],
             r#"{class:_normalizeClass(["both regular and bound",[item2,index]])}"#,
         );
@@ -646,10 +625,10 @@ mod tests {
     #[test]
     fn it_generates_style_regular() {
         test_out(
-            vec![AttributeOrBinding::RegularAttribute {
-                name: "style".into(),
-                value: "margin: 0px; background-color: magenta".into(),
-            }],
+            vec![regular_attribute(
+                "style",
+                "margin: 0px; background-color: magenta",
+            )],
             r#"{style:{margin:"0px","background-color":"magenta"}}"#,
         );
     }
@@ -658,10 +637,10 @@ mod tests {
     fn it_generates_style_bound() {
         // `:style="{ backgroundColor: v ? 'yellow' : undefined }"`
         test_out(
-            vec![AttributeOrBinding::VBind(v_bind! {
-                argument: Some("style".into()),
-                value: js("{ backgroundColor: v ? 'yellow' : undefined }")
-            })],
+            vec![v_bind_attribute(
+                "style",
+                "{ backgroundColor: v ? 'yellow' : undefined }",
+            )],
             r#"{style:_normalizeStyle({backgroundColor:v?"yellow":undefined})}"#,
         );
     }
@@ -670,14 +649,8 @@ mod tests {
     fn it_generates_both_styles() {
         test_out(
             vec![
-                AttributeOrBinding::RegularAttribute {
-                    name: "style".into(),
-                    value: "margin: 0px; background-color: magenta".into(),
-                },
-                AttributeOrBinding::VBind(v_bind! {
-                    argument: Some("style".into()),
-                    value: js("{ backgroundColor: v ? 'yellow' : undefined }")
-                }),
+                regular_attribute("style", "margin: 0px; background-color: magenta"),
+                v_bind_attribute("style", "{ backgroundColor: v ? 'yellow' : undefined }"),
             ],
             r#"{style:_normalizeStyle([{margin:"0px","background-color":"magenta"},{backgroundColor:v?"yellow":undefined}])}"#,
         );
@@ -687,28 +660,22 @@ mod tests {
     fn it_generates_v_bind() {
         // :disabled="true"
         test_out(
-            vec![AttributeOrBinding::VBind(v_bind! {
-                argument: Some("disabled".into()),
-                value: js("true")
-            })],
+            vec![v_bind_attribute("disabled", "true")],
             "{disabled:true}",
         );
 
         // :multi-word-binding="true"
         test_out(
-            vec![AttributeOrBinding::VBind(v_bind! {
-                argument: Some("multi-word-binding".into()),
-                value: js("true")
-            })],
+            vec![v_bind_attribute("multi-word-binding", "true")],
             r#"{"multi-word-binding":true}"#,
         );
 
         // :disabled="some && expression || maybe !== not"
         test_out(
-            vec![AttributeOrBinding::VBind(v_bind! {
-                argument: Some("disabled".into()),
-                value: js("some && expression || maybe !== not")
-            })],
+            vec![v_bind_attribute(
+                "disabled",
+                "some && expression || maybe !== not",
+            )],
             "{disabled:some&&expression||maybe!==not}",
         );
     }
@@ -721,6 +688,7 @@ mod tests {
                 event: Some("click".into()),
                 handler: None,
                 modifiers: vec![],
+                span: DUMMY_SP,
             })],
             r"{onClick:()=>{}}",
         );
@@ -731,48 +699,42 @@ mod tests {
                 event: Some("multi-word-event".into()),
                 handler: None,
                 modifiers: vec![],
+                span: DUMMY_SP,
             })],
             r"{onMultiWordEvent:()=>{}}",
         );
 
         // @click="handleClick"
         test_out(
-            vec![AttributeOrBinding::VOn(VOnDirective {
-                event: Some("click".into()),
-                handler: Some(js("handleClick")),
-                modifiers: vec![],
-            })],
+            vec![v_on_attribute("click", "handleClick")],
             r"{onClick:handleClick}",
         );
 
         // TODO
+        // This should have been transformed previously
         // @click="console.log('hello')"
         // test_out(
         //     vec![AttributeOrBinding::VOn(VOnDirective {
         //         event: Some("click".into()),
         //         handler: Some(js("() => console.log('hello')")),
         //         modifiers: vec![],
+        //         span: DUMMY_SP
         //     })],
         //     r"{onClick:()=>console.log('hello')}"
         // );
 
         // @click="() => console.log('hello')"
         test_out(
-            vec![AttributeOrBinding::VOn(VOnDirective {
-                event: Some("click".into()),
-                handler: Some(js("() => console.log('hello')")),
-                modifiers: vec![],
-            })],
+            vec![v_on_attribute("click", "() => console.log('hello')")],
             r#"{onClick:()=>console.log("hello")}"#,
         );
 
         // @click="$event => handleClick($event, foo, bar)"
         test_out(
-            vec![AttributeOrBinding::VOn(VOnDirective {
-                event: Some("click".into()),
-                handler: Some(js("$event => handleClick($event, foo, bar)")),
-                modifiers: vec![],
-            })],
+            vec![v_on_attribute(
+                "click",
+                "$event => handleClick($event, foo, bar)",
+            )],
             r"{onClick:$event=>handleClick($event,foo,bar)}",
         );
 
@@ -782,6 +744,7 @@ mod tests {
                 event: Some("click".into()),
                 handler: None,
                 modifiers: vec!["stop".into(), "prevent".into(), "self".into()],
+                span: DUMMY_SP,
             })],
             r#"{onClick:_withModifiers(()=>{},["stop","prevent","self"])}"#,
         );
@@ -792,6 +755,7 @@ mod tests {
                 event: Some("click".into()),
                 handler: Some(js("$event => handleClick($event, foo, bar)")),
                 modifiers: vec!["stop".into()],
+                span: DUMMY_SP,
             })],
             r#"{onClick:_withModifiers($event=>handleClick($event,foo,bar),["stop"])}"#,
         );

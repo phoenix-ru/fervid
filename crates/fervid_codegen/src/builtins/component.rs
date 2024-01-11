@@ -28,9 +28,9 @@ impl CodegenContext {
 
         // Expression to put as the first argument to `resolveDynamicComponent()`
         let is_attribute_expr = match component_is_attribute {
-            AttributeOrBinding::RegularAttribute { name, value } if name == "is" => {
+            AttributeOrBinding::RegularAttribute { name, value, span } if name == "is" => {
                 Expr::Lit(Lit::Str(Str {
-                    span,
+                    span: *span,
                     value: value.to_owned(),
                     raw: None,
                 }))
@@ -98,13 +98,10 @@ impl CodegenContext {
 mod tests {
     use std::fmt::Debug;
 
-    use fervid_core::{
-        AttributeOrBinding, BuiltinType, ElementKind, Node, StartingTag, VSlotDirective,
-        VueDirectives,
-    };
+    use fervid_core::{BuiltinType, ElementKind, Node, StartingTag, VSlotDirective, VueDirectives};
     use swc_core::common::DUMMY_SP;
 
-    use crate::test_utils::js;
+    use crate::test_utils::{regular_attribute, v_bind_attribute};
 
     use super::*;
 
@@ -141,10 +138,7 @@ mod tests {
                 kind: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
                     tag_name: "component".into(),
-                    attributes: vec![AttributeOrBinding::RegularAttribute {
-                        name: "is".into(),
-                        value: "div".into(),
-                    }],
+                    attributes: vec![regular_attribute("is", "div")],
                     directives: None,
                 },
                 children: vec![],
@@ -164,13 +158,7 @@ mod tests {
                 kind: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
                     tag_name: "component".into(),
-                    attributes: vec![AttributeOrBinding::VBind(VBindDirective {
-                        argument: Some(StrOrExpr::Str("is".into())),
-                        value: js("foo"),
-                        is_camel: false,
-                        is_prop: false,
-                        is_attr: false,
-                    })],
+                    attributes: vec![v_bind_attribute("is", "foo")],
                     directives: None,
                 },
                 children: vec![],
@@ -191,21 +179,9 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "component".into(),
                     attributes: vec![
-                        AttributeOrBinding::RegularAttribute {
-                            name: "is".into(),
-                            value: "div".into(),
-                        },
-                        AttributeOrBinding::RegularAttribute {
-                            name: "foo".into(),
-                            value: "bar".into(),
-                        },
-                        AttributeOrBinding::VBind(fervid_core::VBindDirective {
-                            argument: Some("baz".into()),
-                            value: js("qux"),
-                            is_camel: false,
-                            is_prop: false,
-                            is_attr: false,
-                        }),
+                        regular_attribute("is", "div"),
+                        regular_attribute("foo", "bar"),
+                        v_bind_attribute("baz", "qux"),
                     ],
                     directives: None,
                 },
@@ -226,10 +202,7 @@ mod tests {
                 kind: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
                     tag_name: "component".into(),
-                    attributes: vec![AttributeOrBinding::RegularAttribute {
-                        name: "is".into(),
-                        value: "div".into(),
-                    }],
+                    attributes: vec![regular_attribute("is", "div")],
                     directives: None,
                 },
                 children: vec![Node::Text("foobar".into(), DUMMY_SP)],
@@ -251,10 +224,7 @@ mod tests {
                 kind: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
                     tag_name: "component".into(),
-                    attributes: vec![AttributeOrBinding::RegularAttribute {
-                        name: "is".into(),
-                        value: "div".into(),
-                    }],
+                    attributes: vec![regular_attribute("is", "div")],
                     directives: None,
                 },
                 children: vec![Node::Element(ElementNode {
@@ -297,21 +267,9 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "component".into(),
                     attributes: vec![
-                        AttributeOrBinding::RegularAttribute {
-                            name: "is".into(),
-                            value: "div".into(),
-                        },
-                        AttributeOrBinding::RegularAttribute {
-                            name: "foo".into(),
-                            value: "bar".into(),
-                        },
-                        AttributeOrBinding::VBind(fervid_core::VBindDirective {
-                            argument: Some("baz".into()),
-                            value: js("qux"),
-                            is_camel: false,
-                            is_prop: false,
-                            is_attr: false,
-                        }),
+                        regular_attribute("is", "div"),
+                        regular_attribute("foo", "bar"),
+                        v_bind_attribute("baz", "qux"),
                     ],
                     directives: None,
                 },

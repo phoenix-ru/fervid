@@ -1,5 +1,9 @@
-use swc_core::{common::SourceMap, ecma::ast::Expr};
-use swc_ecma_codegen::{Node, text_writer::JsWriter, Emitter};
+use fervid_core::{AttributeOrBinding, VBindDirective, VOnDirective};
+use swc_core::{
+    common::{SourceMap, DUMMY_SP},
+    ecma::ast::Expr,
+};
+use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
 
 mod js_polyfill;
 
@@ -26,4 +30,38 @@ pub fn to_str(swc_node: impl Node) -> String {
 
 pub fn js(raw: &str) -> Box<Expr> {
     js_polyfill::parse_js(raw).unwrap()
+}
+
+/// TEST ONLY
+#[inline]
+pub fn regular_attribute(name: &str, value: &str) -> AttributeOrBinding {
+    AttributeOrBinding::RegularAttribute {
+        name: name.into(),
+        value: value.into(),
+        span: DUMMY_SP,
+    }
+}
+
+/// TEST ONLY
+#[inline]
+pub fn v_bind_attribute(name: &str, value: &str) -> AttributeOrBinding {
+    AttributeOrBinding::VBind(VBindDirective {
+        argument: Some(name.into()),
+        value: js(value),
+        is_camel: false,
+        is_prop: false,
+        is_attr: false,
+        span: DUMMY_SP,
+    })
+}
+
+/// TEST ONLY
+#[inline]
+pub fn v_on_attribute(name: &str, value: &str) -> AttributeOrBinding {
+    AttributeOrBinding::VOn(VOnDirective {
+        event: Some(name.into()),
+        handler: Some(js(value)),
+        modifiers: vec![],
+        span: DUMMY_SP,
+    })
 }

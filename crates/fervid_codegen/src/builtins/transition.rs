@@ -32,10 +32,10 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{BuiltinType, ElementKind, StartingTag, Node, AttributeOrBinding};
+    use fervid_core::{BuiltinType, ElementKind, Node, StartingTag};
     use swc_core::common::DUMMY_SP;
 
-    use crate::test_utils::js;
+    use crate::test_utils::{regular_attribute, v_bind_attribute};
 
     use super::*;
 
@@ -53,7 +53,7 @@ mod tests {
                 children: vec![],
                 template_scope: 0,
                 patch_hints: Default::default(),
-                span: DUMMY_SP
+                span: DUMMY_SP,
             },
             r#"_createVNode(_Transition)"#,
         )
@@ -68,24 +68,15 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "transition".into(),
                     attributes: vec![
-                        AttributeOrBinding::RegularAttribute {
-                            name: "foo".into(),
-                            value: "bar".into(),
-                        },
-                        AttributeOrBinding::VBind(fervid_core::VBindDirective {
-                            argument: Some("baz".into()),
-                            value: js("qux"),
-                            is_camel: false,
-                            is_prop: false,
-                            is_attr: false,
-                        }),
+                        regular_attribute("foo", "bar"),
+                        v_bind_attribute("baz", "qux"),
                     ],
                     directives: None,
                 },
                 children: vec![],
                 template_scope: 0,
                 patch_hints: Default::default(),
-                span: DUMMY_SP
+                span: DUMMY_SP,
             },
             r#"_createVNode(_Transition,{foo:"bar",baz:qux})"#,
         )
@@ -105,7 +96,7 @@ mod tests {
                 children: vec![Node::Text("foobar".into(), DUMMY_SP)],
                 template_scope: 0,
                 patch_hints: Default::default(),
-                span: DUMMY_SP
+                span: DUMMY_SP,
             },
             r#"_createVNode(_Transition,null,{"default":_withCtx(()=>[_createTextVNode("foobar")]),_:1})"#,
         )
@@ -120,24 +111,15 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "transition".into(),
                     attributes: vec![
-                        AttributeOrBinding::RegularAttribute {
-                            name: "foo".into(),
-                            value: "bar".into(),
-                        },
-                        AttributeOrBinding::VBind(fervid_core::VBindDirective {
-                            argument: Some("baz".into()),
-                            value: js("qux"),
-                            is_camel: false,
-                            is_prop: false,
-                            is_attr: false,
-                        }),
+                        regular_attribute("foo", "bar"),
+                        v_bind_attribute("baz", "qux"),
                     ],
                     directives: None,
                 },
                 children: vec![Node::Text("foobar".into(), DUMMY_SP)],
                 template_scope: 0,
                 patch_hints: Default::default(),
-                span: DUMMY_SP
+                span: DUMMY_SP,
             },
             r#"_createVNode(_Transition,{foo:"bar",baz:qux},{"default":_withCtx(()=>[_createTextVNode("foobar")]),_:1})"#,
         )

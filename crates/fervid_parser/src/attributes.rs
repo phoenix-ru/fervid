@@ -1,6 +1,6 @@
 use fervid_core::{
-    AttributeOrBinding, FervidAtom, StrOrExpr, VBindDirective, VCustomDirective,
-    VForDirective, VModelDirective, VOnDirective, VSlotDirective, VueDirectives,
+    AttributeOrBinding, FervidAtom, StrOrExpr, VBindDirective, VCustomDirective, VForDirective,
+    VModelDirective, VOnDirective, VSlotDirective, VueDirectives,
 };
 use swc_core::common::{BytePos, Span};
 use swc_ecma_parser::Syntax;
@@ -274,6 +274,7 @@ impl SfcParser<'_, '_, '_> {
                     is_camel,
                     is_prop,
                     is_attr,
+                    span,
                 }));
             }
 
@@ -292,6 +293,7 @@ impl SfcParser<'_, '_, '_> {
                     event: argument,
                     handler,
                     modifiers,
+                    span,
                 }));
             }
 
@@ -443,6 +445,7 @@ pub fn create_regular_attribute(raw_attribute: Attribute) -> AttributeOrBinding 
     AttributeOrBinding::RegularAttribute {
         name: raw_attribute.name,
         value: raw_attribute.value.unwrap_or_default(),
+        span: raw_attribute.span,
     }
 }
 

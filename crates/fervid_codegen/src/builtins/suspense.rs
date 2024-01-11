@@ -33,10 +33,10 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{BuiltinType, ElementKind, StartingTag, Node, AttributeOrBinding};
+    use fervid_core::{BuiltinType, ElementKind, Node, StartingTag};
     use swc_core::common::DUMMY_SP;
 
-    use crate::test_utils::js;
+    use crate::test_utils::{regular_attribute, v_bind_attribute};
 
     use super::*;
 
@@ -69,17 +69,8 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "suspense".into(),
                     attributes: vec![
-                        AttributeOrBinding::RegularAttribute {
-                            name: "foo".into(),
-                            value: "bar".into(),
-                        },
-                        AttributeOrBinding::VBind(fervid_core::VBindDirective {
-                            argument: Some("baz".into()),
-                            value: js("qux"),
-                            is_camel: false,
-                            is_prop: false,
-                            is_attr: false,
-                        }),
+                        regular_attribute("foo", "bar"),
+                        v_bind_attribute("baz", "qux"),
                     ],
                     directives: None,
                 },
@@ -121,17 +112,8 @@ mod tests {
                 starting_tag: StartingTag {
                     tag_name: "suspense".into(),
                     attributes: vec![
-                        AttributeOrBinding::RegularAttribute {
-                            name: "foo".into(),
-                            value: "bar".into(),
-                        },
-                        AttributeOrBinding::VBind(fervid_core::VBindDirective {
-                            argument: Some("baz".into()),
-                            value: js("qux"),
-                            is_camel: false,
-                            is_prop: false,
-                            is_attr: false,
-                        }),
+                        regular_attribute("foo", "bar"),
+                        v_bind_attribute("baz", "qux"),
                     ],
                     directives: None,
                 },
