@@ -1,6 +1,6 @@
 {
   "name": "@fervid/napi",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "All-in-One Vue compiler written in Rust",
   "main": "index.js",
   "repository": "git@github.com:phoenix-ru/fervid.git",
@@ -100,19 +100,19 @@
     "arrowParens": "always"
   },
   "optionalDependencies": {
-    "@fervid/napi-android-arm-eabi": "0.1.4",
-    "@fervid/napi-android-arm64": "0.1.4",
-    "@fervid/napi-darwin-arm64": "0.1.4",
-    "@fervid/napi-darwin-x64": "0.1.4",
-    "@fervid/napi-freebsd-x64": "0.1.4",
-    "@fervid/napi-linux-arm-gnueabihf": "0.1.4",
-    "@fervid/napi-linux-arm64-gnu": "0.1.4",
-    "@fervid/napi-linux-arm64-musl": "0.1.4",
-    "@fervid/napi-linux-x64-gnu": "0.1.4",
-    "@fervid/napi-linux-x64-musl": "0.1.4",
-    "@fervid/napi-win32-arm64-msvc": "0.1.4",
-    "@fervid/napi-win32-ia32-msvc": "0.1.4",
-    "@fervid/napi-win32-x64-msvc": "0.1.4"
+    "@fervid/napi-android-arm-eabi": "0.2.0",
+    "@fervid/napi-android-arm64": "0.2.0",
+    "@fervid/napi-darwin-arm64": "0.2.0",
+    "@fervid/napi-darwin-x64": "0.2.0",
+    "@fervid/napi-freebsd-x64": "0.2.0",
+    "@fervid/napi-linux-arm-gnueabihf": "0.2.0",
+    "@fervid/napi-linux-arm64-gnu": "0.2.0",
+    "@fervid/napi-linux-arm64-musl": "0.2.0",
+    "@fervid/napi-linux-x64-gnu": "0.2.0",
+    "@fervid/napi-linux-x64-musl": "0.2.0",
+    "@fervid/napi-win32-arm64-msvc": "0.2.0",
+    "@fervid/napi-win32-ia32-msvc": "0.2.0",
+    "@fervid/napi-win32-x64-msvc": "0.2.0"
   },
   "packageManager": "yarn@4.0.2",
   "workspaces": [
