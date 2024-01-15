@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { cpus } from 'node:os'
 import { compileScript, parse } from '@vue/compiler-sfc'
 
-import { compileAsync, compileSync } from '../index'
+import { Compiler } from '../index'
 
 // Increase libuv thread pool for a better async result.
 // 4 threads is a default thread pool size.
@@ -19,6 +19,8 @@ const input = readFileSync(join(__dirname, '../../fervid/benches/fixtures/input.
 })
 
 async function run() {
+  const compiler = new Compiler()
+
   await b.suite(
     'compile sfc',
 
@@ -33,7 +35,7 @@ async function run() {
     }),
 
     b.add('@fervid/napi sync', () => {
-      compileSync(input)
+      compiler.compileSync(input)
     }),
 
     // The code below makes sure that async framework is not flawed.
@@ -43,21 +45,21 @@ async function run() {
     // BEGIN
 
     b.add('@fervid/napi sync promise (4 threads)', () => {
-      return Promise.allSettled(Array.from({ length: 4 }, _ => new Promise<void>(resolve => (compileSync(input), resolve()))))
+      return Promise.allSettled(Array.from({ length: 4 }, _ => new Promise<void>(resolve => (compiler.compileSync(input), resolve()))))
     }),
 
     b.add(`@fervid/napi sync promise (${CPUS} threads)`, () => {
-      return Promise.allSettled(Array.from({ length: CPUS }, _ => new Promise<void>(resolve => (compileSync(input), resolve()))))
+      return Promise.allSettled(Array.from({ length: CPUS }, _ => new Promise<void>(resolve => (compiler.compileSync(input), resolve()))))
     }),
 
     // END
 
     b.add('@fervid/napi async (4 threads)', () => {
-      return Promise.allSettled(Array.from({ length: 4 }, _ => compileAsync(input)))
+      return Promise.allSettled(Array.from({ length: 4 }, _ => compiler.compileAsync(input)))
     }),
 
     b.add(`@fervid/napi async CPUS (${CPUS} threads)`, () => {
-      return Promise.allSettled(Array.from({ length: CPUS }, _ => compileAsync(input)))
+      return Promise.allSettled(Array.from({ length: CPUS }, _ => compiler.compileAsync(input)))
     }),
 
     // Custom cycle function to account for the async nature

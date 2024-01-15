@@ -259,7 +259,6 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { compileSync, compileAsync } = nativeBinding
+const { Compiler } = nativeBinding
 
-module.exports.compileSync = compileSync
-module.exports.compileAsync = compileAsync
+module.exports.Compiler = Compiler
