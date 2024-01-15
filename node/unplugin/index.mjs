@@ -1,11 +1,15 @@
 import { createUnplugin } from 'unplugin'
-import { compileSync } from '@fervid/napi'
+import { Compiler } from '@fervid/napi'
 import VirtualModulesPlugin from 'webpack-virtual-modules'
 
 const unplugin = createUnplugin(({ mode = 'production', hmr = false }, meta) => {
-  const isProd = mode === 'production'
+  const isProduction = mode === 'production'
   const shouldAddHmr = hmr
   const bundler = meta.framework
+
+  const compiler = new Compiler({
+    isProduction
+  })
 
   /** @type {VirtualModulesPlugin | undefined} */
   let vfs = undefined
@@ -30,7 +34,7 @@ const unplugin = createUnplugin(({ mode = 'production', hmr = false }, meta) => 
     },
 
     transform(code, id) {
-      const compileResult = compileSync(code, { isProd })
+      const compileResult = compiler.compileSync(code)
 
       /** @type {string[]} */
       const assetImports = []
