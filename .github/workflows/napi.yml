@@ -37,9 +37,6 @@ jobs:
             build: |
               yarn build
               strip -x *.node
-          - host: windows-latest
-            build: yarn build
-            target: x86_64-pc-windows-msvc
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
