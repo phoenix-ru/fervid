@@ -25,7 +25,6 @@ permissions:
 defaults:
   run:
     working-directory: './crates/fervid_napi'
-
 jobs:
   build:
     strategy:
@@ -125,7 +124,7 @@ jobs:
         run: ls -a
         shell: bash
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bindings-${{ matrix.settings.target }}
           path: ${{ env.WORKING_DIR_PATH }}/${{ env.APP_NAME }}.*.node
@@ -157,11 +156,10 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           # cache: yarn
-          # cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Install dependencies
         run: corepack enable; yarn install
       - name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: bindings-${{ matrix.settings.target }}
           path: ${{ env.WORKING_DIR_PATH }}
@@ -192,11 +190,10 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           # cache: yarn
-          # cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Install dependencies
         run: corepack enable; yarn install
       - name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: bindings-x86_64-unknown-linux-gnu
           path: ${{ env.WORKING_DIR_PATH }}
@@ -205,7 +202,6 @@ jobs:
         shell: bash
       - name: Test bindings
         run: docker run --rm -e CI=true -v $(pwd):/build -w /build node:${{ matrix.node }}-slim yarn test
-
   publish:
     name: Publish
     runs-on: ubuntu-latest
@@ -222,11 +218,10 @@ jobs:
         with:
           node-version: 18
           # cache: yarn
-          # cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Install dependencies
         run: corepack enable; yarn install
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: ${{ env.WORKING_DIR_PATH }}/artifacts
       - name: Move artifacts

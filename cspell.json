@@ -111,6 +111,7 @@
     "customcomponent",
     "kleur",
     "riscv",
+    "filehash",
     "webdriverio"
   ],
   "ignorePaths": [
