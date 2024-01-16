@@ -36,19 +36,19 @@ jobs:
             build: yarn build
             target: x86_64-pc-windows-msvc
 
-          - host: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
-            build: |
-              set -e &&
-              corepack enable &&
-              yarn build --target x86_64-unknown-linux-gnu &&
-              strip *.node
+          # - host: ubuntu-latest
+          #   target: x86_64-unknown-linux-gnu
+          #   docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
+          #   build: |
+          #     set -e &&
+          #     corepack enable &&
+          #     yarn build --target x86_64-unknown-linux-gnu &&
+          #     strip *.node
 
-          - host: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
-            build: set -e && yarn build && strip *.node
+          # - host: ubuntu-latest
+          #   target: x86_64-unknown-linux-musl
+          #   docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
+          #   build: set -e && yarn build && strip *.node
 
           - host: macos-latest
             target: x86_64-apple-darwin
