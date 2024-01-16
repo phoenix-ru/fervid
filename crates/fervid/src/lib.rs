@@ -24,7 +24,7 @@
 //! // Create the context and generate the template block
 //! let mut ctx = fervid_codegen::CodegenContext::with_bindings_helper(transform_result.bindings_helper);
 //!
-//! let template_expr: Option<Expr> = transform_result.template_block.map(|template_block| {
+//! let template_expr: Option<Expr> = transform_result.template_block.and_then(|template_block| {
 //!     ctx.generate_sfc_template(&template_block)
 //! });
 //!
@@ -107,7 +107,7 @@ pub fn compile(source: &str, is_prod: bool) -> Result<CompileResult, CompileErro
 
     let template_expr: Option<Expr> = transform_result
         .template_block
-        .map(|template_block| ctx.generate_sfc_template(&template_block));
+        .and_then(|template_block| ctx.generate_sfc_template(&template_block));
 
     let sfc_module = ctx.generate_module(
         template_expr,
@@ -186,7 +186,7 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
 
     let template_expr: Option<Expr> = transform_result
         .template_block
-        .map(|template_block| ctx.generate_sfc_template(&template_block));
+        .and_then(|template_block| ctx.generate_sfc_template(&template_block));
 
     let sfc_module = ctx.generate_module(
         template_expr,

@@ -26,16 +26,17 @@ pub fn transform_and_record_template(
     template: &mut SfcTemplateBlock,
     bindings_helper: &mut BindingsHelper,
 ) {
-    // Only retain `ElementNode`s as template roots
-    template
-        .roots
-        .retain(|root| matches!(root, Node::Element(_)));
-
     // Optimize conditional sequences within template root
     optimize_children(&mut template.roots, ElementKind::Element);
 
-    // Merge more than 1 child into a separate `<template>` element so that Fragment gets generated
-    if template.roots.len() > 1 {
+    // Merge more than 1 child into a separate `<template>` element so that Fragment gets generated.
+    // #11: Do this only when all children are `TextNode`s.
+    if template.roots.len() > 1
+        && !template
+            .roots
+            .iter()
+            .all(|r| matches!(r, Node::Text(_, _) | Node::Interpolation(_)))
+    {
         let all_roots = std::mem::replace(&mut template.roots, Vec::with_capacity(1));
         let new_root = Node::Element(ElementNode {
             kind: ElementKind::Element,
@@ -57,7 +58,6 @@ pub fn transform_and_record_template(
         current_scope: 0,
     };
 
-    // Technically one root only
     for node in template.roots.iter_mut() {
         node.visit_mut_with(&mut template_visitor);
     }
@@ -618,7 +618,7 @@ impl VisitMut for Node {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{ElementKind, Node, SetupBinding, VForDirective, VueDirectives};
+    use fervid_core::{ElementKind, Node, PatchHints, SetupBinding, VForDirective, VueDirectives};
     use swc_core::{common::DUMMY_SP, ecma::ast::Expr};
 
     use crate::test_utils::{parser::parse_javascript_expr, to_str};
@@ -815,6 +815,62 @@ mod tests {
         };
         assert!(matches!(root.children[0], Node::Element(_)));
         assert!(matches!(root.children[1], Node::Element(_)));
+    }
+
+    #[test]
+    fn it_merges_roots() {
+        // #11: Should not get merged
+        // <template>
+        //   hello {{ 1 + 1 }}
+        // </template>
+        let mut sfc_template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![
+                Node::Text("text".into(), DUMMY_SP),
+                Node::Interpolation(Interpolation {
+                    value: js("1 + 1"),
+                    template_scope: 0,
+                    patch_flag: false,
+                    span: DUMMY_SP,
+                }),
+            ],
+            span: DUMMY_SP,
+        };
+        transform_and_record_template(&mut sfc_template, &mut Default::default());
+        assert_eq!(2, sfc_template.roots.len());
+
+        // Should get merged
+        // <template>
+        //   hello {{ 1 + 1 }}
+        //   <div />
+        // </template>
+        let mut sfc_template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![
+                Node::Text("text".into(), DUMMY_SP),
+                Node::Interpolation(Interpolation {
+                    value: js("1 + 1"),
+                    template_scope: 0,
+                    patch_flag: false,
+                    span: DUMMY_SP,
+                }),
+                Node::Element(ElementNode {
+                    kind: ElementKind::Element,
+                    starting_tag: StartingTag {
+                        tag_name: "div".into(),
+                        attributes: vec![],
+                        directives: None,
+                    },
+                    children: vec![],
+                    template_scope: 0,
+                    patch_hints: PatchHints::default(),
+                    span: DUMMY_SP,
+                }),
+            ],
+            span: DUMMY_SP,
+        };
+        transform_and_record_template(&mut sfc_template, &mut Default::default());
+        assert_eq!(1, sfc_template.roots.len());
     }
 
     #[test]

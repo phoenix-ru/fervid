@@ -14,12 +14,27 @@ use crate::context::CodegenContext;
 impl CodegenContext {
     // TODO Generation mode? Is it relevant?
     // TODO Generating module? Or instead taking a module? Or generating an expression and merging?
-    pub fn generate_sfc_template(&mut self, sfc_template: &SfcTemplateBlock) -> Expr {
-        assert_eq!(sfc_template.roots.len(), 1);
+    pub fn generate_sfc_template(&mut self, sfc_template: &SfcTemplateBlock) -> Option<Expr> {
+        // #11: Optimization: multiple template roots
+        // and all are text nodes (must be ensured by Transformer),
+        // generate node sequence
+        if sfc_template.roots.len() > 1 {
+            let mut out = Vec::new();
+            self.generate_node_sequence(
+                &mut sfc_template.roots.iter(),
+                &mut out,
+                sfc_template.roots.len(),
+                true,
+            );
 
-        // TODO Multi-root? Is it actually merged before into a Fragment?
-        let first_child = &sfc_template.roots[0];
-        self.generate_node(&first_child, true)
+            out.pop()
+        } else if sfc_template.roots.len() == 1 {
+            // Generate the only child
+            let first_child = &sfc_template.roots[0];
+            Some(self.generate_node(&first_child, true))
+        } else {
+            None
+        }
     }
 
     pub fn generate_module(

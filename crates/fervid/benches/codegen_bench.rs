@@ -26,7 +26,7 @@ fn codegen_benchmark(c: &mut Criterion) {
                     let template_expr = ctx.generate_sfc_template(&template_block);
                     let script = swc_core::ecma::ast::Module { span: DUMMY_SP, body: vec![], shebang: None };
                     let sfc_export_obj = swc_core::ecma::ast::ObjectLit { span: DUMMY_SP, props: vec![] };
-                    ctx.generate_module(Some(template_expr), script, sfc_export_obj, None);
+                    ctx.generate_module(template_expr, script, sfc_export_obj, None);
                 },
                 criterion::BatchSize::SmallInput,
             );
