@@ -286,79 +286,79 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@fervid/napi-android-arm-eabi@npm:0.2.0, @fervid/napi-android-arm-eabi@workspace:npm/android-arm-eabi":
+"@fervid/napi-android-arm-eabi@npm:0.2.1, @fervid/napi-android-arm-eabi@workspace:npm/android-arm-eabi":
   version: 0.0.0-use.local
   resolution: "@fervid/napi-android-arm-eabi@workspace:npm/android-arm-eabi"
   languageName: unknown
   linkType: soft
 
-"@fervid/napi-android-arm64@npm:0.2.0, @fervid/napi-android-arm64@workspace:npm/android-arm64":
+"@fervid/napi-android-arm64@npm:0.2.1, @fervid/napi-android-arm64@workspace:npm/android-arm64":
   version: 0.0.0-use.local
   resolution: "@fervid/napi-android-arm64@workspace:npm/android-arm64"
   languageName: unknown
   linkType: soft
 
-"@fervid/napi-darwin-arm64@npm:0.2.0, @fervid/napi-darwin-arm64@workspace:npm/darwin-arm64":
+"@fervid/napi-darwin-arm64@npm:0.2.1, @fervid/napi-darwin-arm64@workspace:npm/darwin-arm64":
   version: 0.0.0-use.local
   resolution: "@fervid/napi-darwin-arm64@workspace:npm/darwin-arm64"
   languageName: unknown
   linkType: soft
 
-"@fervid/napi-darwin-x64@npm:0.2.0, @fervid/napi-darwin-x64@workspace:npm/darwin-x64":
+"@fervid/napi-darwin-x64@npm:0.2.1, @fervid/napi-darwin-x64@workspace:npm/darwin-x64":
   version: 0.0.0-use.local
   resolution: "@fervid/napi-darwin-x64@workspace:npm/darwin-x64"
   languageName: unknown
   linkType: soft
 
-"@fervid/napi-freebsd-x64@npm:0.2.0, @fervid/napi-freebsd-x64@workspace:npm/freebsd-x64":
+"@fervid/napi-freebsd-x64@npm:0.2.1, @fervid/napi-freebsd-x64@workspace:npm/freebsd-x64":
   version: 0.0.0-use.local
   resolution: "@fervid/napi-freebsd-x64@workspace:npm/freebsd-x64"
   languageName: unknown
   linkType: soft
 
-"@fervid/napi-linux-arm-gnueabihf@npm:0.2.0, @fervid/napi-linux-arm-gnueabihf@workspace:npm/linux-arm-gnueabihf":
+"@fervid/napi-linux-arm-gnueabihf@npm:0.2.1, @fervid/napi-linux-arm-gnueabihf@workspace:npm/linux-arm-gnueabihf":
   version: 0.0.0-use.local
   resolution: "@fervid/napi-linux-arm-gnueabihf@workspace:npm/linux-arm-gnueabihf"
   languageName: unknown
   linkType: soft
 
-"@fervid/napi-linux-arm64-gnu@npm:0.2.0, @fervid/napi-linux-arm64-gnu@workspace:npm/linux-arm64-gnu":
+"@fervid/napi-linux-arm64-gnu@npm:0.2.1, @fervid/napi-linux-arm64-gnu@workspace:npm/linux-arm64-gnu":
   version: 0.0.0-use.local
   resolution: "@fervid/napi-linux-arm64-gnu@workspace:npm/linux-arm64-gnu"
   languageName: unknown
   linkType: soft
 
-"@fervid/napi-linux-arm64-musl@npm:0.2.0, @fervid/napi-linux-arm64-musl@workspace:npm/linux-arm64-musl":
+"@fervid/napi-linux-arm64-musl@npm:0.2.1, @fervid/napi-linux-arm64-musl@workspace:npm/linux-arm64-musl":
   version: 0.0.0-use.local
   resolution: "@fervid/napi-linux-arm64-musl@workspace:npm/linux-arm64-musl"
   languageName: unknown
   linkType: soft
 
-"@fervid/napi-linux-x64-gnu@npm:0.2.0, @fervid/napi-linux-x64-gnu@workspace:npm/linux-x64-gnu":
+"@fervid/napi-linux-x64-gnu@npm:0.2.1, @fervid/napi-linux-x64-gnu@workspace:npm/linux-x64-gnu":
   version: 0.0.0-use.local
   resolution: "@fervid/napi-linux-x64-gnu@workspace:npm/linux-x64-gnu"
   languageName: unknown
   linkType: soft
 
-"@fervid/napi-linux-x64-musl@npm:0.2.0, @fervid/napi-linux-x64-musl@workspace:npm/linux-x64-musl":
+"@fervid/napi-linux-x64-musl@npm:0.2.1, @fervid/napi-linux-x64-musl@workspace:npm/linux-x64-musl":
   version: 0.0.0-use.local
   resolution: "@fervid/napi-linux-x64-musl@workspace:npm/linux-x64-musl"
   languageName: unknown
   linkType: soft
 
-"@fervid/napi-win32-arm64-msvc@npm:0.2.0, @fervid/napi-win32-arm64-msvc@workspace:npm/win32-arm64-msvc":
+"@fervid/napi-win32-arm64-msvc@npm:0.2.1, @fervid/napi-win32-arm64-msvc@workspace:npm/win32-arm64-msvc":
   version: 0.0.0-use.local
   resolution: "@fervid/napi-win32-arm64-msvc@workspace:npm/win32-arm64-msvc"
   languageName: unknown
   linkType: soft
 
-"@fervid/napi-win32-ia32-msvc@npm:0.2.0, @fervid/napi-win32-ia32-msvc@workspace:npm/win32-ia32-msvc":
+"@fervid/napi-win32-ia32-msvc@npm:0.2.1, @fervid/napi-win32-ia32-msvc@workspace:npm/win32-ia32-msvc":
   version: 0.0.0-use.local
   resolution: "@fervid/napi-win32-ia32-msvc@workspace:npm/win32-ia32-msvc"
   languageName: unknown
   linkType: soft
 
-"@fervid/napi-win32-x64-msvc@npm:0.2.0, @fervid/napi-win32-x64-msvc@workspace:npm/win32-x64-msvc":
+"@fervid/napi-win32-x64-msvc@npm:0.2.1, @fervid/napi-win32-x64-msvc@workspace:npm/win32-x64-msvc":
   version: 0.0.0-use.local
   resolution: "@fervid/napi-win32-x64-msvc@workspace:npm/win32-x64-msvc"
   languageName: unknown
@@ -368,19 +368,19 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@fervid/napi@workspace:."
   dependencies:
-    "@fervid/napi-android-arm-eabi": "npm:0.2.0"
-    "@fervid/napi-android-arm64": "npm:0.2.0"
-    "@fervid/napi-darwin-arm64": "npm:0.2.0"
-    "@fervid/napi-darwin-x64": "npm:0.2.0"
-    "@fervid/napi-freebsd-x64": "npm:0.2.0"
-    "@fervid/napi-linux-arm-gnueabihf": "npm:0.2.0"
-    "@fervid/napi-linux-arm64-gnu": "npm:0.2.0"
-    "@fervid/napi-linux-arm64-musl": "npm:0.2.0"
-    "@fervid/napi-linux-x64-gnu": "npm:0.2.0"
-    "@fervid/napi-linux-x64-musl": "npm:0.2.0"
-    "@fervid/napi-win32-arm64-msvc": "npm:0.2.0"
-    "@fervid/napi-win32-ia32-msvc": "npm:0.2.0"
-    "@fervid/napi-win32-x64-msvc": "npm:0.2.0"
+    "@fervid/napi-android-arm-eabi": "npm:0.2.1"
+    "@fervid/napi-android-arm64": "npm:0.2.1"
+    "@fervid/napi-darwin-arm64": "npm:0.2.1"
+    "@fervid/napi-darwin-x64": "npm:0.2.1"
+    "@fervid/napi-freebsd-x64": "npm:0.2.1"
+    "@fervid/napi-linux-arm-gnueabihf": "npm:0.2.1"
+    "@fervid/napi-linux-arm64-gnu": "npm:0.2.1"
+    "@fervid/napi-linux-arm64-musl": "npm:0.2.1"
+    "@fervid/napi-linux-x64-gnu": "npm:0.2.1"
+    "@fervid/napi-linux-x64-musl": "npm:0.2.1"
+    "@fervid/napi-win32-arm64-msvc": "npm:0.2.1"
+    "@fervid/napi-win32-ia32-msvc": "npm:0.2.1"
+    "@fervid/napi-win32-x64-msvc": "npm:0.2.1"
     "@napi-rs/cli": "npm:^2.17.0"
     "@swc-node/register": "npm:^1.6.8"
     "@swc/core": "npm:^1.3.100"
