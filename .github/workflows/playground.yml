@@ -32,6 +32,7 @@ jobs:
       working-directory: ./crates/fervid_wasm
       run: wasm-pack build --target web
     - name: Upload GitHub Pages artifact
+      if: ${{ github.ref == 'refs/heads/master' }}
       uses: actions/upload-pages-artifact@v2.0.0
       with:
         # Artifact name
@@ -41,6 +42,7 @@ jobs:
         # Duration after which artifact will expire in days.
         retention-days: 31 # optional, default is 1
     - name: Deploy GitHub Pages site
+      if: ${{ github.ref == 'refs/heads/master' }}
       uses: actions/deploy-pages@v1.2.9
       #with:
         # Should this action only emit build telemetry instead of deploying the build artifact?
