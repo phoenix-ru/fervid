@@ -248,6 +248,51 @@ jobs:
         shell: bash
       - name: Test bindings
         run: docker run --rm -v $(pwd):/build -w /build node:${{ matrix.node }}-alpine yarn test
+
+  test-linux-aarch64-gnu-binding:
+    name: Test bindings on aarch64-unknown-linux-gnu - node@${{ matrix.node }}
+    needs:
+      - build
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - '18'
+          - '20'
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR_PATH }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-aarch64-unknown-linux-gnu
+          path: ${{ env.WORKING_DIR_PATH }}
+      - name: List packages
+        run: ls -R .
+        shell: bash
+      - name: Install dependencies
+        run: |
+          yarn config set supportedArchitectures.cpu "arm64"
+          yarn config set supportedArchitectures.libc "glibc"
+          corepack enable; yarn install
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+      - name: Setup and run tests
+        uses: addnab/docker-run-action@v3
+        with:
+          image: node:${{ matrix.node }}-slim
+          options: '--platform linux/arm64 -v ${{ github.workspace }}:/build -w /build'
+          run: |
+            set -e
+            yarn test
+            ls -la
+
   
   publish:
     name: Publish
