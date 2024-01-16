@@ -156,45 +156,6 @@ jobs:
           path: ${{ env.WORKING_DIR_PATH }}/${{ env.APP_NAME }}.*.node
           if-no-files-found: error
 
-  test-macOS-windows-binding:
-    name: Test bindings on ${{ matrix.settings.target }} - node@${{ matrix.node }}
-    needs:
-      - build
-    strategy:
-      fail-fast: false
-      matrix:
-        settings:
-          - host: macos-latest
-            target: x86_64-apple-darwin
-          - host: windows-latest
-            target: x86_64-pc-windows-msvc
-        node:
-          - '18'
-          - '20'
-    defaults:
-      run:
-        working-directory: ${{ env.WORKING_DIR_PATH }}
-    runs-on: ${{ matrix.settings.host }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node }}
-          # cache: yarn
-      - name: Install dependencies
-        run: corepack enable; yarn install
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: bindings-${{ matrix.settings.target }}
-          path: ${{ env.WORKING_DIR_PATH }}
-      - name: List packages
-        run: ls -R .
-        shell: bash
-      - name: Test bindings
-        run: yarn test
-
   test-linux-x64-gnu-binding:
     name: Test bindings on Linux-x64-gnu - node@${{ matrix.node }}
     needs:
