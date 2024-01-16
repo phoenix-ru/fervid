@@ -36,19 +36,19 @@ jobs:
             build: yarn build
             target: x86_64-pc-windows-msvc
 
-          # - host: ubuntu-latest
-          #   target: x86_64-unknown-linux-gnu
-          #   docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
-          #   build: |
-          #     set -e &&
-          #     corepack enable &&
-          #     yarn build --target x86_64-unknown-linux-gnu &&
-          #     strip *.node
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
+            build: |
+              set -e &&
+              corepack enable &&
+              yarn build --target x86_64-unknown-linux-gnu &&
+              strip *.node
 
-          # - host: ubuntu-latest
-          #   target: x86_64-unknown-linux-musl
-          #   docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
-          #   build: set -e && yarn build && strip *.node
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
+            build: set -e && yarn build && strip *.node
 
           - host: macos-latest
             target: x86_64-apple-darwin
@@ -147,12 +147,10 @@ jobs:
       fail-fast: false
       matrix:
         settings:
-          # - host: macos-latest
-            # target: x86_64-apple-darwin
           - host: macos-latest
-            target: aarch64-apple-darwin
-          # - host: windows-latest
-            # target: x86_64-pc-windows-msvc
+            target: x86_64-apple-darwin
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
         node:
           - '18'
           - '20'
@@ -180,39 +178,39 @@ jobs:
       - name: Test bindings
         run: yarn test
 
-  # test-linux-x64-gnu-binding:
-  #   name: Test bindings on Linux-x64-gnu - node@${{ matrix.node }}
-  #   needs:
-  #     - build
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       node:
-  #         - '18'
-  #         - '20'
-  #   defaults:
-  #     run:
-  #       working-directory: ${{ env.WORKING_DIR_PATH }}
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Setup node
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: ${{ matrix.node }}
-  #         # cache: yarn
-  #     - name: Install dependencies
-  #       run: corepack enable; yarn install
-  #     - name: Download artifacts
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: bindings-x86_64-unknown-linux-gnu
-  #         path: ${{ env.WORKING_DIR_PATH }}
-  #     - name: List packages
-  #       run: ls -R .
-  #       shell: bash
-  #     - name: Test bindings
-  #       run: docker run --rm -e CI=true -v $(pwd):/build -w /build node:${{ matrix.node }}-slim yarn test
+  test-linux-x64-gnu-binding:
+    name: Test bindings on Linux-x64-gnu - node@${{ matrix.node }}
+    needs:
+      - build
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - '18'
+          - '20'
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR_PATH }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          # cache: yarn
+      - name: Install dependencies
+        run: corepack enable; yarn install
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: ${{ env.WORKING_DIR_PATH }}
+      - name: List packages
+        run: ls -R .
+        shell: bash
+      - name: Test bindings
+        run: docker run --rm -e CI=true -v $(pwd):/build -w /build node:${{ matrix.node }}-slim yarn test
 
   publish:
     name: Publish
