@@ -5,7 +5,7 @@ import kleur from 'kleur'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cpus } from 'node:os'
-import { compileScript, parse } from '@vue/compiler-sfc'
+import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
 
 import { Compiler } from '../index'
 
@@ -26,12 +26,20 @@ async function run() {
 
     b.add('@vue/compiler-sfc', () => {
       const descriptor = parse(input, { filename: 'input.vue' })
-      compileScript(descriptor.descriptor, {
-        id: 'abc',
-        isProd: true,
-        inlineTemplate: true,
-        defineModel: true
-      })
+      if (descriptor.descriptor.script || descriptor.descriptor.scriptSetup) {
+        compileScript(descriptor.descriptor, {
+          id: 'abc',
+          isProd: true,
+          inlineTemplate: true,
+          defineModel: true
+        })
+      } else {
+        compileTemplate({
+          source: descriptor.descriptor.source,
+          filename: 'input.vue',
+          id: 'abc'
+        })
+      }
     }),
 
     b.add('@fervid/napi sync', () => {
