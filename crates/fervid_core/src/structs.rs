@@ -157,7 +157,9 @@ pub struct PatchHints {
     /// Patch flags
     pub flags: PatchFlagsSet,
     /// Dynamic props
-    pub props: Vec<JsWord>
+    pub props: Vec<JsWord>,
+    /// Whether the node codegen needs to be surrounded by `(openBlock(),`
+    pub should_use_block: bool
 }
 
 flagset::flags! {
@@ -204,10 +206,11 @@ flagset::flags! {
         FullProps = 1 << 4,
 
         /**
-         * Indicates an element with event listeners (which need to be attached
-         * during hydration)
+         * Indicates an element that requires props hydration
+         * (but not necessarily patching)
+         * e.g. event listeners & v-bind with prop modifier
          */
-        HydrateEvents = 1 << 5,
+        NeedHydration = 1 << 5,
 
         /**
          * Indicates a fragment whose children order doesn't change.

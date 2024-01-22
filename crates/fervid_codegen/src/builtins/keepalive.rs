@@ -37,15 +37,16 @@ impl CodegenContext {
             None
         };
 
-        let should_wrap_in_block = keepalive_children.is_some();
+        let should_use_block = keepalive_children.is_some();
 
         let patch_hints = PatchHints {
-            flags: if should_wrap_in_block {
+            flags: if should_use_block {
                 PatchFlagsSet::from(PatchFlags::DynamicSlots)
             } else {
                 PatchFlagsSet::default()
             },
             props: vec![],
+            should_use_block
         };
 
         self.generate_componentlike(
@@ -53,7 +54,7 @@ impl CodegenContext {
             keepalive_attrs,
             keepalive_children,
             &patch_hints,
-            should_wrap_in_block,
+            should_use_block,
             span,
         )
     }

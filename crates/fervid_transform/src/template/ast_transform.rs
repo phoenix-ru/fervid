@@ -2,18 +2,23 @@ use std::borrow::Cow;
 
 use fervid_core::{
     check_attribute_name, fervid_atom, is_from_default_slot, is_html_tag, AttributeOrBinding,
-    BindingTypes, BindingsHelper, ComponentBinding, Conditional, ConditionalNodeSequence,
-    ElementKind, ElementNode, FervidAtom, Interpolation, Node, PatchFlags, SfcTemplateBlock,
-    StartingTag, StrOrExpr, TemplateScope, VOnDirective, VSlotDirective, VUE_BUILTINS,
+    BindingTypes, BindingsHelper, BuiltinType, ComponentBinding, Conditional,
+    ConditionalNodeSequence, ElementKind, ElementNode, FervidAtom, Interpolation, Node, PatchFlags,
+    SfcTemplateBlock, StartingTag, StrOrExpr, TemplateGenerationMode, TemplateScope,
+    VBindDirective, VOnDirective, VSlotDirective, VUE_BUILTINS,
 };
 use smallvec::SmallVec;
-use swc_core::{common::DUMMY_SP, ecma::ast::Expr};
+use swc_core::{
+    common::DUMMY_SP,
+    ecma::ast::{Bool, Expr, Ident, Lit},
+};
 
 use super::{collect_vars::collect_variables, expr_transform::BindingsHelperTransform};
 
 struct TemplateVisitor<'s> {
     bindings_helper: &'s mut BindingsHelper,
     current_scope: u32,
+    v_for_scope: bool,
 }
 
 /// Transforms the AST template by using information from [`BindingsHelper`].
@@ -56,6 +61,7 @@ pub fn transform_and_record_template(
     let mut template_visitor = TemplateVisitor {
         bindings_helper,
         current_scope: 0,
+        v_for_scope: false,
     };
 
     for node in template.roots.iter_mut() {
@@ -289,12 +295,26 @@ impl<'a> Visitor for TemplateVisitor<'_> {
             self.maybe_resolve_component(&element_node.starting_tag.tag_name);
         }
 
-        // Check if there is a scoping directive
-        // Finds a `v-for` or `v-slot` directive when in ElementNode
-        // and collects their variables into the new template scope
+        // `v-for` has special behaviour with `ref`
+        let old_v_for_scope = self.v_for_scope;
+
+        // Patch hints
+        // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L406
+        let has_children = !element_node.children.is_empty();
+        let mut has_dynamic_keys = false;
+        let mut has_hydration_event_binding = false;
+        let mut has_ref = false;
+        let mut has_runtime_directives = false;
+        let mut has_vnode_hook = false;
+        let mut ref_key = Option::<FervidAtom>::None;
+        let mut should_use_block = false;
+
+        // Check if there is a scoping directive.
+        // Find a `v-for` or `v-slot` directive when in ElementNode
+        // and collect their variables into the new template scope
         if let Some(ref mut directives) = element_node.starting_tag.directives {
             let v_for = directives.v_for.as_mut();
-            let v_slot = directives.v_slot.as_ref();
+            let v_slot = directives.v_slot.as_mut();
 
             // Create a new scope
             if v_for.is_some() || v_slot.is_some() {
@@ -306,7 +326,10 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                 });
             }
 
+            // Collect `v-for` bindings
             if let Some(v_for) = v_for {
+                self.v_for_scope = true;
+
                 // Get the iterator variable and collect its variables
                 let mut scope = &mut self.bindings_helper.template_scopes[scope_to_use as usize];
                 collect_variables(&v_for.itervar, &mut scope);
@@ -318,7 +341,7 @@ impl<'a> Visitor for TemplateVisitor<'_> {
 
                 // Add patch flags
                 if !is_dynamic {
-                    // This is `64 /* STABLE_FRAGMENT */))`
+                    // This is `64 /* STABLE_FRAGMENT */`
                     // when iterable is non-dynamic (number, string) (`v-for="i in 3"`)
                     v_for.patch_flags |= PatchFlags::StableFragment;
                 } else {
@@ -337,21 +360,30 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                 }
             }
 
+            // Collect `v-slot` bindings
             if let Some(VSlotDirective {
-                value: Some(v_slot_value),
-                ..
+                slot_name, value, ..
             }) = v_slot
             {
-                // Collect slot bindings
-                let mut scope = &mut self.bindings_helper.template_scopes[scope_to_use as usize];
-                collect_variables(v_slot_value, &mut scope);
-                // TODO transform slot?
+                if let Some(v_slot_value) = value {
+                    let mut scope =
+                        &mut self.bindings_helper.template_scopes[scope_to_use as usize];
+                    collect_variables(v_slot_value, &mut scope);
+                }
+
+                // Transform `v-slot` argument if it is dynamic
+                if let Some(StrOrExpr::Expr(expr)) = slot_name {
+                    self.bindings_helper.transform_expr(expr, scope_to_use);
+                }
             }
         }
 
         // Update the element's scope and the Visitor's current scope
         element_node.template_scope = scope_to_use;
         self.current_scope = scope_to_use;
+
+        // TODO Refactor the directives transformation logic
+        // and maybe the Visitor as well
 
         // Transform the VBind and VOn attributes
         let patch_hints = &mut element_node.patch_hints;
@@ -368,6 +400,12 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                         .bindings_helper
                         .transform_expr(&mut v_bind.value, scope_to_use);
 
+                    // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L676
+                    // Force hydration for v-bind with .prop modifier
+                    if v_bind.is_prop {
+                        patch_hints.flags |= PatchFlags::NeedHydration;
+                    }
+
                     let Some(StrOrExpr::Str(ref argument)) = v_bind.argument else {
                         // This is dynamic
                         // From docs: [FULL_PROPS is] exclusive with CLASS, STYLE and PROPS.
@@ -375,17 +413,33 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                             !(PatchFlags::Props | PatchFlags::Class | PatchFlags::Style);
                         patch_hints.flags |= PatchFlags::FullProps;
                         patch_hints.props.clear();
+                        has_dynamic_keys = true;
                         continue;
                     };
 
-                    // Again, if we are FULL_PROPS already, do not add other props/class/style.
-                    // Or if we do not need to add.
-                    if !has_bindings || patch_hints.flags.contains(PatchFlags::FullProps) {
+                    // Skip `key` prop
+                    if argument == "key" {
+                        // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L585
+                        // #938: elements with dynamic keys should be forced into blocks
+                        should_use_block = true;
                         continue;
                     }
 
-                    // Skip `key` prop
-                    if argument == "key" {
+                    // Skip `is` on `<component>`
+                    if argument == "is"
+                        && matches!(element_kind, ElementKind::Builtin(BuiltinType::Component))
+                    {
+                        continue;
+                    }
+
+                    // For `ref_for`
+                    if self.v_for_scope && argument == "ref" {
+                        has_ref = true;
+                    }
+
+                    // If we are FULL_PROPS already, do not add other props/class/style.
+                    // Or if we do not need to add.
+                    if !has_bindings || patch_hints.flags.contains(PatchFlags::FullProps) {
                         continue;
                     }
 
@@ -407,11 +461,83 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                     }
                 }
 
-                AttributeOrBinding::VOn(VOnDirective {
-                    handler: Some(ref mut handler),
-                    ..
-                }) => {
-                    self.bindings_helper.transform_expr(handler, scope_to_use);
+                AttributeOrBinding::VOn(VOnDirective { event, handler, .. }) => {
+                    // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L589C54-L589C71
+                    // inline before-update hooks need to force block so that it is invoked
+                    // before children
+                    if has_children
+                        && matches!(event, Some(StrOrExpr::Str(s)) if s == "vue:before-update")
+                    {
+                        should_use_block = true;
+                    }
+
+                    // TODO Transform the event name beforehand (?) and make sure the condition is 100% the same
+                    // https://github.com/vuejs/core/blob/f1068fc60ca511f68ff0aaedcc18b39124791d29/packages/compiler-core/src/transforms/transformElement.ts#L430
+                    if let Some(StrOrExpr::Str(evt_name)) = event {
+                        if (!is_component
+                            || matches!(element_kind, ElementKind::Builtin(BuiltinType::Component)))
+                            && evt_name != "click"
+                            && evt_name != "update:modelValue"
+                            && evt_name != "update:model-value"
+                            && !evt_name.starts_with("vnode:")
+                        {
+                            has_hydration_event_binding = true;
+                        }
+
+                        if evt_name.starts_with("vnode:") {
+                            has_vnode_hook = true;
+                        }
+                    } else {
+                        // https://github.com/vuejs/core/blob/f1068fc60ca511f68ff0aaedcc18b39124791d29/packages/compiler-core/src/transforms/transformElement.ts#L605
+                        has_dynamic_keys = true;
+                    }
+
+                    if let Some(handler) = handler {
+                        self.bindings_helper.transform_expr(handler, scope_to_use);
+                    }
+                }
+
+                // Transform the regular `ref` in `inline` mode
+                AttributeOrBinding::RegularAttribute { name, value, span } if name == "ref" => {
+                    has_ref = true;
+
+                    // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L506
+                    // In inline mode there is no setupState object, so we can't use string
+                    // keys to set the ref. Instead, we need to transform it to pass the
+                    // actual ref.
+                    if !value.is_empty()
+                        && matches!(
+                            self.bindings_helper.template_generation_mode,
+                            TemplateGenerationMode::Inline
+                        )
+                        && matches!(
+                            self.bindings_helper
+                                .get_var_binding_type(scope_to_use, &value),
+                            BindingTypes::SetupLet
+                                | BindingTypes::SetupRef
+                                | BindingTypes::SetupMaybeRef
+                        )
+                    {
+                        let span = span.to_owned();
+                        let value = value.to_owned();
+                        ref_key = Some(value.to_owned());
+
+                        let _ = std::mem::replace(
+                            attr,
+                            AttributeOrBinding::VBind(VBindDirective {
+                                argument: Some(StrOrExpr::Str(fervid_atom!("ref"))),
+                                value: Box::new(Expr::Ident(Ident {
+                                    span,
+                                    sym: value,
+                                    optional: false,
+                                })),
+                                is_camel: false,
+                                is_prop: false,
+                                is_attr: false,
+                                span,
+                            }),
+                        );
+                    }
                 }
 
                 _ => {}
@@ -436,6 +562,17 @@ impl<'a> Visitor for TemplateVisitor<'_> {
             for v_model in directives.v_model.iter_mut() {
                 self.bindings_helper
                     .transform_v_model(v_model, scope_to_use, patch_hints);
+            }
+
+            // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L700
+            // custom dirs may use beforeUpdate so they need to force blocks
+            // to ensure before-update gets called before children update
+            if !directives.custom.is_empty() {
+                has_runtime_directives = true;
+
+                if has_children {
+                    should_use_block = true;
+                }
             }
         }
 
@@ -466,6 +603,47 @@ impl<'a> Visitor for TemplateVisitor<'_> {
 
                 Node::Text(_, _) | Node::Comment(_, _) => {}
             }
+        }
+
+        // Add `ref_for` and `ref_key`
+        if has_ref && self.v_for_scope {
+            element_node
+                .starting_tag
+                .attributes
+                .push(AttributeOrBinding::VBind(VBindDirective {
+                    argument: Some(StrOrExpr::Str(fervid_atom!("ref_for"))),
+                    value: Box::new(Expr::Lit(Lit::Bool(Bool {
+                        span: DUMMY_SP,
+                        value: true,
+                    }))),
+                    is_camel: false,
+                    is_prop: false,
+                    is_attr: false,
+                    span: DUMMY_SP,
+                }));
+        }
+        if let Some(ref_key) = ref_key {
+            element_node
+                .starting_tag
+                .attributes
+                .push(AttributeOrBinding::RegularAttribute {
+                    name: fervid_atom!("ref_key"),
+                    value: ref_key,
+                    span: DUMMY_SP,
+                });
+        }
+        self.v_for_scope = old_v_for_scope;
+
+        // Apply other flags
+        // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L732
+        if !has_dynamic_keys && has_hydration_event_binding {
+            patch_hints.flags |= PatchFlags::NeedHydration;
+        }
+        if !should_use_block
+            && (patch_hints.flags.is_empty() || patch_hints.flags == PatchFlags::NeedHydration)
+            && (has_ref || has_vnode_hook || has_runtime_directives)
+        {
+            patch_hints.flags |= PatchFlags::NeedPatch;
         }
 
         // Apply TEXT patch flag
@@ -638,6 +816,7 @@ mod tests {
         let template_visitor = TemplateVisitor {
             bindings_helper: &mut bindings_helper,
             current_scope: 0,
+            v_for_scope: false,
         };
         assert!(matches!(
             template_visitor.recognize_element_kind(&starting_tag),
@@ -1216,6 +1395,7 @@ mod tests {
         let mut template_visitor = TemplateVisitor {
             bindings_helper: &mut bindings_helper,
             current_scope: 0,
+            v_for_scope: false,
         };
 
         let kebab_case = fervid_atom!("test-component");

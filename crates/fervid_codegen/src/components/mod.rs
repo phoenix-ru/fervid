@@ -54,6 +54,7 @@ impl CodegenContext {
     }
 
     // Generates a `createVNode`/`createBlock` structure
+    // TODO Use wrap_in_block from `patch_hints`
     pub fn generate_componentlike(
         &mut self,
         identifier: Expr,
