@@ -1,8 +1,5 @@
-use fervid_core::{
-    fervid_atom, AttributeOrBinding, FervidAtom, SfcCustomBlock, SfcDescriptor, SfcStyleBlock,
-    StartingTag,
-};
-use swc_core::common::{BytePos, Span, DUMMY_SP};
+use fervid_core::{fervid_atom, SfcDescriptor};
+use swc_core::common::{BytePos, Span, Spanned, DUMMY_SP};
 use swc_ecma_parser::StringInput;
 use swc_html_ast::{Child, DocumentFragment, DocumentMode, Element, Namespace};
 use swc_html_parser::{
@@ -12,7 +9,6 @@ use swc_html_parser::{
 
 use crate::{
     error::{ParseError, ParseErrorKind},
-    script::parse_sfc_script_element,
     SfcParser,
 };
 
@@ -39,7 +35,7 @@ impl SfcParser<'_, '_, '_> {
 
         macro_rules! report_error {
             ($kind: ident, $span: expr) => {
-                self.errors.push(ParseError {
+                self.report_error(ParseError {
                     kind: ParseErrorKind::$kind,
                     span: $span,
                 });
@@ -70,8 +66,13 @@ impl SfcParser<'_, '_, '_> {
 
                 sfc_descriptor.template = template_result;
             } else if tag_name.eq("script") {
-                let Some(sfc_script_block) = parse_sfc_script_element(root_element) else {
-                    continue;
+                let sfc_script_block = match self.parse_sfc_script_element(root_element) {
+                    Ok(Some(v)) => v,
+                    Ok(None) => continue,
+                    Err(e) => {
+                        self.report_error(e);
+                        continue;
+                    }
                 };
 
                 if sfc_script_block.is_setup {
@@ -90,59 +91,25 @@ impl SfcParser<'_, '_, '_> {
                     sfc_descriptor.script_legacy = Some(sfc_script_block);
                 }
             } else if tag_name.eq("style") {
-                // Check that `<style>` is not empty
-                let Some(Child::Text(style_content)) = root_element.children.get(0) else {
-                    continue;
-                };
-
-                let mut lang = FervidAtom::from("css");
-                let mut is_scoped = false;
-
-                for attr in root_element.attributes.into_iter() {
-                    if attr.name.eq("lang") {
-                        let Some(attr_val) = attr.value else {
-                            continue;
-                        };
-
-                        lang = attr_val;
-                    } else if attr.name.eq("scoped") {
-                        is_scoped = true;
-                    }
+                if let Some(style_block) = self.parse_sfc_style_element(root_element) {
+                    sfc_descriptor.styles.push(style_block);
                 }
-
-                sfc_descriptor.styles.push(SfcStyleBlock {
-                    lang,
-                    content: style_content.data.to_owned(),
-                    is_scoped,
-                    span: style_content.span,
-                })
             } else {
-                let attributes = root_element
-                    .attributes
-                    .into_iter()
-                    .map(|attr| AttributeOrBinding::RegularAttribute {
-                        name: attr.name,
-                        value: attr.value.unwrap_or_else(|| fervid_atom!("")),
-                        span: attr.span,
-                    })
-                    .collect();
-
-                let starting_tag = StartingTag {
-                    tag_name: root_element.tag_name,
-                    attributes,
-                    directives: None,
-                };
-
-                // TODO Use span of contents, not the full span
-                let span = root_element.span;
-
-                sfc_descriptor.custom_blocks.push(SfcCustomBlock {
-                    starting_tag,
-                    content: FervidAtom::from(
-                        &self.input[(span.lo.0 - 1) as usize..(span.hi.0 - 1) as usize],
-                    ),
-                })
+                if let Some(custom_block) = self.parse_sfc_custom_block_element(root_element) {
+                    sfc_descriptor.custom_blocks.push(custom_block);
+                }
             }
+        }
+
+        // Emit an error if neither of `<template>` and both `<script>`s are present
+        if sfc_descriptor.template.is_none()
+            && sfc_descriptor.script_legacy.is_none()
+            && sfc_descriptor.script_setup.is_none()
+        {
+            self.report_error(ParseError {
+                kind: ParseErrorKind::MissingTemplateOrScript,
+                span: parsed_html.span,
+            });
         }
 
         Ok(sfc_descriptor)
@@ -189,5 +156,59 @@ impl SfcParser<'_, '_, '_> {
         }
 
         result
+    }
+
+    /// Gets the raw contents of Element and also clears errors related to parsing it
+    pub fn use_rawtext_content(
+        &mut self,
+        element_content: Option<&DocumentFragment>,
+        element_children: &[Child],
+    ) -> Option<(&str, Span)> {
+        // For DocumentFragment, use its children.
+        // Otherwise, because DocumentFragment is content of <template>,
+        // it has the exact same span.
+        let children = if let Some(ref content) = element_content {
+            &content.children
+        } else {
+            element_children
+        };
+
+        // Span via first and last children
+        let content_span = if let (Some(first), Some(last)) = (children.first(), children.last()) {
+            Some(Span {
+                lo: first.span_lo(),
+                hi: last.span_hi(),
+                ctxt: Default::default(),
+            })
+        } else {
+            None
+        };
+
+        // Get raw content
+        let raw = if let Some(span) = content_span {
+            &self.input[(span.lo.0 - 1) as usize..(span.hi.0 - 1) as usize]
+        } else {
+            ""
+        };
+
+        // Ignore empty unless allowed
+        if self.ignore_empty && raw.trim().is_empty() {
+            return None;
+        }
+
+        // Ignore swc errors occurring in the rawtext span
+        if let Some(span) = content_span {
+            self.errors.retain(|e| !span.contains(e.span));
+        }
+
+        // Dummy is returned when `ignore_empty = false` and content is empty
+        // It would be better to return span between `<></>` with lo=hi,
+        // but SWC only provides spans including tags and I don't want to guess.
+        Some((raw, content_span.unwrap_or_else(|| DUMMY_SP)))
+    }
+
+    #[inline]
+    pub fn report_error(&mut self, error: ParseError) {
+        self.errors.push(error);
     }
 }

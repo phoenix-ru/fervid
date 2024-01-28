@@ -16,12 +16,20 @@ pub enum ParseErrorKind {
     DuplicateScriptSetup,
     /// More than one `<template>`
     DuplicateTemplate,
+    /// More than one attribute with the same name on a root element
+    DuplicateAttribute,
     /// Unclosed dynamic argument, e.g. `:[dynamic`
     DynamicArgument,
     /// Error while parsing EcmaScript/TypeScript
-    BadExpr(Box<swc_ecma_parser::error::SyntaxError>),
+    EcmaSyntaxError(Box<swc_ecma_parser::error::SyntaxError>),
     /// Unrecoverable error while parsing HTML
     InvalidHtml(Box<swc_html_parser::error::ErrorKind>),
+    /// Both `<template>` and `<script>` are missing
+    MissingTemplateOrScript,
+    /// `<script>`/`<style>` content was not Text
+    UnexpectedNonRawTextContent,
+    /// Language not supported
+    UnsupportedLang,
 }
 
 impl From<swc_ecma_parser::error::Error> for ParseError {
@@ -29,7 +37,7 @@ impl From<swc_ecma_parser::error::Error> for ParseError {
         let span = value.span();
 
         ParseError {
-            kind: ParseErrorKind::BadExpr(Box::new(value.into_kind())),
+            kind: ParseErrorKind::EcmaSyntaxError(Box::new(value.into_kind())),
             span,
         }
     }

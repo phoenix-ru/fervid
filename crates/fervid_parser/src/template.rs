@@ -6,23 +6,53 @@ use swc_core::common::{BytePos, Span};
 use swc_ecma_parser::{Syntax, TsConfig};
 use swc_html_ast::{Child, Element, Text};
 
-use crate::{script::parse_expr, SfcParser};
+use crate::SfcParser;
 
 impl SfcParser<'_, '_, '_> {
     pub fn parse_template_to_ir(&mut self, root_element: Element) -> Option<SfcTemplateBlock> {
         // TODO Errors in template
 
+        let lang_atom = fervid_atom!("lang");
+        let html_atom = || fervid_atom!("html");
+
         let lang = root_element
             .attributes
-            .iter()
+            .into_iter()
             .find_map(|attr| {
-                if attr.name == fervid_atom!("lang") {
-                    Some(attr.name.to_owned())
+                if attr.name == lang_atom {
+                    Some(match attr.value {
+                        Some(v) => {
+                            let trimmed = v.trim();
+                            if trimmed.is_empty() {
+                                html_atom()
+                            } else {
+                                FervidAtom::from(trimmed)
+                            }
+                        }
+                        None => html_atom(),
+                    })
                 } else {
                     None
                 }
             })
-            .unwrap_or_else(|| fervid_atom!("html"));
+            .unwrap_or_else(html_atom);
+
+        // Do not parse non-html templates
+        if lang != "html" {
+            let roots = if let Some((content, content_span)) =
+                self.use_rawtext_content(root_element.content.as_ref(), &root_element.children)
+            {
+                vec![Node::Text(FervidAtom::from(content), content_span)]
+            } else {
+                vec![]
+            };
+
+            return Some(SfcTemplateBlock {
+                lang,
+                roots,
+                span: root_element.span,
+            });
+        }
 
         // <template> technically has a `content`
         let children: Vec<Child> = root_element
@@ -168,7 +198,7 @@ impl SfcParser<'_, '_, '_> {
                 Default::default(),
             );
 
-            match parse_expr(
+            match self.parse_expr(
                 interpolation,
                 Syntax::Typescript(TsConfig::default()),
                 interpolation_span,
@@ -179,7 +209,7 @@ impl SfcParser<'_, '_, '_> {
                     patch_flag: false,
                     span: interpolation_span,
                 })),
-                Err(expr_err) => self.errors.push(expr_err.into()),
+                Err(expr_err) => self.report_error(expr_err),
             }
         }
 

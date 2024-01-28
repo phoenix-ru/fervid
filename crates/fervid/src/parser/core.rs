@@ -87,6 +87,7 @@ fn parse_root_block<'a>(
             out.custom_blocks.push(SfcCustomBlock {
                 starting_tag,
                 content: "".into(),
+                span: DUMMY_SP,
             });
 
             return Ok(input);
@@ -99,6 +100,7 @@ fn parse_root_block<'a>(
         out.custom_blocks.push(SfcCustomBlock {
             starting_tag,
             content,
+            span: DUMMY_SP,
         });
 
         return Ok(input);
@@ -166,12 +168,14 @@ fn parse_root_block<'a>(
                         content: $content,
                         lang,
                         is_setup,
+                        span: DUMMY_SP,
                     });
                 } else {
                     out.script_legacy = Some(SfcScriptBlock {
                         content: $content,
                         lang,
                         is_setup,
+                        span: DUMMY_SP,
                     })
                 }
             };
@@ -217,6 +221,12 @@ fn parse_root_block<'a>(
             AttributeOrBinding::RegularAttribute { name, .. } if name.eq("scoped")
         )
     });
+    let is_module = starting_tag.attributes.iter().any(|attr| {
+        matches!(
+            attr,
+            AttributeOrBinding::RegularAttribute { name, .. } if name.eq("module")
+        )
+    });
 
     // Check self-closing, ignore such styles
     if is_self_closing {
@@ -231,6 +241,7 @@ fn parse_root_block<'a>(
         lang: lang.into(),
         content: content.into(),
         is_scoped,
+        is_module,
         span: DUMMY_SP
     });
 

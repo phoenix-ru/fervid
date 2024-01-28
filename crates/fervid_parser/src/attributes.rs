@@ -8,7 +8,6 @@ use swc_html_ast::Attribute;
 
 use crate::{
     error::{ParseError, ParseErrorKind},
-    script::{parse_expr, parse_pat},
     SfcParser,
 };
 
@@ -181,10 +180,10 @@ impl SfcParser<'_, '_, '_> {
 
                 if is_dynamic_argument {
                     // TODO Narrower span?
-                    let parsed_argument = match parse_expr(raw_argument, ts!(), span) {
+                    let parsed_argument = match self.parse_expr(raw_argument, ts!(), span) {
                         Ok(parsed) => parsed,
                         Err(expr_err) => {
-                            bail!(js, expr_err.into());
+                            bail!(js, expr_err);
                         }
                     };
 
@@ -232,12 +231,12 @@ impl SfcParser<'_, '_, '_> {
 
         macro_rules! push_directive_js {
             ($key: ident, $value: expr) => {
-                match parse_expr($value, ts!(), span) {
+                match self.parse_expr($value, ts!(), span) {
                     Ok(parsed) => {
                         let directives = get_directives!();
                         directives.$key = Some(parsed);
                     }
-                    Result::Err(_) => {}
+                    Result::Err(expr_err) => self.report_error(expr_err),
                 }
             };
         }
@@ -261,10 +260,10 @@ impl SfcParser<'_, '_, '_> {
 
                 let value = expect_value!();
 
-                let parsed_expr = match parse_expr(&value, ts!(), span) {
+                let parsed_expr = match self.parse_expr(&value, ts!(), span) {
                     Ok(parsed) => parsed,
                     Err(expr_err) => {
-                        bail!(js, expr_err.into());
+                        bail!(js, expr_err);
                     }
                 };
 
@@ -280,10 +279,10 @@ impl SfcParser<'_, '_, '_> {
 
             "on" => {
                 let handler = match raw_attribute.value {
-                    Some(ref value) => match parse_expr(&value, ts!(), span) {
+                    Some(ref value) => match self.parse_expr(&value, ts!(), span) {
                         Ok(parsed) => Some(parsed),
                         Err(expr_err) => {
-                            bail!(js, expr_err.into());
+                            bail!(js, expr_err);
                         }
                     },
                     None => None,
@@ -320,8 +319,8 @@ impl SfcParser<'_, '_, '_> {
                     bail!(ParseErrorKind::DirectiveSyntax);
                 };
 
-                match parse_expr(itervar, ts!(), itervar_span) {
-                    Ok(itervar) => match parse_expr(iterable, ts!(), iterable_span) {
+                match self.parse_expr(itervar, ts!(), itervar_span) {
+                    Ok(itervar) => match self.parse_expr(iterable, ts!(), iterable_span) {
                         Ok(iterable) => {
                             push_directive!(
                                 v_for,
@@ -333,16 +332,16 @@ impl SfcParser<'_, '_, '_> {
                                 }
                             );
                         }
-                        Result::Err(_) => {}
+                        Result::Err(expr_err) => self.report_error(expr_err),
                     },
-                    Result::Err(_) => {}
+                    Result::Err(expr_err) => self.report_error(expr_err),
                 };
             }
 
             "model" => {
                 let value = expect_value!();
 
-                match parse_expr(&value, ts!(), span) {
+                match self.parse_expr(&value, ts!(), span) {
                     Ok(model_binding) => {
                         let directives = get_directives!();
                         directives.v_model.push(VModelDirective {
@@ -358,12 +357,13 @@ impl SfcParser<'_, '_, '_> {
             }
 
             "slot" => {
-                let value = raw_attribute
-                    .value
-                    .and_then(|v| match parse_pat(&v, ts!(), span) {
-                        Ok(value) => Some(Box::new(value)),
-                        Result::Err(_) => None,
-                    });
+                let value =
+                    raw_attribute
+                        .value
+                        .and_then(|v| match self.parse_pat(&v, ts!(), span) {
+                            Ok(value) => Some(Box::new(value)),
+                            Result::Err(_) => None,
+                        });
                 push_directive!(
                     v_slot,
                     VSlotDirective {
@@ -420,7 +420,7 @@ impl SfcParser<'_, '_, '_> {
                 };
 
                 // If there is a value, try parsing it and only include the successfully parsed values
-                match parse_expr(&value, ts!(), span) {
+                match self.parse_expr(&value, ts!(), span) {
                     Ok(parsed) => {
                         let directives = get_directives!();
                         directives.custom.push(VCustomDirective {
@@ -430,7 +430,7 @@ impl SfcParser<'_, '_, '_> {
                             value: Some(parsed),
                         });
                     }
-                    Result::Err(_) => {}
+                    Result::Err(expr_err) => self.report_error(expr_err),
                 }
             }
         }

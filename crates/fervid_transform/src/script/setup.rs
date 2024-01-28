@@ -320,9 +320,8 @@ fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param
 #[cfg(test)]
 mod tests {
     use crate::test_utils::parser::*;
-    use fervid_core::{
-        fervid_atom, BindingTypes, BindingsHelper, SetupBinding, SfcScriptBlock,
-    };
+    use fervid_core::{fervid_atom, BindingTypes, BindingsHelper, SetupBinding, SfcScriptBlock};
+    use swc_core::common::DUMMY_SP;
 
     use super::transform_and_record_script_setup;
 
@@ -342,6 +341,7 @@ mod tests {
             content: Box::new(parsed),
             lang: fervid_core::SfcScriptLang::Es,
             is_setup: true,
+            span: DUMMY_SP,
         })
     }
 
@@ -354,6 +354,7 @@ mod tests {
             content: Box::new(parsed),
             lang: fervid_core::SfcScriptLang::Typescript,
             is_setup: true,
+            span: DUMMY_SP,
         })
     }
 

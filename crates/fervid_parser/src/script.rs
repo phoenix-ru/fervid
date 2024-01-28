@@ -1,90 +1,174 @@
 use fervid_core::{SfcScriptBlock, SfcScriptLang};
-use swc_core::{ecma::ast::{Expr, Pat, Module}, common::{comments::SingleThreadedComments, Span}};
-use swc_ecma_parser::{PResult, lexer::Lexer, Syntax, StringInput, Parser, TsConfig, EsConfig};
-use swc_html_ast::{Element, Child};
+use swc_core::{
+    common::Span,
+    ecma::ast::{Expr, Module, Pat},
+};
+use swc_ecma_parser::{lexer::Lexer, EsConfig, Parser, StringInput, Syntax, TsConfig};
+use swc_html_ast::{Child, Element};
 
-pub fn parse_sfc_script_element(element: Element) -> Option<SfcScriptBlock> {
-    let mut is_setup = false;
-    let mut lang = SfcScriptLang::Es;
+use crate::{error::ParseErrorKind, ParseError, SfcParser};
 
-    for attr in element.attributes.iter() {
-        let attr_name = &attr.name;
-        if attr_name.eq("setup") {
-            is_setup = true;
-        } else if attr_name.eq("lang") {
-            lang = match attr.value.as_ref() {
-                Some(v) if v.eq("ts") => SfcScriptLang::Typescript,
-                _ => SfcScriptLang::Es
-            };
+impl SfcParser<'_, '_, '_> {
+    /// Parses the `<script>` and `<script setup>`, both in EcmaScript and TypeScript
+    pub fn parse_sfc_script_element(
+        &mut self,
+        element: Element,
+    ) -> Result<Option<SfcScriptBlock>, ParseError> {
+        // Find `setup` and `lang`
+        let mut is_setup = false;
+        let mut is_setup_seen = false;
+        let mut is_lang_seen = false;
+        let mut lang = SfcScriptLang::Es;
+        for attr in element.attributes.iter() {
+            match attr.name.as_str() {
+                "setup" => {
+                    if is_setup_seen {
+                        self.report_error(ParseError {
+                            kind: ParseErrorKind::DuplicateAttribute,
+                            span: attr.span,
+                        });
+                    }
+
+                    is_setup = true;
+                    is_setup_seen = true;
+                }
+                "lang" if is_lang_seen => self.errors.push(ParseError {
+                    kind: ParseErrorKind::DuplicateAttribute,
+                    span: attr.span,
+                }),
+                "lang" => {
+                    is_lang_seen = true;
+
+                    lang = match attr.value.as_ref().map(|v| v.as_str()) {
+                        Some("ts" | "typescript") => SfcScriptLang::Typescript,
+                        None | Some("js" | "javascript") => SfcScriptLang::Es,
+                        Some(_) => {
+                            return Err(ParseError {
+                                kind: ParseErrorKind::UnsupportedLang,
+                                span: attr.span,
+                            });
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
+
+        // `<script>` should always have a single `Text` child
+        let script_content = match element.children.get(0) {
+            Some(Child::Text(t)) => t,
+            Some(_) => {
+                return Err(ParseError {
+                    kind: ParseErrorKind::UnexpectedNonRawTextContent,
+                    span: element.span,
+                });
+            }
+            None if self.ignore_empty => {
+                return Ok(None);
+            }
+            None => {
+                // Allow empty
+                return Ok(Some(SfcScriptBlock {
+                    content: Box::new(Module {
+                        span: element.span,
+                        body: Vec::new(),
+                        shebang: None,
+                    }),
+                    lang,
+                    is_setup,
+                    span: element.span,
+                }));
+            }
+        };
+
+        // Ignore empty unless allowed
+        if self.ignore_empty && script_content.data.trim().is_empty() {
+            return Ok(None);
+        }
+
+        let module_content = self.parse_module(
+            &script_content.data,
+            if matches!(lang, SfcScriptLang::Typescript) {
+                Syntax::Typescript(TsConfig::default())
+            } else {
+                Syntax::Es(EsConfig::default())
+            },
+            script_content.span,
+        )?;
+
+        Ok(Some(SfcScriptBlock {
+            content: Box::new(module_content),
+            lang,
+            is_setup,
+            span: element.span,
+        }))
     }
 
-    // `<script>` should always have a single `Text` child
-    let Some(Child::Text(script_content)) = element.children.get(0) else {
-        return None;
-    };
+    #[inline]
+    pub fn parse_module(
+        &mut self,
+        raw: &str,
+        syntax: Syntax,
+        span: Span,
+    ) -> Result<Module, ParseError> {
+        let lexer = Lexer::new(
+            syntax,
+            // EsVersion defaults to es5
+            Default::default(),
+            StringInput::new(raw, span.lo, span.hi),
+            Some(&self.comments),
+        );
 
-    let syntax = if matches!(lang, SfcScriptLang::Typescript) {
-        Syntax::Typescript(TsConfig::default())
-    } else {
-        Syntax::Es(EsConfig::default())
-    };
+        let mut parser = Parser::new_from(lexer);
+        let parse_result = parser.parse_module();
 
-    let Ok(content) = parse_module(&script_content.data, syntax, script_content.span) else {
-        // TODO Error??
-        return None;
-    };
+        // Map errors to EcmaSyntaxError
+        self.errors
+            .extend(parser.take_errors().into_iter().map(From::from));
 
-    Some(SfcScriptBlock {
-        content: Box::new(content),
-        lang,
-        is_setup,
-    })
-}
+        parse_result.map_err(From::from)
+    }
 
-pub fn parse_expr(raw: &str, syntax: Syntax, span: Span) -> PResult<Box<Expr>> {
-    let comments = SingleThreadedComments::default();
+    pub fn parse_expr(
+        &mut self,
+        raw: &str,
+        syntax: Syntax,
+        span: Span,
+    ) -> Result<Box<Expr>, ParseError> {
+        let lexer = Lexer::new(
+            syntax,
+            // EsVersion defaults to es5
+            Default::default(),
+            StringInput::new(raw, span.lo, span.hi),
+            Some(&self.comments),
+        );
 
-    let lexer = Lexer::new(
-        syntax,
-        // EsVersion defaults to es5
-        Default::default(),
-        StringInput::new(raw, span.lo, span.hi),
-        Some(&comments)
-    );
+        let mut parser = Parser::new_from(lexer);
+        let parse_result = parser.parse_expr();
 
-    let mut parser = Parser::new_from(lexer);
+        // Map errors to EcmaSyntaxError
+        self.errors
+            .extend(parser.take_errors().into_iter().map(From::from));
 
-    // TODO Return comments or use parser instance to store it
-    parser.parse_expr()
-}
+        parse_result.map_err(From::from)
+    }
 
-pub fn parse_module(raw: &str, syntax: Syntax, span: Span) -> PResult<Module> {
-    let lexer = Lexer::new(
-        syntax,
-        // EsVersion defaults to es5
-        Default::default(),
-        StringInput::new(raw, span.lo, span.hi),
-        None,
-    );
+    pub fn parse_pat(&mut self, raw: &str, syntax: Syntax, span: Span) -> Result<Pat, ParseError> {
+        let lexer = Lexer::new(
+            syntax,
+            // EsVersion defaults to es5
+            Default::default(),
+            StringInput::new(raw, span.lo, span.hi),
+            Some(&self.comments),
+        );
 
-    let mut parser = Parser::new_from(lexer);
+        let mut parser = Parser::new_from(lexer);
+        let parse_result = parser.parse_pat();
 
-    // TODO Return comments or use parser instance to store it
-    parser.parse_module()
-}
+        // Map errors to EcmaSyntaxError
+        self.errors
+            .extend(parser.take_errors().into_iter().map(From::from));
 
-pub fn parse_pat(raw: &str, syntax: Syntax, span: Span) -> PResult<Pat> {
-    let lexer = Lexer::new(
-        syntax,
-        // EsVersion defaults to es5
-        Default::default(),
-        StringInput::new(raw, span.lo, span.hi),
-        None,
-    );
-
-    let mut parser = Parser::new_from(lexer);
-
-    // TODO Return comments or use parser instance to store it
-    parser.parse_pat()
+        parse_result.map_err(From::from)
+    }
 }
