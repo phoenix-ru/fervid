@@ -152,6 +152,7 @@ impl CodegenContext {
                     }),
                     type_only: false,
                     with: None,
+                    phase: Default::default(),
                 })));
         }
 

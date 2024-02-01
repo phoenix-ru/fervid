@@ -15,7 +15,7 @@ keywords = ["vue", "css", "style", "compiler", "transformer"]
 # lightningcss = { version = "1.0.0-alpha.44", git = "https://github.com/phoenix-ru/lightningcss.git", features = ["visitor"] }
 # parcel_selectors = { version = "0.26.0", git = "https://github.com/phoenix-ru/lightningcss.git" }
 fervid_core = { path="../fervid_core", version = "0.1" }
-swc_css_ast = "0.140.13"
-swc_css_codegen = "0.151.21"
-swc_css_parser = { version = "0.150.20" }
+swc_css_ast = "0.140.*"
+swc_css_codegen = "0.151.*"
+swc_css_parser = "0.150.*"
 swc_core = { workspace = true, features = ["common"]}
