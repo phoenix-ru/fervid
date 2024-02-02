@@ -49,64 +49,68 @@ pub fn transform_and_record_script_setup(
     let mut vue_user_imports = VueResolvedImports::default();
     let mut setup_body_stmts = Vec::<Stmt>::new();
 
+    // Collect imports first
+    // This is because ES6 imports are hoisted and usage like this is valid:
+    // const bar = x(1)
+    // import { reactive as x } from 'vue'
+    for module_item in script_setup.content.body.iter() {
+        if let ModuleItem::ModuleDecl(ModuleDecl::Import(import_decl)) = module_item {
+            collect_imports(
+                import_decl,
+                &mut bindings_helper.setup_bindings,
+                &mut vue_user_imports,
+            );
+        };
+    }
+
     // Go over the whole script setup: process all the statements and declarations
     for module_item in script_setup.content.body {
-        match module_item {
+        let stmt = match module_item {
             ModuleItem::ModuleDecl(decl) => {
-                // Collect Vue imports
-                // TODO And maybe non-Vue as well?
-                if let ModuleDecl::Import(ref import_decl) = decl {
-                    collect_imports(
-                        import_decl,
-                        &mut bindings_helper.setup_bindings,
-                        &mut vue_user_imports,
-                    );
-                }
-
                 module_decls.push(decl);
-            }
+                continue;
+            },
+            ModuleItem::Stmt(stmt) => stmt,
+        };
 
-            ModuleItem::Stmt(stmt) => {
-                let transformed = match stmt {
-                    Stmt::Expr(expr_stmt) => {
-                        let span = expr_stmt.span;
+        let transformed = match stmt {
+            Stmt::Expr(expr_stmt) => {
+                let span = expr_stmt.span;
 
-                        let transform_macro_result = transform_script_setup_macro_expr(
-                            &expr_stmt.expr,
-                            bindings_helper,
-                            &mut sfc_object_helper,
-                            false,
-                        );
+                let transform_macro_result = transform_script_setup_macro_expr(
+                    &expr_stmt.expr,
+                    bindings_helper,
+                    &mut sfc_object_helper,
+                    false,
+                );
 
-                        match transform_macro_result {
-                            TransformMacroResult::ValidMacro(transformed_expr) => {
-                                // A macro may overwrite the statement
-                                transformed_expr.map(|expr| Stmt::Expr(ExprStmt { span, expr }))
-                            }
-
-                            TransformMacroResult::NotAMacro => {
-                                // No analysis necessary, return the same statement
-                                Some(Stmt::Expr(expr_stmt))
-                            }
-                        }
+                match transform_macro_result {
+                    TransformMacroResult::ValidMacro(transformed_expr) => {
+                        // A macro may overwrite the statement
+                        transformed_expr.map(|expr| Stmt::Expr(ExprStmt { span, expr }))
                     }
 
-                    Stmt::Decl(decl) => transform_decl_stmt(
-                        decl,
-                        bindings_helper,
-                        &vue_user_imports,
-                        &mut sfc_object_helper,
-                    )
-                    .map(Stmt::Decl),
-
-                    // By default, just return the same statement
-                    _ => Some(stmt),
-                };
-
-                if let Some(transformed_stmt) = transformed {
-                    setup_body_stmts.push(transformed_stmt);
+                    TransformMacroResult::NotAMacro => {
+                        // No analysis necessary, return the same statement
+                        Some(Stmt::Expr(expr_stmt))
+                    }
                 }
             }
+
+            Stmt::Decl(decl) => transform_decl_stmt(
+                decl,
+                bindings_helper,
+                &vue_user_imports,
+                &mut sfc_object_helper,
+            )
+            .map(Stmt::Decl),
+
+            // By default, just return the same statement
+            _ => Some(stmt),
+        };
+
+        if let Some(transformed_stmt) = transformed {
+            setup_body_stmts.push(transformed_stmt);
         }
     }
 
@@ -486,5 +490,141 @@ mod tests {
                 SetupBinding(fervid_atom!("varBaz"), BindingTypes::SetupLet),
             ]
         );
+    }
+
+    // Cases from official spec
+    // https://github.com/vuejs/core/blob/a41c5f1f4367a9f41bcdb8c4e02f54b2378e577d/packages/compiler-sfc/__tests__/compileScript.spec.ts
+
+    #[test]
+    fn import_ref_reactive_function_from_other_place_directly() {
+        test_js_and_ts!(
+            r"
+            import { ref, reactive } from './foo'
+
+            const foo = ref(1)
+            const bar = reactive(1)
+            ",
+            vec![
+                SetupBinding(fervid_atom!("ref"), BindingTypes::Imported),
+                SetupBinding(fervid_atom!("reactive"), BindingTypes::Imported),
+                SetupBinding(fervid_atom!("foo"), BindingTypes::SetupMaybeRef),
+                SetupBinding(fervid_atom!("bar"), BindingTypes::SetupMaybeRef),
+            ]
+        );
+    }
+
+    #[test]
+    fn import_ref_reactive_function_from_other_place_import_w_alias() {
+        test_js_and_ts!(
+            r"
+            import { ref as _ref, reactive as _reactive } from './foo'
+
+            const foo = ref(1)
+            const bar = reactive(1)
+            ",
+            vec![
+                SetupBinding(fervid_atom!("_ref"), BindingTypes::Imported),
+                SetupBinding(fervid_atom!("_reactive"), BindingTypes::Imported),
+                SetupBinding(fervid_atom!("foo"), BindingTypes::SetupMaybeRef),
+                SetupBinding(fervid_atom!("bar"), BindingTypes::SetupMaybeRef),
+            ]
+        );
+    }
+
+    #[test]
+    fn import_ref_reactive_function_from_other_place_aliased_usage_before_import_site() {
+        test_js_and_ts!(
+            r"
+            const bar = x(1)
+            import { reactive as x } from 'vue'
+            ",
+            vec![SetupBinding(
+                fervid_atom!("bar"),
+                BindingTypes::SetupReactiveConst
+            ),]
+        );
+    }
+
+    #[test]
+    fn should_support_module_string_names_syntax() {
+        // TODO Dedupe and two scripts
+        // https://github.com/vuejs/core/blob/a41c5f1f4367a9f41bcdb8c4e02f54b2378e577d/packages/compiler-sfc/__tests__/compileScript.spec.ts#L326
+        test_js_and_ts!(
+            r#"
+            import { "😏" as foo } from './foo'
+            "#,
+            vec![SetupBinding(fervid_atom!("foo"), BindingTypes::Imported),]
+        );
+    }
+
+    #[test]
+    fn with_typescript_hoist_type_declarations() {
+        assert_eq!(
+            analyze_ts_bindings(
+                r"
+                export interface Foo {}
+                type Bar = {}
+                "
+            ),
+            vec![]
+        );
+    }
+
+    #[test]
+    fn with_typescript_runtime_enum() {
+        assert_eq!(
+            analyze_ts_bindings(
+                r"
+                enum Foo { A = 123 }
+                "
+            ),
+            vec![SetupBinding(
+                fervid_atom!("Foo"),
+                BindingTypes::LiteralConst
+            )]
+        );
+    }
+
+    #[test]
+    fn with_typescript_runtime_enum_in_normal_script() {
+        // TODO Two scripts
+        // https://github.com/vuejs/core/blob/a41c5f1f4367a9f41bcdb8c4e02f54b2378e577d/packages/compiler-sfc/__tests__/compileScript.spec.ts#L898
+    }
+
+    #[test]
+    fn with_typescript_const_enum() {
+        assert_eq!(
+            analyze_ts_bindings(
+                r"
+                const enum Foo { A = 123 }
+                "
+            ),
+            vec![SetupBinding(
+                fervid_atom!("Foo"),
+                BindingTypes::LiteralConst
+            )]
+        );
+    }
+
+    #[test]
+    fn with_typescript_import_type() {
+        assert_eq!(
+            analyze_ts_bindings(
+                r"
+                import type { Foo } from './main.ts'
+                import { type Bar, Baz } from './main.ts'
+                "
+            ),
+            vec![SetupBinding(
+                fervid_atom!("Baz"),
+                BindingTypes::Imported
+            )]
+        );
+    }
+
+    #[test]
+    fn with_typescript_with_generic_attribute() {
+        // TODO Generics are not implemented yet
+        // https://github.com/vuejs/core/blob/a41c5f1f4367a9f41bcdb8c4e02f54b2378e577d/packages/compiler-sfc/__tests__/compileScript.spec.ts#L942
     }
 }

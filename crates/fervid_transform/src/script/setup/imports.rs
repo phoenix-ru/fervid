@@ -52,7 +52,7 @@ pub fn collect_imports(
             // e.g. `import { foo as bar } from 'mod.js'` -> local = bar, imported = Some(foo)
             ImportSpecifier::Named(named_spec) => {
                 if named_spec.is_type_only {
-                    return;
+                    continue;
                 }
 
                 // `imported_as` is the variable name, `imported_word` is the imported symbol
