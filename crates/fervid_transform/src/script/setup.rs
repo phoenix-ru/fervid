@@ -16,6 +16,7 @@ use crate::{
             extract_variables_from_pat,
         },
         setup::macros::TransformMacroResult,
+        utils::is_static,
     },
     structs::{SfcExportedObjectHelper, VueResolvedImports},
 };
@@ -69,7 +70,7 @@ pub fn transform_and_record_script_setup(
             ModuleItem::ModuleDecl(decl) => {
                 module_decls.push(decl);
                 continue;
-            },
+            }
             ModuleItem::Stmt(stmt) => stmt,
         };
 
@@ -214,11 +215,20 @@ fn transform_decl_stmt(
         }
 
         Decl::TsEnum(ref ts_enum) => {
+            let is_all_literal = ts_enum
+                .members
+                .iter()
+                .all(|m| m.init.as_ref().map_or(true, |e| is_static(&e)));
+
             // Ambient enums are also included, this is intentional
             // I am not sure about `const enum`s though
             push_return!(SetupBinding(
                 ts_enum.id.sym.to_owned(),
-                BindingTypes::LiteralConst,
+                if is_all_literal {
+                    BindingTypes::LiteralConst
+                } else {
+                    BindingTypes::SetupConst
+                }
             ));
         }
 
@@ -615,10 +625,7 @@ mod tests {
                 import { type Bar, Baz } from './main.ts'
                 "
             ),
-            vec![SetupBinding(
-                fervid_atom!("Baz"),
-                BindingTypes::Imported
-            )]
+            vec![SetupBinding(fervid_atom!("Baz"), BindingTypes::Imported)]
         );
     }
 
@@ -626,5 +633,31 @@ mod tests {
     fn with_typescript_with_generic_attribute() {
         // TODO Generics are not implemented yet
         // https://github.com/vuejs/core/blob/a41c5f1f4367a9f41bcdb8c4e02f54b2378e577d/packages/compiler-sfc/__tests__/compileScript.spec.ts#L942
+    }
+
+    #[test]
+    fn works_for_script_setup() {
+        test_js_and_ts!(
+            r"
+            import { ref as r } from 'vue'
+            defineProps({
+                foo: String
+            })
+
+            const a = r(1)
+            let b = 2
+            const c = 3
+            const { d } = someFoo()
+            let { e } = someBar()
+            ",
+            vec![
+                SetupBinding(fervid_atom!("foo"), BindingTypes::Props),
+                SetupBinding(fervid_atom!("a"), BindingTypes::SetupRef),
+                SetupBinding(fervid_atom!("b"), BindingTypes::SetupLet),
+                SetupBinding(fervid_atom!("c"), BindingTypes::LiteralConst),
+                SetupBinding(fervid_atom!("d"), BindingTypes::SetupMaybeRef),
+                SetupBinding(fervid_atom!("e"), BindingTypes::SetupLet),
+            ]
+        );
     }
 }

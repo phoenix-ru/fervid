@@ -1,4 +1,6 @@
-use fervid_core::{fervid_atom, BindingsHelper, FervidAtom, VueImports};
+use fervid_core::{
+    fervid_atom, BindingTypes, BindingsHelper, FervidAtom, SetupBinding, VueImports,
+};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
@@ -13,12 +15,13 @@ use crate::{
         EMIT_HELPER, EXPOSE_HELPER, MERGE_MODELS_HELPER, MODEL_VALUE, PROPS_HELPER,
         USE_MODEL_HELPER,
     },
+    script::utils::{collect_obj_fields, collect_string_arr},
     structs::{SfcDefineModel, SfcExportedObjectHelper},
 };
 
 pub enum TransformMacroResult {
     NotAMacro,
-    ValidMacro(Option<Box<Expr>>)
+    ValidMacro(Option<Box<Expr>>),
 }
 
 /// Tries to transform a Vue compiler macro.\
@@ -77,6 +80,23 @@ pub fn transform_script_setup_macro_expr(
         if let Some(arg0) = &call_expr.args.get(0) {
             // TODO Check if this was re-assigned before
             sfc_object_helper.props = Some(arg0.expr.to_owned());
+
+            // Add props as bindings
+            let mut raw_bindings = Vec::new();
+            match arg0.expr.as_ref() {
+                Expr::Array(props_arr) => {
+                    collect_string_arr(props_arr, &mut raw_bindings);
+                }
+                Expr::Object(props_obj) => {
+                    collect_obj_fields(props_obj, &mut raw_bindings);
+                }
+                _ => {}
+            }
+            bindings_helper.setup_bindings.extend(
+                raw_bindings
+                    .into_iter()
+                    .map(|raw| SetupBinding(raw, BindingTypes::Props)),
+            );
         }
 
         // Return `__props` when in var mode
@@ -253,10 +273,6 @@ pub fn postprocess_macros(
     sfc_object_helper: &mut SfcExportedObjectHelper,
 ) {
     let len = sfc_object_helper.models.len();
-    if len == 0 {
-        return;
-    }
-
     let mut new_props = Vec::<PropOrSpread>::with_capacity(len);
     let mut new_emits = Vec::<Option<ExprOrSpread>>::with_capacity(len);
 

@@ -3,6 +3,8 @@ use swc_core::ecma::ast::{Callee, ClassDecl, Expr, FnDecl, ObjectPatProp, Pat, R
 
 use crate::{script::utils::unroll_paren_seq, structs::VueResolvedImports};
 
+use super::utils::is_static;
+
 /// Javascript class declaration is always constant.
 /// ```js
 /// class Foo {}
@@ -116,6 +118,7 @@ pub fn categorize_expr(
 
         // The other variants are never refs
         // TODO Write tests and check difficult cases, there would be exceptions
+        _ if is_static(expr) => BindingTypes::LiteralConst,
         _ => BindingTypes::SetupConst,
     }
 }

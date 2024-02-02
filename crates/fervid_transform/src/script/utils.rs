@@ -201,6 +201,28 @@ pub fn get_string_tpl(tpl: &Tpl) -> Option<FervidAtom> {
     Some(template_string.as_ref().into())
 }
 
+/// Checks if the expression only contains literals
+/// https://github.com/vuejs/core/blob/d276a4f3e914aaccc291f7b2513e5d978919d0f9/packages/compiler-sfc/src/compileScript.ts#L1228
+pub fn is_static(expr: &Expr) -> bool {
+    match expr {
+        Expr::Unary(unary) => is_static(&unary.arg),
+
+        Expr::Bin(bin) => is_static(&bin.left) && is_static(&bin.right),
+
+        Expr::Cond(cond) => is_static(&cond.test) && is_static(&cond.cons) && is_static(&cond.alt),
+
+        Expr::Seq(seq) => seq.exprs.iter().all(|e| is_static(e)),
+
+        Expr::Tpl(tpl) => tpl.exprs.iter().all(|e| is_static(e)),
+
+        Expr::Paren(paren) => is_static(&paren.expr),
+
+        Expr::Lit(_) => true,
+
+        _ => false,
+    }
+}
+
 /// Unrolls an expression from parenthesis and sequences.
 /// This is usable for arrow functions like `() => ({})`,
 /// where we need to get the `{}` part.
