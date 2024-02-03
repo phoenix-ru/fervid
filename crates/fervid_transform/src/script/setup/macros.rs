@@ -348,12 +348,13 @@ pub fn postprocess_macros(
                 sfc_object_helper.props = Some(Box::new(new_props));
             };
         }
-        None => {
+        None if !new_props.is_empty() => {
             sfc_object_helper.props = Some(Box::new(Expr::Object(ObjectLit {
                 span: DUMMY_SP,
                 props: new_props,
             })))
         }
+        _ => {}
     }
 
     match sfc_object_helper.emits.take() {
@@ -394,12 +395,13 @@ pub fn postprocess_macros(
                 sfc_object_helper.emits = Some(Box::new(new_emits));
             };
         }
-        None => {
+        None if !new_emits.is_empty() => {
             sfc_object_helper.emits = Some(Box::new(Expr::Array(ArrayLit {
                 span: DUMMY_SP,
                 elems: new_emits,
             })))
         }
+        _ => {}
     }
 }
 
