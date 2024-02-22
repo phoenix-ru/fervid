@@ -349,12 +349,13 @@ impl<'s> VisitMut for TransformVisitor<'s> {
         // Inline logic is pretty complex
         // TODO Actual logic
         match binding_type {
-            BindingTypes::SetupLet => unref(n, span),
-            BindingTypes::SetupConst => {}
-            BindingTypes::SetupReactiveConst => {}
-            BindingTypes::SetupMaybeRef => unref(n, span),
+            BindingTypes::SetupLet | BindingTypes::SetupMaybeRef | BindingTypes::Imported => {
+                unref(n, span)
+            }
             BindingTypes::SetupRef => dot_value(n, span),
-            BindingTypes::LiteralConst => {}
+            BindingTypes::SetupConst
+            | BindingTypes::SetupReactiveConst
+            | BindingTypes::LiteralConst => {}
             _ => {}
         }
     }

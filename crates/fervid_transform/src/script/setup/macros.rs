@@ -263,7 +263,7 @@ pub fn transform_script_setup_macro_expr(
 
         valid_macro!(None)
     } else {
-        bail!();
+        TransformMacroResult::NotAMacro
     }
 }
 

@@ -2,7 +2,7 @@ use fxhash::FxHashMap as HashMap;
 use smallvec::SmallVec;
 use swc_core::ecma::ast::{Expr, Ident};
 
-use crate::{BuiltinType, FervidAtom, BindingTypes, TemplateGenerationMode, VueImportsSet};
+use crate::{BindingTypes, BuiltinType, FervidAtom, TemplateGenerationMode, VueImportsSet};
 
 /// A helper which encompasses all the logic related to bindings,
 /// such as their types, which of them were used, what components and directives
@@ -29,7 +29,7 @@ pub struct BindingsHelper {
     /// Identifiers used in the template and their respective binding types
     pub used_bindings: HashMap<FervidAtom, BindingTypes>,
     /// Internal Vue imports used by built-in components, directives and others
-    pub vue_imports: VueImportsSet
+    pub vue_imports: VueImportsSet,
 }
 
 /// A binding of a component which was found in the template
@@ -50,7 +50,7 @@ pub enum ComponentBinding {
     Unresolved,
 
     /// Component was resolved to be a Vue built-in
-    Builtin(BuiltinType)
+    Builtin(BuiltinType),
 }
 
 /// A binding of a directive which was found in the template
@@ -67,7 +67,7 @@ pub enum CustomDirectiveBinding {
 
     /// Custom directive was not resolved and would need to be resolved in runtime
     #[default]
-    Unresolved
+    Unresolved,
 }
 
 // Todo maybe use SmallVec?
@@ -85,7 +85,7 @@ pub struct OptionsApiBindings {
     pub name: Option<FervidAtom>,
     pub directives: Vec<FervidAtom>,
     /// `SetupBinding` is used to distinguish between `.vue` and other imports
-    pub imports: Vec<SetupBinding>
+    pub imports: Vec<SetupBinding>,
 }
 
 /// Identifier plus a binding type
