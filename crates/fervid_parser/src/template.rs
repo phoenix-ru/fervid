@@ -74,9 +74,9 @@ impl SfcParser<'_, '_, '_> {
             .unwrap_or_else(|| element.children);
 
         // For finer-grained `Span`s and components
-        // TODO spans
+        // TODO Add `tag_name_span` to `StartingTag`
         let raw_idx_start = element.span.lo.0 as usize;
-        let raw_idx_end = element.span.lo.0 as usize + element.tag_name.len();
+        let raw_idx_end = raw_idx_start + element.tag_name.len();
 
         // Use raw names for custom HTML elements.
         // Otherwise SWC renames `CustomComponent` to `customcomponent`
