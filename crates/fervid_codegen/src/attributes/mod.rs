@@ -671,7 +671,7 @@ mod tests {
         // @click
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
-                event: Some("click".into()),
+                event: Some("onClick".into()),
                 handler: None,
                 modifiers: vec![],
                 span: DUMMY_SP,
@@ -679,10 +679,10 @@ mod tests {
             r"{onClick:()=>{}}",
         );
 
-        // @multi-word-event
+        // @multi-word-event (gets transformed to `onMultiWordEvent`)
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
-                event: Some("multi-word-event".into()),
+                event: Some("onMultiWordEvent".into()),
                 handler: None,
                 modifiers: vec![],
                 span: DUMMY_SP,
@@ -692,7 +692,7 @@ mod tests {
 
         // @click="handleClick"
         test_out(
-            vec![v_on_attribute("click", "handleClick")],
+            vec![v_on_attribute("onClick", "handleClick")],
             r"{onClick:handleClick}",
         );
 
@@ -711,14 +711,14 @@ mod tests {
 
         // @click="() => console.log('hello')"
         test_out(
-            vec![v_on_attribute("click", "() => console.log('hello')")],
+            vec![v_on_attribute("onClick", "() => console.log('hello')")],
             r#"{onClick:()=>console.log("hello")}"#,
         );
 
         // @click="$event => handleClick($event, foo, bar)"
         test_out(
             vec![v_on_attribute(
-                "click",
+                "onClick",
                 "$event => handleClick($event, foo, bar)",
             )],
             r"{onClick:$event=>handleClick($event,foo,bar)}",
@@ -727,7 +727,7 @@ mod tests {
         // @click.stop.prevent.self
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
-                event: Some("click".into()),
+                event: Some("onClick".into()),
                 handler: None,
                 modifiers: vec!["stop".into(), "prevent".into(), "self".into()],
                 span: DUMMY_SP,
@@ -738,7 +738,7 @@ mod tests {
         // @click.stop="$event => handleClick($event, foo, bar)"
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
-                event: Some("click".into()),
+                event: Some("onClick".into()),
                 handler: Some(js("$event => handleClick($event, foo, bar)")),
                 modifiers: vec!["stop".into()],
                 span: DUMMY_SP,

@@ -282,5 +282,7 @@ mod tests {
         test!("update:modelValue", "on:update:modelValue");
         test!("vue:update", "onVnodeUpdate");
         test!("vue:updateFoo", "onVnodeUpdateFoo");
+        test!("click", "onClick");
+        test!("multi-word-event", "onMultiWordEvent");
     }
 }

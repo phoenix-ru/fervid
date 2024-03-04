@@ -394,7 +394,7 @@ mod tests {
                         regular_attribute("foo", "bar"),
                         v_bind_attribute("baz", "qux"),
                         v_bind_attribute("readonly", "true"),
-                        v_on_attribute("click", "handleClick"),
+                        v_on_attribute("onClick", "handleClick"),
                     ],
                     directives: None,
                 },
