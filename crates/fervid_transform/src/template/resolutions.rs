@@ -6,7 +6,7 @@ use swc_core::{
     ecma::ast::{Expr, Ident},
 };
 
-use super::{ast_transform::TemplateVisitor, expr_transform::BindingsHelperTransform};
+use super::{ast_transform::TemplateVisitor, expr_transform::BindingsHelperTransform, utils::{to_camel_case, to_pascal_case}};
 
 impl TemplateVisitor<'_> {
     /// Fuzzy-matches the component name to a binding name
@@ -19,10 +19,12 @@ impl TemplateVisitor<'_> {
         }
 
         // `component-name`s like that should be transformed to `ComponentName`s
-        let searched_pascal = to_pascal_case(tag_name);
+        let mut searched_pascal = String::with_capacity(tag_name.len());
+        to_pascal_case(tag_name, &mut searched_pascal);
 
         // and to `componentName`
-        let searched_camel = to_camel_case(tag_name);
+        let mut searched_camel = String::with_capacity(tag_name.len());
+        to_camel_case(tag_name, &mut searched_camel);
 
         let found = self
             .bindings_helper
@@ -79,7 +81,8 @@ impl TemplateVisitor<'_> {
         }
 
         // Directive bindings should always have a name in format `vCustomDirective` or `VCustomDirective`
-        let normalized = to_pascal_case(directive_name);
+        let mut normalized = String::with_capacity(directive_name.len());
+        to_pascal_case(directive_name, &mut normalized);
 
         let found = self
             .bindings_helper
@@ -115,49 +118,6 @@ impl TemplateVisitor<'_> {
             );
         }
     }
-}
-
-/// `foo-bar-baz` -> `FooBarBaz`
-#[inline]
-fn to_pascal_case(raw: &str) -> String {
-    let mut out = String::with_capacity(raw.len());
-    for word in raw.split('-') {
-        let first_char = word.chars().next();
-        if let Some(ch) = first_char {
-            // Uppercase the first char and append to buf
-            for ch_component in ch.to_uppercase() {
-                out.push(ch_component);
-            }
-
-            // Push the rest of the word
-            out.push_str(&word[ch.len_utf8()..]);
-        }
-    }
-    out
-}
-
-/// `foo-bar-baz` -> `fooBarBaz`
-#[inline]
-fn to_camel_case(raw: &str) -> String {
-    let mut out = String::with_capacity(raw.len());
-    for (idx, word) in raw.split('-').enumerate() {
-        if idx == 0 {
-            out.push_str(word);
-            continue;
-        }
-
-        let first_char = word.chars().next();
-        if let Some(ch) = first_char {
-            // Uppercase the first char and append to buf
-            for ch_component in ch.to_uppercase() {
-                out.push(ch_component);
-            }
-
-            // Push the rest of the word
-            out.push_str(&word[ch.len_utf8()..]);
-        }
-    }
-    out
 }
 
 #[cfg(test)]

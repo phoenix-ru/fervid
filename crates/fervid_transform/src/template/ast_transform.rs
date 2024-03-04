@@ -2,8 +2,7 @@ use fervid_core::{
     check_attribute_name, fervid_atom, is_from_default_slot, is_html_tag, AttributeOrBinding,
     BindingTypes, BindingsHelper, BuiltinType, Conditional, ConditionalNodeSequence, ElementKind,
     ElementNode, FervidAtom, Interpolation, Node, PatchFlags, SfcTemplateBlock, StartingTag,
-    StrOrExpr, TemplateGenerationMode, TemplateScope, VBindDirective, VOnDirective, VSlotDirective,
-    VUE_BUILTINS,
+    StrOrExpr, TemplateGenerationMode, TemplateScope, VBindDirective, VSlotDirective, VUE_BUILTINS,
 };
 use smallvec::SmallVec;
 use swc_core::{
@@ -459,39 +458,38 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                     }
                 }
 
-                AttributeOrBinding::VOn(VOnDirective { event, handler, .. }) => {
+                AttributeOrBinding::VOn(ref mut v_on) => {
                     // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L589C54-L589C71
                     // inline before-update hooks need to force block so that it is invoked
                     // before children
                     if has_children
-                        && matches!(event, Some(StrOrExpr::Str(s)) if s == "vue:before-update")
+                        && matches!(&v_on.event, Some(StrOrExpr::Str(s)) if s == "vue:before-update")
                     {
                         should_use_block = true;
                     }
 
+                    self.transform_v_on(v_on, scope_to_use);
+
                     // TODO Transform the event name beforehand (?) and make sure the condition is 100% the same
                     // https://github.com/vuejs/core/blob/f1068fc60ca511f68ff0aaedcc18b39124791d29/packages/compiler-core/src/transforms/transformElement.ts#L430
-                    if let Some(StrOrExpr::Str(evt_name)) = event {
+                    if let Some(StrOrExpr::Str(evt_name)) = v_on.event.as_ref() {
+                        let has_v_node = evt_name.starts_with("vue:");
+
+                        // TODO Adjust condition due to the latest transformation changes
                         if (!is_component
                             || matches!(element_kind, ElementKind::Builtin(BuiltinType::Component)))
                             && evt_name != "click"
                             && evt_name != "update:modelValue"
                             && evt_name != "update:model-value"
-                            && !evt_name.starts_with("vnode:")
+                            && !has_v_node
                         {
                             has_hydration_event_binding = true;
                         }
 
-                        if evt_name.starts_with("vnode:") {
-                            has_vnode_hook = true;
-                        }
+                        has_vnode_hook |= has_v_node;
                     } else {
                         // https://github.com/vuejs/core/blob/f1068fc60ca511f68ff0aaedcc18b39124791d29/packages/compiler-core/src/transforms/transformElement.ts#L605
                         has_dynamic_keys = true;
-                    }
-
-                    if let Some(handler) = handler {
-                        self.bindings_helper.transform_expr(handler, scope_to_use);
                     }
                 }
 

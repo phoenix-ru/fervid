@@ -6,16 +6,17 @@ use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
         ast::{
-            ArrowExpr, AssignExpr, AssignOp, BindingIdent, BlockStmtOrExpr, CallExpr, Callee,
-            CondExpr, Expr, ExprOrSpread, Ident, KeyValueProp, Lit, MemberExpr, MemberProp, Null,
-            Pat, PatOrExpr, Prop, PropName, PropOrSpread,
+            AssignExpr, AssignOp, CallExpr, Callee, CondExpr, Expr, ExprOrSpread, Ident,
+            KeyValueProp, Lit, MemberExpr, MemberProp, Null, Pat, PatOrExpr, Prop, PropName,
+            PropOrSpread,
         },
-        atoms::JsWord,
         visit::{VisitMut, VisitMutWith},
     },
 };
 
 use crate::{script::common::extract_variables_from_pat, template::js_builtins::JS_BUILTINS};
+
+use super::utils::wrap_in_event_arrow;
 
 struct TransformVisitor<'s> {
     current_scope: u32,
@@ -417,7 +418,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
 /// `data()` variable `foo` in non-inline compilation becomes `$data.foo`.\
 /// `setup()` ref variable `bar` in non-inline compilation becomes `$setup.bar`,
 /// but in the inline compilation it remains the same.
-pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<JsWord> {
+pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<FervidAtom> {
     // For inline mode, options API variables become prefixed
     if is_inline {
         return match binding_type {
@@ -504,29 +505,6 @@ fn generate_is_ref_check_assignment(
         test: condition,
         cons: positive_assign,
         alt: negative_assign,
-    }))
-}
-
-/// Wraps `expr` to `$event => (expr)`
-#[inline]
-fn wrap_in_event_arrow(expr: Box<Expr>) -> Box<Expr> {
-    let evt_param = Pat::Ident(BindingIdent {
-        id: Ident {
-            span: DUMMY_SP,
-            sym: FervidAtom::from("$event"),
-            optional: false,
-        },
-        type_ann: None,
-    });
-
-    Box::new(Expr::Arrow(ArrowExpr {
-        span: DUMMY_SP,
-        params: vec![evt_param],
-        body: Box::new(BlockStmtOrExpr::Expr(expr)),
-        is_async: false,
-        is_generator: false,
-        type_params: None,
-        return_type: None,
     }))
 }
 

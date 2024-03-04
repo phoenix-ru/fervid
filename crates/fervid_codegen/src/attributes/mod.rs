@@ -4,7 +4,7 @@ use fervid_core::{
 };
 use regex::Regex;
 use swc_core::{
-    common::{Span, Spanned},
+    common::{Span, Spanned, DUMMY_SP},
     ecma::ast::{
         ArrayLit, ArrowExpr, BinExpr, BinaryOp, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
         ComputedPropName, Expr, ExprOrSpread, Ident, KeyValueProp, Lit, ObjectLit, Prop, PropName,
@@ -12,10 +12,7 @@ use swc_core::{
     },
 };
 
-use crate::{
-    context::CodegenContext,
-    utils::{str_to_propname, to_pascalcase},
-};
+use crate::{context::CodegenContext, utils::str_to_propname};
 
 lazy_static! {
     static ref CSS_RE: Regex =
@@ -199,18 +196,10 @@ impl CodegenContext {
 
                     // Transform or default to () => {}
                     // The patch flag does not apply to v-on
-                    let (transformed, _was_transformed) = handler
-                        .as_ref()
-                        .and_then(|handler| {
-                            let handler = handler.to_owned();
-                            // let was_transformed = transform_scoped(
-                            //     &mut handler,
-                            //     &self.scope_helper,
-                            //     template_scope_id,
-                            // );
-                            Some((handler, true /* TODO */))
-                        })
-                        .unwrap_or_else(|| (Box::new(empty_arrow_expr(span)), false));
+                    // TODO Empty `v-on` should be handled using `mergeProps` and `toHandlers`
+                    let handler = handler
+                        .to_owned()
+                        .unwrap_or_else(|| Box::new(empty_arrow_expr(span)));
 
                     // To generate as an array of `["modifier1", "modifier2"]`
                     let modifiers: Vec<Option<ExprOrSpread>> = modifiers
@@ -241,7 +230,7 @@ impl CodegenContext {
                             }))),
                             args: vec![
                                 ExprOrSpread {
-                                    expr: transformed,
+                                    expr: handler,
                                     spread: None,
                                 },
                                 ExprOrSpread {
@@ -256,7 +245,7 @@ impl CodegenContext {
                         }))
                     } else {
                         // No modifiers, leave expression the same
-                        transformed
+                        handler
                     };
 
                     // TODO Cache
@@ -275,17 +264,30 @@ impl CodegenContext {
                     //     [_toHandlerKey(_ctx.dynamic2)]: _cache[5] || (_cache[5] = () => {})
                     // }, _toHandlers(whatever, true))
 
-                    // IDEA: Do the generation here, and put resulting `Expr`s in the return struct
+                    // IDEA: Do the transformation beforehand, and put resulting `Expr`s in the return struct
 
-                    let event_name = event_name_to_handler(event);
+                    match event {
+                        StrOrExpr::Str(event_name_str) => {
+                            // e.g. `onClick: _ctx.handleClick` or `onClick: _withModifiers(() => {}, ["stop"])
+                            out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
+                                KeyValueProp {
+                                    key: str_to_propname(&event_name_str, span),
+                                    value: handler_expr,
+                                },
+                            ))));
+                        }
 
-                    // e.g. `onClick: _ctx.handleClick` or `onClick: _withModifiers(() => {}, ["stop"])
-                    out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
-                        KeyValueProp {
-                            key: str_to_propname(&event_name, span),
-                            value: handler_expr,
-                        },
-                    ))));
+                        // TODO Instead of pushing to `out`, signify that `mergeProps` and `toHandlerKey` are needed
+                        StrOrExpr::Expr(event_name_expr) => {
+                            out.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                                key: PropName::Computed(ComputedPropName {
+                                    span: DUMMY_SP,
+                                    expr: event_name_expr.to_owned(),
+                                }),
+                                value: handler_expr,
+                            }))));
+                        }
+                    }
                 }
 
                 _ => unreachable!(),
@@ -551,22 +553,6 @@ fn generate_regular_style(style: &str, span: Span) -> ObjectLit {
     }
 
     result
-}
-
-/// Converts event names with dashes to camelcase identifiers,
-/// e.g. `click` -> `onClick`, `state-changed` -> `onStateChanged`
-fn event_name_to_handler(event_name: &StrOrExpr) -> FervidAtom {
-    let StrOrExpr::Str(event_name) = event_name else {
-        todo!("event_name_to_handler is not yet implemented for dynamic events")
-    };
-
-    let mut result = String::with_capacity(event_name.len() + 2);
-    result.push_str("on");
-
-    // ignore error, idk what to do if writing to String fails
-    let _ = to_pascalcase(event_name, &mut result);
-
-    FervidAtom::from(result)
 }
 
 /// Generates () => {}
