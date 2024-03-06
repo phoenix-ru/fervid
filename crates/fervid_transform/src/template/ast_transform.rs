@@ -742,9 +742,9 @@ impl VisitMut for Node {
 #[cfg(test)]
 mod tests {
     use fervid_core::{ElementKind, Node, PatchHints, VForDirective, VueDirectives};
-    use swc_core::{common::DUMMY_SP, ecma::ast::Expr};
+    use swc_core::common::DUMMY_SP;
 
-    use crate::test_utils::{parser::parse_javascript_expr, to_str};
+    use crate::test_utils::{js, to_str};
 
     use super::*;
 
@@ -1435,9 +1435,5 @@ mod tests {
                 ..
             } if tag_name == "h3"
         ));
-    }
-
-    fn js(raw: &str) -> Box<Expr> {
-        parse_javascript_expr(raw, 0, Default::default()).unwrap().0
     }
 }

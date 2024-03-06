@@ -7,8 +7,8 @@ use swc_core::{
     ecma::{
         ast::{
             AssignExpr, AssignOp, CallExpr, Callee, CondExpr, Expr, ExprOrSpread, Ident,
-            KeyValueProp, Lit, MemberExpr, MemberProp, Null, Pat, PatOrExpr, Prop, PropName,
-            PropOrSpread,
+            KeyValueProp, Lit, MemberExpr, MemberProp, Null, ObjectLit, Pat, PatOrExpr, Prop,
+            PropName, PropOrSpread,
         },
         visit::{VisitMut, VisitMutWith},
     },
@@ -231,6 +231,23 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                         is_reassignable,
                     );
                 } else {
+                    // LHS may be a `Pat::Ident`, e.g. in `foo = 0`
+                    // In this case we need to use an `Expr::Ident`.
+                    // I intentionally use `match` in case there are other arms that need same logic
+                    match assign_expr.left {
+                        PatOrExpr::Pat(ref mut pat) => match **pat {
+                            Pat::Ident(ref ident) => {
+                                *pat =
+                                    Box::new(Pat::Expr(Box::new(Expr::Ident(ident.id.to_owned()))));
+                            }
+
+                            _ => {}
+                        },
+
+                        _ => {}
+                    }
+
+                    // Process as usual
                     assign_expr.left.visit_mut_with(self);
                 }
 
@@ -249,6 +266,26 @@ impl<'s> VisitMut for TransformVisitor<'s> {
 
                 // Transform the arrow body
                 arrow_expr.body.visit_mut_with(self);
+
+                // Clear the temporary variables
+                self.local_vars.drain(old_len..);
+
+                return;
+            }
+
+            // Regular functions need params collection as well
+            Expr::Fn(fn_expr) => {
+                let old_len = self.local_vars.len();
+                let func = &mut fn_expr.function;
+
+                // Add the temporary variables
+                self.local_vars.reserve(func.params.len());
+                for param in func.params.iter() {
+                    extract_variables_from_pat(&param.pat, &mut self.local_vars, true);
+                }
+
+                // Transform the function body
+                func.body.visit_mut_with(self);
 
                 // Clear the temporary variables
                 self.local_vars.drain(old_len..);
@@ -374,7 +411,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
     //     }
     // }
 
-    fn visit_mut_member_expr(&mut self, n: &mut swc_core::ecma::ast::MemberExpr) {
+    fn visit_mut_member_expr(&mut self, n: &mut MemberExpr) {
         if n.obj.is_ident() {
             n.obj.visit_mut_with(self)
         } else {
@@ -382,7 +419,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
         }
     }
 
-    fn visit_mut_object_lit(&mut self, n: &mut swc_core::ecma::ast::ObjectLit) {
+    fn visit_mut_object_lit(&mut self, n: &mut ObjectLit) {
         for prop in n.props.iter_mut() {
             match prop {
                 PropOrSpread::Prop(ref mut prop) => {

@@ -1,4 +1,4 @@
-use fervid_core::{fervid_atom, FervidAtom, StrOrExpr, VOnDirective};
+use fervid_core::{fervid_atom, BindingTypes, FervidAtom, StrOrExpr, VOnDirective};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
@@ -32,19 +32,21 @@ impl TemplateVisitor<'_> {
             // 1. Check the handler shape
             let mut is_member_or_paren = false;
             let mut is_non_null_or_opt_chain = false;
-            let mut is_unresolved_ident = false;
+            let mut is_non_const_ident = false;
             let mut needs_event = false;
 
             match handler.as_ref() {
                 // This is always as-is
                 Expr::Fn(_) | Expr::Arrow(_) => {}
 
-                // This is either as-is (if known) or `(...args) => _ctx.smth && _ctx.smth(...args)`
+                // This is either as-is (if const) or `(...args) => _ctx.smth && _ctx.smth(...args)`
                 Expr::Ident(ident) => {
-                    is_unresolved_ident = matches!(
+                    is_non_const_ident = !matches!(
                         self.bindings_helper
                             .get_var_binding_type(scope_to_use, &ident.sym),
-                        fervid_core::BindingTypes::Unresolved
+                        BindingTypes::SetupConst
+                            | BindingTypes::LiteralConst
+                            | BindingTypes::SetupReactiveConst
                     );
                 }
 
@@ -107,7 +109,7 @@ impl TemplateVisitor<'_> {
                 .transform_expr(&mut handler, scope_to_use);
 
             // 4. Wrap in `(...args)` arrow if needed
-            if is_unresolved_ident || is_member_or_paren || is_non_null_or_opt_chain {
+            if is_non_const_ident || is_member_or_paren || is_non_null_or_opt_chain {
                 handler = wrap_in_args_arrow(handler, !is_non_null_or_opt_chain);
             }
 
@@ -243,7 +245,11 @@ fn wrap_in_args_arrow(mut expr: Box<Expr>, needs_check: bool) -> Box<Expr> {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::fervid_atom;
+    use fervid_core::{
+        fervid_atom, BindingTypes, BindingsHelper, SetupBinding, TemplateGenerationMode,
+    };
+
+    use crate::test_utils::{to_str, ts};
 
     use super::*;
 
@@ -284,5 +290,153 @@ mod tests {
         test!("vue:updateFoo", "onVnodeUpdateFoo");
         test!("click", "onClick");
         test!("multi-word-event", "onMultiWordEvent");
+    }
+
+    #[test]
+    fn it_transforms_handler() {
+        // `const foo = ref()`
+        // `function func() {}`
+        let mut bindings_helper = BindingsHelper::default();
+        bindings_helper
+            .setup_bindings
+            .push(SetupBinding(fervid_atom!("foo"), BindingTypes::SetupRef));
+        bindings_helper
+            .setup_bindings
+            .push(SetupBinding(fervid_atom!("func"), BindingTypes::SetupConst));
+        bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
+
+        let mut template_visitor = TemplateVisitor {
+            bindings_helper: &mut bindings_helper,
+            current_scope: 0,
+            v_for_scope: false,
+        };
+
+        // @evt="$in"
+        macro_rules! test {
+            ($in: literal, $expected: literal) => {
+                let mut v_on = VOnDirective {
+                    event: Some("evt".into()),
+                    handler: Some(ts($in)),
+                    modifiers: vec![],
+                    span: DUMMY_SP,
+                };
+                template_visitor.transform_v_on(&mut v_on, 0);
+                assert_eq!($expected, to_str(&v_on.handler.expect("should exist")));
+            };
+        }
+
+        // Explicit and known ref
+
+        // Arrow
+        test!("() => foo = 2", "()=>foo.value=2");
+        test!("$event => foo = 2", "$event=>foo.value=2");
+        test!("$event => foo = $event", "$event=>foo.value=$event");
+        test!("v => foo = v", "v=>foo.value=v");
+        test!("(v1, v2) => foo += v1 * v2", "(v1,v2)=>foo.value+=v1*v2");
+
+        // Function
+        test!("function () { foo = 2 }", "function(){foo.value=2;}");
+        test!(
+            "function assignFoo () { foo = 2 }",
+            "function assignFoo(){foo.value=2;}"
+        );
+        test!(
+            "function ($event) { foo = 2 }",
+            "function($event){foo.value=2;}"
+        );
+        test!(
+            "function ($event) { foo = $event }",
+            "function($event){foo.value=$event;}"
+        );
+        test!("function (v) { foo = v }", "function(v){foo.value=v;}");
+        test!(
+            "function (v1, v2) { foo += v1 * v2 }",
+            "function(v1,v2){foo.value+=v1*v2;}"
+        );
+
+        // Implicit $event
+        test!("foo = 2", "$event=>foo.value=2");
+        test!("foo = 2", "$event=>foo.value=2");
+        test!("foo = $event", "$event=>foo.value=$event");
+
+        // Different handler expressions:
+
+        // resolved binding
+        test!("func", "func");
+
+        // unresolved binding
+        test!("bar", "(...args)=>_ctx.bar&&_ctx.bar(...args)");
+
+        // member expr
+        test!(
+            "foo.bar",
+            "(...args)=>foo.value.bar&&foo.value.bar(...args)"
+        );
+        test!("bar.baz", "(...args)=>_ctx.bar.baz&&_ctx.bar.baz(...args)");
+
+        // paren expr
+        test!("(foo)", "(...args)=>(foo.value)&&(foo.value)(...args)");
+        test!("(bar)", "(...args)=>(_ctx.bar)&&(_ctx.bar)(...args)");
+
+        // ts non-null
+        test!("foo!", "(...args)=>foo.value!(...args)");
+        test!("bar!", "(...args)=>_ctx.bar!(...args)");
+
+        // optional chaining
+        test!("foo?.bar", "(...args)=>foo.value?.bar(...args)");
+        test!("bar?.baz", "(...args)=>_ctx.bar?.baz(...args)");
+
+        // call
+        test!("func()", "$event=>func()");
+        test!("func($event)", "$event=>func($event)");
+        test!("foo($event)", "$event=>foo.value($event)");
+
+        // array
+        test!("[foo, bar]", "$event=>[foo.value,_ctx.bar]");
+
+        // this
+        test!("this", "$event=>this");
+
+        // object
+        // FIXME this is a bug in SWC stringifier (it should add parens):
+        // test!("{}", "$event=>({})");
+        test!("{}", "$event=>{}");
+
+        // unary
+        test!("!foo", "$event=>!foo.value");
+
+        // binary
+        test!("foo || bar", "$event=>foo.value||_ctx.bar");
+
+        // update
+        test!("foo++", "$event=>foo.value++");
+
+        // assign
+        test!("foo += bar", "$event=>foo.value+=_ctx.bar");
+
+        // new
+        test!("new func", "$event=>new func");
+        test!("new foo", "$event=>new foo.value");
+        test!("new bar", "$event=>new _ctx.bar");
+
+        // seq
+        test!("foo, bar", "$event=>foo.value,_ctx.bar");
+
+        // condition
+        test!("foo ? bar : baz", "$event=>foo.value?_ctx.bar:_ctx.baz");
+
+        // literal
+        test!("123.45", "$event=>123.45");
+        test!("'foo'", "$event=>\"foo\"");
+        test!("true", "$event=>true");
+
+        // template
+        test!("`bar ${baz}`", "$event=>`bar ${_ctx.baz}`");
+
+        // tagged template
+        test!("foo`bar ${baz}`", "$event=>foo.value`bar ${_ctx.baz}`");
+
+        // class
+        test!("class FooBar {}", "$event=>class FooBar{}");
     }
 }
