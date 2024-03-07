@@ -6,9 +6,9 @@ use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
         ast::{
-            AssignExpr, AssignOp, CallExpr, Callee, CondExpr, Expr, ExprOrSpread, Ident,
-            KeyValueProp, Lit, MemberExpr, MemberProp, Null, ObjectLit, Pat, PatOrExpr, Prop,
-            PropName, PropOrSpread,
+            AssignExpr, AssignOp, BlockStmt, CallExpr, Callee, CondExpr, Decl, Expr, ExprOrSpread,
+            Ident, KeyValueProp, Lit, MemberExpr, MemberProp, Null, ObjectLit, Pat, PatOrExpr,
+            Prop, PropName, PropOrSpread, Stmt, UpdateExpr, UpdateOp,
         },
         visit::{VisitMut, VisitMutWith},
     },
@@ -72,8 +72,11 @@ impl BindingsHelperTransform for BindingsHelper {
             sym: FervidAtom::from("$event"),
             optional: false,
         }));
-        let mut handler =
-            wrap_in_event_arrow(wrap_in_assignment(v_model.value.to_owned(), event_expr));
+        let mut handler = wrap_in_event_arrow(wrap_in_assignment(
+            v_model.value.to_owned(),
+            event_expr,
+            AssignOp::Assign,
+        ));
 
         // 2. Transform handler
         self.transform_expr(&mut handler, scope_to_use);
@@ -104,6 +107,7 @@ impl BindingsHelperTransform for BindingsHelper {
 
         // TODO Check that SetupConst or SetupReactiveConst are not used as a `v-model` value. Report hard error in this case.
         // TODO Check in general in all cases
+        // DOCTEXT: Disallow `SetupConst` or `SetupReactiveConst` to be used as a `v-model` value or as an assignment target.
     }
 
     fn get_var_binding_type(&mut self, starting_scope: u32, variable: &FervidAtom) -> BindingTypes {
@@ -227,6 +231,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     *n = *generate_is_ref_check_assignment(
                         ident,
                         &assign_expr.right,
+                        assign_expr.op,
                         self.bindings_helper,
                         is_reassignable,
                     );
@@ -290,6 +295,27 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                 // Clear the temporary variables
                 self.local_vars.drain(old_len..);
 
+                return;
+            }
+
+            // Update expression, `SetupLet` is a special case here
+            Expr::Update(update_expr) => {
+                if let Expr::Ident(ref ident) = *update_expr.arg {
+                    if let BindingTypes::SetupLet = self
+                        .bindings_helper
+                        .get_var_binding_type(self.current_scope, &ident.sym)
+                    {
+                        *n = generate_is_ref_check_update(
+                            &ident,
+                            update_expr.op,
+                            update_expr.prefix,
+                            self.bindings_helper,
+                        );
+                        return;
+                    }
+                }
+
+                n.visit_mut_children_with(self);
                 return;
             }
 
@@ -447,6 +473,43 @@ impl<'s> VisitMut for TransformVisitor<'s> {
             }
         }
     }
+
+    // Visit the block as with respect to the variables
+    fn visit_mut_block_stmt(&mut self, block_stmt: &mut BlockStmt) {
+        // All variables will be treated as block scope
+        let old_len = self.local_vars.len();
+
+        for stmt in block_stmt.stmts.iter_mut() {
+            // Add the temporary variables
+            if let Stmt::Decl(decl) = stmt {
+                match decl {
+                    Decl::Class(cls) => self.local_vars.push(SetupBinding(
+                        cls.ident.sym.to_owned(),
+                        BindingTypes::TemplateLocal,
+                    )),
+                    Decl::Fn(fn_decl) => self.local_vars.push(SetupBinding(
+                        fn_decl.ident.sym.to_owned(),
+                        BindingTypes::TemplateLocal,
+                    )),
+                    Decl::Var(var_decl) => {
+                        for var_decl_it in var_decl.decls.iter() {
+                            extract_variables_from_pat(
+                                &var_decl_it.name,
+                                &mut self.local_vars,
+                                true,
+                            );
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            stmt.visit_mut_with(self);
+        }
+
+        // Clear the temporary variables
+        self.local_vars.drain(old_len..);
+    }
 }
 
 /// Gets the variable prefix depending on if we are compiling the template in inline mode.
@@ -491,6 +554,7 @@ pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<Fervid
 fn generate_is_ref_check_assignment(
     lhs_ident: &Ident,
     rhs_expr: &Expr,
+    op: AssignOp,
     bindings_helper: &mut BindingsHelper,
     is_reassignable: bool,
 ) -> Box<Expr> {
@@ -528,11 +592,11 @@ fn generate_is_ref_check_assignment(
     }));
 
     // `ident.value = rhs_expr`
-    let positive_assign = wrap_in_assignment(ident_dot_value, Box::new(rhs_expr.to_owned()));
+    let positive_assign = wrap_in_assignment(ident_dot_value, Box::new(rhs_expr.to_owned()), op);
 
     // `ident = rhs_expr` or `null`
     let negative_assign = if is_reassignable {
-        wrap_in_assignment(ident_expr, Box::new(rhs_expr.to_owned()))
+        wrap_in_assignment(ident_expr, Box::new(rhs_expr.to_owned()), op)
     } else {
         Box::new(Expr::Lit(Lit::Null(Null { span: DUMMY_SP })))
     };
@@ -545,12 +609,76 @@ fn generate_is_ref_check_assignment(
     }))
 }
 
+/// Generates `_isRef(ident) ? ident.value++ : ident++`
+fn generate_is_ref_check_update(
+    ident: &Ident,
+    op: UpdateOp,
+    prefix: bool,
+    bindings_helper: &mut BindingsHelper,
+) -> Expr {
+    // Get `isRef` helper
+    let is_ref_ident = VueImports::IsRef.as_atom();
+    bindings_helper.vue_imports |= VueImports::IsRef;
+
+    // `ident` expression
+    let ident_expr = Box::new(Expr::Ident(ident.to_owned()));
+
+    // `isRef(ident)`
+    let condition = Box::new(Expr::Call(CallExpr {
+        span: DUMMY_SP,
+        callee: Callee::Expr(Box::new(Expr::Ident(Ident {
+            span: DUMMY_SP,
+            sym: is_ref_ident,
+            optional: false,
+        }))),
+        args: vec![ExprOrSpread {
+            spread: None,
+            expr: ident_expr.to_owned(),
+        }],
+        type_args: None,
+    }));
+
+    // `ident.value`
+    let ident_dot_value = Box::new(Expr::Member(MemberExpr {
+        span: DUMMY_SP,
+        obj: ident_expr.to_owned(),
+        prop: MemberProp::Ident(Ident {
+            span: DUMMY_SP,
+            sym: FervidAtom::from("value"),
+            optional: false,
+        }),
+    }));
+
+    // `ident.value++`
+    let positive_update = Box::new(Expr::Update(UpdateExpr {
+        span: DUMMY_SP,
+        op,
+        prefix,
+        arg: ident_dot_value,
+    }));
+
+    // `ident++`
+    let negative_update = Box::new(Expr::Update(UpdateExpr {
+        span: DUMMY_SP,
+        op,
+        prefix,
+        arg: ident_expr,
+    }));
+
+    Expr::Cond(CondExpr {
+        span: DUMMY_SP,
+        test: condition,
+        cons: positive_update,
+        alt: negative_update,
+    })
+}
+
 /// Wraps `expr` to `expr = $event`
 #[inline]
-fn wrap_in_assignment(expr: Box<Expr>, rhs_expr: Box<Expr>) -> Box<Expr> {
+fn wrap_in_assignment(expr: Box<Expr>, rhs_expr: Box<Expr>, op: AssignOp) -> Box<Expr> {
     Box::new(Expr::Assign(AssignExpr {
         span: DUMMY_SP,
-        op: AssignOp::Assign,
+        op,
         left: PatOrExpr::Expr(expr),
         right: rhs_expr,
     }))

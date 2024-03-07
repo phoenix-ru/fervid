@@ -292,18 +292,28 @@ mod tests {
         test!("multi-word-event", "onMultiWordEvent");
     }
 
+    // @evt="$in"
+    macro_rules! test_with {
+        ($visitor: ident, $in: literal, $expected: literal) => {
+            let mut v_on = VOnDirective {
+                event: Some("evt".into()),
+                handler: Some(ts($in)),
+                modifiers: vec![],
+                span: DUMMY_SP,
+            };
+            $visitor.transform_v_on(&mut v_on, 0);
+            assert_eq!($expected, to_str(&v_on.handler.expect("should exist")));
+        };
+    }
+
     #[test]
     fn it_transforms_handler() {
         // `const foo = ref()`
         // `function func() {}`
-        let mut bindings_helper = BindingsHelper::default();
-        bindings_helper
-            .setup_bindings
-            .push(SetupBinding(fervid_atom!("foo"), BindingTypes::SetupRef));
-        bindings_helper
-            .setup_bindings
-            .push(SetupBinding(fervid_atom!("func"), BindingTypes::SetupConst));
-        bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
+        let mut bindings_helper = helper(vec![
+            SetupBinding(fervid_atom!("foo"), BindingTypes::SetupRef),
+            SetupBinding(fervid_atom!("func"), BindingTypes::SetupConst),
+        ]);
 
         let mut template_visitor = TemplateVisitor {
             bindings_helper: &mut bindings_helper,
@@ -311,17 +321,9 @@ mod tests {
             v_for_scope: false,
         };
 
-        // @evt="$in"
         macro_rules! test {
             ($in: literal, $expected: literal) => {
-                let mut v_on = VOnDirective {
-                    event: Some("evt".into()),
-                    handler: Some(ts($in)),
-                    modifiers: vec![],
-                    span: DUMMY_SP,
-                };
-                template_visitor.transform_v_on(&mut v_on, 0);
-                assert_eq!($expected, to_str(&v_on.handler.expect("should exist")));
+                test_with!(template_visitor, $in, $expected)
             };
         }
 
@@ -438,5 +440,193 @@ mod tests {
 
         // class
         test!("class FooBar {}", "$event=>class FooBar{}");
+    }
+
+    // https://github.com/vuejs/core/blob/fef2acb2049fce3407dff17fe8af1836b97dfd73/packages/compiler-sfc/__tests__/compileScript.spec.ts#L495-L543
+    #[test]
+    fn template_assignment_expression_codegen() {
+        // ```ts
+        // const count = ref(0)
+        // const maybe = foo()
+        // let lett = 1
+        // let v = ref(1)
+        // ```
+        let mut bindings_helper = helper(vec![
+            SetupBinding(fervid_atom!("count"), BindingTypes::SetupRef),
+            SetupBinding(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
+            SetupBinding(fervid_atom!("lett"), BindingTypes::SetupLet),
+            SetupBinding(fervid_atom!("v"), BindingTypes::SetupLet),
+        ]);
+
+        let mut template_visitor = TemplateVisitor {
+            bindings_helper: &mut bindings_helper,
+            current_scope: 0,
+            v_for_scope: false,
+        };
+
+        macro_rules! test {
+            ($in: literal, $expected: literal) => {
+                test_with!(template_visitor, $in, $expected)
+            };
+        }
+
+        // <div @click="count = 1"/>
+        test!("count = 1", "$event=>count.value=1");
+
+        // <div @click="maybe = count"/>
+        test!(
+            "maybe = count",
+            "$event=>_isRef(maybe)?maybe.value=count.value:null"
+        );
+
+        // <div @click="lett = count"/>
+        test!(
+            "lett = count",
+            "$event=>_isRef(lett)?lett.value=count.value:lett=count.value"
+        );
+
+        // <div @click="v += 1"/>
+        test!("v += 1", "$event=>_isRef(v)?v.value+=1:v+=1");
+
+        // <div @click="v -= 1"/>
+        test!("v -= 1", "$event=>_isRef(v)?v.value-=1:v-=1");
+
+        // <div @click="() => {
+        //     let a = '' + lett
+        //     v = a
+        // }"/>
+        test!(
+            "() => {
+                let a = '' + lett
+                v = a
+            }",
+            r#"()=>{let a=""+_unref(lett);_isRef(v)?v.value=a:v=a;}"#
+        );
+
+        // <div @click="() => {
+        //     // nested scopes
+        //     (()=>{
+        //     let x = a
+        //     (()=>{
+        //         let z = x
+        //         let z2 = z
+        //     })
+        //     let lz = z
+        //     })
+        //     v = a
+        // }"/>
+        test!(
+            "() => {
+                // nested scopes
+                (()=>{
+                    let x = a
+                    (()=>{
+                        let z = x
+                        let z2 = z
+                    })
+                    let lz = z
+                })
+                v = a
+            }",
+            "()=>{(()=>{let x=_ctx.a(()=>{let z=x;let z2=z;});let lz=_ctx.z;});_isRef(v)?v.value=_ctx.a:v=_ctx.a;}"
+        );
+    }
+
+    // https://github.com/vuejs/core/blob/fef2acb2049fce3407dff17fe8af1836b97dfd73/packages/compiler-sfc/__tests__/compileScript.spec.ts#L545-L574
+    #[test]
+    fn template_update_expression_codegen() {
+        // ```ts
+        // const count = ref(0)
+        // const maybe = foo()
+        // let lett = 1
+        // ```
+        let mut bindings_helper = helper(vec![
+            SetupBinding(fervid_atom!("count"), BindingTypes::SetupRef),
+            SetupBinding(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
+            SetupBinding(fervid_atom!("lett"), BindingTypes::SetupLet),
+        ]);
+
+        let mut template_visitor = TemplateVisitor {
+            bindings_helper: &mut bindings_helper,
+            current_scope: 0,
+            v_for_scope: false,
+        };
+
+        macro_rules! test {
+            ($in: literal, $expected: literal) => {
+                test_with!(template_visitor, $in, $expected)
+            };
+        }
+
+        // <div @click="count++"/>
+        test!("count++", "$event=>count.value++");
+
+        // <div @click="--count"/>
+        test!("--count", "$event=>--count.value");
+
+        // BEGIN
+        // SetupMaybeRef differs from the spec here:
+        // spec compiles to `maybe.value++`
+        // but I think `_unref` is also fine here (and probably safer also)
+
+        // <div @click="maybe++"/>
+        test!("maybe++", "$event=>_unref(maybe)++");
+
+        // <div @click="--maybe"/>
+        test!("--maybe", "$event=>--_unref(maybe)");
+
+        // END
+
+        // <div @click="lett++"/>
+        test!("lett++", "$event=>_isRef(lett)?lett.value++:lett++");
+
+        // <div @click="--lett"/>
+        test!("--lett", "$event=>_isRef(lett)?--lett.value:--lett");
+    }
+
+    // https://github.com/vuejs/core/blob/fef2acb2049fce3407dff17fe8af1836b97dfd73/packages/compiler-sfc/__tests__/compileScript.spec.ts#L576-L600
+    #[test]
+    fn template_destructure_assignment_codegen() {
+        // ```ts
+        // const val = {}
+        // const count = ref(0)
+        // const maybe = foo()
+        // ```
+        let mut bindings_helper = helper(vec![
+            SetupBinding(fervid_atom!("val"), BindingTypes::SetupConst),
+            SetupBinding(fervid_atom!("count"), BindingTypes::SetupRef),
+            SetupBinding(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
+        ]);
+
+        let mut template_visitor = TemplateVisitor {
+            bindings_helper: &mut bindings_helper,
+            current_scope: 0,
+            v_for_scope: false,
+        };
+
+        macro_rules! test {
+            ($in: literal, $expected: literal) => {
+                test_with!(template_visitor, $in, $expected)
+            };
+        }
+
+        // TODO Implement the actual tests and get rid of the dummy
+        test!("count = val", "$event=>count.value=val");
+
+        // <div @click="({ count } = val)"/>
+        // test!("({ count } = val)", "({ count: count.value } = val)");
+
+        // <div @click="[maybe] = val"/>
+        // test!("[maybe] = val", "$event=>[maybe.value]=val");
+
+        // <div @click="({ lett } = val)"/>
+        // test!("({ lett } = val)", "{ lett: lett } = val");
+    }
+
+    fn helper(bindings: Vec<SetupBinding>) -> BindingsHelper {
+        let mut bindings_helper = BindingsHelper::default();
+        bindings_helper.setup_bindings.extend(bindings);
+        bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
+        bindings_helper
     }
 }
