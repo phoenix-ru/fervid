@@ -564,18 +564,11 @@ mod tests {
         // <div @click="--count"/>
         test!("--count", "$event=>--count.value");
 
-        // BEGIN
-        // SetupMaybeRef differs from the spec here:
-        // spec compiles to `maybe.value++`
-        // but I think `_unref` is also fine here (and probably safer also)
-
         // <div @click="maybe++"/>
-        test!("maybe++", "$event=>_unref(maybe)++");
+        test!("maybe++", "$event=>maybe.value++");
 
         // <div @click="--maybe"/>
-        test!("--maybe", "$event=>--_unref(maybe)");
-
-        // END
+        test!("--maybe", "$event=>--maybe.value");
 
         // <div @click="lett++"/>
         test!("lett++", "$event=>_isRef(lett)?lett.value++:lett++");

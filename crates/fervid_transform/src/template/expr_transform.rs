@@ -25,6 +25,10 @@ struct TransformVisitor<'s> {
     is_inline: bool,
     // `SetupBinding` instead of `FervidAtom` to easier interface with `extract_variables_from_pat`
     local_vars: Vec<SetupBinding>,
+    // https://github.com/vuejs/core/blob/9e8ac0c367522922b5d8442b5a3cc508666978af/packages/compiler-core/src/transforms/transformExpression.ts#L126-L135
+    // For transforming `x = y` where LHS is an identifier
+    update_arg: Option<(UpdateOp, bool)>,
+    should_consume_update_expr: bool,
 }
 
 pub trait BindingsHelperTransform {
@@ -51,6 +55,8 @@ impl BindingsHelperTransform for BindingsHelper {
             has_js_bindings: false,
             is_inline,
             local_vars: Vec::new(),
+            update_arg: None,
+            should_consume_update_expr: false,
         };
         expr.visit_mut_with(&mut visitor);
 
@@ -300,22 +306,20 @@ impl<'s> VisitMut for TransformVisitor<'s> {
 
             // Update expression, `SetupLet` is a special case here
             Expr::Update(update_expr) => {
-                if let Expr::Ident(ref ident) = *update_expr.arg {
-                    if let BindingTypes::SetupLet = self
-                        .bindings_helper
-                        .get_var_binding_type(self.current_scope, &ident.sym)
-                    {
-                        *n = generate_is_ref_check_update(
-                            &ident,
-                            update_expr.op,
-                            update_expr.prefix,
-                            self.bindings_helper,
-                        );
-                        return;
-                    }
-                }
+                if let Expr::Ident(_) = *update_expr.arg {
+                    self.update_arg = Some((update_expr.op, update_expr.prefix));
+                    update_expr.arg.visit_mut_with(self);
+                    self.update_arg = None;
 
-                n.visit_mut_children_with(self);
+                    // AGREEMENT: If `should_consume_update_expr` is set,
+                    // assign transformed expr instead (this handles `lett++` case)
+                    if self.should_consume_update_expr {
+                        self.should_consume_update_expr = false;
+                        *n = *update_expr.arg.to_owned();
+                    }
+                } else {
+                    n.visit_mut_children_with(self);
+                }
                 return;
             }
 
@@ -359,6 +363,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                 prop: MemberProp::Ident(ident_expr.to_owned()),
             });
             self.has_js_bindings = true;
+            return;
         }
 
         // Non-inline logic ends here
@@ -410,12 +415,25 @@ impl<'s> VisitMut for TransformVisitor<'s> {
             self.has_js_bindings = true;
         }
 
-        // Inline logic is pretty complex
-        // TODO Actual logic
         match binding_type {
-            BindingTypes::SetupLet | BindingTypes::SetupMaybeRef | BindingTypes::Imported => {
-                unref(n, span)
+            // Update expression with MaybeRef: `maybe++` -> `maybe.value++`
+            BindingTypes::SetupMaybeRef if self.update_arg.is_some() => dot_value(n, span),
+
+            BindingTypes::SetupLet => {
+                if let Some((update_op, update_prefix)) = self.update_arg.take() {
+                    self.should_consume_update_expr = true;
+                    *n = generate_is_ref_check_update(
+                        ident_expr,
+                        update_op,
+                        update_prefix,
+                        self.bindings_helper,
+                    )
+                } else {
+                    unref(n, span)
+                }
             }
+
+            BindingTypes::SetupMaybeRef | BindingTypes::Imported => unref(n, span),
             BindingTypes::SetupRef => dot_value(n, span),
             BindingTypes::SetupConst
             | BindingTypes::SetupReactiveConst
