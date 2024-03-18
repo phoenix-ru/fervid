@@ -1,7 +1,7 @@
 use fervid_core::{fervid_atom, VueImports};
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, Number, AssignExpr, AssignOp, MemberExpr, ComputedPropName, ParenExpr, SeqExpr, BinExpr, BinaryOp},
+    ecma::ast::{AssignExpr, AssignOp, AssignTarget, BinExpr, BinaryOp, CallExpr, Callee, ComputedPropName, Expr, ExprOrSpread, Ident, Lit, MemberExpr, Number, ParenExpr, SeqExpr, SimpleAssignTarget},
 };
 
 use crate::CodegenContext;
@@ -52,14 +52,15 @@ impl CodegenContext {
         }
 
         // 1. `_cache[cache_idx]`
-        let cache_expr = Box::new(Expr::Member(MemberExpr {
+        let cache_member_expr = MemberExpr {
             span: DUMMY_SP,
             obj: Box::new(Expr::Ident(Ident { span: DUMMY_SP, sym: cache_ident, optional: false })),
             prop: swc_core::ecma::ast::MemberProp::Computed(ComputedPropName {
                 span: DUMMY_SP,
                 expr: Box::new(Expr::Lit(Lit::Num(Number { span: DUMMY_SP, value: cache_idx as f64, raw: None }))),
             }),
-        }));
+        };
+        let cache_expr = Box::new(Expr::Member(cache_member_expr.to_owned()));
 
         // 2. `_setBlockTracking(-1)`
         let decrement_tracking = set_block_tracking!(-1.0, set_block_tracking_ident.to_owned());
@@ -68,7 +69,7 @@ impl CodegenContext {
         let cache_assign = Box::new(Expr::Assign(AssignExpr {
             span: DUMMY_SP,
             op: AssignOp::Assign,
-            left: swc_core::ecma::ast::PatOrExpr::Expr(cache_expr.to_owned()),
+            left: AssignTarget::Simple(SimpleAssignTarget::Member(cache_member_expr)),
             right: item_render_expr,
         }));
 

@@ -589,6 +589,7 @@ mod tests {
             SetupBinding(fervid_atom!("val"), BindingTypes::SetupConst),
             SetupBinding(fervid_atom!("count"), BindingTypes::SetupRef),
             SetupBinding(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
+            SetupBinding(fervid_atom!("item"), BindingTypes::TemplateLocal),
         ]);
 
         let mut template_visitor = TemplateVisitor {
@@ -605,6 +606,12 @@ mod tests {
 
         // TODO Implement the actual tests and get rid of the dummy
         test!("count = val", "$event=>count.value=val");
+
+        // Template-local case
+        // TODO Implement
+        // TODO Add parenthesis when needed
+        // <div v-for="item in list"><div @click="({ item } = val)"/></div>
+        // test!("{ item } = val", "$event=>({item}=val})");
 
         // <div @click="({ count } = val)"/>
         // test!("({ count } = val)", "({ count: count.value } = val)");

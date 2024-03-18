@@ -2,10 +2,7 @@ use fervid_core::{fervid_atom, VForDirective, VueImports};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
-        ArrowExpr, AssignExpr, AssignOp, BinExpr, BinaryOp, BindingIdent, BlockStmt,
-        BlockStmtOrExpr, CallExpr, Callee, Decl, Expr, ExprOrSpread, ExprStmt, Ident, IfStmt, Lit,
-        MemberExpr, Null, Number, Pat, PatOrExpr, ReturnStmt, Stmt, VarDecl, VarDeclKind,
-        VarDeclarator,
+        ArrowExpr, AssignExpr, AssignOp, AssignTarget, BinExpr, BinaryOp, BindingIdent, BlockStmt, BlockStmtOrExpr, CallExpr, Callee, Decl, Expr, ExprOrSpread, ExprStmt, Ident, IfStmt, Lit, MemberExpr, Null, Number, Pat, ReturnStmt, SimpleAssignTarget, Stmt, VarDecl, VarDeclKind, VarDeclarator
     },
 };
 
@@ -371,7 +368,7 @@ impl CodegenContext {
             expr: Box::new(Expr::Assign(AssignExpr {
                 span: DUMMY_SP,
                 op: AssignOp::Assign,
-                left: PatOrExpr::Expr(Box::new(Expr::Member(MemberExpr {
+                left: AssignTarget::Simple(SimpleAssignTarget::Member(MemberExpr {
                     span: DUMMY_SP,
                     obj: Box::new(Expr::Ident(item_ident.to_owned())),
                     prop: swc_core::ecma::ast::MemberProp::Ident(Ident {
@@ -379,7 +376,7 @@ impl CodegenContext {
                         sym: fervid_atom!("memo"),
                         optional: false,
                     }),
-                }))),
+                })),
                 right: Box::new(Expr::Ident(memo_ident)),
             })),
         });

@@ -6,9 +6,10 @@ use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
         ast::{
-            AssignExpr, AssignOp, BlockStmt, CallExpr, Callee, CondExpr, Decl, Expr, ExprOrSpread,
-            Ident, KeyValueProp, Lit, MemberExpr, MemberProp, Null, ObjectLit, Pat, PatOrExpr,
-            Prop, PropName, PropOrSpread, Stmt, UpdateExpr, UpdateOp,
+            ArrayLit, ArrayPat, AssignExpr, AssignOp, AssignTarget, AssignTargetPat, BindingIdent,
+            BlockStmt, CallExpr, Callee, CondExpr, Decl, Expr, ExprOrSpread, Ident, KeyValueProp,
+            Lit, MemberExpr, MemberProp, Null, ObjectLit, ObjectPat, Prop, PropName, PropOrSpread,
+            SimpleAssignTarget, Stmt, UpdateExpr, UpdateOp,
         },
         visit::{VisitMut, VisitMutWith},
     },
@@ -72,6 +73,12 @@ impl BindingsHelperTransform for BindingsHelper {
         scope_to_use: u32,
         patch_hints: &mut PatchHints,
     ) {
+        // 0. Ensure that `v-model` value is a valid AssignTarget
+        let Some(assign_target) = convert_expr_to_assign_target(v_model.value.to_owned()) else {
+            // TODO Error
+            return;
+        };
+
         // 1. Create handler: wrap in `$event => value = $event`
         let event_expr = Box::new(Expr::Ident(Ident {
             span: DUMMY_SP,
@@ -79,7 +86,7 @@ impl BindingsHelperTransform for BindingsHelper {
             optional: false,
         }));
         let mut handler = wrap_in_event_arrow(wrap_in_assignment(
-            v_model.value.to_owned(),
+            assign_target,
             event_expr,
             AssignOp::Assign,
         ));
@@ -205,13 +212,8 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                 // This is only valid for Inline mode
                 let setup_let_ident = if self.is_inline {
                     let ident = match assign_expr.left {
-                        PatOrExpr::Expr(ref e) => e.as_ident(),
-
-                        PatOrExpr::Pat(ref pat) => match **pat {
-                            Pat::Ident(ref binding_ident) => Some(&binding_ident.id),
-                            Pat::Expr(ref e) => e.as_ident(),
-                            _ => None,
-                        },
+                        AssignTarget::Simple(SimpleAssignTarget::Ident(ref id)) => Some(&id.id),
+                        _ => None,
                     };
 
                     ident.and_then(|ident| {
@@ -242,22 +244,6 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                         is_reassignable,
                     );
                 } else {
-                    // LHS may be a `Pat::Ident`, e.g. in `foo = 0`
-                    // In this case we need to use an `Expr::Ident`.
-                    // I intentionally use `match` in case there are other arms that need same logic
-                    match assign_expr.left {
-                        PatOrExpr::Pat(ref mut pat) => match **pat {
-                            Pat::Ident(ref ident) => {
-                                *pat =
-                                    Box::new(Pat::Expr(Box::new(Expr::Ident(ident.id.to_owned()))));
-                            }
-
-                            _ => {}
-                        },
-
-                        _ => {}
-                    }
-
                     // Process as usual
                     assign_expr.left.visit_mut_with(self);
                 }
@@ -528,6 +514,61 @@ impl<'s> VisitMut for TransformVisitor<'s> {
         // Clear the temporary variables
         self.local_vars.drain(old_len..);
     }
+
+    // This is a copy of `visit_mut_expr` because AssignTarget is more refined compared to Expr
+    fn visit_mut_assign_target(&mut self, n: &mut AssignTarget) {
+        // TODO
+        // LHS may be a `Pat::Ident`, e.g. in `foo = 0`
+        // In this case we need to use an `Expr::Ident`.
+        // I intentionally use `match` in case there are other arms that need same logic
+        // match assign_expr.left {
+        //     PatOrExpr::Pat(ref mut pat) => match **pat {
+        //         Pat::Ident(ref ident) => {
+        //             *pat =
+        //                 Box::new(Pat::Expr(Box::new(Expr::Ident(ident.id.to_owned()))));
+        //         }
+
+        //         _ => {}
+        //     },
+
+        //     _ => {}
+        // }
+
+        match n {
+            AssignTarget::Simple(simple) => match simple {
+                SimpleAssignTarget::Ident(ident) => {
+                    // Hacky way: create a one time expression just to transform
+                    // TODO Improve whole assign target logic
+
+                    let mut expr = Box::new(Expr::Ident(Ident {
+                        span: ident.span,
+                        sym: ident.sym.to_owned(),
+                        optional: ident.optional,
+                    }));
+                    expr.visit_mut_with(self);
+
+                    if let Some(converted_back) = convert_expr_to_assign_target(expr) {
+                        *n = converted_back;
+                    }
+                }
+
+                SimpleAssignTarget::Member(memb) => memb.visit_mut_with(self),
+                SimpleAssignTarget::SuperProp(sup) => sup.visit_mut_with(self),
+                SimpleAssignTarget::Paren(paren) => paren.visit_mut_with(self),
+                SimpleAssignTarget::OptChain(opt_chain) => opt_chain.visit_mut_with(self),
+                SimpleAssignTarget::TsAs(ts_as) => ts_as.visit_mut_with(self),
+                SimpleAssignTarget::TsSatisfies(sat) => sat.visit_mut_with(self),
+                SimpleAssignTarget::TsNonNull(non_null) => non_null.visit_mut_with(self),
+                SimpleAssignTarget::TsTypeAssertion(type_assert) => {
+                    type_assert.visit_mut_with(self)
+                }
+                SimpleAssignTarget::TsInstantiation(inst) => inst.visit_mut_with(self),
+                SimpleAssignTarget::Invalid(inv) => inv.visit_mut_with(self),
+            },
+
+            AssignTarget::Pat(_) => todo!(),
+        }
+    }
 }
 
 /// Gets the variable prefix depending on if we are compiling the template in inline mode.
@@ -582,6 +623,10 @@ fn generate_is_ref_check_assignment(
 
     // `ident` expression
     let ident_expr = Box::new(Expr::Ident(lhs_ident.to_owned()));
+    let ident_assign_target = AssignTarget::Simple(SimpleAssignTarget::Ident(BindingIdent {
+        id: lhs_ident.to_owned(),
+        type_ann: None,
+    }));
 
     // `isRef(ident)`
     let condition = Box::new(Expr::Call(CallExpr {
@@ -599,7 +644,7 @@ fn generate_is_ref_check_assignment(
     }));
 
     // `ident.value`
-    let ident_dot_value = Box::new(Expr::Member(MemberExpr {
+    let ident_dot_value = AssignTarget::Simple(SimpleAssignTarget::Member(MemberExpr {
         span: DUMMY_SP,
         obj: ident_expr.to_owned(),
         prop: MemberProp::Ident(Ident {
@@ -614,7 +659,7 @@ fn generate_is_ref_check_assignment(
 
     // `ident = rhs_expr` or `null`
     let negative_assign = if is_reassignable {
-        wrap_in_assignment(ident_expr, Box::new(rhs_expr.to_owned()), op)
+        wrap_in_assignment(ident_assign_target, Box::new(rhs_expr.to_owned()), op)
     } else {
         Box::new(Expr::Lit(Lit::Null(Null { span: DUMMY_SP })))
     };
@@ -693,13 +738,64 @@ fn generate_is_ref_check_update(
 
 /// Wraps `expr` to `expr = $event`
 #[inline]
-fn wrap_in_assignment(expr: Box<Expr>, rhs_expr: Box<Expr>, op: AssignOp) -> Box<Expr> {
+fn wrap_in_assignment(lhs: AssignTarget, rhs_expr: Box<Expr>, op: AssignOp) -> Box<Expr> {
     Box::new(Expr::Assign(AssignExpr {
         span: DUMMY_SP,
         op,
-        left: PatOrExpr::Expr(expr),
+        left: lhs,
         right: rhs_expr,
     }))
+}
+
+fn convert_expr_to_assign_target(expr: Box<Expr>) -> Option<AssignTarget> {
+    // Because AssignTarget is strongly typed, we have to map from `Expr` to `AssignTarget`
+    match *expr {
+        Expr::Array(arr) => Some(AssignTarget::Pat(AssignTargetPat::Array(
+            convert_arr_lit_to_pat(arr),
+        ))),
+
+        Expr::Object(obj) => Some(AssignTarget::Pat(AssignTargetPat::Object(
+            convert_obj_lit_to_pat(obj),
+        ))),
+
+        Expr::Ident(ident) => Some(AssignTarget::Simple(SimpleAssignTarget::Ident(
+            BindingIdent {
+                id: ident,
+                type_ann: None, // required by SWC
+            },
+        ))),
+
+        Expr::Member(member) => Some(AssignTarget::Simple(SimpleAssignTarget::Member(member))),
+        Expr::Paren(paren) => Some(AssignTarget::Simple(SimpleAssignTarget::Paren(paren))),
+        Expr::SuperProp(super_prop) => Some(AssignTarget::Simple(SimpleAssignTarget::SuperProp(
+            super_prop,
+        ))),
+        Expr::OptChain(opt_chain) => Some(AssignTarget::Simple(SimpleAssignTarget::OptChain(
+            opt_chain,
+        ))),
+        Expr::TsNonNull(non_null) => Some(AssignTarget::Simple(SimpleAssignTarget::TsNonNull(
+            non_null,
+        ))),
+        Expr::TsAs(ts_as) => Some(AssignTarget::Simple(SimpleAssignTarget::TsAs(ts_as))),
+        Expr::TsInstantiation(inst) => Some(AssignTarget::Simple(
+            SimpleAssignTarget::TsInstantiation(inst),
+        )),
+        Expr::TsSatisfies(sat) => Some(AssignTarget::Simple(SimpleAssignTarget::TsSatisfies(sat))),
+        Expr::TsTypeAssertion(type_assert) => Some(AssignTarget::Simple(
+            SimpleAssignTarget::TsTypeAssertion(type_assert),
+        )),
+
+        // Maybe some other expressions can be a valid assignment target, but I trust SWC here
+        _ => None,
+    }
+}
+
+fn convert_arr_lit_to_pat(_arr_lit: ArrayLit) -> ArrayPat {
+    todo!()
+}
+
+fn convert_obj_lit_to_pat(_obj_lit: ObjectLit) -> ObjectPat {
+    todo!()
 }
 
 #[cfg(test)]
