@@ -7,9 +7,10 @@ use swc_core::{
     ecma::{
         ast::{
             ArrayLit, ArrayPat, AssignExpr, AssignOp, AssignTarget, AssignTargetPat, BindingIdent,
-            BlockStmt, CallExpr, Callee, CondExpr, Decl, Expr, ExprOrSpread, Ident, KeyValueProp,
-            Lit, MemberExpr, MemberProp, Null, ObjectLit, ObjectPat, Prop, PropName, PropOrSpread,
-            SimpleAssignTarget, Stmt, UpdateExpr, UpdateOp,
+            BlockStmt, CallExpr, Callee, CondExpr, Decl, Expr, ExprOrSpread, Ident,
+            KeyValuePatProp, KeyValueProp, Lit, MemberExpr, MemberProp, Null, ObjectLit, ObjectPat,
+            ObjectPatProp, Pat, Prop, PropName, PropOrSpread, SimpleAssignTarget, Stmt, UpdateExpr,
+            UpdateOp,
         },
         visit::{VisitMut, VisitMutWith},
     },
@@ -24,12 +25,31 @@ struct TransformVisitor<'s> {
     bindings_helper: &'s mut BindingsHelper,
     has_js_bindings: bool,
     is_inline: bool,
+
+    /// In ({ x } = y)
+    is_in_destructure_assign: bool,
+
     // `SetupBinding` instead of `FervidAtom` to easier interface with `extract_variables_from_pat`
     local_vars: Vec<SetupBinding>,
+
     // https://github.com/vuejs/core/blob/9e8ac0c367522922b5d8442b5a3cc508666978af/packages/compiler-core/src/transforms/transformExpression.ts#L126-L135
     // For transforming `x = y` where LHS is an identifier
-    update_arg: Option<(UpdateOp, bool)>,
+    update_expr_helper: Option<(UpdateOp, bool)>,
     should_consume_update_expr: bool,
+}
+
+#[derive(Debug)]
+pub enum IdentTransformStrategy {
+    /// Leave the identifier as-is, e.g. for global symbols or template-local variables coming from `v-for`
+    LeaveUnchanged,
+    /// Append the `.value`
+    DotValue,
+    /// Wrap in `unref()`
+    Unref,
+    /// Add the prefix, e.g. `$setup` or `_ctx`
+    Prefix(FervidAtom),
+    /// Generate `isRef(e) ? e.value++ : e++`
+    IsRefCheckUpdate,
 }
 
 pub trait BindingsHelperTransform {
@@ -55,8 +75,9 @@ impl BindingsHelperTransform for BindingsHelper {
             bindings_helper: self,
             has_js_bindings: false,
             is_inline,
+            is_in_destructure_assign: false,
             local_vars: Vec::new(),
-            update_arg: None,
+            update_expr_helper: None,
             should_consume_update_expr: false,
         };
         expr.visit_mut_with(&mut visitor);
@@ -201,8 +222,8 @@ impl BindingsHelperTransform for BindingsHelper {
 }
 
 impl<'s> VisitMut for TransformVisitor<'s> {
-    fn visit_mut_expr(&mut self, n: &mut Expr) {
-        let ident_expr: &mut Ident = match n {
+    fn visit_mut_expr(&mut self, expr: &mut Expr) {
+        let ident: &mut Ident = match expr {
             // Special treatment for assignment expression
             Expr::Assign(assign_expr) => {
                 // Visit RHS first
@@ -236,7 +257,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     // SetupMaybeRef is constant, reassignment is not possible
                     let is_reassignable = matches!(binding_type, BindingTypes::SetupLet);
 
-                    *n = *generate_is_ref_check_assignment(
+                    *expr = *generate_is_ref_check_assignment(
                         ident,
                         &assign_expr.right,
                         assign_expr.op,
@@ -293,18 +314,18 @@ impl<'s> VisitMut for TransformVisitor<'s> {
             // Update expression, `SetupLet` is a special case here
             Expr::Update(update_expr) => {
                 if let Expr::Ident(_) = *update_expr.arg {
-                    self.update_arg = Some((update_expr.op, update_expr.prefix));
+                    self.update_expr_helper = Some((update_expr.op, update_expr.prefix));
                     update_expr.arg.visit_mut_with(self);
-                    self.update_arg = None;
+                    self.update_expr_helper = None;
 
                     // AGREEMENT: If `should_consume_update_expr` is set,
                     // assign transformed expr instead (this handles `lett++` case)
                     if self.should_consume_update_expr {
                         self.should_consume_update_expr = false;
-                        *n = *update_expr.arg.to_owned();
+                        *expr = *update_expr.arg.to_owned();
                     }
                 } else {
-                    n.visit_mut_children_with(self);
+                    expr.visit_mut_children_with(self);
                 }
                 return;
             }
@@ -313,133 +334,84 @@ impl<'s> VisitMut for TransformVisitor<'s> {
             Expr::Ident(ident_expr) => ident_expr,
 
             _ => {
-                n.visit_mut_children_with(self);
+                expr.visit_mut_children_with(self);
                 return;
             }
         };
 
-        let symbol = &ident_expr.sym;
-        let span = ident_expr.span;
-
-        // Try to find variable in the local vars (e.g. arrow function params)
-        if let Some(_) = self.local_vars.iter().rfind(|it| &it.0 == symbol) {
-            self.has_js_bindings = true;
-            return;
-        }
-
-        let binding_type = self
-            .bindings_helper
-            .get_var_binding_type(self.current_scope, symbol);
-
-        // Template local binding doesn't need any processing
-        if let BindingTypes::TemplateLocal = binding_type {
-            self.has_js_bindings = true;
-            return;
-        }
-
-        // Get the prefix which fits the scope (e.g. `_ctx.` for unknown scopes, `$setup.` for setup scope)
-        if let Some(prefix) = get_prefix(&binding_type, self.is_inline) {
-            *n = Expr::Member(MemberExpr {
-                span,
-                obj: Box::new(Expr::Ident(Ident {
-                    span,
-                    sym: prefix,
-                    optional: false,
-                })),
-                prop: MemberProp::Ident(ident_expr.to_owned()),
-            });
-            self.has_js_bindings = true;
-            return;
-        }
-
-        // Non-inline logic ends here
-        if !self.is_inline {
-            return;
-        }
+        // The rest concerns transforming an ident
+        let span = ident.span;
+        let strategy = self.determine_ident_transform_strategy(ident);
 
         // TODO The logic for setup variables actually differs quite significantly
         // https://play.vuejs.org/#eNp9UU1rwzAM/SvCl25QEkZvIRTa0cN22Mq6oy8hUVJ3iW380QWC//tkh2Y7jN6k956kJ2liO62zq0dWsNLWRmgHFp3XWy7FoJVxMMEOArRGDbDK8v2KywZbIfFolLYPE5cArVIFnJwRsuMyPHJZ5nMv6kKJw0H3lUPKAMrz03aaYgmEQAE1D2VOYKxalGzNnK2VbEWXXaySZC9N4qxWgxY9mnfthJKWswISE7mq79X3a8Kc8bi+4fUZ669/8IsdI8bZ0aBFc0XOFs5VpkM304fTG44UL+SgGt+T+g75gVb1PnqcZXsvG7L9R5fcvqQj0+E+7WF0KO1tqWg0KkPSc0Y/er6z+q/dTbZJdfQJFn4A+DKelw==
 
-        let dot_value = |expr: &mut Expr, span: Span| {
-            *expr = Expr::Member(MemberExpr {
-                span,
-                obj: Box::new(expr.to_owned()),
-                prop: MemberProp::Ident(Ident {
-                    span: DUMMY_SP,
-                    sym: "value".into(),
-                    optional: false,
-                }),
-            })
-        };
+        match strategy {
+            IdentTransformStrategy::LeaveUnchanged => return,
 
-        let mut unref = |expr: &mut Expr, span: Span| {
-            self.bindings_helper.vue_imports |= VueImports::Unref;
-
-            *expr = Expr::Call(CallExpr {
-                span,
-                callee: Callee::Expr(Box::new(Expr::Ident(Ident {
+            IdentTransformStrategy::DotValue => {
+                *expr = Expr::Member(MemberExpr {
                     span,
-                    sym: VueImports::Unref.as_atom(),
-                    optional: false,
-                }))),
-                args: vec![ExprOrSpread {
-                    spread: None,
-                    expr: Box::new(expr.to_owned()),
-                }],
-                type_args: None,
-            });
-        };
-
-        // Add a flag that binding is dynamic
-        if matches!(
-            binding_type,
-            BindingTypes::SetupLet
-                | BindingTypes::SetupReactiveConst
-                | BindingTypes::SetupMaybeRef
-                | BindingTypes::SetupRef
-        ) {
-            self.has_js_bindings = true;
-        }
-
-        match binding_type {
-            // Update expression with MaybeRef: `maybe++` -> `maybe.value++`
-            BindingTypes::SetupMaybeRef if self.update_arg.is_some() => dot_value(n, span),
-
-            BindingTypes::SetupLet => {
-                if let Some((update_op, update_prefix)) = self.update_arg.take() {
-                    self.should_consume_update_expr = true;
-                    *n = generate_is_ref_check_update(
-                        ident_expr,
-                        update_op,
-                        update_prefix,
-                        self.bindings_helper,
-                    )
-                } else {
-                    unref(n, span)
-                }
+                    obj: Box::new(expr.to_owned()),
+                    prop: MemberProp::Ident(Ident {
+                        span: DUMMY_SP,
+                        sym: "value".into(),
+                        optional: false,
+                    }),
+                });
+                return;
             }
 
-            BindingTypes::SetupMaybeRef | BindingTypes::Imported => unref(n, span),
-            BindingTypes::SetupRef => dot_value(n, span),
-            BindingTypes::SetupConst
-            | BindingTypes::SetupReactiveConst
-            | BindingTypes::LiteralConst => {}
-            _ => {}
+            IdentTransformStrategy::Unref => {
+                self.bindings_helper.vue_imports |= VueImports::Unref;
+
+                *expr = Expr::Call(CallExpr {
+                    span,
+                    callee: Callee::Expr(Box::new(Expr::Ident(Ident {
+                        span,
+                        sym: VueImports::Unref.as_atom(),
+                        optional: false,
+                    }))),
+                    args: vec![ExprOrSpread {
+                        spread: None,
+                        expr: Box::new(expr.to_owned()),
+                    }],
+                    type_args: None,
+                });
+                return;
+            }
+
+            IdentTransformStrategy::Prefix(prefix) => {
+                *expr = Expr::Member(MemberExpr {
+                    span,
+                    obj: Box::new(Expr::Ident(Ident {
+                        span,
+                        sym: prefix,
+                        optional: false,
+                    })),
+                    prop: MemberProp::Ident(ident.to_owned()),
+                });
+                return;
+            }
+
+            IdentTransformStrategy::IsRefCheckUpdate => {
+                let Some((update_op, update_prefix)) = self.update_expr_helper.take() else {
+                    // TODO This should be unreachable, signify error
+                    return;
+                };
+
+                // Signify that this is a rewrite
+                self.should_consume_update_expr = true;
+                *expr = generate_is_ref_check_update(
+                    ident,
+                    update_op,
+                    update_prefix,
+                    self.bindings_helper,
+                );
+                return;
+            }
         }
     }
-
-    // fn visit_mut_ident(&mut self, n: &mut swc_core::ecma::ast::Ident) {
-    //     let symbol = &n.sym;
-    //     let scope = self.scope_helper.find_scope_of_variable(self.current_scope, symbol);
-
-    //     let prefix = scope.get_prefix();
-    //     if prefix.len() > 0 {
-    //         let mut new_symbol = String::with_capacity(symbol.len() + prefix.len());
-    //         new_symbol.push_str(prefix);
-    //         new_symbol.push_str(&symbol);
-    //         n.sym = new_symbol.into();
-    //     }
-    // }
 
     fn visit_mut_member_expr(&mut self, n: &mut MemberExpr) {
         if n.obj.is_ident() {
@@ -517,38 +489,46 @@ impl<'s> VisitMut for TransformVisitor<'s> {
 
     // This is a copy of `visit_mut_expr` because AssignTarget is more refined compared to Expr
     fn visit_mut_assign_target(&mut self, n: &mut AssignTarget) {
-        // TODO
-        // LHS may be a `Pat::Ident`, e.g. in `foo = 0`
-        // In this case we need to use an `Expr::Ident`.
-        // I intentionally use `match` in case there are other arms that need same logic
-        // match assign_expr.left {
-        //     PatOrExpr::Pat(ref mut pat) => match **pat {
-        //         Pat::Ident(ref ident) => {
-        //             *pat =
-        //                 Box::new(Pat::Expr(Box::new(Expr::Ident(ident.id.to_owned()))));
-        //         }
-
-        //         _ => {}
-        //     },
-
-        //     _ => {}
-        // }
-
         match n {
             AssignTarget::Simple(simple) => match simple {
                 SimpleAssignTarget::Ident(ident) => {
-                    // Hacky way: create a one time expression just to transform
-                    // TODO Improve whole assign target logic
+                    let strategy = self.determine_ident_transform_strategy(&ident.id);
+                    let span = ident.span;
 
-                    let mut expr = Box::new(Expr::Ident(Ident {
-                        span: ident.span,
-                        sym: ident.sym.to_owned(),
-                        optional: ident.optional,
-                    }));
-                    expr.visit_mut_with(self);
+                    match strategy {
+                        IdentTransformStrategy::LeaveUnchanged => return,
 
-                    if let Some(converted_back) = convert_expr_to_assign_target(expr) {
-                        *n = converted_back;
+                        IdentTransformStrategy::DotValue => {
+                            *n = AssignTarget::Simple(SimpleAssignTarget::Member(MemberExpr {
+                                span,
+                                obj: Box::new(Expr::Ident(ident.id.to_owned())),
+                                prop: MemberProp::Ident(Ident {
+                                    span: DUMMY_SP,
+                                    sym: fervid_atom!("value"),
+                                    optional: false,
+                                }),
+                            }));
+                            return;
+                        }
+
+                        IdentTransformStrategy::Prefix(prefix) => {
+                            *n = AssignTarget::Simple(SimpleAssignTarget::Member(MemberExpr {
+                                span,
+                                obj: Box::new(Expr::Ident(Ident {
+                                    span: DUMMY_SP,
+                                    sym: prefix,
+                                    optional: false,
+                                })),
+                                prop: MemberProp::Ident(ident.id.to_owned()),
+                            }));
+                            return;
+                        }
+
+                        IdentTransformStrategy::Unref
+                        | IdentTransformStrategy::IsRefCheckUpdate => {
+                            // TODO Error: this is not a valid transform strategy
+                            // Error hint: this is a bug in `fervid`, please report it
+                        }
                     }
                 }
 
@@ -563,10 +543,207 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     type_assert.visit_mut_with(self)
                 }
                 SimpleAssignTarget::TsInstantiation(inst) => inst.visit_mut_with(self),
-                SimpleAssignTarget::Invalid(inv) => inv.visit_mut_with(self),
+                SimpleAssignTarget::Invalid(_) => {}
             },
 
-            AssignTarget::Pat(_) => todo!(),
+            AssignTarget::Pat(assign_target_pat) => {
+                let old_is_in_destructure = self.is_in_destructure_assign;
+                self.is_in_destructure_assign = true;
+
+                match assign_target_pat {
+                    AssignTargetPat::Array(arr_pat) => arr_pat.visit_mut_with(self),
+                    AssignTargetPat::Object(obj_pat) => obj_pat.visit_mut_with(self),
+                    AssignTargetPat::Invalid(_) => {}
+                };
+
+                self.is_in_destructure_assign = old_is_in_destructure;
+            }
+        }
+    }
+
+    fn visit_mut_pat(&mut self, n: &mut Pat) {
+        if !self.is_in_destructure_assign {
+            n.visit_mut_children_with(self);
+            return;
+        };
+
+        match n {
+            Pat::Ident(ident) => {
+                let strategy = self.determine_ident_transform_strategy(&ident.id);
+                let span = ident.span;
+
+                match strategy {
+                    IdentTransformStrategy::LeaveUnchanged => return,
+
+                    IdentTransformStrategy::DotValue => {
+                        *n = Pat::Expr(Box::new(Expr::Member(MemberExpr {
+                            span,
+                            obj: Box::new(Expr::Ident(ident.id.to_owned())),
+                            prop: MemberProp::Ident(Ident {
+                                span: DUMMY_SP,
+                                sym: fervid_atom!("value"),
+                                optional: false,
+                            }),
+                        })));
+                        return;
+                    }
+
+                    IdentTransformStrategy::Prefix(prefix) => {
+                        *n = Pat::Expr(Box::new(Expr::Member(MemberExpr {
+                            span: DUMMY_SP,
+                            obj: Box::new(Expr::Ident(Ident {
+                                span: DUMMY_SP,
+                                sym: prefix,
+                                optional: false,
+                            })),
+                            prop: MemberProp::Ident(ident.id.to_owned()),
+                        })));
+                        return;
+                    }
+
+                    IdentTransformStrategy::Unref | IdentTransformStrategy::IsRefCheckUpdate => {
+                        // TODO Error: this is not a valid transform strategy
+                        // (technically this is a syntax error, so should be impossible)
+                    }
+                }
+            }
+
+            Pat::Array(arr_pat) => arr_pat.visit_mut_with(self),
+            Pat::Rest(rest_pat) => rest_pat.arg.visit_mut_with(self),
+            Pat::Object(obj_pat) => obj_pat.visit_mut_with(self),
+            Pat::Assign(assign_pat) => assign_pat.visit_mut_with(self),
+            Pat::Expr(expr) => expr.visit_mut_with(self),
+            Pat::Invalid(_) => {}
+        }
+    }
+
+    fn visit_mut_array_pat(&mut self, arr_pat: &mut ArrayPat) {
+        for maybe_pat in arr_pat.elems.iter_mut() {
+            let Some(pat) = maybe_pat else {
+                continue;
+            };
+
+            pat.visit_mut_with(self)
+        }
+    }
+
+    fn visit_mut_object_pat(&mut self, obj_pat: &mut ObjectPat) {
+        for elem in obj_pat.props.iter_mut() {
+            match elem {
+                // `{ x: y }`
+                ObjectPatProp::KeyValue(key_value) => {
+                    key_value.value.visit_mut_with(self);
+
+                    match key_value.key {
+                        // TODO Finish the implementation
+                        PropName::Ident(_) => todo!(),
+                        PropName::Computed(_) => todo!(),
+                        PropName::Str(_) | PropName::Num(_) | PropName::BigInt(_) => {}
+                    }
+                }
+
+                ObjectPatProp::Assign(assign) => {
+                    match assign.value {
+                        // `{ x = y }`
+                        Some(ref mut v) => v.visit_mut_with(self),
+
+                        // If shorthand `{ x }`, expand when not a local variable
+                        None => {
+                            let symbol = &assign.key.sym;
+
+                            let is_local =
+                                self.local_vars.iter().rfind(|it| &it.0 == symbol).is_some()
+                                    || matches!(
+                                        self.bindings_helper
+                                            .get_var_binding_type(self.current_scope, symbol),
+                                        BindingTypes::TemplateLocal
+                                    );
+
+                            if !is_local {
+                                let mut value = Box::new(Pat::Ident(assign.key.to_owned()));
+                                value.visit_mut_with(self);
+                                *elem = ObjectPatProp::KeyValue(KeyValuePatProp {
+                                    key: PropName::Ident(assign.key.id.to_owned()),
+                                    value,
+                                })
+                            }
+                        }
+                    }
+                }
+
+                // The official compiler seems to ignore this one
+                ObjectPatProp::Rest(_) => {}
+            }
+        }
+    }
+}
+
+impl TransformVisitor<'_> {
+    /// Determines the strategy with which an Ident needs to be transformed.
+    /// This function is needed because SWC's AST is strongly-typed and we cannot simply
+    /// transform the Ident as the official compiler does.
+    pub fn determine_ident_transform_strategy(&mut self, ident: &Ident) -> IdentTransformStrategy {
+        let symbol = &ident.sym;
+
+        // Try to find variable in the local vars (e.g. arrow function params)
+        if let Some(_) = self.local_vars.iter().rfind(|it| &it.0 == symbol) {
+            self.has_js_bindings = true;
+            return IdentTransformStrategy::LeaveUnchanged;
+        }
+
+        let binding_type = self
+            .bindings_helper
+            .get_var_binding_type(self.current_scope, symbol);
+
+        // Template local binding doesn't need any processing
+        if let BindingTypes::TemplateLocal = binding_type {
+            self.has_js_bindings = true;
+            return IdentTransformStrategy::LeaveUnchanged;
+        }
+
+        // Get the prefix which fits the scope (e.g. `_ctx.` for unknown scopes, `$setup.` for setup scope)
+        if let Some(prefix) = get_prefix(&binding_type, self.is_inline) {
+            self.has_js_bindings = true;
+            return IdentTransformStrategy::Prefix(prefix);
+        }
+
+        // Non-inline logic ends here
+        if !self.is_inline {
+            return IdentTransformStrategy::LeaveUnchanged;
+        }
+
+        // Add a flag that binding is dynamic
+        if matches!(
+            binding_type,
+            BindingTypes::SetupLet
+                | BindingTypes::SetupReactiveConst
+                | BindingTypes::SetupMaybeRef
+                | BindingTypes::SetupRef
+        ) {
+            self.has_js_bindings = true;
+        }
+
+        match binding_type {
+            // Update expression with MaybeRef: `maybe++` -> `maybe.value++`
+            BindingTypes::SetupMaybeRef
+                if self.update_expr_helper.is_some() || self.is_in_destructure_assign =>
+            {
+                IdentTransformStrategy::DotValue
+            }
+
+            // Update expression with SetupLet: `lett++` -> `isRef(lett) ? lett.value++ : lett++`
+            BindingTypes::SetupLet if self.update_expr_helper.is_some() => {
+                IdentTransformStrategy::IsRefCheckUpdate
+            }
+
+            BindingTypes::SetupMaybeRef | BindingTypes::SetupLet | BindingTypes::Imported => {
+                IdentTransformStrategy::Unref
+            }
+            BindingTypes::SetupRef => IdentTransformStrategy::DotValue,
+            BindingTypes::SetupConst
+            | BindingTypes::SetupReactiveConst
+            | BindingTypes::LiteralConst => IdentTransformStrategy::LeaveUnchanged,
+            _ => IdentTransformStrategy::LeaveUnchanged,
         }
     }
 }

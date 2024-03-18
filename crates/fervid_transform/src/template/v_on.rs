@@ -584,11 +584,13 @@ mod tests {
         // const val = {}
         // const count = ref(0)
         // const maybe = foo()
+        // let lett = 1
         // ```
         let mut bindings_helper = helper(vec![
             SetupBinding(fervid_atom!("val"), BindingTypes::SetupConst),
             SetupBinding(fervid_atom!("count"), BindingTypes::SetupRef),
             SetupBinding(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
+            SetupBinding(fervid_atom!("lett"), BindingTypes::SetupLet),
             SetupBinding(fervid_atom!("item"), BindingTypes::TemplateLocal),
         ]);
 
@@ -617,7 +619,7 @@ mod tests {
         // test!("({ count } = val)", "({ count: count.value } = val)");
 
         // <div @click="[maybe] = val"/>
-        // test!("[maybe] = val", "$event=>[maybe.value]=val");
+        test!("[maybe] = val", "$event=>[maybe.value]=val");
 
         // <div @click="({ lett } = val)"/>
         // test!("({ lett } = val)", "{ lett: lett } = val");
