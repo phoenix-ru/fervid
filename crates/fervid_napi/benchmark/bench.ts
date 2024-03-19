@@ -31,13 +31,12 @@ async function run() {
           id: 'abc',
           isProd: true,
           inlineTemplate: true,
-          defineModel: true
         })
       } else {
         compileTemplate({
           source: descriptor.descriptor.source,
           filename: 'input.vue',
-          id: 'abc'
+          id: 'abc',
         })
       }
     }),
@@ -53,21 +52,25 @@ async function run() {
     // BEGIN
 
     b.add('@fervid/napi sync promise (4 threads)', () => {
-      return Promise.allSettled(Array.from({ length: 4 }, _ => new Promise<void>(resolve => (compiler.compileSync(input), resolve()))))
+      return Promise.allSettled(
+        Array.from({ length: 4 }, (_) => new Promise<void>((resolve) => (compiler.compileSync(input), resolve()))),
+      )
     }),
 
     b.add(`@fervid/napi sync promise (${CPUS} threads)`, () => {
-      return Promise.allSettled(Array.from({ length: CPUS }, _ => new Promise<void>(resolve => (compiler.compileSync(input), resolve()))))
+      return Promise.allSettled(
+        Array.from({ length: CPUS }, (_) => new Promise<void>((resolve) => (compiler.compileSync(input), resolve()))),
+      )
     }),
 
     // END
 
     b.add('@fervid/napi async (4 threads)', () => {
-      return Promise.allSettled(Array.from({ length: 4 }, _ => compiler.compileAsync(input)))
+      return Promise.allSettled(Array.from({ length: 4 }, (_) => compiler.compileAsync(input)))
     }),
 
     b.add(`@fervid/napi async CPUS (${CPUS} threads)`, () => {
-      return Promise.allSettled(Array.from({ length: CPUS }, _ => compiler.compileAsync(input)))
+      return Promise.allSettled(Array.from({ length: CPUS }, (_) => compiler.compileAsync(input)))
     }),
 
     // Custom cycle function to account for the async nature
@@ -76,7 +79,7 @@ async function run() {
       const allCompleted = summary.results.every((item) => item.samples > 0)
       const fastestOps = format(summary.results[summary.fastest.index].ops)
       const progress = Math.round(
-        (summary.results.filter((result) => result.samples !== 0).length / summary.results.length) * 100
+        (summary.results.filter((result) => result.samples !== 0).length / summary.results.length) * 100,
       )
 
       const progressInfo = `Progress: ${progress}%`
@@ -92,38 +95,41 @@ async function run() {
       }
 
       // Re-map fastest/slowest
-      const fastest = summary.results.reduce((prev, next, index) => {
-        return next.ops > prev.ops ? { ops: next.ops, index, name: next.name } : prev
-      }, { ops: 0, index: 0, name: '' })
-      const slowest = summary.results.reduce((prev, next, index) => {
+      const fastest = summary.results.reduce(
+        (prev, next, index) => {
+          return next.ops > prev.ops ? { ops: next.ops, index, name: next.name } : prev
+        },
+        { ops: 0, index: 0, name: '' },
+      )
+      const slowest = summary.results.reduce(
+        (prev, next, index) => {
           return next.ops < prev.ops ? { ops: next.ops, index, name: next.name } : prev
-      }, { ops: Infinity, index: 0, name: '' })
+        },
+        { ops: Infinity, index: 0, name: '' },
+      )
       summary.fastest = fastest
       summary.slowest = slowest
       summary.results.forEach((result, index) => {
-        result.percentSlower = index === fastest.index
-            ? 0
-            : Number(((1 - result.ops / fastest.ops) * 100).toFixed(2))
+        result.percentSlower = index === fastest.index ? 0 : Number(((1 - result.ops / fastest.ops) * 100).toFixed(2))
       })
 
-      const output = summary.results.map((item, index) => {
-        const ops = format(item.ops)
-        const margin = item.margin.toFixed(2)
+      const output = summary.results
+        .map((item, index) => {
+          const ops = format(item.ops)
+          const margin = item.margin.toFixed(2)
 
-        return item.samples
-          ? kleur.cyan(`\n  ${item.name}:\n`) + `    ${ops} ops/s, ±${margin}% ${
-            allCompleted
-              ? getStatus(item, index, summary, ops, fastestOps)
-              : ''}`
-          : null;
-      })
-        .filter(item => item != null)
+          return item.samples
+            ? kleur.cyan(`\n  ${item.name}:\n`) +
+                `    ${ops} ops/s, ±${margin}% ${allCompleted ? getStatus(item, index, summary, ops, fastestOps) : ''}`
+            : null
+        })
+        .filter((item) => item != null)
         .join('\n')
 
       return `${progressInfo}\n${output}`
     }),
 
-    b.complete()
+    b.complete(),
   )
 }
 
@@ -134,11 +140,13 @@ run().catch((e) => {
 function getStatus(item: CaseResultWithDiff, index: number, summary: Summary, ops: string, fastestOps: string) {
   const isFastest = index === summary.fastest.index
   const isSlowest = index === summary.slowest.index
-  const statusShift = fastestOps.length - ops.length + 2;
-  return (' '.repeat(statusShift) +
+  const statusShift = fastestOps.length - ops.length + 2
+  return (
+    ' '.repeat(statusShift) +
     (isFastest
       ? kleur.green('| fastest')
       : isSlowest
         ? kleur.red(`| slowest, ${item.percentSlower}% slower`)
-        : kleur.yellow(`| ${item.percentSlower}% slower`)));
+        : kleur.yellow(`| ${item.percentSlower}% slower`))
+  )
 }
