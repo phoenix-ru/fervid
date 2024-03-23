@@ -35,7 +35,7 @@ impl TemplateVisitor<'_> {
             let mut is_non_const_ident = false;
             let mut needs_event = false;
 
-            match handler.as_ref() {
+            match unwrap_parens(&handler) {
                 // This is always as-is
                 Expr::Fn(_) | Expr::Arrow(_) => {}
 
@@ -243,6 +243,15 @@ fn wrap_in_args_arrow(mut expr: Box<Expr>, needs_check: bool) -> Box<Expr> {
     }))
 }
 
+// Mirror what `@babel/parser` does
+fn unwrap_parens(expr: &Expr) -> &Expr {
+    let Expr::Paren(p) = expr else {
+        return expr;
+    };
+    
+    return &p.expr;
+}
+
 #[cfg(test)]
 mod tests {
     use fervid_core::{
@@ -401,6 +410,7 @@ mod tests {
 
         // object
         // FIXME this is a bug in SWC stringifier (it should add parens):
+        // or maybe it's not a bug, depends on if you interpret it as a Stmt or as an Expr
         // test!("{}", "$event=>({})");
         test!("{}", "$event=>{}");
 
@@ -476,7 +486,8 @@ mod tests {
         // <div @click="maybe = count"/>
         test!(
             "maybe = count",
-            "$event=>_isRef(maybe)?maybe.value=count.value:null"
+            // This is the official spec, but it is inconsistent with the `v-model` transform
+            "$event=>maybe.value=count.value"
         );
 
         // <div @click="lett = count"/>
@@ -606,23 +617,21 @@ mod tests {
             };
         }
 
-        // TODO Implement the actual tests and get rid of the dummy
+        // Not a destructure, but an instant indicator if something is off
         test!("count = val", "$event=>count.value=val");
 
         // Template-local case
-        // TODO Implement
-        // TODO Add parenthesis when needed
         // <div v-for="item in list"><div @click="({ item } = val)"/></div>
-        // test!("{ item } = val", "$event=>({item}=val})");
+        test!("({ item } = val)", "$event=>({item}=val)");
 
         // <div @click="({ count } = val)"/>
-        // test!("({ count } = val)", "({ count: count.value } = val)");
+        test!("({ count } = val)", "$event=>({count:count.value}=val)");
 
         // <div @click="[maybe] = val"/>
         test!("[maybe] = val", "$event=>[maybe.value]=val");
 
         // <div @click="({ lett } = val)"/>
-        // test!("({ lett } = val)", "{ lett: lett } = val");
+        test!("({ lett } = val)", "$event=>({lett:lett}=val)");
     }
 
     fn helper(bindings: Vec<SetupBinding>) -> BindingsHelper {

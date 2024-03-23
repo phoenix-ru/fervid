@@ -3,7 +3,7 @@ use fervid_core::{
     StrOrExpr, TemplateGenerationMode, VModelDirective, VueImports,
 };
 use swc_core::{
-    common::{Span, DUMMY_SP},
+    common::DUMMY_SP,
     ecma::{
         ast::{
             ArrayLit, ArrayPat, AssignExpr, AssignOp, AssignTarget, AssignTargetPat, BindingIdent,
@@ -28,6 +28,14 @@ struct TransformVisitor<'s> {
 
     /// In ({ x } = y)
     is_in_destructure_assign: bool,
+
+    /// In LHS of x = y
+    is_in_assign_target: bool,
+
+    /// COMPAT: `v-on` and `v-model` look differently at how to transform `SetupMaybeRef`
+    /// `v-on` simply assigns to it: `maybe.value = 1`
+    /// `v-model` does a check: `isRef(maybe) ? maybe.value = 1 : null`
+    is_v_model_transform: bool,
 
     // `SetupBinding` instead of `FervidAtom` to easier interface with `extract_variables_from_pat`
     local_vars: Vec<SetupBinding>,
@@ -75,7 +83,9 @@ impl BindingsHelperTransform for BindingsHelper {
             bindings_helper: self,
             has_js_bindings: false,
             is_inline,
+            is_in_assign_target: false,
             is_in_destructure_assign: false,
+            is_v_model_transform: false,
             local_vars: Vec::new(),
             update_expr_helper: None,
             should_consume_update_expr: false,
@@ -113,7 +123,25 @@ impl BindingsHelperTransform for BindingsHelper {
         ));
 
         // 2. Transform handler
-        self.transform_expr(&mut handler, scope_to_use);
+        {
+            let is_inline = matches!(
+                self.template_generation_mode,
+                TemplateGenerationMode::Inline
+            );
+            let mut visitor = TransformVisitor {
+                current_scope: scope_to_use,
+                bindings_helper: self,
+                has_js_bindings: false,
+                is_inline,
+                is_in_assign_target: false,
+                is_in_destructure_assign: false,
+                is_v_model_transform: true,
+                local_vars: Vec::new(),
+                update_expr_helper: None,
+                should_consume_update_expr: false,
+            };
+            handler.visit_mut_with(&mut visitor);
+        }
 
         // 3. Assign handler
         v_model.update_handler = Some(handler);
@@ -230,6 +258,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                 assign_expr.right.visit_mut_with(self);
 
                 // Check for special case: LHS is an ident of type `SetupLet`
+                // Also special case: LHS is `SetupMaybeRef` inside v-model
                 // This is only valid for Inline mode
                 let setup_let_ident = if self.is_inline {
                     let ident = match assign_expr.left {
@@ -242,7 +271,10 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                             .bindings_helper
                             .get_var_binding_type(self.current_scope, &ident.sym);
 
-                        if let BindingTypes::SetupLet | BindingTypes::SetupMaybeRef = binding_type {
+                        if matches!(binding_type, BindingTypes::SetupLet)
+                            || self.is_v_model_transform
+                                && matches!(binding_type, BindingTypes::SetupMaybeRef)
+                        {
                             Some((ident, binding_type))
                         } else {
                             None
@@ -489,6 +521,9 @@ impl<'s> VisitMut for TransformVisitor<'s> {
 
     // This is a copy of `visit_mut_expr` because AssignTarget is more refined compared to Expr
     fn visit_mut_assign_target(&mut self, n: &mut AssignTarget) {
+        let old_is_in_assign_target = self.is_in_assign_target;
+        self.is_in_assign_target = true;
+
         match n {
             AssignTarget::Simple(simple) => match simple {
                 SimpleAssignTarget::Ident(ident) => {
@@ -559,6 +594,8 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                 self.is_in_destructure_assign = old_is_in_destructure;
             }
         }
+
+        self.is_in_assign_target = old_is_in_assign_target;
     }
 
     fn visit_mut_pat(&mut self, n: &mut Pat) {
@@ -726,7 +763,9 @@ impl TransformVisitor<'_> {
         match binding_type {
             // Update expression with MaybeRef: `maybe++` -> `maybe.value++`
             BindingTypes::SetupMaybeRef
-                if self.update_expr_helper.is_some() || self.is_in_destructure_assign =>
+                if self.is_in_destructure_assign
+                    || (self.is_in_assign_target && !self.is_v_model_transform)
+                    || self.update_expr_helper.is_some() =>
             {
                 IdentTransformStrategy::DotValue
             }
@@ -1138,6 +1177,7 @@ mod tests {
         test!(
             "MaybeRef",
             "_unref(MaybeRef)",
+            // This is the official spec, but it is inconsistent with the `v-on` transform
             "$event=>_isRef(MaybeRef)?MaybeRef.value=$event:null"
         );
         test!("Const", "Const", "$event=>Const=$event"); // TODO must err

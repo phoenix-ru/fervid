@@ -2,7 +2,7 @@ use fervid_core::{
     AttributeOrBinding, FervidAtom, StrOrExpr, VBindDirective, VCustomDirective, VForDirective,
     VModelDirective, VOnDirective, VSlotDirective, VueDirectives,
 };
-use swc_core::common::{BytePos, Span};
+use swc_core::{common::{BytePos, Span}, ecma::ast::Expr};
 use swc_ecma_parser::Syntax;
 use swc_html_ast::Attribute;
 
@@ -349,6 +349,12 @@ impl SfcParser<'_, '_, '_> {
 
                 match self.parse_expr(&value, ts!(), span) {
                     Ok(model_binding) => {
+                        // v-model value must be a valid JavaScript member expression
+                        if !matches!(*model_binding, Expr::Member(_) | Expr::Ident(_)) {
+                            // TODO Report an error
+                            bail!();
+                        }
+
                         let directives = get_directives!();
                         directives.v_model.push(VModelDirective {
                             argument,
