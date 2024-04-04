@@ -14,7 +14,9 @@
 //! "#;
 //!
 //! // Parse
-//! let (remaining_input, sfc) = fervid::parser::core::parse_sfc(input).unwrap();
+//! let mut parse_errors = vec![];
+//! let mut parser = fervid_parser::SfcParser::new(input, &mut parse_errors);
+//! let sfc = parser.parse_sfc().unwrap();
 //!
 //! // Do the necessary transformations
 //! let is_prod = true;
@@ -43,7 +45,8 @@
 extern crate lazy_static;
 
 pub mod errors;
-pub mod parser;
+#[deprecated]
+pub mod parser_old;
 
 use errors::CompileError;
 use fervid_codegen::CodegenContext;

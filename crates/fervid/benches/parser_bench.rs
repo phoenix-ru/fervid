@@ -21,7 +21,7 @@ fn parser_benchmark(c: &mut Criterion) {
         c.bench_with_input(
             BenchmarkId::new("parser: parse", input.0),
             &input.1,
-            |b, component| b.iter(|| fervid::parser::core::parse_sfc(black_box(component))),
+            |b, component| b.iter(|| fervid::parser_old::core::parse_sfc(black_box(component))),
         );
     }
 }

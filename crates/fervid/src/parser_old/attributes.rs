@@ -14,7 +14,7 @@ use nom::{
 };
 use swc_core::common::DUMMY_SP;
 
-use crate::parser::{
+use crate::parser_old::{
     ecma::{parse_js, parse_js_pat},
     html_utils::html_name,
 };
