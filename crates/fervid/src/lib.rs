@@ -19,9 +19,13 @@
 //! let sfc = parser.parse_sfc().unwrap();
 //!
 //! // Do the necessary transformations
-//! let is_prod = true;
 //! let mut transform_errors = Vec::new();
-//! let transform_result = fervid_transform::transform_sfc(sfc, is_prod, "filehash", &mut transform_errors);
+//! let transform_options = fervid_transform::TransformSfcOptions {
+//!   is_prod: true,
+//!   scope_id: "filehash",
+//!   filename: "input.vue"
+//! };
+//! let transform_result = fervid_transform::transform_sfc(sfc, transform_options, &mut transform_errors);
 //!
 //! // Create the context and generate the template block
 //! let mut ctx = fervid_codegen::CodegenContext::with_bindings_helper(transform_result.bindings_helper);
@@ -52,12 +56,36 @@ use errors::CompileError;
 use fervid_codegen::CodegenContext;
 pub use fervid_core::*;
 use fervid_parser::SfcParser;
-use fervid_transform::{style::should_transform_style_block, transform_sfc};
-use std::hash::{DefaultHasher, Hash, Hasher};
+use fervid_transform::{style::should_transform_style_block, transform_sfc, TransformSfcOptions};
+use std::{borrow::Cow, hash::{DefaultHasher, Hash, Hasher}};
 use swc_core::ecma::ast::Expr;
 
 // TODO Add severity to errors
 // TODO Better structs
+
+#[derive(Debug, Clone)]
+pub struct CompileOptions<'o> {
+    // ast?: RootNode;
+    pub filename: Cow<'o, str>,
+    pub id: Cow<'o, str>,
+    // pub scoped: Option<bool>,
+    // pub slotted: Option<bool>,
+    pub is_prod: Option<bool>,
+    pub ssr: Option<bool>,
+    // pub ssrCssVars?: string[],
+    // pub inMap?: RawSourceMap,
+    // pub compiler?: TemplateCompiler,
+    // pub compilerOptions?: CompilerOptions,
+    // pub preprocessLang?: string,
+    // pub preprocessOptions?: any,
+    // In some cases, compiler-sfc may not be inside the project root (e.g. when
+    // linked or globally installed). In such cases a custom `require` can be
+    // passed to correctly resolve the preprocessors.
+    // preprocessCustomRequire?: (id: string) => any;
+    // Configure what tags/attributes to transform into asset url imports,
+    // or disable the transform altogether with `false`.
+    // transformAssetUrls?: AssetURLOptions | AssetURLTagConfig | boolean;
+}
 
 pub struct CompileResult {
     pub code: String,
@@ -83,8 +111,11 @@ pub struct CompileEmittedAsset {
 
 /// A more general-purpose SFC compilation function.
 /// Not production-ready yet.
-pub fn compile(source: &str, is_prod: bool) -> Result<CompileResult, CompileError> {
+pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, CompileError> {
     let mut all_errors = Vec::<CompileError>::new();
+
+    // Options
+    let is_prod = options.is_prod.unwrap_or_default();
 
     // Parse
     let mut sfc_parsing_errors = Vec::new();
@@ -93,6 +124,7 @@ pub fn compile(source: &str, is_prod: bool) -> Result<CompileResult, CompileErro
     all_errors.extend(sfc_parsing_errors.into_iter().map(From::from));
 
     // For scopes
+    // TODO Research if it's better to compute that on the caller site or here
     let file_hash = {
         let mut hasher = DefaultHasher::default();
         source.hash(&mut hasher);
@@ -102,7 +134,12 @@ pub fn compile(source: &str, is_prod: bool) -> Result<CompileResult, CompileErro
 
     // Transform
     let mut transform_errors = Vec::new();
-    let transform_result = transform_sfc(sfc, is_prod, &file_hash, &mut transform_errors);
+    let transform_options = TransformSfcOptions {
+        is_prod,
+        scope_id: &file_hash,
+        filename: &options.filename,
+    };
+    let transform_result = transform_sfc(sfc, transform_options, &mut transform_errors);
     all_errors.extend(transform_errors.into_iter().map(From::from));
 
     // Codegen
@@ -182,7 +219,12 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
 
     // Transform
     let mut transform_errors = Vec::new();
-    let transform_result = transform_sfc(sfc, is_prod, &file_hash, &mut transform_errors);
+    let tranform_options = TransformSfcOptions {
+        is_prod,
+        scope_id: &file_hash,
+        filename: "anonymous.vue".into(),
+    };
+    let transform_result = transform_sfc(sfc, tranform_options, &mut transform_errors);
 
     // Codegen
     let mut ctx = CodegenContext::with_bindings_helper(transform_result.bindings_helper);

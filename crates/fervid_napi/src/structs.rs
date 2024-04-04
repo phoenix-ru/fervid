@@ -5,13 +5,12 @@ use swc_core::common::Spanned;
 #[napi(js_name = "Compiler")]
 #[derive(Clone)]
 pub struct FervidJsCompiler {
-    pub is_production: bool,
-    pub ssr: bool,
-    pub source_map: bool,
+    pub options: FervidJsCompilerOptions,
 }
 
+/// Raw options passed from the Node.js side
 #[napi(object)]
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct FervidJsCompilerOptions {
     /// Apply production optimizations. Default: false
     pub is_production: Option<bool>,
@@ -41,7 +40,6 @@ pub struct FervidJsCompilerOptions {
     ///  - `string | RegExp`: matched files are converted into custom elements
     /// Default: files ending with `.ce.vue`
     pub custom_element: Option<()>,
-
     // Ignored
     // pub compiler: Option<()>,
 
@@ -50,9 +48,11 @@ pub struct FervidJsCompilerOptions {
 }
 
 #[napi(object)]
+#[derive(Clone)]
 pub struct FervidJsCompilerOptionsTemplate {}
 
 #[napi(object)]
+#[derive(Clone)]
 pub struct FervidJsCompilerOptionsScript {
     /// Ignored
     /// Hoist <script setup> static constants.
@@ -62,9 +62,20 @@ pub struct FervidJsCompilerOptionsScript {
 }
 
 #[napi(object)]
+#[derive(Clone)]
 pub struct FervidJsCompilerOptionsStyle {
     /// Ignored
     pub trim: Option<bool>,
+}
+
+#[napi(object)]
+#[derive(Clone)]
+pub struct FervidCompileOptions {
+    /// Scope ID for prefixing injected CSS variables
+    pub id: String,
+
+    /// Filename is used for automatic component name inference and self-referential imports
+    pub filename: String,
 }
 
 #[napi(object)]

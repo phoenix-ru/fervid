@@ -1,5 +1,6 @@
 //! Exports data structs used by the crate
 
+use fervid_core::{BindingsHelper, SfcCustomBlock, SfcStyleBlock, SfcTemplateBlock};
 use swc_core::ecma::{atoms::JsWord, ast::{Id, Expr, PropOrSpread, Module, ObjectLit, Function, ExprOrSpread}};
 
 /// Imports from "vue" package
@@ -44,4 +45,27 @@ pub struct TransformScriptsResult {
     pub export_obj: ObjectLit,
     /// Setup function (not linked to default export yet)
     pub setup_fn: Option<Box<Function>>,
+}
+
+pub struct TransformSfcOptions<'s> {
+    pub is_prod: bool,
+    pub scope_id: &'s str,
+    pub filename: &'s str
+}
+
+pub struct TransformSfcResult {
+    /// Helper with all the information about the bindings
+    pub bindings_helper: BindingsHelper,
+    /// Object exported from the `Module`, but detached from it
+    pub exported_obj: ObjectLit,
+    /// Module obtained by processing `<script>` and `<script setup>`
+    pub module: Module,
+    /// Setup function (not linked to default export yet)
+    pub setup_fn: Option<Box<Function>>,
+    /// Transformed template block
+    pub template_block: Option<SfcTemplateBlock>,
+    /// Transformed style blocks
+    pub style_blocks: Vec<SfcStyleBlock>,
+    /// Custom blocks
+    pub custom_blocks: Vec<SfcCustomBlock>,
 }
