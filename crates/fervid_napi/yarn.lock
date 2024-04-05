@@ -79,6 +79,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@babel/parser@npm:^7.24.4":
+  version: 7.24.4
+  resolution: "@babel/parser@npm:7.24.4"
+  bin:
+    parser: ./bin/babel-parser.js
+  checksum: 8381e1efead5069cb7ed2abc3a583f4a86289b2f376c75cecc69f59a8eb36df18274b1886cecf2f97a6a0dff5334b27330f58535be9b3e4e26102cc50e12eac8
+  languageName: node
+  linkType: hard
+
 "@babel/types@npm:^7.8.3":
   version: 7.23.4
   resolution: "@babel/types@npm:7.23.4"
@@ -368,6 +377,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@fervid/napi@workspace:."
   dependencies:
+    "@babel/parser": "npm:^7.24.4"
     "@fervid/napi-android-arm-eabi": "npm:0.2.1"
     "@fervid/napi-android-arm64": "npm:0.2.1"
     "@fervid/napi-darwin-arm64": "npm:0.2.1"

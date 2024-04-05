@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { cpus } from 'node:os'
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
 
-import { Compiler } from '../index'
+import { Compiler, FervidCompileOptions } from '../index'
 
 // Increase libuv thread pool for a better async result.
 // 4 threads is a default thread pool size.
@@ -17,6 +17,11 @@ process.env.UV_THREADPOOL_SIZE = CPUS.toString()
 const input = readFileSync(join(__dirname, '../../fervid/benches/fixtures/input.vue'), {
   encoding: 'utf-8',
 })
+
+const options: FervidCompileOptions = {
+  filename: 'input.vue',
+  id: ''
+}
 
 async function run() {
   const compiler = new Compiler()
@@ -42,7 +47,7 @@ async function run() {
     }),
 
     b.add('@fervid/napi sync', () => {
-      compiler.compileSync(input)
+      compiler.compileSync(input, options)
     }),
 
     // The code below makes sure that async framework is not flawed.
@@ -53,24 +58,24 @@ async function run() {
 
     b.add('@fervid/napi sync promise (4 threads)', () => {
       return Promise.allSettled(
-        Array.from({ length: 4 }, (_) => new Promise<void>((resolve) => (compiler.compileSync(input), resolve()))),
+        Array.from({ length: 4 }, (_) => new Promise<void>((resolve) => (compiler.compileSync(input, options), resolve()))),
       )
     }),
 
     b.add(`@fervid/napi sync promise (${CPUS} threads)`, () => {
       return Promise.allSettled(
-        Array.from({ length: CPUS }, (_) => new Promise<void>((resolve) => (compiler.compileSync(input), resolve()))),
+        Array.from({ length: CPUS }, (_) => new Promise<void>((resolve) => (compiler.compileSync(input, options), resolve()))),
       )
     }),
 
     // END
 
     b.add('@fervid/napi async (4 threads)', () => {
-      return Promise.allSettled(Array.from({ length: 4 }, (_) => compiler.compileAsync(input)))
+      return Promise.allSettled(Array.from({ length: 4 }, (_) => compiler.compileAsync(input, options)))
     }),
 
     b.add(`@fervid/napi async CPUS (${CPUS} threads)`, () => {
-      return Promise.allSettled(Array.from({ length: CPUS }, (_) => compiler.compileAsync(input)))
+      return Promise.allSettled(Array.from({ length: CPUS }, (_) => compiler.compileAsync(input, options)))
     }),
 
     // Custom cycle function to account for the async nature
