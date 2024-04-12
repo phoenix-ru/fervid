@@ -60,13 +60,13 @@
   },
   "devDependencies": {
     "@babel/parser": "^7.24.4",
-    "@napi-rs/cli": "^2.18.0",
+    "@napi-rs/cli": "^2.18.1",
     "@swc-node/register": "^1.9.0",
-    "@swc/core": "^1.4.8",
+    "@swc/core": "^1.4.13",
     "@taplo/cli": "^0.7.0",
-    "@types/node": "^20.11.10",
-    "@typescript-eslint/eslint-plugin": "^7.3.1",
-    "@typescript-eslint/parser": "^7.3.1",
+    "@types/node": "^20.12.7",
+    "@typescript-eslint/eslint-plugin": "^7.6.0",
+    "@typescript-eslint/parser": "^7.6.0",
     "@vue/compiler-sfc": "^3.4.21",
     "benny": "^3.7.1",
     "chalk": "^5.3.0",
@@ -78,9 +78,9 @@
     "kleur": "^4.1.5",
     "lint-staged": "^14.0.1",
     "npm-run-all": "^4.1.5",
-    "prettier": "^3.2.4",
+    "prettier": "^3.2.5",
     "typescript": "^5.3.3",
-    "vitest": "^1.4.0"
+    "vitest": "^1.5.0"
   },
   "lint-staged": {
     "*.@(js|ts|tsx)": [
@@ -115,7 +115,7 @@
     "@fervid/napi-win32-ia32-msvc": "0.2.1",
     "@fervid/napi-win32-x64-msvc": "0.2.1"
   },
-  "packageManager": "yarn@4.0.2",
+  "packageManager": "yarn@4.1.1",
   "workspaces": [
     "npm/*"
   ]

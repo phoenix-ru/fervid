@@ -11,13 +11,13 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@fervid/unplugin": "^0.0.1",
+    "@fervid/unplugin": "link:../../unplugin",
     "html-webpack-plugin": "^5.6.0",
-    "rollup": "^4.13.0",
-    "unplugin": "^1.10.0",
-    "webpack": "^5.90.3",
+    "rollup": "^4.14.2",
+    "unplugin": "^1.10.1",
+    "webpack": "^5.91.0",
     "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^4.15.1"
+    "webpack-dev-server": "^4.15.2"
   },
   "dependencies": {
     "vue": "^3.4.21"
