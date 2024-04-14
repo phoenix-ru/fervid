@@ -57,7 +57,11 @@ use fervid_codegen::CodegenContext;
 pub use fervid_core::*;
 use fervid_parser::SfcParser;
 use fervid_transform::{style::should_transform_style_block, transform_sfc, TransformSfcOptions};
-use std::{borrow::Cow, hash::{DefaultHasher, Hash, Hasher}};
+use std::{
+    borrow::Cow,
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
 use swc_core::ecma::ast::Expr;
 
 // TODO Add severity to errors
