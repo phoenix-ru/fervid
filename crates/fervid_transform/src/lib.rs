@@ -36,6 +36,7 @@ pub fn transform_sfc<'o>(
         sfc_descriptor.script_setup,
         sfc_descriptor.script_legacy,
         &mut bindings_helper,
+        errors
     );
 
     // Transform the template if it is present

@@ -1,6 +1,6 @@
 use fervid_core::{BindingTypes, BindingsHelper, SetupBinding, SfcScriptBlock};
 use swc_core::{
-    common::DUMMY_SP,
+    common::{Span, DUMMY_SP},
     ecma::ast::{
         BindingIdent, BlockStmt, Decl, ExprStmt, Function, Ident, KeyValuePatProp, KeyValueProp,
         ModuleDecl, ModuleItem, ObjectPat, ObjectPatProp, Param, Pat, Prop, PropName, PropOrSpread,
@@ -10,6 +10,7 @@ use swc_core::{
 
 use crate::{
     atoms::{EMIT, EMITS, EMIT_HELPER, EXPOSE, EXPOSE_HELPER, PROPS, PROPS_HELPER},
+    error::{ScriptError, TransformError, TransformErrorKind},
     script::{
         common::{
             categorize_class, categorize_expr, categorize_fn_decl, enrich_binding_types,
@@ -30,7 +31,7 @@ use self::macros::{postprocess_macros, transform_script_setup_macro_expr};
 
 pub struct TransformScriptSetupResult {
     /// All the imports (and maybe exports) of the `<script setup>`
-    pub module_decls: Vec<ModuleDecl>,
+    pub module_items: Vec<ModuleItem>,
     /// SFC object produced in a form of helper
     pub sfc_object_helper: SfcExportedObjectHelper,
     /// `setup` function produced
@@ -41,10 +42,11 @@ pub struct TransformScriptSetupResult {
 pub fn transform_and_record_script_setup(
     script_setup: SfcScriptBlock,
     bindings_helper: &mut BindingsHelper,
+    errors: &mut Vec<TransformError>,
 ) -> TransformScriptSetupResult {
     let span = script_setup.content.span;
 
-    let mut module_decls = Vec::<ModuleDecl>::new();
+    let mut module_items = Vec::<ModuleItem>::new();
     let mut sfc_object_helper = SfcExportedObjectHelper::default();
 
     let mut vue_user_imports = VueResolvedImports::default();
@@ -67,8 +69,19 @@ pub fn transform_and_record_script_setup(
     // Go over the whole script setup: process all the statements and declarations
     for module_item in script_setup.content.body {
         let stmt = match module_item {
-            ModuleItem::ModuleDecl(decl) => {
-                module_decls.push(decl);
+            ModuleItem::ModuleDecl(ref decl) => {
+                // Disallow non-type exports
+                let setup_export_error_span = check_export(decl);
+                match setup_export_error_span {
+                    Some(span) => errors.push(TransformError {
+                        span,
+                        kind: TransformErrorKind::ScriptError(ScriptError::SetupExport),
+                    }),
+                    None => {
+                        module_items.push(module_item);
+                    }
+                }
+
                 continue;
             }
             ModuleItem::Stmt(stmt) => stmt,
@@ -134,7 +147,7 @@ pub fn transform_and_record_script_setup(
     }));
 
     TransformScriptSetupResult {
-        module_decls,
+        module_items,
         sfc_object_helper,
         setup_fn,
     }
@@ -262,6 +275,31 @@ pub fn merge_sfc_helper(sfc_helper: SfcExportedObjectHelper, dest: &mut Vec<Prop
     dest.extend(sfc_helper.untyped_fields);
 }
 
+/// Returns an error span if non-type export is used
+fn check_export(module_decl: &ModuleDecl) -> Option<Span> {
+    match module_decl {
+        ModuleDecl::ExportDecl(e) => match e.decl {
+            Decl::Class(_)
+            | Decl::Fn(_)
+            | Decl::Var(_)
+            | Decl::Using(_)
+            | Decl::TsEnum(_)
+            | Decl::TsModule(_) => Some(e.span),
+            Decl::TsInterface(_) | Decl::TsTypeAlias(_) => None,
+        },
+        ModuleDecl::ExportNamed(e) if !e.type_only => Some(e.span),
+        ModuleDecl::ExportDefaultDecl(e) => Some(e.span),
+        ModuleDecl::ExportDefaultExpr(e) => Some(e.span),
+        ModuleDecl::ExportAll(e) if !e.type_only => Some(e.span),
+        ModuleDecl::TsExportAssignment(e) => Some(e.span),
+
+        // ModuleDecl::Import(_) => todo!(),
+        // ModuleDecl::TsImportEquals(_) => todo!(),
+        // ModuleDecl::TsNamespaceExport(_) => todo!(),
+        _ => None,
+    }
+}
+
 /// Used to populate the params to `setup()`, such as `__props`, `emit`, etc.
 fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param> {
     let has_ctx_param =
@@ -333,7 +371,10 @@ fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param
 
 #[cfg(test)]
 mod tests {
-    use crate::test_utils::parser::*;
+    use crate::{
+        error::{ScriptError, TransformErrorKind},
+        test_utils::parser::*,
+    };
     use fervid_core::{fervid_atom, BindingTypes, BindingsHelper, SetupBinding, SfcScriptBlock};
     use swc_core::common::DUMMY_SP;
 
@@ -341,7 +382,8 @@ mod tests {
 
     fn analyze_bindings(script_setup: SfcScriptBlock) -> Vec<SetupBinding> {
         let mut bindings_helper = BindingsHelper::default();
-        transform_and_record_script_setup(script_setup, &mut bindings_helper);
+        let mut errors = Vec::new();
+        transform_and_record_script_setup(script_setup, &mut bindings_helper, &mut errors);
 
         bindings_helper.setup_bindings
     }
@@ -659,5 +701,58 @@ mod tests {
                 SetupBinding(fervid_atom!("e"), BindingTypes::SetupLet),
             ]
         );
+    }
+
+    // https://github.com/vuejs/core/blob/140a7681cc3bba22f55d97fd85a5eafe97a1230f/packages/compiler-sfc/__tests__/compileScript.spec.ts#L871-L890
+    #[test]
+    fn non_type_named_exports() {
+        macro_rules! check {
+            ($code: literal, $should_error: literal) => {
+                let parsed = parse_typescript_module($code, 0, Default::default())
+                    .expect("analyze_js expects the input to be parseable")
+                    .0;
+
+                let script_setup = SfcScriptBlock {
+                    content: Box::new(parsed),
+                    lang: fervid_core::SfcScriptLang::Typescript,
+                    is_setup: true,
+                    span: DUMMY_SP,
+                };
+
+                let mut bindings_helper = BindingsHelper::default();
+                let mut errors = Vec::new();
+                transform_and_record_script_setup(script_setup, &mut bindings_helper, &mut errors);
+
+                if $should_error {
+                    let error = errors.first().expect("Should have error");
+                    assert!(matches!(
+                        error.kind,
+                        TransformErrorKind::ScriptError(ScriptError::SetupExport)
+                    ));
+                }
+            };
+        }
+
+        macro_rules! expect_error {
+            ($code: literal) => {
+                check!($code, true);
+            };
+        }
+
+        macro_rules! expect_no_error {
+            ($code: literal) => {
+                check!($code, false);
+            };
+        }
+
+        expect_error!("export const a = 1");
+        expect_error!("export * from './foo'");
+        expect_error!(
+            "
+            const bar = 1
+            export { bar as default }"
+        );
+        expect_no_error!("export type Foo = Bar | Baz");
+        expect_no_error!("export interface Foo {}");
     }
 }

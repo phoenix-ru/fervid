@@ -3,10 +3,10 @@
 use fervid_core::{BindingsHelper, SfcScriptBlock, TemplateGenerationMode};
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{Function, Module, ModuleItem, ObjectLit},
+    ecma::ast::{Function, Module, ObjectLit},
 };
 
-use crate::structs::TransformScriptsResult;
+use crate::{error::TransformError, structs::TransformScriptsResult};
 
 use self::{
     options_api::{transform_and_record_script_options_api, AnalyzeOptions},
@@ -31,6 +31,7 @@ pub fn transform_and_record_scripts(
     script_setup: Option<SfcScriptBlock>,
     script_legacy: Option<SfcScriptBlock>,
     bindings_helper: &mut BindingsHelper,
+    errors: &mut Vec<TransformError>,
 ) -> TransformScriptsResult {
     // Set inline flag in `BindingsHelper`
     if bindings_helper.is_prod && script_setup.is_some() {
@@ -74,13 +75,12 @@ pub fn transform_and_record_scripts(
     let mut setup_fn: Option<Box<Function>> = None;
     if let Some(script_setup) = script_setup {
         let setup_transform_result =
-            transform_and_record_script_setup(script_setup, bindings_helper);
+            transform_and_record_script_setup(script_setup, bindings_helper, errors);
 
         // TODO Push imports at module top or bottom? Or smart merge?
         // TODO Merge Vue imports produced by module transformation
-        // TODO Is this really a `Vec<ModuleDecl>` or should rather be a `Vec<ModuleItem>`?
-        for module_decl in setup_transform_result.module_decls.into_iter() {
-            module.body.push(ModuleItem::ModuleDecl(module_decl));
+        for module_item in setup_transform_result.module_items.into_iter() {
+            module.body.push(module_item);
         }
 
         // Merge fields into an SFC exported object

@@ -9,7 +9,14 @@ pub struct TransformError {
 
 #[derive(Debug)]
 pub enum TransformErrorKind {
-    CssError(CssError)
+    CssError(CssError),
+    ScriptError(ScriptError)
+}
+
+#[derive(Debug)]
+pub enum ScriptError {
+    /// Disallow non-type exports inside `<script setup>`
+    SetupExport
 }
 
 impl From<CssError> for TransformError {
