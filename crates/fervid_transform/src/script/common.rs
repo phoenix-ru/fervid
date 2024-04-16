@@ -45,7 +45,6 @@ pub fn categorize_fn_decl(fn_decl: &FnDecl) -> SetupBinding {
 pub fn categorize_expr(
     expr: &Expr,
     vue_user_imports: &VueResolvedImports,
-    is_await_used: &mut bool,
 ) -> BindingTypes {
     // Unroll an expression from all possible parenthesis and commas,
     // e.g. `(foo, bar)` -> `bar`
@@ -82,8 +81,7 @@ pub fn categorize_expr(
         }
 
         Expr::Await(await_expr) => {
-            *is_await_used = true; // only first-level await is recognized
-            categorize_expr(&await_expr.arg, vue_user_imports, is_await_used)
+            categorize_expr(&await_expr.arg, vue_user_imports)
         }
 
         // MaybeRef binding
@@ -95,25 +93,25 @@ pub fn categorize_expr(
         // TS expressions
         //
         Expr::TsTypeAssertion(type_assertion_expr) => {
-            categorize_expr(&type_assertion_expr.expr, vue_user_imports, is_await_used)
+            categorize_expr(&type_assertion_expr.expr, vue_user_imports)
         }
 
         Expr::TsConstAssertion(const_assertion_expr) => {
-            categorize_expr(&const_assertion_expr.expr, vue_user_imports, is_await_used)
+            categorize_expr(&const_assertion_expr.expr, vue_user_imports)
         }
 
         Expr::TsNonNull(non_null_expr) => {
-            categorize_expr(&non_null_expr.expr, vue_user_imports, is_await_used)
+            categorize_expr(&non_null_expr.expr, vue_user_imports)
         }
 
         Expr::TsInstantiation(instantiation_expr) => {
-            categorize_expr(&instantiation_expr.expr, vue_user_imports, is_await_used)
+            categorize_expr(&instantiation_expr.expr, vue_user_imports)
         }
 
-        Expr::TsAs(as_expr) => categorize_expr(&as_expr.expr, vue_user_imports, is_await_used),
+        Expr::TsAs(as_expr) => categorize_expr(&as_expr.expr, vue_user_imports),
 
         Expr::TsSatisfies(satisfies_expr) => {
-            categorize_expr(&satisfies_expr.expr, vue_user_imports, is_await_used)
+            categorize_expr(&satisfies_expr.expr, vue_user_imports)
         }
 
         // The other variants are never refs

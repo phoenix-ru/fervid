@@ -22,12 +22,13 @@ use crate::{
     structs::{SfcExportedObjectHelper, VueResolvedImports},
 };
 
+mod await_detection;
 mod imports;
 mod macros;
 
 pub use imports::*;
 
-use self::macros::{postprocess_macros, transform_script_setup_macro_expr};
+use self::{await_detection::detect_await_module_item, macros::{postprocess_macros, transform_script_setup_macro_expr}};
 
 pub struct TransformScriptSetupResult {
     /// All the imports (and maybe exports) of the `<script setup>`
@@ -52,10 +53,12 @@ pub fn transform_and_record_script_setup(
     let mut vue_user_imports = VueResolvedImports::default();
     let mut setup_body_stmts = Vec::<Stmt>::new();
 
-    // Collect imports first
+    // Perform read-only tasks first:
+    // 1. Collect imports
     // This is because ES6 imports are hoisted and usage like this is valid:
     // const bar = x(1)
     // import { reactive as x } from 'vue'
+    // 2. Detect `await` usage
     for module_item in script_setup.content.body.iter() {
         if let ModuleItem::ModuleDecl(ModuleDecl::Import(import_decl)) = module_item {
             collect_imports(
@@ -64,6 +67,10 @@ pub fn transform_and_record_script_setup(
                 &mut vue_user_imports,
             );
         };
+
+        if !sfc_object_helper.is_async_setup {
+            sfc_object_helper.is_async_setup |= detect_await_module_item(module_item);
+        }
     }
 
     // Go over the whole script setup: process all the statements and declarations
@@ -212,7 +219,6 @@ fn transform_decl_stmt(
                         let rhs_type = categorize_expr(
                             init_expr,
                             vue_user_imports,
-                            &mut sfc_object_helper.is_async_setup,
                         );
 
                         enrich_binding_types(&mut collected_bindings, rhs_type, is_const, is_ident);

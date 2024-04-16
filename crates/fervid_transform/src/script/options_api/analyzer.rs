@@ -93,8 +93,6 @@ pub fn analyze_top_level_items(
     out: &mut OptionsApiBindings,
     vue_imports: &mut VueResolvedImports,
 ) {
-    let mut is_await_used = false; // ignored
-
     for module_item in module.body.iter() {
         match *module_item {
             ModuleItem::ModuleDecl(ref module_decl) => {
@@ -113,7 +111,6 @@ pub fn analyze_top_level_items(
                             &export_decl.decl,
                             &mut out.setup,
                             vue_imports,
-                            &mut is_await_used,
                         );
                     }
 
@@ -123,7 +120,7 @@ pub fn analyze_top_level_items(
             }
 
             ModuleItem::Stmt(Stmt::Decl(ref decl)) => {
-                analyze_top_level_decl(decl, &mut out.setup, vue_imports, &mut is_await_used);
+                analyze_top_level_decl(decl, &mut out.setup, vue_imports);
             }
 
             _ => {}
@@ -141,7 +138,6 @@ fn analyze_top_level_decl(
     decl: &Decl,
     out: &mut Vec<SetupBinding>,
     vue_user_imports: &mut VueResolvedImports,
-    is_await_used: &mut bool,
 ) {
     match decl {
         Decl::Class(class) => out.push(categorize_class(class)),
@@ -165,7 +161,7 @@ fn analyze_top_level_decl(
                     if let Some(ref init_expr) = var_declarator.init {
                         // Resolve only when this is a constant identifier.
                         // For destructures correct bindings are already assigned.
-                        let rhs_type = categorize_expr(init_expr, vue_user_imports, is_await_used);
+                        let rhs_type = categorize_expr(init_expr, vue_user_imports);
 
                         enrich_binding_types(&mut collected_bindings, rhs_type, is_const, is_ident);
                     }
