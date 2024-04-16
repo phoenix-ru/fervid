@@ -362,7 +362,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0610544180c38b88101fecf2dd634b174a62eef6946f84dfc6a7127512b381c"
 dependencies = [
  "bitflags 1.3.2",
- "textwrap",
+ "textwrap 0.11.0",
  "unicode-width",
 ]
 
@@ -757,6 +757,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fervid_lint"
+version = "0.1.0"
+dependencies = [
+ "fervid_parser",
+ "swc_core",
+ "swc_ecma_lints",
+ "swc_ecma_transforms_base",
+ "swc_error_reporters",
+]
+
+[[package]]
 name = "fervid_napi"
 version = "0.1.0"
 dependencies = [
@@ -1037,6 +1048,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "is_ci"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7655c9839580ee829dfacba1d1278c2b7883e50a277ff7541299489d6bdfdc45"
+
+[[package]]
 name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1213,14 +1230,45 @@ checksum = "8452105ba047068f40ff7093dd1d9da90898e63dd61736462e9cdda6a90ad3c3"
 
 [[package]]
 name = "miette"
+version = "4.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c90329e44f9208b55f45711f9558cec15d7ef8295cc65ecd6d4188ae8edc58c"
+dependencies = [
+ "atty",
+ "backtrace",
+ "miette-derive 4.7.1",
+ "once_cell",
+ "owo-colors",
+ "supports-color",
+ "supports-hyperlinks",
+ "supports-unicode",
+ "terminal_size",
+ "textwrap 0.15.2",
+ "thiserror",
+ "unicode-width",
+]
+
+[[package]]
+name = "miette"
 version = "5.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59bb584eaeeab6bd0226ccf3509a69d7936d148cf3d036ad350abe35e8c6856e"
 dependencies = [
- "miette-derive",
+ "miette-derive 5.10.0",
  "once_cell",
  "thiserror",
  "unicode-width",
+]
+
+[[package]]
+name = "miette-derive"
+version = "4.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b5bc45b761bcf1b5e6e6c4128cd93b84c218721a8d9b894aa0aff4ed180174c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1408,6 +1456,12 @@ name = "outref"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f222829ae9293e33a9f5e9f440c6760a3d450a64affe1846486b140db81c1f4"
+
+[[package]]
+name = "owo-colors"
+version = "3.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1b04fb49957986fdce4d6ee7a65027d55d4b6d2265e5848bbb507b58ccfdb6f"
 
 [[package]]
 name = "panic-message"
@@ -2002,6 +2056,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "smawk"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7c388c1b5e93756d0c740965c41e8822f866621d41acbdf6336a6a168f8840c"
+
+[[package]]
 name = "sourcemap"
 version = "6.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2127,6 +2187,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
 
 [[package]]
+name = "supports-color"
+version = "1.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ba6faf2ca7ee42fdd458f4347ae0a9bd6bcc445ad7cb57ad82b383f18870d6f"
+dependencies = [
+ "atty",
+ "is_ci",
+]
+
+[[package]]
+name = "supports-hyperlinks"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "590b34f7c5f01ecc9d78dba4b3f445f31df750a67621cf31626f3b7441ce6406"
+dependencies = [
+ "atty",
+]
+
+[[package]]
+name = "supports-unicode"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8b945e45b417b125a8ec51f1b7df2f8df7920367700d1f98aedd21e5735f8b2"
+dependencies = [
+ "atty",
+]
+
+[[package]]
 name = "swc_atoms"
 version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2137,6 +2225,20 @@ dependencies = [
  "once_cell",
  "rkyv",
  "rustc-hash",
+ "serde",
+]
+
+[[package]]
+name = "swc_cached"
+version = "0.3.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83406221c501860fce9c27444f44125eafe9e598b8b81be7563d7036784cd05c"
+dependencies = [
+ "ahash 0.8.11",
+ "anyhow",
+ "dashmap",
+ "once_cell",
+ "regex",
  "serde",
 ]
 
@@ -2167,6 +2269,32 @@ dependencies = [
  "tracing",
  "unicode-width",
  "url",
+]
+
+[[package]]
+name = "swc_config"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ada712ac5e28a301683c8af957e8a56deca675cbc376473dd207a527b989efb5"
+dependencies = [
+ "anyhow",
+ "indexmap",
+ "serde",
+ "serde_json",
+ "swc_cached",
+ "swc_config_macro",
+]
+
+[[package]]
+name = "swc_config_macro"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b2574f75082322a27d990116cd2a24de52945fc94172b24ca0b3e9e2a6ceb6b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "swc_macros_common",
+ "syn 2.0.58",
 ]
 
 [[package]]
@@ -2314,6 +2442,7 @@ dependencies = [
  "num-bigint",
  "phf",
  "scoped-tls",
+ "serde",
  "string_enum",
  "swc_atoms",
  "swc_common",
@@ -2349,6 +2478,26 @@ dependencies = [
  "quote",
  "swc_macros_common",
  "syn 2.0.58",
+]
+
+[[package]]
+name = "swc_ecma_lints"
+version = "0.92.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d38a464421a91150511530b93321fa3f888cade9ad05080bf228fd72421c747"
+dependencies = [
+ "auto_impl",
+ "dashmap",
+ "parking_lot",
+ "rayon",
+ "regex",
+ "serde",
+ "swc_atoms",
+ "swc_common",
+ "swc_config",
+ "swc_ecma_ast 0.112.7",
+ "swc_ecma_utils",
+ "swc_ecma_visit",
 ]
 
 [[package]]
@@ -2462,6 +2611,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "swc_error_reporters"
+version = "0.17.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3329e73f159a3d38d4cd5f606a0918eeff39f5bbdbdafd9b6fecb290d2e9a32d"
+dependencies = [
+ "anyhow",
+ "miette 4.7.1",
+ "once_cell",
+ "parking_lot",
+ "swc_common",
+]
+
+[[package]]
 name = "swc_html_ast"
 version = "0.33.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2567,8 +2729,18 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "900c942f83b6a8b9998cc8f74ad3ffa24b7ff3c4279ea1c1c52d95dced9f3516"
 dependencies = [
- "miette",
+ "miette 5.10.0",
  "vec1",
+]
+
+[[package]]
+name = "terminal_size"
+version = "0.1.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "633c1a546cee861a1a6d0dc69ebeca693bf4296661ba7852b9d21d159e0506df"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]
@@ -2577,6 +2749,17 @@ version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d326610f408c7a4eb6f51c37c330e496b08506c9457c9d34287ecc38809fb060"
 dependencies = [
+ "unicode-width",
+]
+
+[[package]]
+name = "textwrap"
+version = "0.15.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7b3e525a49ec206798b40326a44121291b530c963cfb01018f63e135bac543d"
+dependencies = [
+ "smawk",
+ "unicode-linebreak",
  "unicode-width",
 ]
 
@@ -2711,6 +2894,12 @@ name = "unicode-ident"
 version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
+
+[[package]]
+name = "unicode-linebreak"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b09c83c3c29d37506a3e260c08c03743a6bb66a9cd432c6934ab501a190571f"
 
 [[package]]
 name = "unicode-normalization"
@@ -2858,7 +3047,7 @@ checksum = "8d12a78aa0bab22d2f26ed1a96df7ab58e8a93506a3e20adb47c51a93b4e1357"
 dependencies = [
  "const_format",
  "itertools 0.11.0",
- "miette",
+ "miette 5.10.0",
  "nom",
  "pori",
  "regex",
