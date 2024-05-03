@@ -255,10 +255,10 @@ fn unwrap_parens(expr: &Expr) -> &Expr {
 #[cfg(test)]
 mod tests {
     use fervid_core::{
-        fervid_atom, BindingTypes, BindingsHelper, SetupBinding, TemplateGenerationMode,
+        fervid_atom, BindingTypes, TemplateGenerationMode,
     };
 
-    use crate::test_utils::{to_str, ts};
+    use crate::{test_utils::{to_str, ts}, BindingsHelper, SetupBinding};
 
     use super::*;
 

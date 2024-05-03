@@ -1,5 +1,5 @@
 use error::TransformError;
-use fervid_core::{BindingsHelper, SfcDescriptor};
+use fervid_core::SfcDescriptor;
 use misc::infer_name;
 use script::transform_and_record_scripts;
 use style::{attach_scope_id, create_style_scope, transform_style_blocks};
@@ -36,7 +36,7 @@ pub fn transform_sfc<'o>(
         sfc_descriptor.script_setup,
         sfc_descriptor.script_legacy,
         &mut bindings_helper,
-        errors
+        errors,
     );
 
     // Transform the template if it is present

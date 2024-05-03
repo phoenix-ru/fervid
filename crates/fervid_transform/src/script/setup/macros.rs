@@ -1,5 +1,5 @@
 use fervid_core::{
-    fervid_atom, BindingTypes, BindingsHelper, FervidAtom, SetupBinding, VueImports,
+    fervid_atom, BindingTypes, FervidAtom, VueImports,
 };
 use swc_core::{
     common::DUMMY_SP,
@@ -16,7 +16,7 @@ use crate::{
         USE_MODEL_HELPER,
     },
     script::utils::{collect_obj_fields, collect_string_arr},
-    structs::{SfcDefineModel, SfcExportedObjectHelper},
+    structs::{SfcDefineModel, SfcExportedObjectHelper}, BindingsHelper, SetupBinding,
 };
 
 pub enum TransformMacroResult {

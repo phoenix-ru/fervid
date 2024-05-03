@@ -1,7 +1,7 @@
-use fervid_core::{BindingTypes, SetupBinding};
+use fervid_core::BindingTypes;
 use swc_core::ecma::ast::{Callee, ClassDecl, Expr, FnDecl, ObjectPatProp, Pat, RestPat};
 
-use crate::{script::utils::unroll_paren_seq, structs::VueResolvedImports};
+use crate::{script::utils::unroll_paren_seq, structs::VueResolvedImports, SetupBinding};
 
 use super::utils::is_static;
 
@@ -42,10 +42,7 @@ pub fn categorize_fn_decl(fn_decl: &FnDecl) -> SetupBinding {
 ///     baz = computed(() => 3),        // BindingTypes::SetupRef
 ///     qux = reactive({ x: 4 }),       // BindingTypes::SetupReactiveConst
 /// ```
-pub fn categorize_expr(
-    expr: &Expr,
-    vue_user_imports: &VueResolvedImports,
-) -> BindingTypes {
+pub fn categorize_expr(expr: &Expr, vue_user_imports: &VueResolvedImports) -> BindingTypes {
     // Unroll an expression from all possible parenthesis and commas,
     // e.g. `(foo, bar)` -> `bar`
     let expr = unroll_paren_seq(expr);
@@ -80,9 +77,7 @@ pub fn categorize_expr(
             }
         }
 
-        Expr::Await(await_expr) => {
-            categorize_expr(&await_expr.arg, vue_user_imports)
-        }
+        Expr::Await(await_expr) => categorize_expr(&await_expr.arg, vue_user_imports),
 
         // MaybeRef binding
         Expr::Ident(_) | Expr::Cond(_) | Expr::Member(_) | Expr::OptChain(_) | Expr::Assign(_) => {
@@ -100,9 +95,7 @@ pub fn categorize_expr(
             categorize_expr(&const_assertion_expr.expr, vue_user_imports)
         }
 
-        Expr::TsNonNull(non_null_expr) => {
-            categorize_expr(&non_null_expr.expr, vue_user_imports)
-        }
+        Expr::TsNonNull(non_null_expr) => categorize_expr(&non_null_expr.expr, vue_user_imports),
 
         Expr::TsInstantiation(instantiation_expr) => {
             categorize_expr(&instantiation_expr.expr, vue_user_imports)

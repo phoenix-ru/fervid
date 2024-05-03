@@ -1,14 +1,16 @@
 use fervid_core::{
     check_attribute_name, fervid_atom, is_from_default_slot, is_html_tag, AttributeOrBinding,
-    BindingTypes, BindingsHelper, BuiltinType, Conditional, ConditionalNodeSequence, ElementKind,
-    ElementNode, FervidAtom, Interpolation, Node, PatchFlags, SfcTemplateBlock, StartingTag,
-    StrOrExpr, TemplateGenerationMode, TemplateScope, VBindDirective, VSlotDirective, VUE_BUILTINS,
+    BindingTypes, BuiltinType, Conditional, ConditionalNodeSequence, ElementKind, ElementNode,
+    FervidAtom, Interpolation, Node, PatchFlags, SfcTemplateBlock, StartingTag, StrOrExpr,
+    TemplateGenerationMode, VBindDirective, VSlotDirective, VUE_BUILTINS,
 };
 use smallvec::SmallVec;
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{Bool, Expr, Ident, Lit},
 };
+
+use crate::{BindingsHelper, TemplateScope};
 
 use super::{collect_vars::collect_variables, expr_transform::BindingsHelperTransform};
 

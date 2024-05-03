@@ -1,19 +1,21 @@
 //! Responsible for `<script>` and `<script setup>` transformations and analysis.
 
-use fervid_core::{BindingsHelper, SfcScriptBlock, TemplateGenerationMode};
+use fervid_core::{SfcScriptBlock, TemplateGenerationMode};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{Function, Module, ObjectLit},
 };
 
-use crate::{error::TransformError, structs::TransformScriptsResult};
+use crate::{error::TransformError, structs::TransformScriptsResult, BindingsHelper};
 
 use self::{
+    imports::process_imports,
     options_api::{transform_and_record_script_options_api, AnalyzeOptions},
     setup::{merge_sfc_helper, transform_and_record_script_setup},
 };
 
 pub mod common;
+mod imports;
 mod options_api;
 mod setup;
 pub mod utils;
@@ -29,13 +31,18 @@ pub mod utils;
 /// - (TODO) Imported `.vue` component bindings;
 pub fn transform_and_record_scripts(
     script_setup: Option<SfcScriptBlock>,
-    script_legacy: Option<SfcScriptBlock>,
+    mut script_legacy: Option<SfcScriptBlock>,
     bindings_helper: &mut BindingsHelper,
     errors: &mut Vec<TransformError>,
 ) -> TransformScriptsResult {
     // Set inline flag in `BindingsHelper`
     if bindings_helper.is_prod && script_setup.is_some() {
         bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
+    }
+
+    // 1.1. Imports in `<script>`
+    if let Some(ref mut script_options) = script_legacy {
+        process_imports(&mut script_options.content, bindings_helper, false, errors);
     }
 
     //
@@ -51,11 +58,12 @@ pub fn transform_and_record_scripts(
         |script| *script.content,
     );
 
-    let script_options_transform_result =
-        transform_and_record_script_options_api(&mut module, AnalyzeOptions::default());
-
-    // Assign Options API bindings
-    bindings_helper.options_api_bindings = Some(script_options_transform_result.vars);
+    let script_options_transform_result = transform_and_record_script_options_api(
+        &mut module,
+        AnalyzeOptions::default(),
+        bindings_helper,
+        errors,
+    );
 
     //
     // STEP 2: Prepare the exported object.
@@ -98,5 +106,110 @@ pub fn transform_and_record_scripts(
         module,
         export_obj,
         setup_fn,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use swc_core::common::{sync::Lrc, SourceMap, Span};
+    use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
+
+    use super::*;
+    use crate::test_utils::parser::parse_javascript_module;
+
+    /// https://github.com/vuejs/core/blob/c0c9432b64091fa15fd8619cfb06828735356a42/packages/compiler-sfc/__tests__/compileScript.spec.ts#L261-L275
+    #[test]
+    fn import_dedupe_between_script_and_script_setup() {
+        check_import_dedupe(
+            "import { x } from './x'",
+            "
+            import { x } from './x'
+            x()",
+            "import { x } from './x';\n",
+        )
+    }
+
+    #[test]
+    fn it_deduplicates_imports() {
+        check_import_dedupe(
+            "
+            import { x } from './x'
+            import { ref } from 'vue'",
+            "
+            import { x, y, z } from './x'
+            x()
+            const foo = ref()",
+            "import { x } from './x';\nimport { ref } from 'vue';\nimport { y, z } from './x';\n",
+        );
+    }
+
+    fn check_import_dedupe(script_content: &str, script_setup_content: &str, expected: &str) {
+        macro_rules! ts {
+            ($input: expr) => {
+                Box::new(
+                    parse_javascript_module($input, 0, Default::default())
+                        .expect("analyze_ts expects the input to be parseable")
+                        .0,
+                )
+            };
+        }
+
+        let script = SfcScriptBlock {
+            content: ts!(script_content),
+            lang: fervid_core::SfcScriptLang::Typescript,
+            is_setup: false,
+            span: Span {
+                lo: swc_core::common::BytePos(1),
+                hi: swc_core::common::BytePos(script_content.len() as u32 + 1),
+                ctxt: Default::default(),
+            },
+        };
+        let script_setup = SfcScriptBlock {
+            content: ts!(script_setup_content),
+            lang: fervid_core::SfcScriptLang::Typescript,
+            is_setup: true,
+            span: Span {
+                lo: swc_core::common::BytePos(script_content.len() as u32 + 2),
+                hi: swc_core::common::BytePos(script_setup_content.len() as u32 + 1),
+                ctxt: Default::default(),
+            },
+        };
+
+        // Do work
+        let mut bindings_helper = BindingsHelper::default();
+        let mut errors = Vec::new();
+        let res = transform_and_record_scripts(
+            Some(script_setup),
+            Some(script),
+            &mut bindings_helper,
+            &mut errors,
+        );
+
+        // Emitting the result requires some setup with SWC
+        let cm: Lrc<SourceMap> = Default::default();
+        let mut buff: Vec<u8> = Vec::with_capacity(128);
+        let writer: JsWriter<&mut Vec<u8>> = JsWriter::new(cm.clone(), "\n", &mut buff, None);
+
+        // For possible errors, otherwise SWC does not like it
+        let mut source = String::from(script_content);
+        source.push_str(script_setup_content);
+        cm.new_source_file(swc_core::common::FileName::Anon, source);
+
+        let mut emitter_cfg = swc_ecma_codegen::Config::default();
+        emitter_cfg.minify = false;
+        emitter_cfg.omit_last_semi = false;
+
+        let mut emitter = Emitter {
+            cfg: emitter_cfg,
+            comments: None,
+            wr: writer,
+            cm,
+        };
+
+        let _ = res.module.emit_with(&mut emitter);
+
+        let stringified = String::from_utf8(buff).unwrap();
+
+        assert_eq!(expected, stringified);
     }
 }

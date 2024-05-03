@@ -1,12 +1,16 @@
-use fervid_core::{
-    BindingTypes, ComponentBinding, CustomDirectiveBinding, FervidAtom, SetupBinding,
-};
+use fervid_core::{BindingTypes, ComponentBinding, CustomDirectiveBinding, FervidAtom};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{Expr, Ident},
 };
 
-use super::{ast_transform::TemplateVisitor, expr_transform::BindingsHelperTransform, utils::{to_camel_case, to_pascal_case}};
+use crate::SetupBinding;
+
+use super::{
+    ast_transform::TemplateVisitor,
+    expr_transform::BindingsHelperTransform,
+    utils::{to_camel_case, to_pascal_case},
+};
 
 impl TemplateVisitor<'_> {
     /// Fuzzy-matches the component name to a binding name
@@ -122,7 +126,9 @@ impl TemplateVisitor<'_> {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{fervid_atom, BindingsHelper, SetupBinding};
+    use fervid_core::fervid_atom;
+
+    use crate::BindingsHelper;
 
     use super::*;
 

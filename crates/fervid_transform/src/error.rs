@@ -15,8 +15,13 @@ pub enum TransformErrorKind {
 
 #[derive(Debug)]
 pub enum ScriptError {
+    /// A compiler macro was imported, but it didn't need to
+    CompilerMacroImport,
+    /// Different imports using the same local symbol,
+    /// e.g `import foo from './foo'` and `import { foo } from './bar'`.
+    DuplicateImport,
     /// Disallow non-type exports inside `<script setup>`
-    SetupExport
+    SetupExport,
 }
 
 impl From<CssError> for TransformError {

@@ -1,4 +1,4 @@
-use fervid_core::{BindingTypes, BindingsHelper, SetupBinding, SfcScriptBlock};
+use fervid_core::{BindingTypes, SfcScriptBlock};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::ast::{
@@ -19,16 +19,19 @@ use crate::{
         setup::macros::TransformMacroResult,
         utils::is_static,
     },
-    structs::{SfcExportedObjectHelper, VueResolvedImports},
+    structs::SfcExportedObjectHelper,
+    BindingsHelper, SetupBinding,
 };
 
 mod await_detection;
-mod imports;
 mod macros;
 
-pub use imports::*;
+use self::{
+    await_detection::detect_await_module_item,
+    macros::{postprocess_macros, transform_script_setup_macro_expr},
+};
 
-use self::{await_detection::detect_await_module_item, macros::{postprocess_macros, transform_script_setup_macro_expr}};
+use super::imports::process_imports;
 
 pub struct TransformScriptSetupResult {
     /// All the imports (and maybe exports) of the `<script setup>`
@@ -41,7 +44,7 @@ pub struct TransformScriptSetupResult {
 
 /// Transforms the `<script setup>` block and records its bindings
 pub fn transform_and_record_script_setup(
-    script_setup: SfcScriptBlock,
+    mut script_setup: SfcScriptBlock,
     bindings_helper: &mut BindingsHelper,
     errors: &mut Vec<TransformError>,
 ) -> TransformScriptSetupResult {
@@ -50,24 +53,16 @@ pub fn transform_and_record_script_setup(
     let mut module_items = Vec::<ModuleItem>::new();
     let mut sfc_object_helper = SfcExportedObjectHelper::default();
 
-    let mut vue_user_imports = VueResolvedImports::default();
     let mut setup_body_stmts = Vec::<Stmt>::new();
 
-    // Perform read-only tasks first:
+    // Perform these tasks first:
     // 1. Collect imports
     // This is because ES6 imports are hoisted and usage like this is valid:
     // const bar = x(1)
     // import { reactive as x } from 'vue'
     // 2. Detect `await` usage
+    process_imports(&mut script_setup.content, bindings_helper, true, errors);
     for module_item in script_setup.content.body.iter() {
-        if let ModuleItem::ModuleDecl(ModuleDecl::Import(import_decl)) = module_item {
-            collect_imports(
-                import_decl,
-                &mut bindings_helper.setup_bindings,
-                &mut vue_user_imports,
-            );
-        };
-
         if !sfc_object_helper.is_async_setup {
             sfc_object_helper.is_async_setup |= detect_await_module_item(module_item);
         }
@@ -118,13 +113,9 @@ pub fn transform_and_record_script_setup(
                 }
             }
 
-            Stmt::Decl(decl) => transform_decl_stmt(
-                decl,
-                bindings_helper,
-                &vue_user_imports,
-                &mut sfc_object_helper,
-            )
-            .map(Stmt::Decl),
+            Stmt::Decl(decl) => {
+                transform_decl_stmt(decl, bindings_helper, &mut sfc_object_helper).map(Stmt::Decl)
+            }
 
             // By default, just return the same statement
             _ => Some(stmt),
@@ -165,7 +156,6 @@ pub fn transform_and_record_script_setup(
 fn transform_decl_stmt(
     decl: Decl,
     bindings_helper: &mut BindingsHelper,
-    vue_user_imports: &VueResolvedImports,
     sfc_object_helper: &mut SfcExportedObjectHelper,
 ) -> Option<Decl> {
     /// Pushes the binding type and returns the same passed `Decl`
@@ -216,10 +206,8 @@ fn transform_decl_stmt(
                     } else if is_const && is_ident {
                         // Resolve only when this is a constant identifier.
                         // For destructures correct bindings are already assigned.
-                        let rhs_type = categorize_expr(
-                            init_expr,
-                            vue_user_imports,
-                        );
+                        let rhs_type =
+                            categorize_expr(init_expr, &bindings_helper.vue_resolved_imports);
 
                         enrich_binding_types(&mut collected_bindings, rhs_type, is_const, is_ident);
                     }
@@ -380,8 +368,9 @@ mod tests {
     use crate::{
         error::{ScriptError, TransformErrorKind},
         test_utils::parser::*,
+        BindingsHelper, SetupBinding,
     };
-    use fervid_core::{fervid_atom, BindingTypes, BindingsHelper, SetupBinding, SfcScriptBlock};
+    use fervid_core::{fervid_atom, BindingTypes, SfcScriptBlock};
     use swc_core::common::DUMMY_SP;
 
     use super::transform_and_record_script_setup;

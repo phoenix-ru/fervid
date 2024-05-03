@@ -723,6 +723,7 @@ name = "fervid_codegen"
 version = "0.1.0"
 dependencies = [
  "fervid_core",
+ "fervid_transform",
  "flagset",
  "fxhash",
  "lazy_static",

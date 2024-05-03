@@ -1,11 +1,9 @@
-use fervid_core::{BindingTypes, SetupBinding};
+use crate::SetupBinding;
+use fervid_core::BindingTypes;
 use swc_core::ecma::ast::{ExportSpecifier, ModuleExportName, NamedExport};
 
 /// Collects exports from e.g. `export { foo, bar as baz } from 'qux'`
-pub fn collect_exports_named(
-    named: &NamedExport,
-    out: &mut Vec<SetupBinding>
-) {
+pub fn collect_exports_named(named: &NamedExport, out: &mut Vec<SetupBinding>) {
     if named.type_only {
         return;
     }

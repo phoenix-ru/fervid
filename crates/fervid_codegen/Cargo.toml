@@ -11,6 +11,7 @@ license = "Apache-2.0"
 
 [dependencies]
 fervid_core = { path="../fervid_core", version = "0.1" }
+fervid_transform = { path="../fervid_transform", version="0.1" }
 lazy_static = { workspace = true }
 swc_core = { workspace = true , features = ["ecma_ast"] }
 swc_ecma_codegen = { workspace = true }

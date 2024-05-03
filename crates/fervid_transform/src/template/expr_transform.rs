@@ -1,6 +1,6 @@
 use fervid_core::{
-    fervid_atom, BindingTypes, BindingsHelper, FervidAtom, PatchFlags, PatchHints, SetupBinding,
-    StrOrExpr, TemplateGenerationMode, VModelDirective, VueImports,
+    fervid_atom, BindingTypes, FervidAtom, PatchFlags, PatchHints, StrOrExpr,
+    TemplateGenerationMode, VModelDirective, VueImports,
 };
 use swc_core::{
     common::DUMMY_SP,
@@ -16,7 +16,10 @@ use swc_core::{
     },
 };
 
-use crate::{script::common::extract_variables_from_pat, template::js_builtins::JS_BUILTINS};
+use crate::{
+    script::common::extract_variables_from_pat, template::js_builtins::JS_BUILTINS, BindingsHelper,
+    SetupBinding,
+};
 
 use super::utils::wrap_in_event_arrow;
 
@@ -1019,10 +1022,10 @@ mod tests {
     use crate::{
         template::{expr_transform::BindingsHelperTransform, js_builtins::JS_BUILTINS},
         test_utils::{parser::parse_javascript_expr, to_str},
+        BindingsHelper, SetupBinding, TemplateScope,
     };
     use fervid_core::{
-        BindingTypes, BindingsHelper, FervidAtom, PatchHints, SetupBinding, StrOrExpr,
-        TemplateGenerationMode, TemplateScope, VModelDirective,
+        BindingTypes, FervidAtom, PatchHints, StrOrExpr, TemplateGenerationMode, VModelDirective,
     };
     use smallvec::SmallVec;
     use swc_core::common::DUMMY_SP;

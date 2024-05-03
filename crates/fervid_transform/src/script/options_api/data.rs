@@ -1,4 +1,4 @@
-use fervid_core::OptionsApiBindings;
+use crate::OptionsApiBindings;
 use swc_core::ecma::ast::{BlockStmt, Expr};
 
 use crate::script::utils::{collect_block_stmt_return_fields, unroll_paren_seq, collect_obj_fields};

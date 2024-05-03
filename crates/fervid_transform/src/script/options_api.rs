@@ -1,4 +1,3 @@
-use fervid_core::OptionsApiBindings;
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
@@ -7,7 +6,7 @@ use swc_core::{
     },
 };
 
-use crate::structs::VueResolvedImports;
+use crate::{error::TransformError, BindingsHelper};
 
 mod analyzer;
 mod components;
@@ -37,37 +36,45 @@ pub struct AnalyzeOptions {
 }
 
 pub struct ScriptOptionsTransformResult {
-    pub vars: Box<OptionsApiBindings>,
-    pub resolved_vue_imports: Box<VueResolvedImports>,
     pub default_export_obj: Option<ObjectLit>,
 }
 
 pub fn transform_and_record_script_options_api(
     module: &mut Module,
     opts: AnalyzeOptions,
+    bindings_helper: &mut BindingsHelper,
+    _errors: &mut Vec<TransformError>,
 ) -> ScriptOptionsTransformResult {
     // Default export should be either an object or `defineComponent({ /* ... */ })`
     // let maybe_default_export = super::utils::find_default_export(module);
     let maybe_default_export = find_default_export_obj(module);
 
-    // This is where we collect all the analyzed stuff
-    let mut script_legacy_vars = OptionsApiBindings::default();
-    let mut vue_imports = VueResolvedImports::default();
+    macro_rules! get_bindings {
+        () => {
+            bindings_helper
+                .options_api_bindings
+                .get_or_insert_with(|| Default::default())
+        };
+    }
 
     // Analyze the imports and top level items
     if opts.collect_top_level_stmts {
-        analyzer::analyze_top_level_items(module, &mut script_legacy_vars, &mut vue_imports)
+        let mut options_api_bindings = get_bindings!();
+        analyzer::analyze_top_level_items(
+            module,
+            &mut options_api_bindings,
+            &mut bindings_helper.vue_resolved_imports,
+        )
     }
 
     // TODO The actual transformation?
     // Analyze the default export
     if let Some(ref default_export) = maybe_default_export {
-        analyzer::analyze_default_export(default_export, &mut script_legacy_vars);
+        let mut options_api_bindings = get_bindings!();
+        analyzer::analyze_default_export(default_export, &mut options_api_bindings);
     }
 
     ScriptOptionsTransformResult {
-        vars: Box::new(script_legacy_vars),
-        resolved_vue_imports: Box::new(vue_imports),
         default_export_obj: maybe_default_export,
     }
 }
@@ -173,27 +180,56 @@ fn unroll_default_export_expr(mut expr: Expr) -> Expr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::parser::*;
-    use fervid_core::{BindingTypes, FervidAtom, SetupBinding};
+    use crate::{script::imports::process_imports, test_utils::parser::*, OptionsApiBindings, SetupBinding};
+    use fervid_core::{BindingTypes, FervidAtom};
 
-    fn analyze_js(input: &str, opts: AnalyzeOptions) -> ScriptOptionsTransformResult {
+    struct TestAnalyzeResult {
+        vars: Box<OptionsApiBindings>
+    }
+
+    fn analyze_js(input: &str, opts: AnalyzeOptions) -> TestAnalyzeResult {
         let mut parsed = parse_javascript_module(input, 0, Default::default())
             .expect("analyze_js expects the input to be parseable")
             .0;
+        let mut bindings_helper = BindingsHelper::default();
+        let mut errors = Vec::new();
 
-        let analyzed = transform_and_record_script_options_api(&mut parsed, opts);
+        process_imports(&mut parsed, &mut bindings_helper, false, &mut errors);
 
-        analyzed
+        let _analyzed = transform_and_record_script_options_api(
+            &mut parsed,
+            opts,
+            &mut bindings_helper,
+            &mut errors,
+        );
+
+        let vars = bindings_helper.options_api_bindings.unwrap_or_else(|| Default::default());
+        TestAnalyzeResult {
+            vars,
+        }
     }
 
-    fn analyze_ts(input: &str, opts: AnalyzeOptions) -> ScriptOptionsTransformResult {
+    fn analyze_ts(input: &str, opts: AnalyzeOptions) -> TestAnalyzeResult {
         let mut parsed = parse_typescript_module(input, 0, Default::default())
             .expect("analyze_ts expects the input to be parseable")
             .0;
 
-        let analyzed = transform_and_record_script_options_api(&mut parsed, opts);
+        let mut bindings_helper = BindingsHelper::default();
+        let mut errors = Vec::new();
 
-        analyzed
+        process_imports(&mut parsed, &mut bindings_helper, false, &mut errors);
+
+        let _analyzed = transform_and_record_script_options_api(
+            &mut parsed,
+            opts,
+            &mut bindings_helper,
+            &mut errors,
+        );
+
+        let vars = bindings_helper.options_api_bindings.unwrap_or_else(|| Default::default());
+        TestAnalyzeResult {
+            vars,
+        }
     }
 
     macro_rules! test_js_and_ts {
@@ -245,7 +281,9 @@ mod tests {
                         AnalyzeOptions {
                             require_default_export: true,
                             ..Default::default()
-                        }
+                        },
+                        &mut Default::default(),
+                        &mut Default::default()
                     )
                     .default_export_obj,
                     None
@@ -260,7 +298,9 @@ mod tests {
                         AnalyzeOptions {
                             require_default_export: true,
                             ..Default::default()
-                        }
+                        },
+                        &mut Default::default(),
+                        &mut Default::default()
                     )
                     .default_export_obj,
                     None

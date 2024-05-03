@@ -1,4 +1,4 @@
-use fervid_core::OptionsApiBindings;
+use crate::OptionsApiBindings;
 use swc_core::ecma::ast::ArrayLit;
 
 use crate::script::utils::collect_string_arr;

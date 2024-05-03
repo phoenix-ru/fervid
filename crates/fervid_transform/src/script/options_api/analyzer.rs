@@ -1,4 +1,4 @@
-use fervid_core::{BindingTypes, OptionsApiBindings, SetupBinding};
+use fervid_core::BindingTypes;
 use swc_core::ecma::{
     ast::{
         ArrayLit, ArrowExpr, BlockStmtOrExpr, Decl, Expr, Function, Lit, Module, ModuleDecl,
@@ -14,10 +14,10 @@ use crate::{
             categorize_class, categorize_expr, categorize_fn_decl, enrich_binding_types,
             extract_variables_from_pat,
         },
-        setup::collect_imports,
         utils::get_string_tpl,
     },
     structs::VueResolvedImports,
+    OptionsApiBindings, SetupBinding,
 };
 
 use super::{
@@ -97,24 +97,17 @@ pub fn analyze_top_level_items(
         match *module_item {
             ModuleItem::ModuleDecl(ref module_decl) => {
                 match module_decl {
-                    ModuleDecl::Import(ref import_decl) => {
-                        collect_imports(import_decl, &mut out.imports, vue_imports)
-                    }
-
                     ModuleDecl::ExportNamed(ref named_exports) => {
                         collect_exports_named(named_exports, &mut out.setup)
                     }
 
                     // Collects an export from e.g. `export function foo() {}` or `export const bar = 'baz'`
                     ModuleDecl::ExportDecl(ref export_decl) => {
-                        analyze_top_level_decl(
-                            &export_decl.decl,
-                            &mut out.setup,
-                            vue_imports,
-                        );
+                        analyze_top_level_decl(&export_decl.decl, &mut out.setup, vue_imports);
                     }
 
                     // Other types are ignored (ModuleDecl::Export* and ModuleDecl::Ts*)
+                    // Imports were already processed
                     _ => {}
                 }
             }
