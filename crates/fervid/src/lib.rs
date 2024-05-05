@@ -59,10 +59,10 @@ use fervid_parser::SfcParser;
 use fervid_transform::{style::should_transform_style_block, transform_sfc, TransformSfcOptions};
 use std::{
     borrow::Cow,
-    collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
 };
 use swc_core::ecma::ast::Expr;
+use fxhash::FxHasher32;
 
 // TODO Add severity to errors
 // TODO Better structs
@@ -130,7 +130,7 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
     // For scopes
     // TODO Research if it's better to compute that on the caller site or here
     let file_hash = {
-        let mut hasher = DefaultHasher::default();
+        let mut hasher = FxHasher32::default();
         source.hash(&mut hasher);
         let num = hasher.finish();
         format!("{:x}", num)
@@ -215,7 +215,7 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
 
     // For scopes
     let file_hash = {
-        let mut hasher = DefaultHasher::default();
+        let mut hasher = FxHasher32::default();
         source.hash(&mut hasher);
         let num = hasher.finish();
         format!("{:x}", num)
