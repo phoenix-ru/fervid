@@ -724,6 +724,8 @@ mod tests {
                         error.kind,
                         TransformErrorKind::ScriptError(ScriptError::SetupExport)
                     ));
+                } else {
+                    assert!(errors.is_empty());
                 }
             };
         }
