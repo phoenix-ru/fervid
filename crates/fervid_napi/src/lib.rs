@@ -56,7 +56,9 @@ impl FervidJsCompiler {
             filename: Cow::Borrowed(&options.filename),
             id: Cow::Borrowed(&options.id),
             is_prod: self.options.is_production,
-            ssr: self.options.ssr
+            ssr: self.options.ssr,
+            gen_default_as: options.gen_default_as.as_ref().map(|v| Cow::Borrowed(v.as_str())),
+            source_map: self.options.source_map
         };
 
         let native_compile_result =
@@ -64,6 +66,7 @@ impl FervidJsCompiler {
 
         Ok(CompileResult {
             code: native_compile_result.code,
+            source_map: native_compile_result.source_map,
             custom_blocks: native_compile_result
                 .other_assets
                 .into_iter()

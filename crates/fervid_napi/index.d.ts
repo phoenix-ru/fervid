@@ -43,6 +43,8 @@ export interface FervidJsCompilerOptionsScript {
    * Default: true
    */
   hoistStatic?: boolean
+  /** Produce source maps */
+  sourceMap?: boolean
 }
 export interface FervidJsCompilerOptionsStyle {
   /** Ignored */
@@ -53,12 +55,15 @@ export interface FervidCompileOptions {
   id: string
   /** Filename is used for automatic component name inference and self-referential imports */
   filename: string
+  /** Generate a const instead of default export */
+  genDefaultAs?: string
 }
 export interface CompileResult {
   code: string
   styles: Array<Style>
   errors: Array<SerializedError>
   customBlocks: Array<CustomBlock>
+  sourceMap?: string
 }
 export interface Style {
   code: string

@@ -59,6 +59,8 @@ pub struct FervidJsCompilerOptionsScript {
     /// - Only enabled when one `<script setup>` exists.
     /// Default: true
     pub hoist_static: Option<bool>,
+    /// Produce source maps
+    pub source_map: Option<bool>
 }
 
 #[napi(object)]
@@ -73,9 +75,10 @@ pub struct FervidJsCompilerOptionsStyle {
 pub struct FervidCompileOptions {
     /// Scope ID for prefixing injected CSS variables
     pub id: String,
-
     /// Filename is used for automatic component name inference and self-referential imports
     pub filename: String,
+    /// Generate a const instead of default export
+    pub gen_default_as: Option<String>,
 }
 
 #[napi(object)]
@@ -84,6 +87,7 @@ pub struct CompileResult {
     pub styles: Vec<Style>,
     pub errors: Vec<SerializedError>,
     pub custom_blocks: Vec<CustomBlock>,
+    pub source_map: Option<String>
 }
 
 #[napi(object)]

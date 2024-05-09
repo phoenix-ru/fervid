@@ -1,11 +1,16 @@
 use fervid_core::{FervidAtom, SfcTemplateBlock, TemplateGenerationMode};
 use swc_core::{
-    common::{FileName, SourceMap, DUMMY_SP},
-    ecma::ast::{
-        ArrowExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, Decl, ExportDefaultExpr, Expr,
-        Function, Ident, ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit, Param,
-        Pat, Prop, PropName, PropOrSpread, ReturnStmt, Stmt, Str, VarDecl, VarDeclKind,
-    },
+    atoms::Atom, common::{
+        collections::AHashMap, source_map::SourceMapGenConfig, BytePos, FileName, SourceMap,
+        DUMMY_SP,
+    }, ecma::{
+        ast::{
+            ArrowExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, Decl, ExportDefaultExpr, Expr,
+            Function, Ident, ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit,
+            Param, Pat, Prop, PropName, PropOrSpread, ReturnStmt, Stmt, Str, VarDecl, VarDeclKind,
+        },
+        visit::{noop_visit_type, Visit, VisitWith},
+    }
 };
 use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
 
@@ -318,25 +323,109 @@ impl CodegenContext {
         }
     }
 
-    pub fn stringify(source: &str, item: &impl Node, minify: bool) -> String {
+    pub fn stringify<T>(
+        source: &str,
+        module: &T,
+        filename: FileName,
+        generate_source_map: bool,
+        minify: bool,
+    ) -> (String, Option<String>)
+    where
+        T: Node + VisitWith<IdentCollector>,
+    {
         // Emitting the result requires some setup with SWC
         let cm: swc_core::common::sync::Lrc<SourceMap> = Default::default();
-        cm.new_source_file(FileName::Custom("test.ts".to_owned()), source.to_owned());
-        let mut buff: Vec<u8> = Vec::new();
-        let writer: JsWriter<&mut Vec<u8>> = JsWriter::new(cm.clone(), "\n", &mut buff, None);
+        cm.new_source_file(filename.to_owned(), source.to_owned());
 
-        let mut emitter_cfg = swc_ecma_codegen::Config::default();
-        emitter_cfg.minify = minify;
+        let mut source_map_buf = vec![];
 
-        let mut emitter = Emitter {
-            cfg: emitter_cfg,
-            comments: None,
-            wr: writer,
-            cm,
+        let generated = {
+            let mut buff: Vec<u8> = Vec::new();
+            let src_map = if generate_source_map {
+                Some(&mut source_map_buf)
+            } else {
+                None
+            };
+            let writer: JsWriter<&mut Vec<u8>> =
+                JsWriter::new(cm.clone(), "\n", &mut buff, src_map);
+
+            let mut emitter_cfg = swc_ecma_codegen::Config::default();
+            emitter_cfg.minify = minify;
+
+            let mut emitter = Emitter {
+                cfg: emitter_cfg,
+                comments: None,
+                wr: writer,
+                cm: cm.clone(),
+            };
+
+            module.emit_with(&mut emitter).expect("Failed to emit");
+            String::from_utf8(buff).expect("Invalid UTF-8")
         };
 
-        let _ = item.emit_with(&mut emitter);
+        let map = if generate_source_map {
+            let source_map_names = {
+                let mut v = IdentCollector {
+                    names: Default::default(),
+                };
 
-        String::from_utf8(buff).unwrap()
+                module.visit_with(&mut v);
+
+                v.names
+            };
+
+            let map = cm.build_source_map_with_config(
+                &source_map_buf,
+                None,
+                SourceMapConfig {
+                    source_file_name: Some(filename.to_string().as_str()),
+                    names: &source_map_names,
+                },
+            );
+            let mut buf = vec![];
+
+            map.to_writer(&mut buf).expect("Failed to write source map");
+            Some(String::from_utf8(buf).expect("Invalid UTF-8 in source map"))
+        } else {
+            None
+        };
+
+        (generated, map)
+    }
+}
+
+struct SourceMapConfig<'a> {
+    source_file_name: Option<&'a str>,
+    names: &'a AHashMap<BytePos, FervidAtom>,
+}
+
+impl SourceMapGenConfig for SourceMapConfig<'_> {
+    fn file_name_to_source(&self, f: &FileName) -> String {
+        if let Some(file_name) = self.source_file_name {
+            return file_name.to_string();
+        }
+
+        f.to_string()
+    }
+
+    fn inline_sources_content(&self, _f: &FileName) -> bool {
+        true
+    }
+
+    fn name_for_bytepos(&self, pos: BytePos) -> Option<&str> {
+        self.names.get(&pos).map(|v| &**v)
+    }
+}
+
+// Adapted from `swc_compiler_base`
+pub struct IdentCollector {
+    pub names: AHashMap<BytePos, Atom>,
+}
+
+impl Visit for IdentCollector {
+    noop_visit_type!();
+
+    fn visit_ident(&mut self, ident: &Ident) {
+        self.names.insert(ident.span.lo, ident.sym.clone());
     }
 }

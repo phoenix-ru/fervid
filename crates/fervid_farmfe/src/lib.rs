@@ -88,6 +88,8 @@ impl Plugin for FarmPluginVueFervid {
                 id: param.module_id.clone().into(),
                 is_prod: Some(true),
                 ssr: None,
+                gen_default_as: None,
+                source_map: None
             },
         );
 

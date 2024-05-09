@@ -7,7 +7,7 @@
 //! </p>
 //!
 //! ```
-//! use swc_core::ecma::ast::Expr;
+//! use swc_core::{common::FileName, ecma::ast::Expr};
 //!
 //! let input = r#"
 //!   <template><div>hello world</div></template>
@@ -43,7 +43,7 @@
 //! );
 //!
 //! // (Optional) Stringify the code
-//! let compiled_code = fervid_codegen::CodegenContext::stringify(input, &sfc_module, false);
+//! let compiled_code = fervid_codegen::CodegenContext::stringify(input, &sfc_module, FileName::Custom("input.vue".into()), false, false);
 //! ```
 
 extern crate lazy_static;
@@ -57,12 +57,12 @@ use fervid_codegen::CodegenContext;
 pub use fervid_core::*;
 use fervid_parser::SfcParser;
 use fervid_transform::{style::should_transform_style_block, transform_sfc, TransformSfcOptions};
+use fxhash::FxHasher32;
 use std::{
     borrow::Cow,
     hash::{Hash, Hasher},
 };
-use swc_core::ecma::ast::Expr;
-use fxhash::FxHasher32;
+use swc_core::{common::FileName, ecma::ast::Expr};
 
 // TODO Add severity to errors
 // TODO Better structs
@@ -89,6 +89,12 @@ pub struct CompileOptions<'o> {
     // Configure what tags/attributes to transform into asset url imports,
     // or disable the transform altogether with `false`.
     // transformAssetUrls?: AssetURLOptions | AssetURLTagConfig | boolean;
+
+    // script
+    pub gen_default_as: Option<Cow<'o, str>>,
+
+    // fervid-specific
+    pub source_map: Option<bool>,
 }
 
 pub struct CompileResult {
@@ -97,6 +103,7 @@ pub struct CompileResult {
     pub errors: Vec<CompileError>,
     pub styles: Vec<CompileEmittedStyle>,
     pub other_assets: Vec<CompileEmittedAsset>,
+    pub source_map: Option<String>,
 }
 
 pub struct CompileEmittedStyle {
@@ -160,7 +167,14 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
         transform_result.setup_fn,
     );
 
-    let code = CodegenContext::stringify(&source, &sfc_module, false);
+    // Convert AST to string
+    let (code, source_map) = CodegenContext::stringify(
+        &source,
+        &sfc_module,
+        FileName::Custom(options.filename.to_string()),
+        options.source_map.unwrap_or(false),
+        false,
+    );
 
     let styles = transform_result
         .style_blocks
@@ -192,6 +206,7 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
         errors: all_errors,
         styles,
         other_assets,
+        source_map,
     })
 }
 
@@ -244,7 +259,8 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
         transform_result.setup_fn,
     );
 
-    let compiled_code = CodegenContext::stringify(&source, &sfc_module, false);
+    let (compiled_code, _map) =
+        CodegenContext::stringify(&source, &sfc_module, FileName::Anon, false, false);
 
     Ok(compiled_code)
 }
