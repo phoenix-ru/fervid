@@ -1,16 +1,19 @@
 use fervid_core::{FervidAtom, SfcTemplateBlock, TemplateGenerationMode};
 use swc_core::{
-    atoms::Atom, common::{
+    atoms::Atom,
+    common::{
         collections::AHashMap, source_map::SourceMapGenConfig, BytePos, FileName, SourceMap,
         DUMMY_SP,
-    }, ecma::{
+    },
+    ecma::{
         ast::{
             ArrowExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, Decl, ExportDefaultExpr, Expr,
             Function, Ident, ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit,
             Param, Pat, Prop, PropName, PropOrSpread, ReturnStmt, Stmt, Str, VarDecl, VarDeclKind,
+            VarDeclarator,
         },
         visit::{noop_visit_type, Visit, VisitWith},
-    }
+    },
 };
 use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
 
@@ -48,6 +51,7 @@ impl CodegenContext {
         mut script: Module,
         mut sfc_export_obj: ObjectLit,
         mut synthetic_setup_fn: Option<Box<Function>>,
+        gen_default_as: Option<&str>,
     ) -> Module {
         let template_generation_mode = &self.bindings_helper.template_generation_mode;
 
@@ -161,15 +165,34 @@ impl CodegenContext {
                 })));
         }
 
-        // Append the default export
-        script
-            .body
-            .push(ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(
-                ExportDefaultExpr {
+        let gen_default_as = if let Some(options_gen_default_as) = gen_default_as {
+            ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                span: DUMMY_SP,
+                kind: VarDeclKind::Const,
+                declare: false,
+                decls: vec![VarDeclarator {
                     span: DUMMY_SP,
-                    expr: Box::new(Expr::Object(sfc_export_obj)),
-                },
-            )));
+                    name: Pat::Ident(BindingIdent {
+                        id: Ident {
+                            span: DUMMY_SP,
+                            sym: FervidAtom::from(options_gen_default_as),
+                            optional: false,
+                        },
+                        type_ann: None,
+                    }),
+                    init: Some(Box::new(Expr::Object(sfc_export_obj))),
+                    definite: false,
+                }],
+            }))))
+        } else {
+            ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(ExportDefaultExpr {
+                span: DUMMY_SP,
+                expr: Box::new(Expr::Object(sfc_export_obj)),
+            }))
+        };
+
+        // Append the default export/const
+        script.body.push(gen_default_as);
 
         script
     }

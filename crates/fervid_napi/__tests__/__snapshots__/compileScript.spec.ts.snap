@@ -51,3 +51,57 @@ export default {
 };
 "
 `;
+
+exports[`SFC genDefaultAs > <script setup> only 1`] = `
+"const _sfc_ = {
+    __name: "anonymous",
+    setup () {
+        const a = 1;
+    }
+};
+"
+`;
+
+exports[`SFC genDefaultAs > <script setup> only w/ ts 1`] = `
+"const _sfc_ = {
+    __name: "anonymous",
+    setup () {
+        const a = 1;
+    }
+};
+"
+`;
+
+exports[`SFC genDefaultAs > <script> + <script setup> 1`] = `
+"const _sfc_ = {
+    __name: "anonymous",
+    setup () {
+        const a = 1;
+    }
+};
+"
+`;
+
+exports[`SFC genDefaultAs > <script> + <script setup> w/ ts 1`] = `
+"const _sfc_ = {
+    __name: "anonymous",
+    setup () {
+        const a = 1;
+    }
+};
+"
+`;
+
+exports[`SFC genDefaultAs > normal <script> only 1`] = `
+"const _sfc_ = {
+    __name: "anonymous"
+};
+"
+`;
+
+exports[`SFC genDefaultAs > normal <script> w/ cssVars 1`] = `
+"const _sfc_ = {
+    __name: "anonymous"
+};
+"
+`;

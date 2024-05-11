@@ -40,6 +40,7 @@
 //!     transform_result.module,
 //!     transform_result.exported_obj,
 //!     transform_result.setup_fn,
+//!     None,
 //! );
 //!
 //! // (Optional) Stringify the code
@@ -165,6 +166,7 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
         transform_result.module,
         transform_result.exported_obj,
         transform_result.setup_fn,
+        options.gen_default_as.as_deref(),
     );
 
     // Convert AST to string
@@ -257,6 +259,7 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
         transform_result.module,
         transform_result.exported_obj,
         transform_result.setup_fn,
+        None,
     );
 
     let (compiled_code, _map) =
