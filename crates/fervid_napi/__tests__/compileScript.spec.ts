@@ -4,6 +4,52 @@ import { Compiler, FervidCompileOptions } from '..'
 
 const mockId = 'xxxxxxxx'
 
+describe('SFC compile <script setup>', () => {
+  // https://github.com/vuejs/core/blob/530d9ec5f69a39246314183d942d37986c01dc46/packages/compiler-sfc/__tests__/compileScript.spec.ts#L16-L52
+  test('should expose top level declarations', () => {
+    const { content } = compile(`
+      <script setup>
+      import { x } from './x'
+      let a = 1
+      const b = 2
+      function c() {}
+      class d {}
+      </script>
+
+      <script>
+      import { xx } from './x'
+      let aa = 1
+      const bb = 2
+      function cc() {}
+      class dd {}
+      </script>
+      `)
+
+    // TODO
+    // expect(content).toMatch(
+    //   `return {
+    //     x,
+    //     get aa() { return aa }, set aa(v) { aa = v }, ` +
+    //     `bb, cc, dd, get a() { return a }, set a(v) { a = v }, b, c, d, ` +
+    //     `get xx() { return xx }, get x() { return x } }`,
+    // )
+
+    // expect(bindings).toStrictEqual({
+    //   x: BindingTypes.SETUP_MAYBE_REF,
+    //   a: BindingTypes.SETUP_LET,
+    //   b: BindingTypes.SETUP_CONST,
+    //   c: BindingTypes.SETUP_CONST,
+    //   d: BindingTypes.SETUP_CONST,
+    //   xx: BindingTypes.SETUP_MAYBE_REF,
+    //   aa: BindingTypes.SETUP_LET,
+    //   bb: BindingTypes.LITERAL_CONST,
+    //   cc: BindingTypes.SETUP_CONST,
+    //   dd: BindingTypes.SETUP_CONST,
+    // })
+    assertCode(content)
+  })
+})
+
 describe('SFC analyze <script> bindings', () => {
 // https://github.com/vuejs/core/blob/272ab9fbdcb1af0535108b9f888e80d612f9171d/packages/compiler-sfc/__tests__/compileScript.spec.ts#L1252-L1306
   describe('auto name inference', () => {

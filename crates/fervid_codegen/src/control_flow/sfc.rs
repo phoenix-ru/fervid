@@ -1,4 +1,6 @@
-use fervid_core::{FervidAtom, SfcTemplateBlock, TemplateGenerationMode};
+use fervid_core::{
+    fervid_atom, BindingTypes, FervidAtom, SfcTemplateBlock, TemplateGenerationMode,
+};
 use swc_core::{
     atoms::Atom,
     common::{
@@ -7,10 +9,10 @@ use swc_core::{
     },
     ecma::{
         ast::{
-            ArrowExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, Decl, ExportDefaultExpr, Expr,
-            Function, Ident, ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit,
-            Param, Pat, Prop, PropName, PropOrSpread, ReturnStmt, Stmt, Str, VarDecl, VarDeclKind,
-            VarDeclarator,
+            ArrowExpr, AssignExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, Decl,
+            ExportDefaultExpr, Expr, ExprStmt, Function, GetterProp, Ident, ImportDecl, MethodProp,
+            Module, ModuleDecl, ModuleItem, ObjectLit, Param, Pat, Prop, PropName, PropOrSpread,
+            ReturnStmt, SetterProp, Stmt, Str, VarDecl, VarDeclKind, VarDeclarator,
         },
         visit::{noop_visit_type, Visit, VisitWith},
     },
@@ -120,6 +122,19 @@ impl CodegenContext {
                             }),
                             function: Box::new(render_fn),
                         }))));
+                }
+            }
+        } else if matches!(template_generation_mode, TemplateGenerationMode::RenderFn) {
+            // No template but dev mode: still generate return bindings for setup
+            if let Some(ref mut setup_fn) = synthetic_setup_fn {
+                if let Some(ref mut setup_body) = setup_fn.body {
+                    let return_bindings = self.generate_return_bindings();
+                    if !return_bindings.props.is_empty() {
+                        setup_body.stmts.push(Stmt::Return(ReturnStmt {
+                            span: DUMMY_SP,
+                            arg: Some(Box::new(Expr::Object(return_bindings))),
+                        }));
+                    }
                 }
             }
         }
@@ -332,12 +347,133 @@ impl CodegenContext {
         let mut props =
             Vec::<PropOrSpread>::with_capacity(self.bindings_helper.used_bindings.len());
 
-        for used_binding in self.bindings_helper.used_bindings.keys() {
-            props.push(PropOrSpread::Prop(Box::new(Prop::Shorthand(Ident {
-                span: DUMMY_SP,
-                sym: used_binding.to_owned(),
-                optional: false,
-            }))));
+        let options_api_iter = self
+            .bindings_helper
+            .options_api_bindings
+            .as_ref()
+            .map_or_else(|| [].iter(), |v| v.setup.iter());
+        let setup_iter = self.bindings_helper.setup_bindings.iter();
+
+        dbg!(&self.bindings_helper.setup_bindings);
+        dbg!(&options_api_iter);
+
+        let all_bindings = options_api_iter.chain(setup_iter);
+
+        // https://github.com/vuejs/core/blob/530d9ec5f69a39246314183d942d37986c01dc46/packages/compiler-sfc/src/compileScript.ts#L826-L844
+        for binding in all_bindings {
+            match binding.1 {
+                // `get smth() { return smth }`
+                BindingTypes::Imported
+                    if self.bindings_helper.used_bindings.contains_key(&binding.0) =>
+                {
+                    let ident = Ident {
+                        span: DUMMY_SP,
+                        sym: binding.0.to_owned(),
+                        optional: false,
+                    };
+                    props.push(PropOrSpread::Prop(Box::new(Prop::Getter(GetterProp {
+                        span: DUMMY_SP,
+                        key: PropName::Ident(ident.to_owned()),
+                        type_ann: None,
+                        body: Some(BlockStmt {
+                            span: DUMMY_SP,
+                            stmts: vec![Stmt::Return(ReturnStmt {
+                                span: DUMMY_SP,
+                                arg: Some(Box::new(Expr::Ident(ident))),
+                            })],
+                        }),
+                    }))));
+                }
+
+                // `get smth() { return smth }`
+                // `set smth(v) { smth = v }`
+                BindingTypes::SetupLet => {
+                    let ident = Ident {
+                        span: DUMMY_SP,
+                        sym: binding.0.to_owned(),
+                        optional: false,
+                    };
+
+                    // `get smth() { return smth }`
+                    props.push(PropOrSpread::Prop(Box::new(Prop::Getter(GetterProp {
+                        span: DUMMY_SP,
+                        key: PropName::Ident(ident.to_owned()),
+                        type_ann: None,
+                        body: Some(BlockStmt {
+                            span: DUMMY_SP,
+                            stmts: vec![Stmt::Return(ReturnStmt {
+                                span: DUMMY_SP,
+                                arg: Some(Box::new(Expr::Ident(ident.to_owned()))),
+                            })],
+                        }),
+                    }))));
+
+                    // `set smth(v) { smth = v }`
+                    let set_arg = if binding.0 == "v" {
+                        fervid_atom!("_v")
+                    } else {
+                        fervid_atom!("v")
+                    };
+                    props.push(PropOrSpread::Prop(Box::new(Prop::Setter(SetterProp {
+                        span: DUMMY_SP,
+                        key: PropName::Ident(ident.to_owned()),
+                        this_param: None,
+                        param: Box::new(Pat::Ident(BindingIdent {
+                            id: Ident {
+                                span: DUMMY_SP,
+                                sym: set_arg.to_owned(),
+                                optional: false,
+                            },
+                            type_ann: None,
+                        })),
+                        body: Some(BlockStmt {
+                            span: DUMMY_SP,
+                            stmts: vec![Stmt::Expr(ExprStmt {
+                                span: DUMMY_SP,
+                                expr: Box::new(Expr::Assign(AssignExpr {
+                                    span: DUMMY_SP,
+                                    op: swc_core::ecma::ast::AssignOp::Assign,
+                                    left: swc_core::ecma::ast::AssignTarget::Simple(
+                                        swc_core::ecma::ast::SimpleAssignTarget::Ident(
+                                            BindingIdent {
+                                                id: ident,
+                                                type_ann: None,
+                                            },
+                                        ),
+                                    ),
+                                    right: Box::new(Expr::Ident(Ident {
+                                        span: DUMMY_SP,
+                                        sym: set_arg,
+                                        optional: false,
+                                    })),
+                                })),
+                            })],
+                        }),
+                    }))));
+                }
+
+                BindingTypes::Imported
+                | BindingTypes::Component
+                | BindingTypes::SetupConst
+                | BindingTypes::SetupReactiveConst
+                | BindingTypes::SetupMaybeRef
+                | BindingTypes::SetupRef
+                | BindingTypes::LiteralConst => {
+                    props.push(PropOrSpread::Prop(Box::new(Prop::Shorthand(Ident {
+                        span: DUMMY_SP,
+                        sym: binding.0.to_owned(),
+                        optional: false,
+                    }))));
+                }
+
+                BindingTypes::Data
+                | BindingTypes::Props
+                | BindingTypes::PropsAliased
+                | BindingTypes::Options
+                | BindingTypes::TemplateLocal
+                | BindingTypes::JsGlobal
+                | BindingTypes::Unresolved => {}
+            }
         }
 
         ObjectLit {

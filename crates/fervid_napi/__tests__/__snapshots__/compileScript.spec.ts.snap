@@ -52,11 +52,47 @@ export default {
 "
 `;
 
+exports[`SFC compile <script setup> > should expose top level declarations 1`] = `
+"import { xx } from './x';
+let aa = 1;
+const bb = 2;
+function cc() {}
+class dd {
+}
+import { x } from './x';
+export default {
+    __name: "anonymous",
+    setup () {
+        let a = 1;
+        const b = 2;
+        function c() {}
+        class d {
+        }
+        return {
+            x,
+            get a () {
+                return a;
+            },
+            set a (v){
+                a = v;
+            },
+            b,
+            c,
+            d
+        };
+    }
+};
+"
+`;
+
 exports[`SFC genDefaultAs > <script setup> only 1`] = `
 "const _sfc_ = {
     __name: "anonymous",
     setup () {
         const a = 1;
+        return {
+            a
+        };
     }
 };
 "
@@ -67,6 +103,9 @@ exports[`SFC genDefaultAs > <script setup> only w/ ts 1`] = `
     __name: "anonymous",
     setup () {
         const a = 1;
+        return {
+            a
+        };
     }
 };
 "
@@ -77,6 +116,9 @@ exports[`SFC genDefaultAs > <script> + <script setup> 1`] = `
     __name: "anonymous",
     setup () {
         const a = 1;
+        return {
+            a
+        };
     }
 };
 "
@@ -87,6 +129,9 @@ exports[`SFC genDefaultAs > <script> + <script setup> w/ ts 1`] = `
     __name: "anonymous",
     setup () {
         const a = 1;
+        return {
+            a
+        };
     }
 };
 "
