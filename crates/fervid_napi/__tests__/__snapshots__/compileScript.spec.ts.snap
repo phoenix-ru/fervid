@@ -69,7 +69,9 @@ export default {
         class d {
         }
         return {
-            x,
+            get x () {
+                return x;
+            },
             get a () {
                 return a;
             },

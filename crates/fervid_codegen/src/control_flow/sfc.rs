@@ -354,18 +354,15 @@ impl CodegenContext {
             .map_or_else(|| [].iter(), |v| v.setup.iter());
         let setup_iter = self.bindings_helper.setup_bindings.iter();
 
-        dbg!(&self.bindings_helper.setup_bindings);
-        dbg!(&options_api_iter);
-
         let all_bindings = options_api_iter.chain(setup_iter);
 
         // https://github.com/vuejs/core/blob/530d9ec5f69a39246314183d942d37986c01dc46/packages/compiler-sfc/src/compileScript.ts#L826-L844
         for binding in all_bindings {
             match binding.1 {
                 // `get smth() { return smth }`
-                BindingTypes::Imported
-                    if self.bindings_helper.used_bindings.contains_key(&binding.0) =>
-                {
+                BindingTypes::Imported => {
+                    // TODO Skip if TS and binding is unused
+
                     let ident = Ident {
                         span: DUMMY_SP,
                         sym: binding.0.to_owned(),
@@ -452,8 +449,7 @@ impl CodegenContext {
                     }))));
                 }
 
-                BindingTypes::Imported
-                | BindingTypes::Component
+                BindingTypes::Component
                 | BindingTypes::SetupConst
                 | BindingTypes::SetupReactiveConst
                 | BindingTypes::SetupMaybeRef
