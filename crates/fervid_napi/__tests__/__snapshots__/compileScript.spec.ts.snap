@@ -69,6 +69,18 @@ export default {
         class d {
         }
         return {
+            get xx () {
+                return xx;
+            },
+            get aa () {
+                return aa;
+            },
+            set aa (v){
+                aa = v;
+            },
+            bb,
+            cc,
+            dd,
             get x () {
                 return x;
             },

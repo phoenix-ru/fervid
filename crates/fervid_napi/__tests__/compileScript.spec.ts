@@ -25,14 +25,34 @@ describe('SFC compile <script setup>', () => {
       </script>
       `)
 
-    // TODO
-    // expect(content).toMatch(
-    //   `return {
-    //     x,
-    //     get aa() { return aa }, set aa(v) { aa = v }, ` +
-    //     `bb, cc, dd, get a() { return a }, set a(v) { a = v }, b, c, d, ` +
-    //     `get xx() { return xx }, get x() { return x } }`,
-    // )
+    expect(content).toMatch(
+      `        return {
+            get xx () {
+                return xx;
+            },
+            get aa () {
+                return aa;
+            },
+            set aa (v){
+                aa = v;
+            },
+            bb,
+            cc,
+            dd,
+            get x () {
+                return x;
+            },
+            get a () {
+                return a;
+            },
+            set a (v){
+                a = v;
+            },
+            b,
+            c,
+            d
+        };`,
+    )
 
     // expect(bindings).toStrictEqual({
     //   x: BindingTypes.SETUP_MAYBE_REF,

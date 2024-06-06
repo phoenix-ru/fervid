@@ -48,33 +48,41 @@ pub fn transform_and_record_scripts(
     //
     // STEP 1: Transform Options API `<script>`.
     //
+    let mut script_module: Option<Box<Module>> = None;
+    let mut script_default_export: Option<ObjectLit> = None;
 
-    let mut module: Module = script_legacy.map_or_else(
-        || Module {
+    if let Some(script_options_block) = script_legacy {
+        let mut module = script_options_block.content;
+
+        let transform_result = transform_and_record_script_options_api(
+            &mut module,
+            AnalyzeOptions {
+                collect_top_level_stmts: script_setup.is_some(),
+                ..Default::default()
+            },
+            bindings_helper,
+            errors,
+        );
+
+        script_module = Some(module);
+        script_default_export = transform_result.default_export_obj;
+    }
+
+    //
+    // STEP 2: Prepare the exported object and module
+    //
+
+    let mut module = script_module.unwrap_or_else(|| {
+        Box::new(Module {
             span: DUMMY_SP,
             body: vec![],
             shebang: None,
-        },
-        |script| *script.content,
-    );
-
-    let script_options_transform_result = transform_and_record_script_options_api(
-        &mut module,
-        AnalyzeOptions::default(),
-        bindings_helper,
-        errors,
-    );
-
-    //
-    // STEP 2: Prepare the exported object.
-    //
-
-    let mut export_obj = script_options_transform_result
-        .default_export_obj
-        .unwrap_or_else(|| ObjectLit {
-            span: DUMMY_SP,
-            props: vec![],
-        });
+        })
+    });
+    let mut export_obj = script_default_export.unwrap_or_else(|| ObjectLit {
+        span: DUMMY_SP,
+        props: vec![],
+    });
 
     //
     // STEP 3: Transform the Composition API `<script setup>`.

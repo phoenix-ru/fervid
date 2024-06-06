@@ -122,7 +122,7 @@ pub struct SfcExportedObjectHelper {
 
 pub struct TransformScriptsResult {
     /// EcmaScript module
-    pub module: Module,
+    pub module: Box<Module>,
     /// Default exported object (not linked to module yet)
     pub export_obj: ObjectLit,
     /// Setup function (not linked to default export yet)
@@ -141,7 +141,7 @@ pub struct TransformSfcResult {
     /// Object exported from the `Module`, but detached from it
     pub exported_obj: ObjectLit,
     /// Module obtained by processing `<script>` and `<script setup>`
-    pub module: Module,
+    pub module: Box<Module>,
     /// Setup function (not linked to default export yet)
     pub setup_fn: Option<Box<Function>>,
     /// Transformed template block

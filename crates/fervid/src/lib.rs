@@ -37,7 +37,7 @@
 //! // Generate the module code
 //! let sfc_module = ctx.generate_module(
 //!     template_expr,
-//!     transform_result.module,
+//!     *transform_result.module,
 //!     transform_result.exported_obj,
 //!     transform_result.setup_fn,
 //!     None,
@@ -163,7 +163,7 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
 
     let sfc_module = ctx.generate_module(
         template_expr,
-        transform_result.module,
+        *transform_result.module,
         transform_result.exported_obj,
         transform_result.setup_fn,
         options.gen_default_as.as_deref(),
@@ -256,7 +256,7 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
 
     let sfc_module = ctx.generate_module(
         template_expr,
-        transform_result.module,
+        *transform_result.module,
         transform_result.exported_obj,
         transform_result.setup_fn,
         None,

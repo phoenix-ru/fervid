@@ -351,7 +351,7 @@ impl CodegenContext {
             .bindings_helper
             .options_api_bindings
             .as_ref()
-            .map_or_else(|| [].iter(), |v| v.setup.iter());
+            .map_or_else(|| [].iter().chain([].iter()), |v| v.imports.iter().chain(v.setup.iter()));
         let setup_iter = self.bindings_helper.setup_bindings.iter();
 
         let all_bindings = options_api_iter.chain(setup_iter);
