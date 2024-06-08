@@ -351,17 +351,24 @@ impl CodegenContext {
             .bindings_helper
             .options_api_bindings
             .as_ref()
-            .map_or_else(|| [].iter().chain([].iter()), |v| v.imports.iter().chain(v.setup.iter()));
+            .map_or_else(
+                || [].iter().chain([].iter()),
+                |v| v.imports.iter().chain(v.setup.iter()),
+            );
         let setup_iter = self.bindings_helper.setup_bindings.iter();
 
         let all_bindings = options_api_iter.chain(setup_iter);
+        let is_ts = self.bindings_helper.is_ts;
 
         // https://github.com/vuejs/core/blob/530d9ec5f69a39246314183d942d37986c01dc46/packages/compiler-sfc/src/compileScript.ts#L826-L844
         for binding in all_bindings {
             match binding.1 {
                 // `get smth() { return smth }`
                 BindingTypes::Imported => {
-                    // TODO Skip if TS and binding is unused
+                    // Skip if TS and binding is unused
+                    if is_ts && !self.bindings_helper.used_bindings.contains_key(&binding.0) {
+                        continue;
+                    }
 
                     let ident = Ident {
                         span: DUMMY_SP,

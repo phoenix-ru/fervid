@@ -99,6 +99,47 @@ export default {
 "
 `;
 
+exports[`SFC compile <script setup> > should expose top level declarations w/ ts 1`] = `
+"import { xx } from './x';
+let aa = 1;
+const bb = 2;
+function cc() {}
+class dd {
+}
+import { x } from './x';
+export default {
+    __name: "anonymous",
+    setup () {
+        let a = 1;
+        const b = 2;
+        function c() {}
+        class d {
+        }
+        return {
+            get aa () {
+                return aa;
+            },
+            set aa (v){
+                aa = v;
+            },
+            bb,
+            cc,
+            dd,
+            get a () {
+                return a;
+            },
+            set a (v){
+                a = v;
+            },
+            b,
+            c,
+            d
+        };
+    }
+};
+"
+`;
+
 exports[`SFC genDefaultAs > <script setup> only 1`] = `
 "const _sfc_ = {
     __name: "anonymous",

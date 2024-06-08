@@ -22,6 +22,8 @@ pub struct BindingsHelper {
     pub custom_directives: HashMap<FervidAtom, CustomDirectiveBinding>,
     /// Are we compiling for DEV or PROD
     pub is_prod: bool,
+    /// Is Typescript or Javascript used
+    pub is_ts: bool,
     /// Scopes of the `<template>` for in-template variable resolutions
     pub template_scopes: Vec<TemplateScope>,
     /// Bindings in `<script setup>`

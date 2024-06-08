@@ -68,6 +68,54 @@ describe('SFC compile <script setup>', () => {
     // })
     assertCode(content)
   })
+
+  // Difference with the original is that in TS `x` and `xx` may be types,
+  // and compiler doesn't know without looking at the usage.
+  // Since neither are used, they are excluded.
+  test('should expose top level declarations w/ ts', () => {
+    const { content } = compile(`
+      <script setup lang="ts">
+      import { x } from './x'
+      let a = 1
+      const b = 2
+      function c() {}
+      class d {}
+      </script>
+
+      <script lang="ts">
+      import { xx } from './x'
+      let aa = 1
+      const bb = 2
+      function cc() {}
+      class dd {}
+      </script>
+      `)
+
+    expect(content).toMatch(
+      `        return {
+            get aa () {
+                return aa;
+            },
+            set aa (v){
+                aa = v;
+            },
+            bb,
+            cc,
+            dd,
+            get a () {
+                return a;
+            },
+            set a (v){
+                a = v;
+            },
+            b,
+            c,
+            d
+        };`,
+    )
+
+    assertCode(content)
+  })
 })
 
 describe('SFC analyze <script> bindings', () => {

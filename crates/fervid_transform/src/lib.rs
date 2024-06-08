@@ -1,5 +1,5 @@
 use error::TransformError;
-use fervid_core::SfcDescriptor;
+use fervid_core::{SfcDescriptor, SfcScriptBlock, SfcScriptLang};
 use misc::infer_name;
 use script::transform_and_record_scripts;
 use style::{attach_scope_id, create_style_scope, transform_style_blocks};
@@ -29,9 +29,23 @@ pub fn transform_sfc<'o>(
     options: TransformSfcOptions<'o>,
     errors: &mut Vec<TransformError>,
 ) -> TransformSfcResult {
-    // Transform the scripts
+    // Create the bindings helper
     let mut bindings_helper = BindingsHelper::default();
     bindings_helper.is_prod = options.is_prod;
+
+    // TS if any of scripts is TS.
+    // Unlike the official compiler, we don't care if languages are mixed, because nothing changes.
+    let recognize_lang = |script: &SfcScriptBlock| matches!(script.lang, SfcScriptLang::Typescript);
+    bindings_helper.is_ts = sfc_descriptor
+        .script_setup
+        .as_ref()
+        .map_or(false, recognize_lang)
+        || sfc_descriptor
+            .script_legacy
+            .as_ref()
+            .map_or(false, recognize_lang);
+
+    // Transform the scripts
     let mut transform_result = transform_and_record_scripts(
         sfc_descriptor.script_setup,
         sfc_descriptor.script_legacy,
