@@ -38,17 +38,12 @@ jobs:
 
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
             build: |
-              set -e &&
-              corepack enable &&
-              yarn build --target x86_64-unknown-linux-gnu &&
-              strip *.node
+              yarn build --platform --target x86_64-unknown-linux-gnu --use-napi-cross
 
           - host: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
-            build: set -e && yarn build && strip *.node
+            build: yarn build --platform --target x86_64-unknown-linux-musl -x
 
           - host: macos-latest
             target: x86_64-apple-darwin
@@ -79,44 +74,44 @@ jobs:
             target: aarch64-unknown-linux-gnu
             build: yarn build --target aarch64-unknown-linux-gnu --use-napi-cross
           - host: ubuntu-latest
-            target: 'armv7-unknown-linux-gnueabihf'
-            build: ${packageManager} build --platform --target armv7-unknown-linux-gnueabihf --use-napi-cross
+            target: armv7-unknown-linux-gnueabihf
+            build: yarn build --platform --target armv7-unknown-linux-gnueabihf --use-napi-cross
           # - host: ubuntu-latest
-          #   target: 'armv7-unknown-linux-musleabihf'
-          #   build: ${packageManager} build --platform --target armv7-unknown-linux-musleabihf -x
+          #   target: armv7-unknown-linux-musleabihf
+          #   build: yarn build --platform --target armv7-unknown-linux-musleabihf -x
           - host: ubuntu-latest
-            target: 'aarch64-linux-android'
-            build: ${packageManager} build --platform --target aarch64-linux-android
+            target: aarch64-linux-android
+            build: yarn build --platform --target aarch64-linux-android
           - host: ubuntu-latest
-            target: 'armv7-linux-androideabi'
-            build: ${packageManager} build --platform --target armv7-linux-androideabi
+            target: armv7-linux-androideabi
+            build: yarn build --platform --target armv7-linux-androideabi
           - host: ubuntu-latest
-            target: 'aarch64-unknown-linux-musl'
-            build: ${packageManager} build --platform --target aarch64-unknown-linux-musl -x
+            target: aarch64-unknown-linux-musl
+            build: yarn build --platform --target aarch64-unknown-linux-musl -x
           - host: windows-latest
-            target: 'aarch64-pc-windows-msvc'
-            build: ${packageManager} build --platform --target aarch64-pc-windows-msvc
+            target: aarch64-pc-windows-msvc
+            build: yarn build --platform --target aarch64-pc-windows-msvc
           # - host: ubuntu-latest
-          #   target: 'riscv64gc-unknown-linux-gnu'
+          #   target: riscv64gc-unknown-linux-gnu
           #   setup: |
           #     sudo apt-get update
           #     sudo apt-get install gcc-riscv64-linux-gnu -y
-          #   build: ${packageManager} build --platform --target riscv64gc-unknown-linux-gnu
+          #   build: yarn build --platform --target riscv64gc-unknown-linux-gnu
           # - host: ubuntu-latest
-          #   target: 'powerpc64le-unknown-linux-gnu'
+          #   target: powerpc64le-unknown-linux-gnu
           #   setup: |
           #     sudo apt-get update
           #     sudo apt-get install gcc-powerpc64le-linux-gnu -y
-          #   build: ${packageManager} build --platform --target powerpc64le-unknown-linux-gnu
+          #   build: yarn build --platform --target powerpc64le-unknown-linux-gnu
           # - host: ubuntu-latest
-          #   target: 's390x-unknown-linux-gnu'
+          #   target: s390x-unknown-linux-gnu
           #   setup: |
           #     sudo apt-get update
           #     sudo apt-get install gcc-s390x-linux-gnu -y
-          #   build: ${packageManager} build --platform --target s390x-unknown-linux-gnu
+          #   build: yarn build --platform --target s390x-unknown-linux-gnu
           # - host: ubuntu-latest
-          #   target: '${wasiTargetName}'
-          #   build: ${packageManager} build --platform --target ${wasiTargetName}
+          #   target: ${wasiTargetName}
+          #   build: yarn build --platform --target ${wasiTargetName}
 
     defaults:
       run:
@@ -177,14 +172,6 @@ jobs:
           node-version: 20
           # cache: yarn
           architecture: x86
-
-      - name: Build in docker
-        uses: addnab/docker-run-action@v3
-        if: ${{ matrix.settings.docker }}
-        with:
-          image: ${{ matrix.settings.docker }}
-          options: '--user 0:0 -v ${{ github.workspace }}/.cargo-cache/git/db:/usr/local/cargo/git/db -v ${{ github.workspace }}/.cargo/registry/cache:/usr/local/cargo/registry/cache -v ${{ github.workspace }}/.cargo/registry/index:/usr/local/cargo/registry/index -v ${{ github.workspace }}:/build -w /build/crates/fervid_napi'
-          run: ${{ matrix.settings.build }}
 
       - name: Build
         run: ${{ matrix.settings.build }}

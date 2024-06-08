@@ -391,7 +391,7 @@ __metadata:
     "@fervid/napi-win32-arm64-msvc": "npm:0.2.1"
     "@fervid/napi-win32-ia32-msvc": "npm:0.2.1"
     "@fervid/napi-win32-x64-msvc": "npm:0.2.1"
-    "@napi-rs/cli": "npm:^2.18.1"
+    "@napi-rs/cli": "npm:^2.18.3"
     "@swc-node/register": "npm:^1.9.0"
     "@swc/core": "npm:^1.4.13"
     "@taplo/cli": "npm:^0.7.0"
@@ -497,12 +497,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@napi-rs/cli@npm:^2.18.1":
-  version: 2.18.1
-  resolution: "@napi-rs/cli@npm:2.18.1"
+"@napi-rs/cli@npm:^2.18.3":
+  version: 2.18.3
+  resolution: "@napi-rs/cli@npm:2.18.3"
   bin:
     napi: scripts/index.js
-  checksum: 10c0/5923cba5f9a3d00fb70689b69a7c389437dd7042b49b05c00df098176ed1fa3232ce3dc2ddbd02912142c8c899fa7c74b99b9bf324962dd124fd45abc4dc331a
+  checksum: 10c0/4d91fe84551a3775cbf93f6340c8b6a87dc653248f90c459fb996ea689ff52ba698a7620ad08713b3b97baf0a675fe2d4cac83a9e842e56cdfbf204c7f5f01d5
   languageName: node
   linkType: hard
 
