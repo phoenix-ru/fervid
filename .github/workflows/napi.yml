@@ -159,11 +159,11 @@ jobs:
 
       - name: Setup node x86
         if: matrix.settings.target == 'i686-pc-windows-msvc'
-        run: yarn config set supportedArchitectures.cpu "ia32"
+        run: corepack enable && yarn config set supportedArchitectures.cpu "ia32"
         shell: bash
 
       - name: Install dependencies
-        run: corepack enable; yarn install
+        run: corepack enable && yarn install
 
       - name: Setup node x86
         uses: actions/setup-node@v4
