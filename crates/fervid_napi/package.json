@@ -46,7 +46,7 @@
   "scripts": {
     "artifacts": "napi artifacts",
     "bench": "node -r @swc-node/register benchmark/bench.ts",
-    "build": "napi build --platform --release --strip --pipe \"prettier -w\"",
+    "build": "napi build --platform --release --pipe \"prettier -w\"",
     "build:debug": "napi build --platform --pipe \"prettier -w\"",
     "format": "run-p format:prettier format:rs format:toml",
     "format:prettier": "prettier . -w",
@@ -60,7 +60,7 @@
   },
   "devDependencies": {
     "@babel/parser": "^7.24.4",
-    "@napi-rs/cli": "3.0.0-alpha.4",
+    "@napi-rs/cli": "^2.18.1",
     "@swc-node/register": "^1.9.0",
     "@swc/core": "^1.4.13",
     "@taplo/cli": "^0.7.0",
