@@ -210,7 +210,7 @@ jobs:
         run: ls -R .
         shell: bash
       - name: Test bindings
-        run: docker run --rm -e CI=true -v $(pwd):/build -w /build node:${{ matrix.node }}-slim "corepack enable && yarn test"
+        run: docker run --rm -e CI=true -v $(pwd):/build -w /build node:${{ matrix.node }}-slim sh -c "corepack enable && yarn test"
 
   publish:
     name: Publish
