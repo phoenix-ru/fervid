@@ -68,25 +68,79 @@ jobs:
               yarn build --target aarch64-apple-darwin
               strip -x *.node
 
+          # Cross-compile, taken from
+          # https://github.com/napi-rs/napi-rs/blob/7f7dfab001edbfa377112b41d3c7ff28b62892d3/cli/src/api/templates/ci-template.ts
+          - host: windows-latest
+            target: i686-pc-windows-msvc
+            build: |
+              yarn build --target i686-pc-windows-msvc
+              yarn test
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            build: yarn build --target aarch64-unknown-linux-gnu --use-napi-cross
+          - host: ubuntu-latest
+            target: 'armv7-unknown-linux-gnueabihf'
+            build: ${packageManager} build --platform --target armv7-unknown-linux-gnueabihf --use-napi-cross
+          # - host: ubuntu-latest
+          #   target: 'armv7-unknown-linux-musleabihf'
+          #   build: ${packageManager} build --platform --target armv7-unknown-linux-musleabihf -x
+          - host: ubuntu-latest
+            target: 'aarch64-linux-android'
+            build: ${packageManager} build --platform --target aarch64-linux-android
+          - host: ubuntu-latest
+            target: 'armv7-linux-androideabi'
+            build: ${packageManager} build --platform --target armv7-linux-androideabi
+          - host: ubuntu-latest
+            target: 'aarch64-unknown-linux-musl'
+            build: ${packageManager} build --platform --target aarch64-unknown-linux-musl -x
+          - host: windows-latest
+            target: 'aarch64-pc-windows-msvc'
+            build: ${packageManager} build --platform --target aarch64-pc-windows-msvc
+          # - host: ubuntu-latest
+          #   target: 'riscv64gc-unknown-linux-gnu'
+          #   setup: |
+          #     sudo apt-get update
+          #     sudo apt-get install gcc-riscv64-linux-gnu -y
+          #   build: ${packageManager} build --platform --target riscv64gc-unknown-linux-gnu
+          # - host: ubuntu-latest
+          #   target: 'powerpc64le-unknown-linux-gnu'
+          #   setup: |
+          #     sudo apt-get update
+          #     sudo apt-get install gcc-powerpc64le-linux-gnu -y
+          #   build: ${packageManager} build --platform --target powerpc64le-unknown-linux-gnu
+          # - host: ubuntu-latest
+          #   target: 's390x-unknown-linux-gnu'
+          #   setup: |
+          #     sudo apt-get update
+          #     sudo apt-get install gcc-s390x-linux-gnu -y
+          #   build: ${packageManager} build --platform --target s390x-unknown-linux-gnu
+          # - host: ubuntu-latest
+          #   target: '${wasiTargetName}'
+          #   build: ${packageManager} build --platform --target ${wasiTargetName}
+
     defaults:
       run:
         working-directory: ${{ env.WORKING_DIR_PATH }}
     name: stable - ${{ matrix.settings.target }} - node@18
     runs-on: ${{ matrix.settings.host }}
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup node
         uses: actions/setup-node@v4
         if: ${{ !matrix.settings.docker }}
         with:
-          node-version: 18
+          node-version: 20
           # cache: yarn
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         if: ${{ !matrix.settings.docker }}
         with:
           toolchain: stable
           targets: ${{ matrix.settings.target }}
+
       - name: Cache cargo
         uses: actions/cache@v3
         with:
@@ -97,27 +151,33 @@ jobs:
             .cargo-cache
             target/
           key: ${{ matrix.settings.target }}-cargo-${{ matrix.settings.host }}
+
       - uses: goto-bus-stop/setup-zig@v2
-        if: ${{ matrix.settings.target == 'armv7-unknown-linux-gnueabihf' }}
+        if: ${{ contains(matrix.settings.target, 'musl') }}
         with:
-          version: 0.11.0
+          version: 0.12.0
+
       - name: Setup toolchain
         run: ${{ matrix.settings.setup }}
         if: ${{ matrix.settings.setup }}
         shell: bash
+
       - name: Setup node x86
         if: matrix.settings.target == 'i686-pc-windows-msvc'
         run: yarn config set supportedArchitectures.cpu "ia32"
         shell: bash
+
       - name: Install dependencies
         run: corepack enable; yarn install
+
       - name: Setup node x86
         uses: actions/setup-node@v4
         if: matrix.settings.target == 'i686-pc-windows-msvc'
         with:
-          node-version: 18
+          node-version: 20
           # cache: yarn
           architecture: x86
+
       - name: Build in docker
         uses: addnab/docker-run-action@v3
         if: ${{ matrix.settings.docker }}
@@ -125,13 +185,16 @@ jobs:
           image: ${{ matrix.settings.docker }}
           options: '--user 0:0 -v ${{ github.workspace }}/.cargo-cache/git/db:/usr/local/cargo/git/db -v ${{ github.workspace }}/.cargo/registry/cache:/usr/local/cargo/registry/cache -v ${{ github.workspace }}/.cargo/registry/index:/usr/local/cargo/registry/index -v ${{ github.workspace }}:/build -w /build/crates/fervid_napi'
           run: ${{ matrix.settings.build }}
+
       - name: Build
         run: ${{ matrix.settings.build }}
         if: ${{ !matrix.settings.docker }}
         shell: bash
+
       - name: List directory before upload
         run: ls -a
         shell: bash
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -223,7 +286,7 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           # cache: yarn
       - name: Install dependencies
         run: corepack enable; yarn install
