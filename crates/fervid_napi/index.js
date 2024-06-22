@@ -208,12 +208,62 @@ switch (platform) {
         }
         break
       case 'arm':
-        localFileExisted = existsSync(join(__dirname, 'napi.linux-arm-gnueabihf.node'))
+        if (isMusl()) {
+          localFileExisted = existsSync(join(__dirname, 'napi.linux-arm-musleabihf.node'))
+          try {
+            if (localFileExisted) {
+              nativeBinding = require('./napi.linux-arm-musleabihf.node')
+            } else {
+              nativeBinding = require('@fervid/napi-linux-arm-musleabihf')
+            }
+          } catch (e) {
+            loadError = e
+          }
+        } else {
+          localFileExisted = existsSync(join(__dirname, 'napi.linux-arm-gnueabihf.node'))
+          try {
+            if (localFileExisted) {
+              nativeBinding = require('./napi.linux-arm-gnueabihf.node')
+            } else {
+              nativeBinding = require('@fervid/napi-linux-arm-gnueabihf')
+            }
+          } catch (e) {
+            loadError = e
+          }
+        }
+        break
+      case 'riscv64':
+        if (isMusl()) {
+          localFileExisted = existsSync(join(__dirname, 'napi.linux-riscv64-musl.node'))
+          try {
+            if (localFileExisted) {
+              nativeBinding = require('./napi.linux-riscv64-musl.node')
+            } else {
+              nativeBinding = require('@fervid/napi-linux-riscv64-musl')
+            }
+          } catch (e) {
+            loadError = e
+          }
+        } else {
+          localFileExisted = existsSync(join(__dirname, 'napi.linux-riscv64-gnu.node'))
+          try {
+            if (localFileExisted) {
+              nativeBinding = require('./napi.linux-riscv64-gnu.node')
+            } else {
+              nativeBinding = require('@fervid/napi-linux-riscv64-gnu')
+            }
+          } catch (e) {
+            loadError = e
+          }
+        }
+        break
+      case 's390x':
+        localFileExisted = existsSync(join(__dirname, 'napi.linux-s390x-gnu.node'))
         try {
           if (localFileExisted) {
-            nativeBinding = require('./napi.linux-arm-gnueabihf.node')
+            nativeBinding = require('./napi.linux-s390x-gnu.node')
           } else {
-            nativeBinding = require('@fervid/napi-linux-arm-gnueabihf')
+            nativeBinding = require('@fervid/napi-linux-s390x-gnu')
           }
         } catch (e) {
           loadError = e
