@@ -107,7 +107,8 @@ function cc() {}
 class dd {
 }
 import { x } from './x';
-export default {
+import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
     __name: "anonymous",
     setup () {
         let a = 1;
@@ -136,7 +137,7 @@ export default {
             d
         };
     }
-};
+});
 "
 `;
 
@@ -154,7 +155,8 @@ exports[`SFC genDefaultAs > <script setup> only 1`] = `
 `;
 
 exports[`SFC genDefaultAs > <script setup> only w/ ts 1`] = `
-"const _sfc_ = {
+"import { defineComponent as _defineComponent } from "vue";
+const _sfc_ = _defineComponent({
     __name: "anonymous",
     setup () {
         const a = 1;
@@ -162,7 +164,7 @@ exports[`SFC genDefaultAs > <script setup> only w/ ts 1`] = `
             a
         };
     }
-};
+});
 "
 `;
 
@@ -180,7 +182,8 @@ exports[`SFC genDefaultAs > <script> + <script setup> 1`] = `
 `;
 
 exports[`SFC genDefaultAs > <script> + <script setup> w/ ts 1`] = `
-"const _sfc_ = {
+"import { defineComponent as _defineComponent } from "vue";
+const _sfc_ = _defineComponent({
     __name: "anonymous",
     setup () {
         const a = 1;
@@ -188,7 +191,7 @@ exports[`SFC genDefaultAs > <script> + <script setup> w/ ts 1`] = `
             a
         };
     }
-};
+});
 "
 `;
 

@@ -253,7 +253,7 @@ describe('SFC genDefaultAs', () => {
     expect(content).not.toMatch('export default')
     // TODO https://github.com/phoenix-ru/fervid/issues/23
     // expect(content).toMatch(`const _sfc_ = /*#__PURE__*/_defineComponent(`)
-    expect(content).toMatch(`const _sfc_ = `)
+    expect(content).toMatch(`const _sfc_ = _defineComponent({`)
     assertCode(content)
   })
 
@@ -274,7 +274,7 @@ describe('SFC genDefaultAs', () => {
       // TODO https://github.com/phoenix-ru/fervid/issues/23
       // There is no need for spreading, because Fervid merges trivial objects
       // `const _sfc_ = /*#__PURE__*/_defineComponent({\n  ...__default__`,
-      `const _sfc_ = {\n    __name:`,
+      `const _sfc_ = _defineComponent({\n    __name:`,
     )
     assertCode(content)
   })

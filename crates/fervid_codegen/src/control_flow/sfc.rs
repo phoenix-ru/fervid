@@ -1,5 +1,5 @@
 use fervid_core::{
-    fervid_atom, BindingTypes, FervidAtom, SfcTemplateBlock, TemplateGenerationMode,
+    fervid_atom, BindingTypes, FervidAtom, SfcTemplateBlock, TemplateGenerationMode, VueImports,
 };
 use swc_core::{
     atoms::Atom,
@@ -9,10 +9,11 @@ use swc_core::{
     },
     ecma::{
         ast::{
-            ArrowExpr, AssignExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, Decl,
-            ExportDefaultExpr, Expr, ExprStmt, Function, GetterProp, Ident, ImportDecl, MethodProp,
-            Module, ModuleDecl, ModuleItem, ObjectLit, Param, Pat, Prop, PropName, PropOrSpread,
-            ReturnStmt, SetterProp, Stmt, Str, VarDecl, VarDeclKind, VarDeclarator,
+            ArrowExpr, AssignExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
+            Decl, ExportDefaultExpr, Expr, ExprOrSpread, ExprStmt, Function, GetterProp, Ident,
+            ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit, Param, Pat, Prop,
+            PropName, PropOrSpread, ReturnStmt, SetterProp, Stmt, Str, VarDecl, VarDeclKind,
+            VarDeclarator,
         },
         visit::{noop_visit_type, Visit, VisitWith},
     },
@@ -160,6 +161,58 @@ impl CodegenContext {
             }
         }
 
+        // Either use export object as-is or inside `defineComponent`
+        let sfc_exported = if self.bindings_helper.is_ts {
+            // Add /*#__PURE__*/ comment
+            let obj_span = sfc_export_obj.span;
+            if !obj_span.is_dummy() {
+                // TODO also try to make sure that span is not dummy
+            }
+
+            Box::new(Expr::Call(CallExpr {
+                span: obj_span,
+                callee: Callee::Expr(Box::new(Expr::Ident(Ident {
+                    span: DUMMY_SP,
+                    sym: self.get_and_add_import_ident(VueImports::DefineComponent),
+                    optional: false,
+                }))),
+                args: vec![ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(Expr::Object(sfc_export_obj)),
+                }],
+                type_args: None,
+            }))
+        } else {
+            Box::new(Expr::Object(sfc_export_obj))
+        };
+
+        // Do `export default` or `const _smth = ` where variable name is passed
+        let gen_default_as = if let Some(options_gen_default_as) = gen_default_as {
+            ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
+                span: DUMMY_SP,
+                kind: VarDeclKind::Const,
+                declare: false,
+                decls: vec![VarDeclarator {
+                    span: DUMMY_SP,
+                    name: Pat::Ident(BindingIdent {
+                        id: Ident {
+                            span: DUMMY_SP,
+                            sym: FervidAtom::from(options_gen_default_as),
+                            optional: false,
+                        },
+                        type_ann: None,
+                    }),
+                    init: Some(sfc_exported),
+                    definite: false,
+                }],
+            }))))
+        } else {
+            ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(ExportDefaultExpr {
+                span: DUMMY_SP,
+                expr: sfc_exported,
+            }))
+        };
+
         // Append the Vue imports
         // TODO Smart merging with user imports?
         let used_imports = self.generate_imports();
@@ -179,32 +232,6 @@ impl CodegenContext {
                     phase: Default::default(),
                 })));
         }
-
-        let gen_default_as = if let Some(options_gen_default_as) = gen_default_as {
-            ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
-                span: DUMMY_SP,
-                kind: VarDeclKind::Const,
-                declare: false,
-                decls: vec![VarDeclarator {
-                    span: DUMMY_SP,
-                    name: Pat::Ident(BindingIdent {
-                        id: Ident {
-                            span: DUMMY_SP,
-                            sym: FervidAtom::from(options_gen_default_as),
-                            optional: false,
-                        },
-                        type_ann: None,
-                    }),
-                    init: Some(Box::new(Expr::Object(sfc_export_obj))),
-                    definite: false,
-                }],
-            }))))
-        } else {
-            ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(ExportDefaultExpr {
-                span: DUMMY_SP,
-                expr: Box::new(Expr::Object(sfc_export_obj)),
-            }))
-        };
 
         // Append the default export/const
         script.body.push(gen_default_as);
