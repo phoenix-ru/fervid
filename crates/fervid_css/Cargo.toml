@@ -1,7 +1,7 @@
 [package]
 name = "fervid_css"
 description = "Transformer for Vue `<style>` blocks"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Marsel Shaikhin <phoenix.apps@yahoo.com>"]
 repository = "https://github.com/phoenix-ru/fervid"
@@ -14,7 +14,7 @@ keywords = ["vue", "css", "style", "compiler", "transformer"]
 # cssparser = "0.29.6"
 # lightningcss = { version = "1.0.0-alpha.44", git = "https://github.com/phoenix-ru/lightningcss.git", features = ["visitor"] }
 # parcel_selectors = { version = "0.26.0", git = "https://github.com/phoenix-ru/lightningcss.git" }
-fervid_core = { path="../fervid_core", version = "0.1" }
+fervid_core = { path="../fervid_core", version = "0.2" }
 swc_css_ast = "0.140.*"
 swc_css_codegen = "0.151.*"
 swc_css_parser = "0.150.*"

@@ -6,7 +6,7 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fervid_parser = {path = "../fervid_parser", version = "0.1"}
+fervid_parser = {path = "../fervid_parser", version = "*"}
 swc_core = {workspace = true, features = ["common", "ecma_ast", "ecma_visit"]}
 swc_ecma_lints = {version = "0.92"}
 swc_ecma_transforms_base = {version = "0.137"}

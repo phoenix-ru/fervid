@@ -1,7 +1,7 @@
 [package]
 name = "fervid_codegen"
 description = "EcmaScript code generation for the fervid crate"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Marsel Shaikhin <phoenix.apps@yahoo.com>"]
 repository = "https://github.com/phoenix-ru/fervid"
@@ -10,8 +10,8 @@ license = "Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fervid_core = { path="../fervid_core", version = "0.1" }
-fervid_transform = { path="../fervid_transform", version="0.1" }
+fervid_core = { path="../fervid_core", version = "0.2" }
+fervid_transform = { path="../fervid_transform", version="0.2" }
 lazy_static = { workspace = true }
 swc_core = { workspace = true, features = ["ecma_ast", "ecma_visit", "common_sourcemap"] }
 swc_ecma_codegen = { workspace = true }

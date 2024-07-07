@@ -14,5 +14,5 @@ crate-type = ["cdylib", "rlib"]
 farmfe_core = { version = "*" }
 farmfe_toolkit_plugin_types = { version = "*" }
 farmfe_macro_plugin = { version = "*" }
-fervid = { path = "../fervid", version = "0.0.3" }
+fervid = { path = "../fervid", version = "0.2" }
 fxhash = { workspace = true }

@@ -1,7 +1,7 @@
 [package]
 name = "fervid_wasm"
 description = "WASM bindings for the fervid project"
-version = "0.0.1"
+version = "0.2.0"
 edition = "2021"
 authors = ["Marsel Shaikhin <phoenix.apps@yahoo.com>"]
 repository = "https://github.com/phoenix-ru/rust-vue-compiler"
@@ -13,7 +13,7 @@ license = "Apache-2.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-fervid = { path = "../fervid", version = "0.0.3" }
+fervid = { path = "../fervid", version = "0.2" }
 
 wasm-bindgen = "0.2.87"
 wee_alloc = "0.4.5"

@@ -704,7 +704,7 @@ dependencies = [
 
 [[package]]
 name = "fervid"
-version = "0.0.3"
+version = "0.2.0"
 dependencies = [
  "criterion",
  "fervid_codegen",
@@ -723,7 +723,7 @@ dependencies = [
 
 [[package]]
 name = "fervid_codegen"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fervid_core",
  "fervid_transform",
@@ -740,7 +740,7 @@ dependencies = [
 
 [[package]]
 name = "fervid_core"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "flagset",
  "fxhash",
@@ -751,7 +751,7 @@ dependencies = [
 
 [[package]]
 name = "fervid_css"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fervid_core",
  "swc_core",
@@ -773,7 +773,7 @@ dependencies = [
 
 [[package]]
 name = "fervid_napi"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fervid",
  "fervid_codegen",
@@ -787,7 +787,7 @@ dependencies = [
 
 [[package]]
 name = "fervid_parser"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fervid_core",
  "swc_core",
@@ -798,7 +798,7 @@ dependencies = [
 
 [[package]]
 name = "fervid_transform"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fervid_core",
  "fervid_css",
@@ -813,7 +813,7 @@ dependencies = [
 
 [[package]]
 name = "fervid_wasm"
-version = "0.0.1"
+version = "0.2.0"
 dependencies = [
  "fervid",
  "wasm-bindgen",

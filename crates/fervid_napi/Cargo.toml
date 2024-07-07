@@ -1,7 +1,7 @@
 [package]
 name = "fervid_napi"
 description = "Vue SFC compiler written in Rust"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Marsel Shaikhin <phoenix.apps@yahoo.com>"]
 repository = "https://github.com/phoenix-ru/rust-vue-compiler"
@@ -19,9 +19,9 @@ mimalloc-rust = "0.2"
 mimalloc-rust = { version = "0.2", features = ["local-dynamic-tls"] }
 
 [dependencies]
-fervid = { path = "../fervid", version = "0.0.3" }
-fervid_codegen = { path = "../fervid_codegen", version = "0.1" }
-fervid_transform = { path = "../fervid_transform", version = "0.1" }
+fervid = { path = "../fervid", version = "0.2" }
+fervid_codegen = { path = "../fervid_codegen", version = "0.2" }
+fervid_transform = { path = "../fervid_transform", version = "0.2" }
 swc_core = { workspace = true }
 
 napi = "2"
