@@ -6,7 +6,7 @@ use swc_core::ecma::{
 
 use crate::{
     atoms::{COMPUTED, DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_PROPS, REACTIVE, REF, VUE},
-    error::{ScriptError, TransformError, TransformErrorKind},
+    error::{ScriptError, ScriptErrorKind, TransformError },
     structs::VueResolvedImports,
     BindingsHelper, ImportBinding, SetupBinding,
 };
@@ -114,10 +114,10 @@ pub fn register_import(
                     || *imported_word == *DEFINE_EMITS
                     || *imported_word == *DEFINE_EXPOSE
                 {
-                    errors.push(TransformError {
+                    errors.push(TransformError::ScriptError(ScriptError {
                         span: named_spec.span,
-                        kind: TransformErrorKind::ScriptError(ScriptError::CompilerMacroImport),
-                    });
+                        kind: ScriptErrorKind::CompilerMacroImport,
+                    }));
                     return false;
                 }
 
@@ -145,10 +145,10 @@ pub fn register_import(
     if let Some(existing) = bindings_helper.user_imports.get(&local) {
         // Not exact duplicate means some local name has been used twice
         if existing.source != *source || existing.imported != imported {
-            errors.push(TransformError {
+            errors.push(TransformError::ScriptError(ScriptError {
                 span,
-                kind: TransformErrorKind::ScriptError(ScriptError::DuplicateImport),
-            });
+                kind: ScriptErrorKind::DuplicateImport,
+            }));
         }
 
         return false;

@@ -803,6 +803,7 @@ dependencies = [
  "fervid_core",
  "fervid_css",
  "fxhash",
+ "itertools 0.10.5",
  "lazy_static",
  "phf",
  "smallvec",

@@ -1,11 +1,11 @@
-use fervid_core::{
-    fervid_atom, BindingTypes, FervidAtom, VueImports,
-};
+use fervid_core::{fervid_atom, BindingTypes, FervidAtom, VueImports};
+use fxhash::FxHashSet;
+use itertools::{Either, Itertools};
 use swc_core::{
-    common::DUMMY_SP,
+    common::{Spanned, DUMMY_SP},
     ecma::ast::{
         ArrayLit, Bool, CallExpr, Callee, Expr, ExprOrSpread, Ident, KeyValueProp, Lit, ObjectLit,
-        Prop, PropName, PropOrSpread, Str,
+        Prop, PropName, PropOrSpread, Str, TsFnOrConstructorType, TsFnParam, TsLit, TsType,
     },
 };
 
@@ -15,13 +15,21 @@ use crate::{
         EMIT_HELPER, EXPOSE_HELPER, MERGE_MODELS_HELPER, MODEL_VALUE, PROPS_HELPER,
         USE_MODEL_HELPER,
     },
-    script::utils::{collect_obj_fields, collect_string_arr},
-    structs::{SfcDefineModel, SfcExportedObjectHelper}, BindingsHelper, SetupBinding,
+    error::{ScriptError, ScriptErrorKind, TransformError},
+    script::{
+        resolve_type::{
+            resolve_type_elements, resolve_union_type, ResolvedElements, TypeResolveContext,
+        },
+        utils::{collect_obj_fields, collect_string_arr},
+    },
+    structs::{SfcDefineModel, SfcExportedObjectHelper},
+    BindingsHelper, SetupBinding,
 };
 
 pub enum TransformMacroResult {
     NotAMacro,
     ValidMacro(Option<Box<Expr>>),
+    Error(TransformError),
 }
 
 /// Tries to transform a Vue compiler macro.\
@@ -112,9 +120,56 @@ pub fn transform_script_setup_macro_expr(
             valid_macro!(None)
         }
     } else if DEFINE_EMITS.eq(sym) {
+        // Validation: duplicate call
+        if sfc_object_helper.emits.is_some() {
+            return TransformMacroResult::Error(TransformError::ScriptError(ScriptError {
+                span: call_expr.span,
+                kind: ScriptErrorKind::DuplicateDefineEmits,
+            }));
+        }
+
+        // Validation: both runtime and types
+        if !call_expr.args.is_empty() && call_expr.type_args.is_some() {
+            return TransformMacroResult::Error(TransformError::ScriptError(ScriptError {
+                span: call_expr.span,
+                kind: ScriptErrorKind::DefineEmitsTypeAndNonTypeArguments,
+            }));
+        }
+
         if let Some(arg0) = &call_expr.args.get(0) {
             sfc_object_helper.emits = Some(arg0.expr.to_owned())
+        } else if let Some(ref type_args) = call_expr.type_args {
+            let Some(ts_type) = type_args.params.first() else {
+                return TransformMacroResult::Error(TransformError::ScriptError(ScriptError {
+                    span: type_args.span,
+                    kind: ScriptErrorKind::DefineEmitsMalformed,
+                }));
+            };
+
+            let runtime_emits = match extract_runtime_emits(&ts_type) {
+                Ok(v) => v,
+                Err(e) => return TransformMacroResult::Error(TransformError::ScriptError(e)),
+            };
+
+            sfc_object_helper.emits = Some(Box::new(Expr::Array(ArrayLit {
+                span: DUMMY_SP,
+                elems: runtime_emits
+                    .into_iter()
+                    .map(|it| {
+                        Some(ExprOrSpread {
+                            spread: None,
+                            expr: Box::new(Expr::Lit(Lit::Str(Str {
+                                span: DUMMY_SP,
+                                value: it,
+                                raw: None,
+                            }))),
+                        })
+                    })
+                    .collect_vec(),
+            })))
         }
+
+        // TODO Process type declaration
 
         // Return `__emits` when in var mode
         if is_var_decl {
@@ -478,4 +533,101 @@ fn is_local(options: Option<&ExprOrSpread>) -> bool {
     };
 
     local_bool.value
+}
+
+/// Extracts runtime emits from type-only `defineEmits` declaration
+/// Adapted from https://github.com/vuejs/core/blob/0ac0f2e338f6f8f0bea7237db539c68bfafb88ae/packages/compiler-sfc/src/script/defineEmits.ts#L73-L103
+fn extract_runtime_emits(type_arg: &TsType) -> Result<FxHashSet<FervidAtom>, ScriptError> {
+    let mut ctx = TypeResolveContext::new("todo".to_owned());
+
+    let mut emits = FxHashSet::<FervidAtom>::default();
+
+    // Handle cases like `defineEmits<(e: 'foo' | 'bar') => void>()`
+    if let TsType::TsFnOrConstructorType(TsFnOrConstructorType::TsFnType(ref ts_fn_type)) = type_arg
+    {
+        // Expect first param in fn, e.g. `e: 'foo' | 'bar'` in example above
+        let Some(first_fn_param) = ts_fn_type.params.first() else {
+            return Err(ScriptError {
+                span: ts_fn_type.span,
+                kind: ScriptErrorKind::DefineEmitsMalformed,
+            });
+        };
+
+        extract_event_names(&mut ctx, first_fn_param, &mut emits);
+
+        return Ok(emits);
+    }
+
+    let ResolvedElements { props, calls } = resolve_type_elements(&mut ctx, type_arg)?;
+
+    let mut has_property = false;
+    for key in props.into_keys() {
+        emits.insert(key);
+        has_property = true;
+    }
+
+    if !calls.is_empty() {
+        if has_property {
+            return Err(ScriptError {
+                kind: ScriptErrorKind::DefineEmitsMixedCallAndPropertySyntax,
+                span: type_arg.span(),
+            });
+        }
+
+        for call in calls {
+            let (params, span) = match call {
+                Either::Left(l) => (l.params, l.span),
+                Either::Right(r) => (r.params, r.span),
+            };
+
+            let Some(first_param) = params.first() else {
+                return Err(ScriptError {
+                    span,
+                    kind: ScriptErrorKind::ResolveTypeMissingTypeParam,
+                });
+            };
+            extract_event_names(&mut ctx, first_param, &mut emits);
+        }
+    }
+
+    return Ok(emits);
+}
+
+/// Adapted from https://github.com/vuejs/core/blob/0ac0f2e338f6f8f0bea7237db539c68bfafb88ae/packages/compiler-sfc/src/script/defineEmits.ts#L105-L128
+fn extract_event_names(
+    ctx: &mut TypeResolveContext,
+    event_name: &TsFnParam,
+    emits: &mut FxHashSet<FervidAtom>,
+) {
+    let TsFnParam::Ident(ident) = event_name else {
+        return;
+    };
+
+    let Some(ref type_annotation) = ident.type_ann else {
+        return;
+    };
+
+    let scope = ctx.scope.clone();
+
+    let types = resolve_union_type(ctx, &type_annotation.type_ann, &scope);
+    for ts_type in types {
+        if let TsType::TsLitType(ts_lit_type) = ts_type {
+            // No UnaryExpression
+            match ts_lit_type.lit {
+                TsLit::Number(ref n) => {
+                    emits.insert(FervidAtom::from(n.value.to_string()));
+                }
+                TsLit::Str(ref s) => {
+                    emits.insert(s.value.to_owned());
+                }
+                TsLit::Bool(ref b) => {
+                    emits.insert(FervidAtom::from(b.value.to_string()));
+                }
+                TsLit::BigInt(ref big_int) => {
+                    emits.insert(FervidAtom::from(big_int.value.to_string()));
+                }
+                TsLit::Tpl(_) => {}
+            }
+        }
+    }
 }

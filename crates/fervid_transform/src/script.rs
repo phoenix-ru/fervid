@@ -17,6 +17,7 @@ use self::{
 pub mod common;
 mod imports;
 mod options_api;
+mod resolve_type;
 mod setup;
 pub mod utils;
 

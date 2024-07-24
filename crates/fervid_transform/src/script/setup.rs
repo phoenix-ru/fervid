@@ -10,7 +10,7 @@ use swc_core::{
 
 use crate::{
     atoms::{EMIT, EMITS, EMIT_HELPER, EXPOSE, EXPOSE_HELPER, PROPS, PROPS_HELPER},
-    error::{ScriptError, TransformError, TransformErrorKind},
+    error::{ScriptError, ScriptErrorKind, TransformError},
     script::{
         common::{
             categorize_class, categorize_expr, categorize_fn_decl, enrich_binding_types,
@@ -75,10 +75,10 @@ pub fn transform_and_record_script_setup(
                 // Disallow non-type exports
                 let setup_export_error_span = check_export(decl);
                 match setup_export_error_span {
-                    Some(span) => errors.push(TransformError {
+                    Some(span) => errors.push(TransformError::ScriptError(ScriptError {
                         span,
-                        kind: TransformErrorKind::ScriptError(ScriptError::SetupExport),
-                    }),
+                        kind: ScriptErrorKind::SetupExport,
+                    })),
                     None => {
                         module_items.push(module_item);
                     }
@@ -109,6 +109,11 @@ pub fn transform_and_record_script_setup(
                     TransformMacroResult::NotAMacro => {
                         // No analysis necessary, return the same statement
                         Some(Stmt::Expr(expr_stmt))
+                    }
+
+                    TransformMacroResult::Error(err) => {
+                        errors.push(err);
+                        None
                     }
                 }
             }
@@ -366,7 +371,7 @@ fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param
 #[cfg(test)]
 mod tests {
     use crate::{
-        error::{ScriptError, TransformErrorKind},
+        error::{ScriptError, ScriptErrorKind, TransformError},
         test_utils::parser::*,
         BindingsHelper, SetupBinding,
     };
@@ -721,8 +726,11 @@ mod tests {
                 if $should_error {
                     let error = errors.first().expect("Should have error");
                     assert!(matches!(
-                        error.kind,
-                        TransformErrorKind::ScriptError(ScriptError::SetupExport)
+                        error,
+                        TransformError::ScriptError(ScriptError {
+                            kind: ScriptErrorKind::SetupExport,
+                            ..
+                        })
                     ));
                 } else {
                     assert!(errors.is_empty());

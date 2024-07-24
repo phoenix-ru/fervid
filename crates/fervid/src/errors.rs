@@ -43,7 +43,7 @@ impl Spanned for CompileError {
     fn span(&self) -> swc_core::common::Span {
         match self {
             CompileError::SfcParse(e) => e.span,
-            CompileError::TransformError(e) => e.span
+            CompileError::TransformError(e) => e.span()
         }
     }
 }

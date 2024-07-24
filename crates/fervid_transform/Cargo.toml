@@ -17,6 +17,7 @@ lazy_static = { workspace = true }
 phf = { workspace = true }
 swc_core = { workspace = true, features = ["common", "ecma_ast", "ecma_visit"] }
 smallvec = { workspace = true }
+itertools = "*"
 
 [dev-dependencies]
 swc_ecma_codegen = { workspace = true }
