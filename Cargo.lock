@@ -817,6 +817,7 @@ name = "fervid_wasm"
 version = "0.2.0"
 dependencies = [
  "fervid",
+ "swc_core",
  "wasm-bindgen",
  "wee_alloc",
 ]

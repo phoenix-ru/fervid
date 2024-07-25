@@ -38,7 +38,7 @@ function mountEditor () {
     })
 
     outputEditorInstance = monaco.editor.create(outputElement, {
-        value: compileAndTime(),
+        value: compileAndTime().code,
         language: 'javascript',
         readOnly: true,
         minimap: { enabled: false }
@@ -50,7 +50,19 @@ function mountEditor () {
 
     function recompile () {
         value = inputEditorInstance.getValue()
-        outputEditorInstance.setValue(compileAndTime())
+        const compilationResult = compileAndTime()
+        outputEditorInstance.setValue(compilationResult.code)
+
+        const errors = compilationResult.errors.map(it => ({
+            startLineNumber: it.start_line_number,
+            endLineNumber: it.end_line_number,
+            startColumn: it.start_column + 1,
+            endColumn: it.end_column + 1,
+            severity: 8,
+            message: it.message
+        }))
+
+        monaco.editor.setModelMarkers(inputEditorInstance.getModel(), null, errors)
     }
 
     inputEditorInstance.onDidChangeModelContent(recompile)

@@ -14,6 +14,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 fervid = { path = "../fervid", version = "0.2" }
+swc_core = { workspace = true, features = ["ecma_ast"] }
 
 wasm-bindgen = "0.2.87"
 wee_alloc = "0.4.5"
