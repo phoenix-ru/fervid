@@ -19,7 +19,7 @@
     "index.js"
   ],
   "napi": {
-    "name": "napi",
+    "name": "fervid",
     "triples": {
       "defaults": true,
       "additional": [
