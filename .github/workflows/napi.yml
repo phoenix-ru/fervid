@@ -1,7 +1,7 @@
 name: Build NAPI
 env:
   DEBUG: napi:*
-  APP_NAME: napi
+  APP_NAME: fervid
   MACOSX_DEPLOYMENT_TARGET: '10.13'
   WORKING_DIR_PATH: ${{ github.workspace }}/crates/fervid_napi
   CI: true
