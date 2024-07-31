@@ -112,7 +112,20 @@
     "kleur",
     "riscv",
     "filehash",
-    "webdriverio"
+    "webdriverio",
+    "farmfe",
+    "downleveling",
+    "musleabihf",
+    "rawtext",
+    "itertools",
+    "uncapitalize",
+    "uncapitalizes",
+    "antd",
+    "DOCTEXT",
+    "SWC's",
+    "replacen",
+    "stringifier",
+    "preprocessors"
   ],
   "ignorePaths": [
     ".github/**",
