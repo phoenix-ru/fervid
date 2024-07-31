@@ -240,12 +240,12 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
 
     // Transform
     let mut transform_errors = Vec::new();
-    let tranform_options = TransformSfcOptions {
+    let transform_options = TransformSfcOptions {
         is_prod,
         scope_id: &file_hash,
         filename: "anonymous.vue".into(),
     };
-    let transform_result = transform_sfc(sfc, tranform_options, &mut transform_errors);
+    let transform_result = transform_sfc(sfc, transform_options, &mut transform_errors);
 
     // Codegen
     let mut ctx = CodegenContext::with_bindings_helper(transform_result.bindings_helper);

@@ -294,7 +294,7 @@ impl<'a> Visitor for TemplateVisitor<'_> {
             self.maybe_resolve_component(&element_node.starting_tag.tag_name);
         }
 
-        // `v-for` has special behaviour with `ref`
+        // `v-for` has special behavior with `ref`
         let old_v_for_scope = self.v_for_scope;
 
         // Patch hints

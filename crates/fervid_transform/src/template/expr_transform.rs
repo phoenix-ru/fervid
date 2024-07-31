@@ -570,7 +570,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     }
                 }
 
-                SimpleAssignTarget::Member(memb) => memb.visit_mut_with(self),
+                SimpleAssignTarget::Member(member) => member.visit_mut_with(self),
                 SimpleAssignTarget::SuperProp(sup) => sup.visit_mut_with(self),
                 SimpleAssignTarget::Paren(paren) => paren.visit_mut_with(self),
                 SimpleAssignTarget::OptChain(opt_chain) => opt_chain.visit_mut_with(self),
