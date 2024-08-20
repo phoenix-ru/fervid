@@ -72,10 +72,13 @@ enum MergeElementsAs {
 pub struct TypeResolveContext {
     pub filename: String,
     pub scope: Rc<TypeScope>,
+    pub is_prod: bool,
+    /// For Custom Elements
+    pub is_ce: bool,
 }
 
 impl TypeResolveContext {
-    pub fn new(filename: String) -> TypeResolveContext {
+    pub fn new(filename: String, is_prod: bool) -> TypeResolveContext {
         // function ctxToScope(ctx: TypeResolveContext): TypeScope {
         //     if (ctx.scope) {
         //       return ctx.scope
@@ -100,7 +103,12 @@ impl TypeResolveContext {
         //     return (ctx.scope = scope)
         //   }
         let scope = Rc::from(TypeScope::new(filename.to_owned()));
-        TypeResolveContext { filename, scope }
+        TypeResolveContext {
+            filename,
+            scope,
+            is_prod,
+            is_ce: false,
+        }
     }
 }
 
@@ -211,7 +219,10 @@ fn resolve_type_elements_impl(
                             resolve_type_elements_impl(ctx, &first_type_param, scope)?;
                         return resolve_extract_prop_types(ctx, resolved_elements);
                     } else {
-                        return Err(error(ScriptErrorKind::ResolveTypeMissingTypeParam, type_params.span));
+                        return Err(error(
+                            ScriptErrorKind::ResolveTypeMissingTypeParam,
+                            type_params.span,
+                        ));
                     }
                 }
             }
@@ -242,7 +253,10 @@ fn resolve_type_elements_impl(
             }
 
             if type_name_single == "" {
-                return Err(error(ScriptErrorKind::ResolveTypeUnsupported, type_ref.span));
+                return Err(error(
+                    ScriptErrorKind::ResolveTypeUnsupported,
+                    type_ref.span,
+                ));
             }
 
             // TODO typeParameters
@@ -262,7 +276,10 @@ fn resolve_type_elements_impl(
             {
                 // limited support, only reference types
                 let Some(first_type_param) = type_params.params.first() else {
-                    return Err(error(ScriptErrorKind::ResolveTypeMissingTypeParam, type_params.span));
+                    return Err(error(
+                        ScriptErrorKind::ResolveTypeMissingTypeParam,
+                        type_params.span,
+                    ));
                 };
 
                 if let Some(ret) = resolve_return_type(ctx, first_type_param, scope) {
@@ -270,7 +287,10 @@ fn resolve_type_elements_impl(
                 }
             }
 
-            Err(error(ScriptErrorKind::ResolveTypeUnsupported, type_ref.span))
+            Err(error(
+                ScriptErrorKind::ResolveTypeUnsupported,
+                type_ref.span,
+            ))
         }
 
         TsType::TsImportType(import_type) => {
@@ -279,7 +299,10 @@ fn resolve_type_elements_impl(
                     && matches!(import_type.qualifier.as_ref(), Some(TsEntityName::Ident(id)) if id.sym == "ExtractPropTypes")
                 {
                     let Some(first_type_param) = type_args.params.first() else {
-                        return Err(error(ScriptErrorKind::ResolveTypeMissingTypeParam, type_args.span));
+                        return Err(error(
+                            ScriptErrorKind::ResolveTypeMissingTypeParam,
+                            type_args.span,
+                        ));
                     };
 
                     let resolved_elements =
@@ -308,7 +331,10 @@ fn resolve_type_elements_impl(
             if let Some(resolved) = resolve_type_reference(ctx, ts_type, scope) {
                 resolve_type_elements_impl(ctx, resolved, scope)
             } else {
-                Err(error(ScriptErrorKind::ResolveTypeUnresolvable, type_query.span))
+                Err(error(
+                    ScriptErrorKind::ResolveTypeUnresolvable,
+                    type_query.span,
+                ))
             }
         }
 
@@ -344,7 +370,10 @@ fn type_elements_to_map(elements: &Vec<TsTypeElement>) -> ResolutionResult<Resol
                         result.props.insert(key, ts_type_element.to_owned());
                     }
                 } else {
-                    return Err(error(ScriptErrorKind::ResolveTypeUnsupportedComputedKey, $signature.span));
+                    return Err(error(
+                        ScriptErrorKind::ResolveTypeUnsupportedComputedKey,
+                        $signature.span,
+                    ));
                 }
             };
         }
@@ -484,12 +513,18 @@ fn resolve_mapped_type(
         resolve_string_type(ctx, &constraint, scope)?
     } else {
         // Constraint must be present, otherwise we can't resolve
-        return Err(error(ScriptErrorKind::ResolveTypeUnresolvable, mapped_type.type_param.span));
+        return Err(error(
+            ScriptErrorKind::ResolveTypeUnresolvable,
+            mapped_type.type_param.span,
+        ));
     };
 
     let Some(ref type_ann) = mapped_type.type_ann else {
         // Same for type annotation - cannot continue without it
-        return Err(error(ScriptErrorKind::ResolveTypeUnresolvable, mapped_type.span));
+        return Err(error(
+            ScriptErrorKind::ResolveTypeUnresolvable,
+            mapped_type.span,
+        ));
     };
 
     for key in keys {
@@ -607,7 +642,10 @@ fn resolve_array_element_type<'t>(
             } else if let Some(resolved) = resolve_type_reference(ctx, array_element_type, scope) {
                 resolve_array_element_type(ctx, resolved, scope)
             } else {
-                Err(error(ScriptErrorKind::ResolveTypeElementType, type_ref.span))
+                Err(error(
+                    ScriptErrorKind::ResolveTypeElementType,
+                    type_ref.span,
+                ))
             }
         }
 
@@ -669,7 +707,7 @@ fn qualified_name_to_path(qual_name: &TsQualifiedName) -> Vec<FervidAtom> {
         .collect_vec()
 }
 
-fn resolve_global_scope(ctx: &mut TypeResolveContext) -> Result<Option<Vec<TypeScope>>, ()> {
+fn resolve_global_scope(_ctx: &mut TypeResolveContext) -> Result<Option<Vec<TypeScope>>, ()> {
     // function resolveGlobalScope(ctx: TypeResolveContext): TypeScope[] | undefined {
     //     if (ctx.options.globalTypeFiles) {
     //       const fs = resolveFS(ctx)
@@ -799,7 +837,10 @@ fn resolve_string_type(
 
             TsLit::Tpl(ref tpl) => resolve_template_keys_ts(ctx, tpl, scope),
 
-            ref x => Err(error(ScriptErrorKind::ResolveTypeUnsupportedIndexType, x.span())),
+            ref x => Err(error(
+                ScriptErrorKind::ResolveTypeUnsupportedIndexType,
+                x.span(),
+            )),
         },
 
         TsType::TsUnionOrIntersectionType(TsUnionOrIntersectionType::TsUnionType(union_type)) => {
@@ -817,18 +858,27 @@ fn resolve_string_type(
             }
 
             let TsEntityName::Ident(ref type_name_ident) = type_ref.type_name else {
-                return Err(error(ScriptErrorKind::ResolveTypeUnsupportedIndexType, type_ref.type_name.span()));
+                return Err(error(
+                    ScriptErrorKind::ResolveTypeUnsupportedIndexType,
+                    type_ref.type_name.span(),
+                ));
             };
 
             let Some(ref type_params) = type_ref.type_params else {
-                return Err(error(ScriptErrorKind::ResolveTypeMissingTypeParams, type_ref.span));
+                return Err(error(
+                    ScriptErrorKind::ResolveTypeMissingTypeParams,
+                    type_ref.span,
+                ));
             };
 
             let mut get_param = |idx: usize| {
                 let param = type_params.params.get(idx);
                 match param {
                     Some(p) => resolve_string_type(ctx, &p, scope),
-                    None => Err(error(ScriptErrorKind::ResolveTypeMissingTypeParam, type_params.span)),
+                    None => Err(error(
+                        ScriptErrorKind::ResolveTypeMissingTypeParam,
+                        type_params.span,
+                    )),
                 }
             };
 
@@ -864,11 +914,17 @@ fn resolve_string_type(
                     capitalize_or_uncapitalize_atoms(&mut result, false);
                     Ok(result)
                 }
-                _ => Err(error(ScriptErrorKind::ResolveTypeUnsupportedIndexType, type_name_ident.span)),
+                _ => Err(error(
+                    ScriptErrorKind::ResolveTypeUnsupportedIndexType,
+                    type_name_ident.span,
+                )),
             }
         }
 
-        x => Err(error(ScriptErrorKind::ResolveTypeUnresolvableIndexType, x.span())),
+        x => Err(error(
+            ScriptErrorKind::ResolveTypeUnresolvableIndexType,
+            x.span(),
+        )),
     }
 }
 
@@ -893,7 +949,10 @@ fn resolve_string_type_expr(expr: &Expr) -> ResolutionResult<Vec<FervidAtom>> {
         Expr::Tpl(tpl) => resolve_template_keys(tpl),
 
         // Type references are not supported (since Expr is not a proper TS type)
-        x => Err(error(ScriptErrorKind::ResolveTypeUnresolvableIndexType, x.span())),
+        x => Err(error(
+            ScriptErrorKind::ResolveTypeUnresolvableIndexType,
+            x.span(),
+        )),
     }
 }
 
@@ -904,11 +963,17 @@ fn resolve_builtin(
     scope: &TypeScope,
 ) -> ResolutionResult<ResolvedElements> {
     let Some(ref type_params) = type_ref.type_params else {
-        return Err(error(ScriptErrorKind::ResolveTypeMissingTypeParams, type_ref.span));
+        return Err(error(
+            ScriptErrorKind::ResolveTypeMissingTypeParams,
+            type_ref.span,
+        ));
     };
 
     let Some(first_type_param) = type_params.params.first() else {
-        return Err(error(ScriptErrorKind::ResolveTypeMissingTypeParam, type_params.span));
+        return Err(error(
+            ScriptErrorKind::ResolveTypeMissingTypeParam,
+            type_params.span,
+        ));
     };
 
     let mut t = resolve_type_elements(ctx, &first_type_param)?;
@@ -936,7 +1001,10 @@ fn resolve_builtin(
             let should_stay = name == "Pick";
 
             let Some(second_type_param) = type_params.params.get(1) else {
-                return Err(error(ScriptErrorKind::ResolveTypeMissingTypeParam, type_params.span));
+                return Err(error(
+                    ScriptErrorKind::ResolveTypeMissingTypeParam,
+                    type_params.span,
+                ));
             };
 
             let picked_or_omitted = resolve_string_type(ctx, &second_type_param, scope)?;
@@ -1128,6 +1196,101 @@ fn inner_resolve_type_reference<'t>(
     }
 
     None
+}
+
+flagset::flags! {
+    pub enum Types: usize {
+        String,
+        Number,
+        Boolean,
+        Object,
+        Null,
+        Unknown,
+        Function,
+        Array,
+        Set,
+        Map,
+        WeakSet,
+        WeakMap,
+        Date,
+        Promise,
+        Error,
+        Symbol,
+    }
+}
+
+pub fn infer_runtime_type(
+    ctx: &mut TypeResolveContext,
+    ts_type: &TsType,
+    is_key_of: bool,
+) -> flagset::FlagSet<Types> {
+    let mut result = flagset::FlagSet::<Types>::default();
+
+    macro_rules! return_value {
+        ($v: expr) => {{
+            result |= $v;
+            result
+        }};
+    }
+
+    match ts_type {
+        TsType::TsKeywordType(keyword) => match keyword.kind {
+            TsKeywordTypeKind::TsStringKeyword => return return_value!(Types::String),
+            TsKeywordTypeKind::TsNumberKeyword | TsKeywordTypeKind::TsBigIntKeyword => {
+                return return_value!(Types::Number)
+            }
+            TsKeywordTypeKind::TsBooleanKeyword => return return_value!(Types::Boolean),
+            TsKeywordTypeKind::TsObjectKeyword => return return_value!(Types::Object),
+            TsKeywordTypeKind::TsNullKeyword => return return_value!(Types::Null),
+
+            TsKeywordTypeKind::TsAnyKeyword => {
+                if is_key_of {
+                    return return_value!(Types::String | Types::Number | Types::Symbol);
+                }
+            }
+            TsKeywordTypeKind::TsUnknownKeyword => todo!(),
+            TsKeywordTypeKind::TsSymbolKeyword => todo!(),
+            TsKeywordTypeKind::TsVoidKeyword => todo!(),
+            TsKeywordTypeKind::TsUndefinedKeyword => todo!(),
+            TsKeywordTypeKind::TsNeverKeyword => todo!(),
+            TsKeywordTypeKind::TsIntrinsicKeyword => todo!(),
+        },
+
+        TsType::TsTypeLit(_) => todo!(),
+
+        TsType::TsFnOrConstructorType(_) => return return_value!(Types::Function),
+        TsType::TsArrayType(_) | TsType::TsTupleType(_) => return return_value!(Types::Array),
+
+        TsType::TsLitType(literal_type) => match literal_type.lit {
+            TsLit::Number(_) => return return_value!(Types::Number),
+            TsLit::Str(_) => return return_value!(Types::String),
+            TsLit::Bool(_) => return return_value!(Types::Boolean),
+            TsLit::BigInt(_) => return return_value!(Types::Number),
+            TsLit::Tpl(_) => return return_value!(Types::Unknown),
+        },
+
+        TsType::TsTypeRef(_) => todo!(),
+
+        TsType::TsParenthesizedType(paren) => return infer_runtime_type(ctx, &paren.type_ann, is_key_of),
+
+        TsType::TsThisType(_) => todo!(),
+        TsType::TsTypeQuery(_) => todo!(),
+        TsType::TsOptionalType(_) => todo!(),
+        TsType::TsRestType(_) => todo!(),
+        TsType::TsUnionOrIntersectionType(_) => todo!(),
+        TsType::TsConditionalType(_) => todo!(),
+        TsType::TsInferType(_) => todo!(),
+        TsType::TsTypeOperator(_) => todo!(),
+        TsType::TsIndexedAccessType(_) => todo!(),
+        TsType::TsMappedType(_) => todo!(),
+        TsType::TsTypePredicate(_) => todo!(),
+        TsType::TsImportType(_) => todo!(),
+    }
+
+    // No runtime check at this point
+    result |= Types::Unknown;
+
+    result
 }
 
 /// Support for the `ExtractPropTypes` helper - it's non-exhaustive, mostly

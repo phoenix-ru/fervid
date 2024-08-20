@@ -804,6 +804,7 @@ version = "0.2.0"
 dependencies = [
  "fervid_core",
  "fervid_css",
+ "flagset",
  "fxhash",
  "itertools 0.12.1",
  "lazy_static",
@@ -832,9 +833,9 @@ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 
 [[package]]
 name = "flagset"
-version = "0.4.5"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdeb3aa5e95cf9aabc17f060cfa0ced7b83f042390760ca53bf09df9968acaa1"
+checksum = "b3ea1ec5f8307826a5b71094dd91fc04d4ae75d5709b20ad351c7fb4815c86ec"
 
 [[package]]
 name = "form_urlencoded"

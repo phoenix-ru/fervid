@@ -20,10 +20,11 @@ use crate::{
         utils::is_static,
     },
     structs::SfcExportedObjectHelper,
-    BindingsHelper, SetupBinding,
+    BindingsHelper, SetupBinding, TransformSfcContext,
 };
 
 mod await_detection;
+mod define_props;
 mod macros;
 
 use self::{
@@ -31,7 +32,7 @@ use self::{
     macros::{postprocess_macros, transform_script_setup_macro_expr},
 };
 
-use super::imports::process_imports;
+use super::{imports::process_imports, resolve_type::TypeResolveContext};
 
 pub struct TransformScriptSetupResult {
     /// All the imports (and maybe exports) of the `<script setup>`
@@ -44,11 +45,15 @@ pub struct TransformScriptSetupResult {
 
 /// Transforms the `<script setup>` block and records its bindings
 pub fn transform_and_record_script_setup(
+    ctx: &mut TransformSfcContext,
     mut script_setup: SfcScriptBlock,
     bindings_helper: &mut BindingsHelper,
     errors: &mut Vec<TransformError>,
 ) -> TransformScriptSetupResult {
     let span = script_setup.content.span;
+
+    // Context for type resolution
+    let mut ctx = TypeResolveContext::new(ctx.filename.to_owned(), bindings_helper.is_prod);
 
     let mut module_items = Vec::<ModuleItem>::new();
     let mut sfc_object_helper = SfcExportedObjectHelper::default();
@@ -73,7 +78,7 @@ pub fn transform_and_record_script_setup(
         let stmt = match module_item {
             ModuleItem::ModuleDecl(ref decl) => {
                 // Disallow non-type exports
-                let setup_export_error_span = check_export(decl);
+                let setup_export_error_span: Option<Span> = check_export(decl);
                 match setup_export_error_span {
                     Some(span) => errors.push(TransformError::ScriptError(ScriptError {
                         span,
@@ -94,6 +99,7 @@ pub fn transform_and_record_script_setup(
                 let span = expr_stmt.span;
 
                 let transform_macro_result = transform_script_setup_macro_expr(
+                    &mut ctx,
                     &expr_stmt.expr,
                     bindings_helper,
                     &mut sfc_object_helper,
@@ -119,7 +125,8 @@ pub fn transform_and_record_script_setup(
             }
 
             Stmt::Decl(decl) => {
-                transform_decl_stmt(decl, bindings_helper, &mut sfc_object_helper).map(Stmt::Decl)
+                transform_decl_stmt(&mut ctx, decl, bindings_helper, &mut sfc_object_helper)
+                    .map(Stmt::Decl)
             }
 
             // By default, just return the same statement
@@ -159,6 +166,7 @@ pub fn transform_and_record_script_setup(
 /// Analyzes the declaration in `script setup` context.
 /// These are typically `var`/`let`/`const` declarations, function declarations, etc.
 fn transform_decl_stmt(
+    ctx: &mut TypeResolveContext,
     decl: Decl,
     bindings_helper: &mut BindingsHelper,
     sfc_object_helper: &mut SfcExportedObjectHelper,
@@ -197,6 +205,7 @@ fn transform_decl_stmt(
                 // Process RHS
                 if let Some(ref init_expr) = var_declarator.init {
                     let transform_macro_result = transform_script_setup_macro_expr(
+                        ctx,
                         init_expr,
                         bindings_helper,
                         sfc_object_helper,
@@ -373,7 +382,7 @@ mod tests {
     use crate::{
         error::{ScriptError, ScriptErrorKind, TransformError},
         test_utils::parser::*,
-        BindingsHelper, SetupBinding,
+        BindingsHelper, SetupBinding, TransformSfcContext,
     };
     use fervid_core::{fervid_atom, BindingTypes, SfcScriptBlock};
     use swc_core::common::DUMMY_SP;
@@ -382,8 +391,14 @@ mod tests {
 
     fn analyze_bindings(script_setup: SfcScriptBlock) -> Vec<SetupBinding> {
         let mut bindings_helper = BindingsHelper::default();
+        let mut ctx = TransformSfcContext::anonymous();
         let mut errors = Vec::new();
-        transform_and_record_script_setup(script_setup, &mut bindings_helper, &mut errors);
+        transform_and_record_script_setup(
+            &mut ctx,
+            script_setup,
+            &mut bindings_helper,
+            &mut errors,
+        );
 
         bindings_helper.setup_bindings
     }
@@ -720,8 +735,14 @@ mod tests {
                 };
 
                 let mut bindings_helper = BindingsHelper::default();
+                let mut ctx = TransformSfcContext::anonymous();
                 let mut errors = Vec::new();
-                transform_and_record_script_setup(script_setup, &mut bindings_helper, &mut errors);
+                transform_and_record_script_setup(
+                    &mut ctx,
+                    script_setup,
+                    &mut bindings_helper,
+                    &mut errors,
+                );
 
                 if $should_error {
                     let error = errors.first().expect("Should have error");

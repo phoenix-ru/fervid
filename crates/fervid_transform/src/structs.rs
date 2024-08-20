@@ -11,6 +11,11 @@ use swc_core::ecma::{
     atoms::JsWord,
 };
 
+/// Context object. Currently very minimal but may grow over time.
+pub struct TransformSfcContext {
+    pub filename: String,
+}
+
 /// A helper which encompasses all the logic related to bindings,
 /// such as their types, which of them were used, what components and directives
 /// were seen in the template, etc.
@@ -152,4 +157,13 @@ pub struct TransformSfcResult {
     pub style_blocks: Vec<SfcStyleBlock>,
     /// Custom blocks
     pub custom_blocks: Vec<SfcCustomBlock>,
+}
+
+#[cfg(test)]
+impl TransformSfcContext {
+    pub fn anonymous() -> TransformSfcContext {
+        TransformSfcContext {
+            filename: "anonymous.vue".to_string(),
+        }
+    }
 }

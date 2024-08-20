@@ -23,8 +23,12 @@ pub enum ScriptErrorKind {
     DefineEmitsTypeAndNonTypeArguments,
     /// "defineEmits() type cannot mixed call signature and property syntax"
     DefineEmitsMixedCallAndPropertySyntax,
+    /// `defineProps` was called with both runtime and type arguments
+    DefinePropsTypeAndNonTypeArguments,
     /// Duplicate `defineEmits` call
     DuplicateDefineEmits,
+    /// Duplicate `defineProps` call
+    DuplicateDefineProps,
     /// Different imports using the same local symbol,
     /// e.g `import foo from './foo'` and `import { foo } from './bar'`.
     DuplicateImport,
@@ -48,6 +52,10 @@ pub enum ScriptErrorKind {
     ResolveTypeUnsupportedComputedKey,
     /// Disallow non-type exports inside `<script setup>`
     SetupExport,
+    /// `withDefaults` only works with type-only `defineProps`
+    WithDefaultsNeedsTypeOnlyDefineProps,
+    /// `withDefaults` without `defineProps` inside
+    WithDefaultsWithoutDefineProps,
 }
 
 impl From<CssError> for TransformError {
