@@ -126,7 +126,8 @@
     "replacen",
     "stringifier",
     "preprocessors",
-    "bitflags"
+    "bitflags",
+    "keyof"
   ],
   "ignorePaths": [
     ".github/**",
