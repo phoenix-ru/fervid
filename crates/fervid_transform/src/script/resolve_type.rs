@@ -3,6 +3,7 @@
 use std::rc::Rc;
 
 use fervid_core::{fervid_atom, FervidAtom};
+use flagset::FlagSet;
 use fxhash::FxHashMap;
 use itertools::Itertools;
 use phf::{phf_set, Set};
@@ -10,10 +11,10 @@ use swc_core::{
     common::{pass::Either, Span, Spanned, DUMMY_SP},
     ecma::ast::{
         BinExpr, BinaryOp, Expr, Ident, Lit, Tpl, TsCallSignatureDecl, TsEntityName,
-        TsFnOrConstructorType, TsFnType, TsGetterSignature, TsIndexedAccessType,
+        TsFnOrConstructorType, TsFnParam, TsFnType, TsGetterSignature, TsIndexedAccessType,
         TsIntersectionType, TsKeywordType, TsKeywordTypeKind, TsLit, TsLitType, TsMappedType,
         TsQualifiedName, TsTplLitType, TsType, TsTypeAnn, TsTypeElement, TsTypeLit,
-        TsTypeQueryExpr, TsTypeRef, TsUnionOrIntersectionType, TsUnionType,
+        TsTypeOperatorOp, TsTypeQueryExpr, TsTypeRef, TsUnionOrIntersectionType, TsUnionType,
     },
 };
 
@@ -550,7 +551,7 @@ fn resolve_index_type(
     ctx: &mut TypeResolveContext,
     index_type: &TsIndexedAccessType,
     scope: &TypeScope,
-) -> ResolutionResult<Vec<TsType>> {
+) -> ResolutionResult<Vec<Box<TsType>>> {
     let TsIndexedAccessType {
         obj_type,
         index_type,
@@ -563,12 +564,12 @@ fn resolve_index_type(
     }) = index_type.as_ref()
     {
         return resolve_array_element_type(ctx, &obj_type, scope)
-            .map(|v| v.into_iter().cloned().collect_vec());
+            .map(|v| v.into_iter().map(|v| Box::new(v.clone())).collect_vec());
     }
 
     let resolved = resolve_type_elements_impl(ctx, &obj_type, scope)?;
     let mut props = resolved.props;
-    let mut types = Vec::<TsType>::new();
+    let mut types = Vec::<Box<TsType>>::new();
 
     macro_rules! implementation {
         ($value: ident) => {
@@ -580,7 +581,7 @@ fn resolve_index_type(
             };
 
             if let Some(ref type_ann) = target_type {
-                types.push(*type_ann.type_ann.to_owned());
+                types.push(type_ann.type_ann.to_owned());
             }
         };
     }
@@ -1222,15 +1223,13 @@ flagset::flags! {
 pub fn infer_runtime_type(
     ctx: &mut TypeResolveContext,
     ts_type: &TsType,
+    scope: &TypeScope,
     is_key_of: bool,
-) -> flagset::FlagSet<Types> {
-    let mut result = flagset::FlagSet::<Types>::default();
-
+) -> FlagSet<Types> {
     macro_rules! return_value {
-        ($v: expr) => {{
-            result |= $v;
-            result
-        }};
+        ($v: expr) => {
+            FlagSet::from($v)
+        };
     }
 
     match ts_type {
@@ -1248,15 +1247,82 @@ pub fn infer_runtime_type(
                     return return_value!(Types::String | Types::Number | Types::Symbol);
                 }
             }
-            TsKeywordTypeKind::TsUnknownKeyword => todo!(),
-            TsKeywordTypeKind::TsSymbolKeyword => todo!(),
-            TsKeywordTypeKind::TsVoidKeyword => todo!(),
-            TsKeywordTypeKind::TsUndefinedKeyword => todo!(),
-            TsKeywordTypeKind::TsNeverKeyword => todo!(),
-            TsKeywordTypeKind::TsIntrinsicKeyword => todo!(),
+            TsKeywordTypeKind::TsSymbolKeyword => return return_value!(Types::Symbol),
+
+            TsKeywordTypeKind::TsUnknownKeyword
+            | TsKeywordTypeKind::TsVoidKeyword
+            | TsKeywordTypeKind::TsUndefinedKeyword
+            | TsKeywordTypeKind::TsNeverKeyword
+            | TsKeywordTypeKind::TsIntrinsicKeyword => return return_value!(Types::Unknown),
         },
 
-        TsType::TsTypeLit(_) => todo!(),
+        TsType::TsTypeLit(type_lit) => {
+            let mut result: FlagSet<Types> = FlagSet::default();
+
+            for member in type_lit.members.iter() {
+                if !is_key_of {
+                    let call_or_construct = matches!(
+                        member,
+                        TsTypeElement::TsCallSignatureDecl(_)
+                            | TsTypeElement::TsConstructSignatureDecl(_)
+                    );
+
+                    result |= if call_or_construct {
+                        Types::Function
+                    } else {
+                        Types::Object
+                    };
+
+                    continue;
+                }
+
+                match member {
+                    TsTypeElement::TsPropertySignature(property_signature)
+                        if matches!(property_signature.key.as_ref(), Expr::Lit(Lit::Num(_))) =>
+                    {
+                        result |= Types::Number;
+                    }
+
+                    TsTypeElement::TsIndexSignature(index_signature) => {
+                        let Some(first_param) = index_signature.params.first() else {
+                            continue;
+                        };
+
+                        let type_ann = match first_param {
+                            TsFnParam::Ident(i) => &i.type_ann,
+                            TsFnParam::Array(a) => &a.type_ann,
+                            TsFnParam::Rest(r) => &r.type_ann,
+                            TsFnParam::Object(o) => &o.type_ann,
+                        };
+
+                        let Some(annotation) = type_ann else {
+                            continue;
+                        };
+
+                        // Here official compiler assumes only one element in the set
+                        let inferred = infer_runtime_type(ctx, &annotation.type_ann, scope, false);
+                        if !(inferred & Types::Unknown).is_empty() {
+                            return return_value!(Types::Unknown);
+                        }
+                        result |= inferred;
+                    }
+
+                    _ => {
+                        result |= Types::String;
+                    }
+                }
+            }
+
+            if result.is_empty() {
+                result |= if is_key_of {
+                    Types::Unknown
+                } else {
+                    Types::Object
+                };
+            }
+
+            return result;
+        }
 
         TsType::TsFnOrConstructorType(_) => return return_value!(Types::Function),
         TsType::TsArrayType(_) | TsType::TsTupleType(_) => return return_value!(Types::Array),
@@ -1269,27 +1335,180 @@ pub fn infer_runtime_type(
             TsLit::Tpl(_) => return return_value!(Types::Unknown),
         },
 
-        TsType::TsTypeRef(_) => todo!(),
+        TsType::TsTypeRef(type_ref) => 't: {
+            let resolved = resolve_type_reference(ctx, ts_type, scope);
+            if let Some(resolved) = resolved {
+                // TODO Use `resolved._ownerScope`
+                return infer_runtime_type(ctx, resolved, scope, is_key_of);
+            }
 
-        TsType::TsParenthesizedType(paren) => return infer_runtime_type(ctx, &paren.type_ann, is_key_of),
+            let TsEntityName::Ident(ref ident) = type_ref.type_name else {
+                break 't;
+            };
 
-        TsType::TsThisType(_) => todo!(),
-        TsType::TsTypeQuery(_) => todo!(),
-        TsType::TsOptionalType(_) => todo!(),
-        TsType::TsRestType(_) => todo!(),
-        TsType::TsUnionOrIntersectionType(_) => todo!(),
-        TsType::TsConditionalType(_) => todo!(),
-        TsType::TsInferType(_) => todo!(),
-        TsType::TsTypeOperator(_) => todo!(),
-        TsType::TsIndexedAccessType(_) => todo!(),
-        TsType::TsMappedType(_) => todo!(),
-        TsType::TsTypePredicate(_) => todo!(),
+            if is_key_of {
+                match ident.sym.as_str() {
+                    "String"
+                    | "Array"
+                    | "ArrayLike"
+                    | "Parameters"
+                    | "ConstructorParameters"
+                    | "ReadonlyArray" => {
+                        return return_value!(Types::String | Types::Number);
+                    }
+
+                    // TS built-in utility types
+                    "Record" | "Partial" | "Required" | "Readonly" => {
+                        if let Some(first_type_param) =
+                            type_ref.type_params.as_ref().and_then(|v| v.params.first())
+                        {
+                            return infer_runtime_type(ctx, &first_type_param, scope, true);
+                        };
+                    }
+                    "Pick" | "Extract" => {
+                        if let Some(second_type_param) =
+                            type_ref.type_params.as_ref().and_then(|v| v.params.get(1))
+                        {
+                            return infer_runtime_type(ctx, &second_type_param, scope, false);
+                        };
+                    }
+
+                    "Function" | "Object" | "Set" | "Map" | "WeakSet" | "WeakMap" | "Date"
+                    | "Promise" | "Error" | "Uppercase" | "Lowercase" | "Capitalize"
+                    | "Uncapitalize" | "ReadonlyMap" | "ReadonlySet" => {
+                        return return_value!(Types::String);
+                    }
+
+                    _ => {}
+                }
+            } else {
+                match ident.sym.as_str() {
+                    "Array" => return return_value!(Types::Array),
+                    "Function" => return return_value!(Types::Function),
+                    "Object" => return return_value!(Types::Object),
+                    "Set" => return return_value!(Types::Set),
+                    "Map" => return return_value!(Types::Map),
+                    "WeakSet" => return return_value!(Types::WeakSet),
+                    "WeakMap" => return return_value!(Types::WeakMap),
+                    "Date" => return return_value!(Types::Date),
+                    "Promise" => return return_value!(Types::Promise),
+                    "Error" => return return_value!(Types::Error),
+
+                    // TS built-in utility types
+                    // https://www.typescriptlang.org/docs/handbook/utility-types.html
+                    "Partial" | "Required" | "Readonly" | "Record" | "Pick" | "Omit"
+                    | "InstanceType" => {
+                        return return_value!(Types::Object);
+                    }
+
+                    "Uppercase" | "Lowercase" | "Capitalize" | "Uncapitalize" => {
+                        return return_value!(Types::String);
+                    }
+
+                    "Parameters" | "ConstructorParameters" | "ReadonlyArray" => {
+                        return return_value!(Types::Array);
+                    }
+
+                    "ReadonlyMap" => return return_value!(Types::Map),
+                    "ReadonlySet" => return return_value!(Types::Set),
+
+                    "NonNullable" => {
+                        if let Some(first_type_param) =
+                            type_ref.type_params.as_ref().and_then(|v| v.params.first())
+                        {
+                            let mut inferred =
+                                infer_runtime_type(ctx, &first_type_param, scope, false);
+                            inferred -= Types::Null;
+                            return inferred;
+                        };
+                    }
+
+                    "Extract" => {
+                        if let Some(second_type_param) =
+                            type_ref.type_params.as_ref().and_then(|v| v.params.get(1))
+                        {
+                            return infer_runtime_type(ctx, &second_type_param, scope, false);
+                        };
+                    }
+
+                    "Exclude" | "OmitThisParameter" => {
+                        if let Some(first_type_param) =
+                            type_ref.type_params.as_ref().and_then(|v| v.params.first())
+                        {
+                            return infer_runtime_type(ctx, &first_type_param, scope, false);
+                        };
+                    }
+
+                    _ => {}
+                }
+            }
+        }
+
+        TsType::TsParenthesizedType(paren) => {
+            return infer_runtime_type(ctx, &paren.type_ann, scope, false);
+        }
+
+        TsType::TsUnionOrIntersectionType(union_or_intersection) => {
+            let (types, is_intersection) = match union_or_intersection {
+                TsUnionOrIntersectionType::TsUnionType(union_type) => (&union_type.types, false),
+                TsUnionOrIntersectionType::TsIntersectionType(intersection) => {
+                    (&intersection.types, true)
+                }
+            };
+            let mut flattened = flatten_types(ctx, &types, scope, is_key_of);
+            if is_intersection {
+                flattened -= Types::Unknown;
+            }
+            return flattened;
+        }
+
+        TsType::TsIndexedAccessType(index_type) => {
+            let Ok(types) = resolve_index_type(ctx, index_type, scope) else {
+                // Soft-fail
+                return return_value!(Types::Unknown);
+            };
+            return flatten_types(ctx, &types, scope, false);
+        }
+
         TsType::TsImportType(_) => todo!(),
+
+        TsType::TsTypeQuery(type_query) => 't: {
+            let TsTypeQueryExpr::TsEntityName(TsEntityName::Ident(ref ident)) =
+                type_query.expr_name
+            else {
+                break 't;
+            };
+
+            let matched = scope.declares.get(&ident.sym);
+            if let Some(matched) = matched {
+                // TODO Switch scope to the `matched._ownerScope`
+                return infer_runtime_type(ctx, matched, scope, is_key_of);
+            }
+        }
+
+        // `keyof`, `unique`, `readonly`
+        TsType::TsTypeOperator(type_operator) => {
+            let is_key_of = matches!(type_operator.op, TsTypeOperatorOp::KeyOf);
+            return infer_runtime_type(ctx, &type_operator.type_ann, scope, is_key_of);
+        }
+
+        _ => {}
     }
 
     // No runtime check at this point
-    result |= Types::Unknown;
+    FlagSet::from(Types::Unknown)
+}
 
+fn flatten_types(
+    ctx: &mut TypeResolveContext,
+    types: &[Box<TsType>],
+    scope: &TypeScope,
+    is_key_of: bool,
+) -> FlagSet<Types> {
+    let mut result = FlagSet::<Types>::default();
+    for ts_type in types {
+        result |= infer_runtime_type(ctx, &ts_type, scope, is_key_of);
+    }
     result
 }
 
