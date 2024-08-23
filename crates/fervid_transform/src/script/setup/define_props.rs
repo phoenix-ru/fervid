@@ -1,9 +1,11 @@
-use fervid_core::{fervid_atom, BindingTypes, FervidAtom};
+use fervid_core::{fervid_atom, BindingTypes, FervidAtom, VueImports};
+use flagset::FlagSet;
+use itertools::Itertools;
 use swc_core::{
     common::{Span, Spanned, DUMMY_SP},
     ecma::ast::{
-        Bool, CallExpr, Callee, Expr, GetterProp, Ident, KeyValueProp, Lit, MethodProp, ObjectLit,
-        Prop, PropName, PropOrSpread, SetterProp, TsType,
+        ArrayLit, Bool, CallExpr, Callee, Expr, ExprOrSpread, GetterProp, Ident, KeyValueProp, Lit,
+        MethodProp, ObjectLit, Prop, PropName, PropOrSpread, SetterProp, TsType, TsTypeElement,
     },
 };
 
@@ -11,7 +13,10 @@ use crate::{
     atoms::{DEFINE_PROPS, PROPS_HELPER},
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::{
-        resolve_type::TypeResolveContext,
+        resolve_type::{
+            infer_runtime_type_type_element, resolve_type_elements, ResolutionResult,
+            TypeResolveContext, Types, TypesSet,
+        },
         utils::{collect_obj_fields, collect_string_arr},
     },
     BindingsHelper, SetupBinding, SfcExportedObjectHelper,
@@ -171,12 +176,17 @@ fn process_define_props_impl(
 
         Some(runtime_decl)
     } else if let Some(type_decl) = define_props.type_decl {
-        extract_runtime_props(
+        let extracted_props_result = extract_runtime_props(
             ctx,
             &type_decl,
             define_props.defaults.as_deref(),
             bindings_helper,
-        )
+        );
+
+        match extracted_props_result {
+            Ok(v) => v,
+            Err(e) => return TransformMacroResult::Error(TransformError::ScriptError(e)),
+        }
     } else {
         // When both runtime and types are absent (i.e. for `defineProps()`), we allow it
         None
@@ -204,7 +214,7 @@ fn process_define_props_impl(
 
 struct PropTypeData {
     key: FervidAtom,
-    types: Vec<String>, // TODO Use bitflags
+    types: TypesSet,
     required: bool,
     skip_check: bool,
 }
@@ -215,10 +225,10 @@ fn extract_runtime_props(
     type_decl: &TsType,
     defaults: Option<&Expr>,
     bindings_helper: &mut BindingsHelper,
-) -> Option<Box<Expr>> {
-    let props = resolve_runtime_props_from_type(ctx, type_decl);
+) -> ResolutionResult<Option<Box<Expr>>> {
+    let props = resolve_runtime_props_from_type(ctx, type_decl)?;
     if props.is_empty() {
-        return None;
+        return Ok(None);
     }
 
     let has_static_defaults = has_static_with_defaults(defaults);
@@ -252,22 +262,81 @@ fn extract_runtime_props(
         }
     }
 
-    // TODO Implement hasStaticDefaults (ez)
+    let mut props_decl = Box::new(Expr::Object(props_obj));
 
-    // TODO
-    // if (ctx.propsRuntimeDefaults && !hasStaticDefaults) {
-    //   propsDecls = `/*#__PURE__*/${ctx.helper(
-    //     'mergeDefaults',
-    //   )}(${propsDecls}, ${ctx.getString(ctx.propsRuntimeDefaults)})`
+    // Has defaults, but they are not static
+    if let (false, Some(defaults)) = (has_static_defaults, defaults) {
+        let merge_defaults_helper = VueImports::MergeDefaults;
+        bindings_helper.vue_imports |= merge_defaults_helper;
 
-    Some(Box::new(Expr::Object(props_obj)))
+        // TODO /*#__PURE__*/ comment
+        props_decl = Box::new(Expr::Call(CallExpr {
+            span: DUMMY_SP,
+            callee: Callee::Expr(Box::new(Expr::Ident(Ident {
+                span: DUMMY_SP,
+                sym: merge_defaults_helper.as_atom(),
+                optional: false,
+            }))),
+            args: vec![
+                ExprOrSpread {
+                    spread: None,
+                    expr: props_decl,
+                },
+                ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(defaults.to_owned()),
+                },
+            ],
+            type_args: None,
+        }));
+    }
+
+    Ok(Some(props_decl))
 }
 
 fn resolve_runtime_props_from_type(
     ctx: &mut TypeResolveContext,
     type_decl: &TsType,
-) -> Vec<PropTypeData> {
-    todo!()
+) -> ResolutionResult<Vec<PropTypeData>> {
+    let mut props = vec![];
+    let elements = resolve_type_elements(ctx, type_decl)?;
+
+    let ctx_scope = &ctx.scope.clone();
+
+    for (key, element) in elements.props {
+        // TODO Use `element._ownerScope`
+        let mut types = infer_runtime_type_type_element(ctx, &element, &ctx_scope);
+
+        // Skip check for result containing unknown types
+        let mut skip_check = false;
+        if types.contains(Types::Unknown) {
+            if types.contains(Types::Boolean | Types::Function) {
+                types -= Types::Unknown;
+                skip_check = true;
+            } else {
+                types = FlagSet::from(Types::Null);
+            }
+        }
+
+        let required = match element {
+            TsTypeElement::TsCallSignatureDecl(_) => true,
+            TsTypeElement::TsConstructSignatureDecl(_) => true,
+            TsTypeElement::TsPropertySignature(s) => !s.optional,
+            TsTypeElement::TsGetterSignature(s) => !s.optional,
+            TsTypeElement::TsSetterSignature(s) => !s.optional,
+            TsTypeElement::TsMethodSignature(s) => !s.optional,
+            TsTypeElement::TsIndexSignature(_) => true,
+        };
+
+        props.push(PropTypeData {
+            key,
+            types,
+            required,
+            skip_check,
+        });
+    }
+
+    return Ok(props);
 }
 
 fn get_runtime_prop_from_type(
@@ -450,14 +519,13 @@ fn get_runtime_prop_from_type(
     // #7111 for function, if default value exists or it's not static, should keep it
     // in production
     let default_defined_or_not_static = !has_static_defaults || default.is_some();
+    let types = prop.types;
     if ctx.is_ce
-        || prop
-            .types
-            .iter()
-            .any(|el| el == "Boolean" || (default_defined_or_not_static && el == "Function"))
+        || types.contains(Types::Boolean)
+        || (default_defined_or_not_static && types.contains(Types::Function))
     {
         // e.g. `type: Number`
-        add_field!("type", to_runtime_type_string(prop.types));
+        add_field!("type", to_runtime_type_string(types));
 
         // e.g. `default: 0`
         if let Some(default) = default {
@@ -507,7 +575,7 @@ fn has_static_with_defaults(defaults: Option<&Expr>) -> bool {
 
 struct GenDestructuredDefaultValueReturn {
     value: Box<Expr>,
-    need_skip_factory: bool,
+    _need_skip_factory: bool,
 }
 fn gen_destructured_default_value(
     _ctx: &mut TypeResolveContext,
@@ -517,6 +585,37 @@ fn gen_destructured_default_value(
     None
 }
 
-fn to_runtime_type_string(types: Vec<String>) -> Box<Expr> {
-    todo!()
+fn to_runtime_type_string(types: TypesSet) -> Box<Expr> {
+    let mut idents: Vec<&'static str> = Vec::new();
+
+    for type_name in types.into_iter() {
+        idents.push(type_name.into())
+    }
+
+    if idents.len() == 1 {
+        return Box::new(Expr::Ident(Ident {
+            span: DUMMY_SP,
+            sym: FervidAtom::from(idents[0]),
+            optional: false,
+        }));
+    }
+
+    let array_elems = idents
+        .into_iter()
+        .map(|ident| {
+            Some(ExprOrSpread {
+                spread: None,
+                expr: Box::new(Expr::Ident(Ident {
+                    span: DUMMY_SP,
+                    sym: FervidAtom::from(ident),
+                    optional: false,
+                })),
+            })
+        })
+        .collect_vec();
+
+    Box::new(Expr::Array(ArrayLit {
+        span: DUMMY_SP,
+        elems: array_elems,
+    }))
 }

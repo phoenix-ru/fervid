@@ -7,6 +7,7 @@ use flagset::FlagSet;
 use fxhash::FxHashMap;
 use itertools::Itertools;
 use phf::{phf_set, Set};
+use strum_macros::{AsRefStr, EnumString, IntoStaticStr};
 use swc_core::{
     common::{pass::Either, Span, Spanned, DUMMY_SP},
     ecma::ast::{
@@ -28,7 +29,7 @@ static SUPPORTED_BUILTINS_SET: Set<&'static str> = phf_set! {
     "Omit",
 };
 
-type ResolutionResult<T> = Result<T, ScriptError>;
+pub type ResolutionResult<T> = Result<T, ScriptError>;
 
 #[derive(Default)]
 pub struct ResolvedElements {
@@ -1200,11 +1201,13 @@ fn inner_resolve_type_reference<'t>(
 }
 
 flagset::flags! {
+    #[derive(AsRefStr, EnumString, IntoStaticStr)]
     pub enum Types: usize {
         String,
         Number,
         Boolean,
         Object,
+        #[strum(serialize = "null")]
         Null,
         Unknown,
         Function,
@@ -1220,12 +1223,14 @@ flagset::flags! {
     }
 }
 
+pub type TypesSet = FlagSet<Types>;
+
 pub fn infer_runtime_type(
     ctx: &mut TypeResolveContext,
     ts_type: &TsType,
     scope: &TypeScope,
     is_key_of: bool,
-) -> FlagSet<Types> {
+) -> TypesSet {
     macro_rules! return_value {
         ($v: expr) => {
             FlagSet::from($v)
@@ -1257,7 +1262,7 @@ pub fn infer_runtime_type(
         },
 
         TsType::TsTypeLit(type_lit) => {
-            let mut result: FlagSet<Types> = FlagSet::default();
+            let mut result: TypesSet = FlagSet::default();
 
             for member in type_lit.members.iter() {
                 if !is_key_of {
@@ -1301,7 +1306,7 @@ pub fn infer_runtime_type(
 
                         // Here official compiler assumes only one element in the set
                         let inferred = infer_runtime_type(ctx, &annotation.type_ann, scope, false);
-                        if !(inferred & Types::Unknown).is_empty() {
+                        if inferred.contains(Types::Unknown) {
                             return return_value!(Types::Unknown);
                         }
                         result |= inferred;
@@ -1499,12 +1504,40 @@ pub fn infer_runtime_type(
     FlagSet::from(Types::Unknown)
 }
 
+pub fn infer_runtime_type_type_element(
+    ctx: &mut TypeResolveContext,
+    ts_type_element: &TsTypeElement,
+    scope: &TypeScope,
+) -> TypesSet {
+    macro_rules! unknown {
+        () => {
+            FlagSet::from(Types::Unknown)
+        };
+    }
+
+    let type_ann = match ts_type_element {
+        TsTypeElement::TsCallSignatureDecl(d) => &d.type_ann,
+        TsTypeElement::TsConstructSignatureDecl(d) => &d.type_ann,
+        TsTypeElement::TsPropertySignature(s) => &s.type_ann,
+        TsTypeElement::TsGetterSignature(s) => &s.type_ann,
+        TsTypeElement::TsSetterSignature(s) => return unknown!(),
+        TsTypeElement::TsMethodSignature(s) => &s.type_ann,
+        TsTypeElement::TsIndexSignature(s) => &s.type_ann,
+    };
+
+    let Some(type_ann) = type_ann else {
+        return unknown!();
+    };
+
+    infer_runtime_type(ctx, &type_ann.type_ann, scope, false)
+}
+
 fn flatten_types(
     ctx: &mut TypeResolveContext,
     types: &[Box<TsType>],
     scope: &TypeScope,
     is_key_of: bool,
-) -> FlagSet<Types> {
+) -> TypesSet {
     let mut result = FlagSet::<Types>::default();
     for ts_type in types {
         result |= infer_runtime_type(ctx, &ts_type, scope, is_key_of);

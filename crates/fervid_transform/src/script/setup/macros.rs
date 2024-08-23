@@ -335,7 +335,14 @@ pub fn postprocess_macros(
         }))));
     }
 
-    match sfc_object_helper.props.take() {
+    // Take existing props if the new ones have something
+    let existing_props = if new_props.is_empty() {
+        None
+    } else {
+        sfc_object_helper.props.take()
+    };
+
+    match existing_props {
         Some(mut existing_props) => {
             // Try merging into an object if previous props is an object
             if let Expr::Object(ref mut existing_props_obj) = *existing_props {
@@ -382,7 +389,14 @@ pub fn postprocess_macros(
         _ => {}
     }
 
-    match sfc_object_helper.emits.take() {
+    // Take existing emits if the new one has something
+    let existing_emits = if new_emits.is_empty() {
+        None
+    } else {
+        sfc_object_helper.emits.take()
+    };
+
+    match existing_emits {
         Some(mut existing_emits) => {
             // Try merging into an array if previous emits is an array
             if let Expr::Array(ref mut existing_emits_arr) = *existing_emits {

@@ -810,6 +810,8 @@ dependencies = [
  "lazy_static",
  "phf",
  "smallvec",
+ "strum",
+ "strum_macros",
  "swc_core",
  "swc_ecma_codegen",
  "swc_ecma_parser",

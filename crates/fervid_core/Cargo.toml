@@ -15,6 +15,6 @@ flagset = { workspace = true }
 fxhash = { workspace = true }
 phf = { workspace = true }
 smallvec = { workspace = true }
-strum = "0.26.3"
-strum_macros = "0.26.4"
+strum = { workspace = true }
+strum_macros = { workspace = true }
 swc_core = { workspace = true, features = ["common", "ecma_ast"] }
