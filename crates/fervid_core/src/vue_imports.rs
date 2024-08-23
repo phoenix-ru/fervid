@@ -27,6 +27,8 @@ flags! {
         IsRef,
         #[strum(serialize = "_KeepAlive")]
         KeepAlive,
+        #[strum(serialize = "_mergeDefaults")]
+        MergeDefaults,
         #[strum(serialize = "_mergeModels")]
         MergeModels,
         #[strum(serialize = "_normalizeClass")]

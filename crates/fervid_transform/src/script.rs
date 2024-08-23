@@ -6,7 +6,9 @@ use swc_core::{
     ecma::ast::{Function, Module, ObjectLit},
 };
 
-use crate::{error::TransformError, structs::TransformScriptsResult, BindingsHelper};
+use crate::{
+    error::TransformError, structs::TransformScriptsResult, BindingsHelper, TransformSfcContext,
+};
 
 use self::{
     imports::process_imports,
@@ -31,6 +33,7 @@ pub mod utils;
 /// - Import bindings;
 /// - (TODO) Imported `.vue` component bindings;
 pub fn transform_and_record_scripts(
+    ctx: &mut TransformSfcContext,
     script_setup: Option<SfcScriptBlock>,
     mut script_legacy: Option<SfcScriptBlock>,
     bindings_helper: &mut BindingsHelper,
@@ -92,7 +95,7 @@ pub fn transform_and_record_scripts(
     let mut setup_fn: Option<Box<Function>> = None;
     if let Some(script_setup) = script_setup {
         let setup_transform_result =
-            transform_and_record_script_setup(script_setup, bindings_helper, errors);
+            transform_and_record_script_setup(ctx, script_setup, bindings_helper, errors);
 
         // TODO Push imports at module top or bottom? Or smart merge?
         // TODO Merge Vue imports produced by module transformation
@@ -184,10 +187,14 @@ mod tests {
             },
         };
 
+        // Context for testing
+        let mut ctx = TransformSfcContext::anonymous();
+
         // Do work
         let mut bindings_helper = BindingsHelper::default();
         let mut errors = Vec::new();
         let res = transform_and_record_scripts(
+            &mut ctx,
             Some(script_setup),
             Some(script),
             &mut bindings_helper,

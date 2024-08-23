@@ -1,4 +1,4 @@
-use fervid_core::{fervid_atom, BindingTypes, FervidAtom, VueImports};
+use fervid_core::{fervid_atom, FervidAtom, VueImports};
 use fxhash::FxHashSet;
 use itertools::{Either, Itertools};
 use swc_core::{
@@ -13,17 +13,17 @@ use crate::{
     atoms::{
         DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_MODEL, DEFINE_OPTIONS, DEFINE_PROPS, DEFINE_SLOTS,
         EMIT_HELPER, EXPOSE_HELPER, MERGE_MODELS_HELPER, MODEL_VALUE, PROPS_HELPER,
-        USE_MODEL_HELPER,
+        USE_MODEL_HELPER, WITH_DEFAULTS,
     },
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::{
         resolve_type::{
             resolve_type_elements, resolve_union_type, ResolvedElements, TypeResolveContext,
         },
-        utils::{collect_obj_fields, collect_string_arr},
+        setup::define_props::{process_define_props, process_with_defaults},
     },
     structs::{SfcDefineModel, SfcExportedObjectHelper},
-    BindingsHelper, SetupBinding,
+    BindingsHelper,
 };
 
 pub enum TransformMacroResult {
@@ -38,6 +38,7 @@ pub enum TransformMacroResult {
 ///
 /// See https://vuejs.org/api/sfc-script-setup.html#defineprops-defineemits
 pub fn transform_script_setup_macro_expr(
+    ctx: &mut TypeResolveContext,
     expr: &Expr,
     bindings_helper: &mut BindingsHelper,
     sfc_object_helper: &mut SfcExportedObjectHelper,
@@ -85,40 +86,9 @@ pub fn transform_script_setup_macro_expr(
     let sym = &callee_ident.sym;
     let span = call_expr.span;
     if DEFINE_PROPS.eq(sym) {
-        if let Some(arg0) = &call_expr.args.get(0) {
-            // TODO Check if this was re-assigned before
-            sfc_object_helper.props = Some(arg0.expr.to_owned());
-
-            // Add props as bindings
-            let mut raw_bindings = Vec::new();
-            match arg0.expr.as_ref() {
-                Expr::Array(props_arr) => {
-                    collect_string_arr(props_arr, &mut raw_bindings);
-                }
-                Expr::Object(props_obj) => {
-                    collect_obj_fields(props_obj, &mut raw_bindings);
-                }
-                _ => {}
-            }
-            bindings_helper.setup_bindings.extend(
-                raw_bindings
-                    .into_iter()
-                    .map(|raw| SetupBinding(raw, BindingTypes::Props)),
-            );
-        }
-
-        // Return `__props` when in var mode
-        if is_var_decl {
-            sfc_object_helper.is_setup_props_referenced = true;
-
-            valid_macro!(Some(Box::new(Expr::Ident(Ident {
-                span,
-                sym: PROPS_HELPER.to_owned(),
-                optional: false,
-            }))))
-        } else {
-            valid_macro!(None)
-        }
+        process_define_props(ctx, call_expr, is_var_decl, sfc_object_helper, bindings_helper)
+    } else if WITH_DEFAULTS.eq(sym) {
+        process_with_defaults(ctx, call_expr, is_var_decl, sfc_object_helper, bindings_helper)
     } else if DEFINE_EMITS.eq(sym) {
         // Validation: duplicate call
         if sfc_object_helper.emits.is_some() {
@@ -146,7 +116,7 @@ pub fn transform_script_setup_macro_expr(
                 }));
             };
 
-            let runtime_emits = match extract_runtime_emits(&ts_type) {
+            let runtime_emits = match extract_runtime_emits(ctx, &ts_type) {
                 Ok(v) => v,
                 Err(e) => return TransformMacroResult::Error(TransformError::ScriptError(e)),
             };
@@ -365,7 +335,14 @@ pub fn postprocess_macros(
         }))));
     }
 
-    match sfc_object_helper.props.take() {
+    // Take existing props if the new ones have something
+    let existing_props = if new_props.is_empty() {
+        None
+    } else {
+        sfc_object_helper.props.take()
+    };
+
+    match existing_props {
         Some(mut existing_props) => {
             // Try merging into an object if previous props is an object
             if let Expr::Object(ref mut existing_props_obj) = *existing_props {
@@ -412,7 +389,14 @@ pub fn postprocess_macros(
         _ => {}
     }
 
-    match sfc_object_helper.emits.take() {
+    // Take existing emits if the new one has something
+    let existing_emits = if new_emits.is_empty() {
+        None
+    } else {
+        sfc_object_helper.emits.take()
+    };
+
+    match existing_emits {
         Some(mut existing_emits) => {
             // Try merging into an array if previous emits is an array
             if let Expr::Array(ref mut existing_emits_arr) = *existing_emits {
@@ -537,9 +521,10 @@ fn is_local(options: Option<&ExprOrSpread>) -> bool {
 
 /// Extracts runtime emits from type-only `defineEmits` declaration
 /// Adapted from https://github.com/vuejs/core/blob/0ac0f2e338f6f8f0bea7237db539c68bfafb88ae/packages/compiler-sfc/src/script/defineEmits.ts#L73-L103
-fn extract_runtime_emits(type_arg: &TsType) -> Result<FxHashSet<FervidAtom>, ScriptError> {
-    let mut ctx = TypeResolveContext::new("todo".to_owned());
-
+fn extract_runtime_emits(
+    ctx: &mut TypeResolveContext,
+    type_arg: &TsType,
+) -> Result<FxHashSet<FervidAtom>, ScriptError> {
     let mut emits = FxHashSet::<FervidAtom>::default();
 
     // Handle cases like `defineEmits<(e: 'foo' | 'bar') => void>()`
@@ -553,12 +538,12 @@ fn extract_runtime_emits(type_arg: &TsType) -> Result<FxHashSet<FervidAtom>, Scr
             });
         };
 
-        extract_event_names(&mut ctx, first_fn_param, &mut emits);
+        extract_event_names(ctx, first_fn_param, &mut emits);
 
         return Ok(emits);
     }
 
-    let ResolvedElements { props, calls } = resolve_type_elements(&mut ctx, type_arg)?;
+    let ResolvedElements { props, calls } = resolve_type_elements(ctx, type_arg)?;
 
     let mut has_property = false;
     for key in props.into_keys() {
@@ -586,7 +571,7 @@ fn extract_runtime_emits(type_arg: &TsType) -> Result<FxHashSet<FervidAtom>, Scr
                     kind: ScriptErrorKind::ResolveTypeMissingTypeParam,
                 });
             };
-            extract_event_names(&mut ctx, first_param, &mut emits);
+            extract_event_names(ctx, first_param, &mut emits);
         }
     }
 

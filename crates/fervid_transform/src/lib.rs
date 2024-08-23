@@ -33,6 +33,11 @@ pub fn transform_sfc<'o>(
     let mut bindings_helper = BindingsHelper::default();
     bindings_helper.is_prod = options.is_prod;
 
+    // Create the context
+    let mut ctx = TransformSfcContext {
+        filename: options.filename.to_string()
+    };
+
     // TS if any of scripts is TS.
     // Unlike the official compiler, we don't care if languages are mixed, because nothing changes.
     let recognize_lang = |script: &SfcScriptBlock| matches!(script.lang, SfcScriptLang::Typescript);
@@ -47,6 +52,7 @@ pub fn transform_sfc<'o>(
 
     // Transform the scripts
     let mut transform_result = transform_and_record_scripts(
+        &mut ctx,
         sfc_descriptor.script_setup,
         sfc_descriptor.script_legacy,
         &mut bindings_helper,

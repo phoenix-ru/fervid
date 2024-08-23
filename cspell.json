@@ -125,7 +125,9 @@
     "SWC's",
     "replacen",
     "stringifier",
-    "preprocessors"
+    "preprocessors",
+    "bitflags",
+    "keyof"
   ],
   "ignorePaths": [
     ".github/**",

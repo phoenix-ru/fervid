@@ -11,10 +11,10 @@ keywords = ["vue3", "SFC", "compiler"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flagset = "0.4.3"
+flagset = { workspace = true }
 fxhash = { workspace = true }
 phf = { workspace = true }
 smallvec = { workspace = true }
-strum = "0.26.3"
-strum_macros = "0.26.4"
+strum = { workspace = true }
+strum_macros = { workspace = true }
 swc_core = { workspace = true, features = ["common", "ecma_ast"] }
