@@ -84,7 +84,7 @@ export interface SerializedError {
 }
 export type FervidJsCompiler = Compiler
 /** Fervid: a compiler for Vue.js written in Rust */
-export class Compiler {
+export declare class Compiler {
   options: FervidJsCompilerOptions
   constructor(options?: FervidJsCompilerOptions | undefined | null)
   compileSync(source: string, options: FervidCompileOptions): CompileResult
