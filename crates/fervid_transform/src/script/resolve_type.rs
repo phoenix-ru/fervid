@@ -2,24 +2,30 @@
 
 use std::rc::Rc;
 
-use fervid_core::{fervid_atom, FervidAtom};
+use fervid_core::{fervid_atom, FervidAtom, SfcScriptBlock};
 use flagset::FlagSet;
-use fxhash::FxHashMap;
+use fxhash::FxHashMap as HashMap;
 use itertools::Itertools;
 use phf::{phf_set, Set};
 use strum_macros::{AsRefStr, EnumString, IntoStaticStr};
 use swc_core::{
     common::{pass::Either, Span, Spanned, DUMMY_SP},
     ecma::ast::{
-        BinExpr, BinaryOp, Expr, Ident, Lit, Tpl, TsCallSignatureDecl, TsEntityName,
-        TsFnOrConstructorType, TsFnParam, TsFnType, TsGetterSignature, TsIndexedAccessType,
+        BinExpr, BinaryOp, Class, ClassDecl, Decl, DefaultDecl, ExportSpecifier, Expr, FnDecl,
+        Function, Ident, Lit, ModuleDecl, ModuleExportName, ModuleItem, Pat, Stmt, Tpl,
+        TsCallSignatureDecl, TsEntityName, TsEnumDecl, TsExprWithTypeArgs, TsFnOrConstructorType,
+        TsFnParam, TsFnType, TsGetterSignature, TsIndexedAccessType, TsInterfaceDecl,
         TsIntersectionType, TsKeywordType, TsKeywordTypeKind, TsLit, TsLitType, TsMappedType,
-        TsQualifiedName, TsTplLitType, TsType, TsTypeAnn, TsTypeElement, TsTypeLit,
-        TsTypeOperatorOp, TsTypeQueryExpr, TsTypeRef, TsUnionOrIntersectionType, TsUnionType,
+        TsModuleName, TsNamespaceBody, TsQualifiedName, TsTplLitType, TsType, TsTypeAnn,
+        TsTypeElement, TsTypeLit, TsTypeOperatorOp, TsTypeQueryExpr, TsTypeRef,
+        TsUnionOrIntersectionType, TsUnionType,
     },
 };
 
-use crate::error::{ScriptError, ScriptErrorKind};
+use crate::{
+    error::{ScriptError, ScriptErrorKind},
+    ImportBinding, ScopeTypeNode, TransformSfcContext, TypeOrDecl, TypeScope,
+};
 
 static SUPPORTED_BUILTINS_SET: Set<&'static str> = phf_set! {
     "Partial",
@@ -33,85 +39,15 @@ pub type ResolutionResult<T> = Result<T, ScriptError>;
 
 #[derive(Default)]
 pub struct ResolvedElements {
-    pub props: FxHashMap<FervidAtom, TsTypeElement>,
+    pub props: HashMap<FervidAtom, TsTypeElement>,
     pub calls: Vec<Either<TsFnType, TsCallSignatureDecl>>,
 }
 
-type ScopeTypeNode = TsType;
-
-pub struct TypeScope {
-    filename: String,
-    // source: String,
-    // offset: usize,
-    imports: FxHashMap<FervidAtom, ()>,
-    types: FxHashMap<FervidAtom, ScopeTypeNode>,
-    declares: FxHashMap<FervidAtom, ScopeTypeNode>,
-    is_generic_scope: bool,
-    // resolved_import_sources: FxHashMap<FervidAtom, String>,
-    exported_types: FxHashMap<FervidAtom, ScopeTypeNode>,
-    exported_declares: FxHashMap<FervidAtom, ScopeTypeNode>,
-}
-
-impl TypeScope {
-    fn new(filename: String) -> TypeScope {
-        TypeScope {
-            filename,
-            imports: Default::default(),
-            types: Default::default(),
-            declares: Default::default(),
-            is_generic_scope: false,
-            exported_types: Default::default(),
-            exported_declares: Default::default(),
-        }
-    }
-}
+pub type TypeResolveContext = TransformSfcContext;
 
 enum MergeElementsAs {
     Union,
     Intersection,
-}
-
-pub struct TypeResolveContext {
-    pub filename: String,
-    pub scope: Rc<TypeScope>,
-    pub is_prod: bool,
-    /// For Custom Elements
-    pub is_ce: bool,
-}
-
-impl TypeResolveContext {
-    pub fn new(filename: String, is_prod: bool) -> TypeResolveContext {
-        // function ctxToScope(ctx: TypeResolveContext): TypeScope {
-        //     if (ctx.scope) {
-        //       return ctx.scope
-        //     }
-
-        //     const body =
-        //       'ast' in ctx
-        //         ? ctx.ast
-        //         : ctx.scriptAst
-        //           ? [...ctx.scriptAst.body, ...ctx.scriptSetupAst!.body]
-        //           : ctx.scriptSetupAst!.body
-
-        //     const scope = new TypeScope(
-        //       ctx.filename,
-        //       ctx.source,
-        //       'startOffset' in ctx ? ctx.startOffset! : 0,
-        //       'userImports' in ctx ? Object.create(ctx.userImports) : recordImports(body),
-        //     )
-
-        //     recordTypes(ctx, body, scope)
-
-        //     return (ctx.scope = scope)
-        //   }
-        let scope = Rc::from(TypeScope::new(filename.to_owned()));
-        TypeResolveContext {
-            filename,
-            scope,
-            is_prod,
-            is_ce: false,
-        }
-    }
 }
 
 /// Resolve arbitrary type node to a list of type elements that can be then
@@ -122,10 +58,10 @@ pub fn resolve_type_elements(
 ) -> ResolutionResult<ResolvedElements> {
     // No cache present
     let scope = ctx.scope.clone();
-    return resolve_type_elements_impl(ctx, ts_type, &scope);
+    return resolve_type_elements_impl_type(ctx, ts_type, &scope.borrow());
 }
 
-fn resolve_type_elements_impl(
+fn resolve_type_elements_impl_type(
     ctx: &mut TypeResolveContext,
     ts_type: &TsType,
     scope: &TypeScope,
@@ -141,7 +77,7 @@ fn resolve_type_elements_impl(
     match ts_type {
         TsType::TsTypeLit(type_lit) => type_elements_to_map(&type_lit.members),
         TsType::TsParenthesizedType(paren) => {
-            resolve_type_elements_impl(ctx, &paren.type_ann, scope)
+            resolve_type_elements_impl_type(ctx, &paren.type_ann, scope)
         }
         TsType::TsFnOrConstructorType(fn_or_constructor) => match fn_or_constructor {
             TsFnOrConstructorType::TsFnType(fn_type) => Ok(ResolvedElements {
@@ -158,7 +94,7 @@ fn resolve_type_elements_impl(
             let mut resolved_elements =
                 Vec::<ResolvedElements>::with_capacity(union_type.types.len());
             for t in union_type.types.iter() {
-                match resolve_type_elements_impl(ctx, t, scope) {
+                match resolve_type_elements_impl_type(ctx, t, scope) {
                     Ok(v) => {
                         resolved_elements.push(v);
                     }
@@ -176,7 +112,7 @@ fn resolve_type_elements_impl(
                 Vec::<ResolvedElements>::with_capacity(intersection_type.types.len());
 
             for t in intersection_type.types.iter() {
-                match resolve_type_elements_impl(ctx, t, scope) {
+                match resolve_type_elements_impl_type(ctx, t, scope) {
                     Ok(v) => {
                         resolved_elements.push(v);
                     }
@@ -196,104 +132,18 @@ fn resolve_type_elements_impl(
             let types = resolve_index_type(ctx, indexed_access_type, scope)?;
             let mut resolved_elements = Vec::with_capacity(types.len());
             for t in types.iter() {
-                let resolved = resolve_type_elements_impl(ctx, &t, scope)?;
+                let resolved = resolve_type_elements_impl_type(ctx, &t, scope)?;
                 resolved_elements.push(resolved);
             }
 
             Ok(merge_elements(resolved_elements, MergeElementsAs::Union))
         }
 
-        TsType::TsTypeRef(type_ref) => {
-            let type_name = get_reference_name_from_entity(&type_ref.type_name);
-            let type_name_single = if type_name.len() == 1 {
-                &type_name[0]
-            } else {
-                ""
-            };
-
-            if type_name_single == "ExtractPropTypes"
-                || type_name_single == "ExtractPublicPropTypes"
-            {
-                // TODO `&& scope.imports[typeName]?.source === 'vue'`
-                if let Some(ref type_params) = type_ref.type_params {
-                    if let Some(first_type_param) = type_params.params.first() {
-                        let resolved_elements =
-                            resolve_type_elements_impl(ctx, &first_type_param, scope)?;
-                        return resolve_extract_prop_types(ctx, resolved_elements);
-                    } else {
-                        return Err(error(
-                            ScriptErrorKind::ResolveTypeMissingTypeParam,
-                            type_params.span,
-                        ));
-                    }
-                }
-            }
-
-            let resolved = resolve_type_reference(ctx, ts_type, scope);
-            if let Some(_resolved) = resolved {
-                // let typeParams: Record<string, Node> | undefined
-                // if (
-                //     (resolved.type === 'TSTypeAliasDeclaration' ||
-                //     resolved.type === 'TSInterfaceDeclaration') &&
-                //     resolved.typeParameters &&
-                //     node.typeParameters
-                // ) {
-                //     typeParams = Object.create(null)
-                //     resolved.typeParameters.params.forEach((p, i) => {
-                //     let param = typeParameters && typeParameters[p.name]
-                //     if (!param) param = node.typeParameters!.params[i]
-                //     typeParams![p.name] = param
-                //     })
-                // }
-                // return resolveTypeElements(
-                //     ctx,
-                //     resolved,
-                //     resolved._ownerScope,
-                //     typeParams,
-                // )
-                todo!()
-            }
-
-            if type_name_single == "" {
-                return Err(error(
-                    ScriptErrorKind::ResolveTypeUnsupported,
-                    type_ref.span,
-                ));
-            }
-
-            // TODO typeParameters
-            // if (typeParameters && typeParameters[typeName]) {
-            //     return resolveTypeElements(
-            //         ctx,
-            //         typeParameters[typeName],
-            //         scope,
-            //         typeParameters,
-            //     )
-            // }
-
-            if SUPPORTED_BUILTINS_SET.contains(type_name_single) {
-                return resolve_builtin(ctx, type_ref, type_name_single, scope);
-            } else if let ("ReturnType", Some(ref type_params)) =
-                (type_name_single, type_ref.type_params.as_ref())
-            {
-                // limited support, only reference types
-                let Some(first_type_param) = type_params.params.first() else {
-                    return Err(error(
-                        ScriptErrorKind::ResolveTypeMissingTypeParam,
-                        type_params.span,
-                    ));
-                };
-
-                if let Some(ret) = resolve_return_type(ctx, first_type_param, scope) {
-                    return resolve_type_elements_impl(ctx, ret, scope);
-                }
-            }
-
-            Err(error(
-                ScriptErrorKind::ResolveTypeUnsupported,
-                type_ref.span,
-            ))
-        }
+        TsType::TsTypeRef(type_ref) => resolve_type_elements_impl_type_ref_or_expr_with_type_args(
+            ctx,
+            TypeRefOrExprWithTypeArgs::TsTypeRef(type_ref, ts_type),
+            scope,
+        ),
 
         TsType::TsImportType(import_type) => {
             if let Some(type_args) = import_type.type_args.as_ref() {
@@ -308,7 +158,7 @@ fn resolve_type_elements_impl(
                     };
 
                     let resolved_elements =
-                        resolve_type_elements_impl(ctx, &first_type_param, scope)?;
+                        resolve_type_elements_impl_type(ctx, &first_type_param, scope)?;
 
                     return resolve_extract_prop_types(ctx, resolved_elements);
                 }
@@ -330,8 +180,15 @@ fn resolve_type_elements_impl(
         }
 
         TsType::TsTypeQuery(type_query) => {
-            if let Some(resolved) = resolve_type_reference(ctx, ts_type, scope) {
-                resolve_type_elements_impl(ctx, resolved, scope)
+            if let Some(resolved) =
+                resolve_type_reference(ctx, ReferenceTypes::TsType(ts_type), scope)
+            {
+                match &resolved.value {
+                    TypeOrDecl::Type(ts_type) => {
+                        resolve_type_elements_impl_type(ctx, &ts_type, scope)
+                    }
+                    TypeOrDecl::Decl(decl) => resolve_type_elements_impl_decl(ctx, &decl, scope),
+                }
             } else {
                 Err(error(
                     ScriptErrorKind::ResolveTypeUnresolvable,
@@ -353,6 +210,163 @@ fn resolve_type_elements_impl(
         // | TsType::TsTypePredicate(_)
         x => Err(error(ScriptErrorKind::ResolveTypeUnresolvable, x.span())),
     }
+}
+
+fn resolve_type_elements_impl_decl(
+    ctx: &mut TypeResolveContext,
+    decl: &Decl,
+    scope: &TypeScope,
+) -> ResolutionResult<ResolvedElements> {
+    // TODO Implementing a check for `@vue-ignore` requires access to comments
+    // if (
+    //   node.leadingComments &&
+    //   node.leadingComments.some(c => c.value.includes('@vue-ignore'))
+    // ) {
+    //   return { props: {} }
+    // }
+
+    match decl {
+        Decl::TsInterface(interface) => resolve_interface_members(ctx, interface, scope),
+        Decl::Class(_) => todo!(),
+        Decl::Fn(_) => todo!(),
+        Decl::Var(_) => todo!(),
+        Decl::Using(_) => todo!(),
+        Decl::TsTypeAlias(_) => todo!(),
+        Decl::TsEnum(_) => todo!(),
+        Decl::TsModule(_) => todo!(),
+    }
+}
+
+enum TypeRefOrExprWithTypeArgs<'t> {
+    TsTypeRef(&'t TsTypeRef, &'t TsType),
+    TsExprWithTypeArgs(&'t TsExprWithTypeArgs),
+}
+
+fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
+    ctx: &mut TypeResolveContext,
+    node: TypeRefOrExprWithTypeArgs,
+    scope: &TypeScope,
+) -> ResolutionResult<ResolvedElements> {
+    let (reference_type, type_params, span) = match node {
+        TypeRefOrExprWithTypeArgs::TsTypeRef(type_ref, ts_type) => (
+            ReferenceTypes::TsType(ts_type),
+            type_ref.type_params.as_ref(),
+            type_ref.span,
+        ),
+
+        TypeRefOrExprWithTypeArgs::TsExprWithTypeArgs(expr_with_type_args) => (
+            ReferenceTypes::TsExprWithTypeArgs(expr_with_type_args),
+            expr_with_type_args.type_args.as_ref(),
+            expr_with_type_args.span,
+        ),
+    };
+
+    let type_name = get_reference_name(reference_type);
+    let type_name_single = if type_name.len() == 1 {
+        type_name.get(0)
+    } else {
+        None
+    };
+
+    // Condition:
+    // (typeName === 'ExtractPropTypes' ||
+    //   typeName === 'ExtractPublicPropTypes') &&
+    //   node.typeParameters &&
+    //   scope.imports[typeName]?.source === 'vue'
+    match type_name_single {
+        Some(type_name_single)
+            if type_name_single == "ExtractPropTypes"
+                || type_name_single == "ExtractPublicPropTypes" =>
+        'm: {
+            let Some(import) = scope.imports.get(type_name_single) else {
+                break 'm;
+            };
+
+            if import.source != "vue" {
+                break 'm;
+            }
+
+            let Some(ref type_params) = type_params else {
+                break 'm;
+            };
+
+            let Some(first_type_param) = type_params.params.first() else {
+                return Err(error(
+                    ScriptErrorKind::ResolveTypeMissingTypeParam,
+                    type_params.span,
+                ));
+            };
+
+            let resolved_elements = resolve_type_elements_impl_type(ctx, &first_type_param, scope)?;
+            return resolve_extract_prop_types(ctx, resolved_elements);
+        }
+        _ => {}
+    }
+
+    let resolved = resolve_type_reference(ctx, reference_type, scope);
+    if let Some(resolved) = resolved {
+        // TODO
+        // let typeParams: Record<string, Node> | undefined
+        // if (
+        //     (resolved.type === 'TSTypeAliasDeclaration' ||
+        //     resolved.type === 'TSInterfaceDeclaration') &&
+        //     resolved.typeParameters &&
+        //     node.typeParameters
+        // ) {
+        //     typeParams = Object.create(null)
+        //     resolved.typeParameters.params.forEach((p, i) => {
+        //     let param = typeParameters && typeParameters[p.name]
+        //     if (!param) param = node.typeParameters!.params[i]
+        //     typeParams![p.name] = param
+        //     })
+        // }
+        // return resolveTypeElements(
+        //     ctx,
+        //     resolved,
+        //     resolved._ownerScope,
+        //     typeParams,
+        // )
+
+        // TODO `resolved._ownerScope`
+        return match resolved.value {
+            TypeOrDecl::Type(ref ts_type) => resolve_type_elements_impl_type(ctx, &ts_type, scope),
+            TypeOrDecl::Decl(ref decl) => resolve_type_elements_impl_decl(ctx, &decl, scope),
+        };
+    }
+
+    let Some(type_name_single) = type_name_single else {
+        return Err(error(ScriptErrorKind::ResolveTypeUnsupported, span));
+    };
+
+    // TODO typeParameters
+    // if (typeParameters && typeParameters[typeName]) {
+    //     return resolveTypeElements(
+    //         ctx,
+    //         typeParameters[typeName],
+    //         scope,
+    //         typeParameters,
+    //     )
+    // }
+
+    if SUPPORTED_BUILTINS_SET.contains(type_name_single) {
+        return resolve_builtin(ctx, node, type_name_single, scope);
+    } else if let ("ReturnType", Some(ref type_params)) =
+        (type_name_single.as_str(), type_params.as_ref())
+    {
+        // limited support, only reference types
+        let Some(first_type_param) = type_params.params.first() else {
+            return Err(error(
+                ScriptErrorKind::ResolveTypeMissingTypeParam,
+                type_params.span,
+            ));
+        };
+
+        if let Some(ret) = resolve_return_type(ctx, first_type_param, scope) {
+            return resolve_type_elements_impl_type(ctx, ret, scope);
+        }
+    }
+
+    Err(error(ScriptErrorKind::ResolveTypeUnsupported, span))
 }
 
 fn type_elements_to_map(elements: &Vec<TsTypeElement>) -> ResolutionResult<ResolvedElements> {
@@ -501,6 +515,34 @@ fn merge_elements(
     result
 }
 
+fn resolve_interface_members(
+    ctx: &mut TypeResolveContext,
+    interface_decl: &TsInterfaceDecl,
+    scope: &TypeScope, // TODO Type parameters
+) -> ResolutionResult<ResolvedElements> {
+    let mut base = type_elements_to_map(&interface_decl.body.body)?;
+
+    for ext in interface_decl.extends.iter() {
+        let Ok(mut resolved) = resolve_type_elements_impl_type_ref_or_expr_with_type_args(
+            ctx,
+            TypeRefOrExprWithTypeArgs::TsExprWithTypeArgs(ext),
+            scope,
+        ) else {
+            return Err(error(ScriptErrorKind::ResolveTypeExtendsBaseType, ext.span));
+        };
+
+        for (key, value) in resolved.props {
+            if !base.props.contains_key(&key) {
+                base.props.insert(key, value);
+            }
+        }
+
+        base.calls.append(&mut resolved.calls);
+    }
+
+    Ok(base)
+}
+
 fn resolve_mapped_type(
     ctx: &mut TypeResolveContext,
     mapped_type: &TsMappedType,
@@ -568,7 +610,7 @@ fn resolve_index_type(
             .map(|v| v.into_iter().map(|v| Box::new(v.clone())).collect_vec());
     }
 
-    let resolved = resolve_type_elements_impl(ctx, &obj_type, scope)?;
+    let resolved = resolve_type_elements_impl_type(ctx, &obj_type, scope)?;
     let mut props = resolved.props;
     let mut types = Vec::<Box<TsType>>::new();
 
@@ -636,45 +678,62 @@ fn resolve_array_element_type<'t>(
 
             // Array<Type>
             if let ("Array", Some(type_params)) = (ref_name, type_ref.type_params.as_ref()) {
-                Ok(type_params
+                return Ok(type_params
                     .params
                     .iter()
                     .map(|it| it.as_ref())
-                    .collect_vec())
-            } else if let Some(resolved) = resolve_type_reference(ctx, array_element_type, scope) {
-                resolve_array_element_type(ctx, resolved, scope)
-            } else {
-                Err(error(
-                    ScriptErrorKind::ResolveTypeElementType,
-                    type_ref.span,
-                ))
+                    .collect_vec());
             }
+
+            // Reference
+            if let Some(resolved) =
+                resolve_type_reference(ctx, ReferenceTypes::TsType(array_element_type), scope)
+            {
+                if let TypeOrDecl::Type(ts_type) = &resolved.value {
+                    return resolve_array_element_type(ctx, &ts_type, scope);
+                }
+            };
+
+            Err(error(
+                ScriptErrorKind::ResolveTypeElementType,
+                type_ref.span,
+            ))
         }
 
         x => Err(error(ScriptErrorKind::ResolveTypeElementType, x.span())),
     }
 }
 
-fn get_reference_name(ts_type: &TsType) -> Vec<FervidAtom> {
-    let reference = match ts_type {
-        TsType::TsTypeRef(type_ref) => Some(&type_ref.type_name),
+fn get_reference_name(ts_type: ReferenceTypes) -> Vec<FervidAtom> {
+    match ts_type {
+        ReferenceTypes::TsExprWithTypeArgs(ts_expr_with_type_args) => {
+            let expr = &ts_expr_with_type_args.expr;
+            if let Expr::Ident(ref ident) = expr.as_ref() {
+                return vec![ident.sym.to_owned()];
+            }
+        }
 
-        TsType::TsImportType(import_type) => import_type.qualifier.as_ref(),
+        ReferenceTypes::TsType(ts_type) => {
+            let reference = match ts_type {
+                TsType::TsTypeRef(type_ref) => Some(&type_ref.type_name),
 
-        TsType::TsTypeQuery(type_query) => match type_query.expr_name {
-            TsTypeQueryExpr::TsEntityName(ref entity_name) => Some(entity_name),
-            TsTypeQueryExpr::Import(ref import_type) => import_type.qualifier.as_ref(),
-        },
+                TsType::TsImportType(import_type) => import_type.qualifier.as_ref(),
 
-        // No `TSExpressionWithTypeArguments` present (as it's not a valid TsType)
-        _ => None,
-    };
+                TsType::TsTypeQuery(type_query) => match type_query.expr_name {
+                    TsTypeQueryExpr::TsEntityName(ref entity_name) => Some(entity_name),
+                    TsTypeQueryExpr::Import(ref import_type) => import_type.qualifier.as_ref(),
+                },
 
-    if let Some(entity_name) = reference {
-        get_reference_name_from_entity(entity_name)
-    } else {
-        vec![fervid_atom!("default")]
+                _ => None,
+            };
+
+            if let Some(entity_name) = reference {
+                return get_reference_name_from_entity(entity_name);
+            }
+        }
     }
+
+    vec![fervid_atom!("default")]
 }
 
 fn get_reference_name_from_entity(ts_entity_name: &TsEntityName) -> Vec<FervidAtom> {
@@ -727,10 +786,10 @@ fn resolve_global_scope(_ctx: &mut TypeResolveContext) -> Result<Option<Vec<Type
 }
 
 fn resolve_type_from_import<'t>(
-    ctx: &mut TypeResolveContext,
-    ts_type: &'t TsType,
-    name: &str,
-    scope: &TypeScope,
+    _ctx: &mut TypeResolveContext,
+    _ts_type: ReferenceTypes<'t>,
+    _name: &str,
+    _scope: &TypeScope,
 ) -> Option<&'t ScopeTypeNode> {
     // const { source, imported } = scope.imports[name]
     // const sourceScope = importSourceToScope(ctx, node, scope, source)
@@ -854,9 +913,17 @@ fn resolve_string_type(
         }
 
         TsType::TsTypeRef(type_ref) => {
-            let resolved = resolve_type_reference(ctx, ts_type, scope);
+            let resolved = resolve_type_reference(ctx, ReferenceTypes::TsType(ts_type), scope);
             if let Some(resolved) = resolved {
-                return resolve_string_type(ctx, resolved, scope);
+                // Only type supported in the call below
+                let TypeOrDecl::Type(ref ts_type) = resolved.value else {
+                    return Err(error(
+                        ScriptErrorKind::ResolveTypeUnresolvableIndexType,
+                        type_ref.span,
+                    ));
+                };
+
+                return resolve_string_type(ctx, &ts_type, scope);
             }
 
             let TsEntityName::Ident(ref type_name_ident) = type_ref.type_name else {
@@ -960,15 +1027,22 @@ fn resolve_string_type_expr(expr: &Expr) -> ResolutionResult<Vec<FervidAtom>> {
 
 fn resolve_builtin(
     ctx: &mut TypeResolveContext,
-    type_ref: &TsTypeRef,
+    node: TypeRefOrExprWithTypeArgs,
     name: &str,
     scope: &TypeScope,
 ) -> ResolutionResult<ResolvedElements> {
-    let Some(ref type_params) = type_ref.type_params else {
-        return Err(error(
-            ScriptErrorKind::ResolveTypeMissingTypeParams,
-            type_ref.span,
-        ));
+    let (type_params, span) = match node {
+        TypeRefOrExprWithTypeArgs::TsTypeRef(type_ref, _) => {
+            (type_ref.type_params.as_ref(), type_ref.span)
+        }
+        TypeRefOrExprWithTypeArgs::TsExprWithTypeArgs(expr_with_type_args) => (
+            expr_with_type_args.type_args.as_ref(),
+            expr_with_type_args.span,
+        ),
+    };
+
+    let Some(ref type_params) = type_params else {
+        return Err(error(ScriptErrorKind::ResolveTypeMissingTypeParams, span));
     };
 
     let Some(first_type_param) = type_params.params.first() else {
@@ -1048,48 +1122,78 @@ fn resolve_return_type<'t>(
     ts_type: &'t TsType,
     scope: &'t TypeScope,
 ) -> Option<&'t TsType> {
-    let mut resolved = Option::<&TsType>::None;
+    let mut resolved = Option::<&ScopeTypeNode>::None;
     if matches!(
         ts_type,
         TsType::TsTypeRef(_) | TsType::TsTypeQuery(_) | TsType::TsImportType(_)
     ) {
-        resolved = resolve_type_reference(ctx, &ts_type, scope);
+        resolved = resolve_type_reference(ctx, ReferenceTypes::TsType(&ts_type), scope);
     }
 
     let Some(resolved) = resolved else {
         return None;
     };
 
-    match resolved {
-        TsType::TsFnOrConstructorType(TsFnOrConstructorType::TsFnType(fn_type)) => {
-            Some(&fn_type.type_ann.type_ann)
-        }
+    match &resolved.value {
+        TypeOrDecl::Type(ts_type) => match ts_type.as_ref() {
+            TsType::TsFnOrConstructorType(TsFnOrConstructorType::TsFnType(fn_type)) => {
+                Some(&fn_type.type_ann.type_ann)
+            }
+
+            _ => None,
+        },
+
+        TypeOrDecl::Decl(decl) => match decl.as_ref() {
+            Decl::Fn(fn_decl) => fn_decl
+                .function
+                .return_type
+                .as_ref()
+                .map(|v| v.type_ann.as_ref()),
+
+            _ => None,
+        },
 
         _ => None,
     }
+}
+
+pub enum TypeOrDeclRef<'t> {
+    Type(&'t TsType),
+    Decl(&'t Decl),
 }
 
 pub fn resolve_union_type<'t>(
     ctx: &mut TypeResolveContext,
     ts_type: &'t TsType,
     scope: &'t TypeScope,
-) -> Vec<&'t TsType> {
+) -> Vec<TypeOrDeclRef<'t>> {
     let mut result = Vec::new();
     resolve_union_type_impl(ctx, ts_type, scope, &mut result);
     result
 }
 
-/// Adapted from https://github.com/vuejs/core/blob/0ac0f2e338f6f8f0bea7237db539c68bfafb88ae/packages/compiler-sfc/src/script/resolveType.ts#L1922-L1940
 fn resolve_union_type_impl<'t>(
     ctx: &mut TypeResolveContext,
     ts_type: &'t TsType,
     scope: &'t TypeScope,
-    out: &mut Vec<&'t TsType>,
+    out: &mut Vec<TypeOrDeclRef<'t>>,
 ) {
     let mut ts_type = ts_type;
+
+    // Try resolving a type reference
     if let TsType::TsTypeRef(_) = ts_type {
-        if let Some(resolved) = resolve_type_reference(ctx, &ts_type, scope) {
-            ts_type = resolved;
+        if let Some(resolved) = resolve_type_reference(ctx, ReferenceTypes::TsType(ts_type), scope)
+        {
+            match resolved.value {
+                TypeOrDecl::Type(ref t) => {
+                    // Use resolved type as target
+                    ts_type = &t
+                }
+                TypeOrDecl::Decl(ref decl) => {
+                    out.push(TypeOrDeclRef::Decl(decl));
+                    return;
+                }
+            }
         }
     }
 
@@ -1100,15 +1204,21 @@ fn resolve_union_type_impl<'t>(
             resolve_union_type_impl(ctx, &union_type_child, scope, out);
         }
     } else {
-        out.push(ts_type);
+        out.push(TypeOrDeclRef::Type(&ts_type))
     }
+}
+
+#[derive(Clone, Copy)]
+enum ReferenceTypes<'t> {
+    TsType(&'t TsType),
+    TsExprWithTypeArgs(&'t TsExprWithTypeArgs),
 }
 
 fn resolve_type_reference<'t>(
     ctx: &mut TypeResolveContext,
-    ts_type: &'t TsType,
+    ts_type: ReferenceTypes<'t>,
     scope: &'t TypeScope,
-) -> Option<&'t TsType> {
+) -> Option<&'t ScopeTypeNode> {
     // TODO No type resolution is implemented yet
     // TODO Implementing this requires scopes
     // TODO It also requires a FS layer to work the same way as in official compiler
@@ -1125,14 +1235,14 @@ fn resolve_type_reference<'t>(
 
 fn inner_resolve_type_reference<'t>(
     ctx: &mut TypeResolveContext,
-    ts_type: &'t TsType,
+    ts_type: ReferenceTypes<'t>,
     scope: &'t TypeScope,
     name: &[FervidAtom],
     only_exported: bool,
 ) -> Option<&'t ScopeTypeNode> {
     let name_single = if name.len() == 1 {
         Some(&name[0])
-    } else if !name.is_empty() {
+    } else if name.len() > 1 {
         None
     } else {
         return None;
@@ -1141,11 +1251,13 @@ fn inner_resolve_type_reference<'t>(
     if let Some(name_single) = name_single {
         if let Some(_) = scope.imports.get(name_single) {
             return resolve_type_from_import(ctx, ts_type, &name_single, scope);
-        }
+        };
 
         let lookup_source = match ts_type {
-            TsType::TsTypeQuery(_) if only_exported => &scope.exported_declares,
-            TsType::TsTypeQuery(_) => &scope.declares,
+            ReferenceTypes::TsType(TsType::TsTypeQuery(_)) if only_exported => {
+                &scope.exported_declares
+            }
+            ReferenceTypes::TsType(TsType::TsTypeQuery(_)) => &scope.declares,
             _ if only_exported => &scope.exported_types,
             _ => &scope.types,
         };
@@ -1158,7 +1270,7 @@ fn inner_resolve_type_reference<'t>(
         let global_scopes = resolve_global_scope(ctx);
         if let Ok(Some(global_scopes)) = global_scopes {
             for s in global_scopes {
-                let src = if matches!(ts_type, TsType::TsTypeQuery(_)) {
+                let src = if matches!(ts_type, ReferenceTypes::TsType(TsType::TsTypeQuery(_))) {
                     &s.declares
                 } else {
                     &s.types
@@ -1200,6 +1312,426 @@ fn inner_resolve_type_reference<'t>(
     None
 }
 
+pub fn record_types(
+    _ctx: &mut TransformSfcContext,
+    script_setup: Option<&SfcScriptBlock>,
+    script_options: Option<&SfcScriptBlock>,
+    scope: &mut TypeScope,
+    as_global: bool,
+) {
+    let TypeScope {
+        imports,
+        types,
+        declares,
+        exported_types,
+        exported_declares,
+        ..
+    } = scope;
+
+    let (body, setup_offset) = match (script_setup, script_options) {
+        (None, None) => return,
+        (None, Some(o)) => (Either::Left(o.content.body.iter()), None),
+        (Some(s), None) => (Either::Left(s.content.body.iter()), Some(0)),
+        (Some(s), Some(o)) => (
+            Either::Right(o.content.body.iter().chain(s.content.body.iter())),
+            Some(o.content.body.len()),
+        ),
+    };
+
+    // Ambient means no imports or exports present
+    let is_ambient = as_global && !body.clone().any(|s| matches!(s, ModuleItem::ModuleDecl(_)));
+
+    // We clone the iterator several times so that it can be used again.
+    // This has no impact on perf.
+    for module_item in body.clone() {
+        if as_global {
+            if is_ambient {
+                if is_declare(module_item) {}
+            } else if let ModuleItem::Stmt(Stmt::Decl(Decl::TsModule(module))) = module_item {
+                if !module.global {
+                    break;
+                }
+
+                let Some(TsNamespaceBody::TsModuleBlock(ref module)) = module.body else {
+                    break;
+                };
+
+                for s in module.body.iter() {
+                    record_type_module_item(s, types, declares, None);
+                }
+            }
+        } else {
+            record_type_module_item(module_item, types, declares, None);
+        }
+    }
+
+    if !as_global {
+        for (idx, stmt) in body.enumerate() {
+            match stmt {
+                ModuleItem::ModuleDecl(module_decl) => match module_decl {
+                    ModuleDecl::ExportDecl(decl) => {
+                        record_type_decl(&decl.decl, types, declares, None);
+                        record_type_decl(&decl.decl, exported_types, exported_declares, None);
+                    }
+
+                    ModuleDecl::ExportNamed(named) => {
+                        /// Gets the atom from ident or string
+                        fn get_id(n: &ModuleExportName) -> FervidAtom {
+                            match n {
+                                ModuleExportName::Ident(i) => i.sym.to_owned(),
+                                ModuleExportName::Str(s) => s.value.to_owned(),
+                            }
+                        }
+
+                        for spec in named.specifiers.iter() {
+                            let ExportSpecifier::Named(spec) = spec else {
+                                continue;
+                            };
+
+                            let local = get_id(&spec.orig);
+                            let exported = spec
+                                .exported
+                                .as_ref()
+                                .map(get_id)
+                                .unwrap_or_else(|| local.to_owned());
+
+                            if let Some(ref source) = named.src {
+                                let is_from_setup = setup_offset.is_some_and(|v| idx >= v);
+
+                                // re-export, register an import + export as a type reference
+                                imports.insert(
+                                    exported.to_owned(),
+                                    ImportBinding {
+                                        source: source.value.to_owned(),
+                                        imported: local.to_owned(),
+                                        local: local.to_owned(),
+                                        is_from_setup,
+                                    },
+                                );
+
+                                // We can use IDs for scopes (lookup by ID, store ID on the scope level and on ScopeTypeNode)
+                                exported_types.insert(
+                                    exported,
+                                    ScopeTypeNode {
+                                        owner_scope: scope.id,
+                                        value: TypeOrDecl::Type(Rc::from(TsType::TsTypeRef(
+                                            TsTypeRef {
+                                                span: DUMMY_SP,
+                                                type_name: TsEntityName::Ident(Ident {
+                                                    span: DUMMY_SP,
+                                                    sym: local,
+                                                    optional: false,
+                                                }),
+                                                type_params: None,
+                                            },
+                                        ))),
+                                    },
+                                );
+                            } else if let Some(local_type) = types.get(&local) {
+                                // exporting local defined type
+                                exported_types.insert(exported, local_type.to_owned());
+                            }
+                        }
+                    }
+
+                    ModuleDecl::ExportAll(_) => {
+                        // TODO This is not yet supported
+                        // const sourceScope = importSourceToScope(
+                        //   ctx,
+                        //   stmt.source,
+                        //   scope,
+                        //   stmt.source.value,
+                        // )
+                        // Object.assign(scope.exportedTypes, sourceScope.exportedTypes)
+                    }
+
+                    ModuleDecl::ExportDefaultDecl(decl) => {
+                        match decl.decl {
+                            DefaultDecl::TsInterfaceDecl(ref interface_decl) => {
+                                record_type_interface_decl(interface_decl, types, declares);
+                                record_type_interface_decl(
+                                    interface_decl,
+                                    exported_types,
+                                    exported_declares,
+                                );
+                            }
+
+                            DefaultDecl::Class(ref class) => {
+                                record_type_class(
+                                    &class.class,
+                                    class.ident.as_ref(),
+                                    types,
+                                    Some(fervid_atom!("default")),
+                                );
+                                record_type_class(
+                                    &class.class,
+                                    class.ident.as_ref(),
+                                    exported_types,
+                                    Some(fervid_atom!("default")),
+                                );
+                            }
+
+                            DefaultDecl::Fn(ref fn_decl) => {
+                                // todo
+                            }
+                        }
+                    }
+
+                    ModuleDecl::ExportDefaultExpr(expr) => {
+                        // Only e.g. `export default foo` is processed
+                        let Expr::Ident(ident) = expr.expr.as_ref() else {
+                            continue;
+                        };
+
+                        if let Some(existing_type) = types.get(&ident.sym) {
+                            exported_types
+                                .insert(fervid_atom!("default"), existing_type.to_owned());
+                        }
+                    }
+
+                    _ => {}
+                },
+
+                ModuleItem::Stmt(_) => {}
+            }
+        }
+    }
+
+    // TODO Support both `_ownerScope` and `_ns` (using IDs)
+    // for (const key of Object.keys(types)) {
+    //     const node = types[key]
+    //     node._ownerScope = scope
+    //     if (node._ns) node._ns._ownerScope = scope
+    // }
+
+    // TODO Support declares `_ownerScope`
+    // for (const key of Object.keys(declares)) {
+    //     declares[key]._ownerScope = scope
+    // }
+}
+
+fn record_type_module_item(
+    module_item: &ModuleItem,
+    types: &mut HashMap<FervidAtom, ScopeTypeNode>,
+    declares: &mut HashMap<FervidAtom, ScopeTypeNode>,
+    overwrite_id: Option<FervidAtom>,
+) {
+    match module_item {
+        ModuleItem::ModuleDecl(_) => {}
+        ModuleItem::Stmt(stmt) => record_type_stmt(stmt, types, declares, overwrite_id),
+    }
+}
+
+fn record_type_stmt(
+    s: &Stmt,
+    types: &mut HashMap<FervidAtom, ScopeTypeNode>,
+    declares: &mut HashMap<FervidAtom, ScopeTypeNode>,
+    overwrite_id: Option<FervidAtom>,
+) {
+    match s {
+        Stmt::Decl(decl) => record_type_decl(decl, types, declares, overwrite_id),
+        _ => {}
+    }
+}
+
+fn record_type_decl(
+    decl: &Decl,
+    types: &mut HashMap<FervidAtom, ScopeTypeNode>,
+    declares: &mut HashMap<FervidAtom, ScopeTypeNode>,
+    overwrite_id: Option<FervidAtom>,
+) {
+    match decl {
+        Decl::Class(class) => {
+            record_type_class(&class.class, Some(&class.ident), types, overwrite_id)
+        }
+
+        Decl::TsInterface(ts_interface) => {
+            let id = overwrite_id.unwrap_or_else(|| ts_interface.id.sym.to_owned());
+
+            let Some(_existing) = types.get_mut(&id) else {
+                types.insert(
+                    id,
+                    ScopeTypeNode {
+                        value: TypeOrDecl::Decl(Rc::new(decl.clone())),
+                        owner_scope: 0, // TODO
+                    },
+                );
+                return;
+            };
+
+            // TODO Existing
+        }
+
+        Decl::TsEnum(ts_enum) => {
+            let id = overwrite_id.unwrap_or_else(|| ts_enum.id.sym.to_owned());
+
+            let Some(_existing) = types.get_mut(&id) else {
+                types.insert(
+                    id,
+                    ScopeTypeNode {
+                        value: TypeOrDecl::Decl(Rc::new(decl.clone())),
+                        owner_scope: 0, // TODO
+                    },
+                );
+                return;
+            };
+
+            // TODO Existing
+        }
+
+        Decl::TsModule(ts_module) => {
+            let id = overwrite_id.unwrap_or_else(|| match &ts_module.id {
+                TsModuleName::Ident(id) => id.sym.to_owned(),
+                TsModuleName::Str(s) => s.value.to_owned(),
+            });
+
+            let Some(_existing) = types.get_mut(&id) else {
+                types.insert(
+                    id,
+                    ScopeTypeNode {
+                        value: TypeOrDecl::Decl(Rc::new(decl.clone())),
+                        owner_scope: 0, // TODO
+                    },
+                );
+                return;
+            };
+
+            // TODO Existing
+        }
+
+        Decl::TsTypeAlias(ts_type_alias) => {
+            let to_insert = if ts_type_alias.type_params.is_some() {
+                TypeOrDecl::Decl(Rc::new(decl.to_owned()))
+            } else {
+                TypeOrDecl::Type(Rc::from(ts_type_alias.type_ann.clone()))
+            };
+
+            types.insert(
+                ts_type_alias.id.sym.to_owned(),
+                ScopeTypeNode {
+                    value: to_insert,
+                    owner_scope: 0, // TODO
+                },
+            );
+        }
+
+        Decl::Fn(fn_decl) => {
+            // Shallow clone (without body)
+            declares.insert(
+                fn_decl.ident.sym.to_owned(),
+                ScopeTypeNode {
+                    value: TypeOrDecl::Decl(Rc::new(Decl::Fn(FnDecl {
+                        ident: fn_decl.ident.to_owned(),
+                        declare: fn_decl.declare,
+                        function: Box::new(Function {
+                            params: fn_decl.function.params.clone(),
+                            decorators: vec![],
+                            span: fn_decl.function.span,
+                            body: None,
+                            is_generator: fn_decl.function.is_generator,
+                            is_async: fn_decl.function.is_generator,
+                            type_params: fn_decl.function.type_params.clone(),
+                            return_type: fn_decl.function.return_type.clone(),
+                        }),
+                    }))),
+                    owner_scope: 0, // TODO
+                },
+            );
+        }
+
+        Decl::Var(var_decl) => {
+            if !var_decl.declare {
+                return;
+            }
+
+            for decl in var_decl.decls.iter() {
+                let Pat::Ident(ref ident) = decl.name else {
+                    continue;
+                };
+
+                let Some(ref type_ann) = ident.type_ann else {
+                    continue;
+                };
+
+                declares.insert(
+                    ident.sym.to_owned(),
+                    ScopeTypeNode {
+                        value: TypeOrDecl::Type(Rc::from(type_ann.type_ann.clone())),
+                        owner_scope: 0, // TODO
+                    },
+                );
+            }
+        }
+
+        Decl::Using(_) => {}
+    }
+}
+
+fn record_type_interface_decl(
+    interface_decl: &TsInterfaceDecl,
+    types: &mut HashMap<FervidAtom, ScopeTypeNode>,
+    declares: &mut HashMap<FervidAtom, ScopeTypeNode>,
+) {
+    // todo
+}
+
+fn record_type_class(
+    class: &Class,
+    ident: Option<&Ident>,
+    types: &mut HashMap<FervidAtom, ScopeTypeNode>,
+    overwrite_id: Option<FervidAtom>,
+) {
+    // Overwrite or ident
+    let id = overwrite_id.or_else(|| ident.map(|v| v.sym.clone()));
+    if let Some(id) = id {
+        // Shallow copy
+        types.insert(
+            id.clone(),
+            ScopeTypeNode {
+                owner_scope: 0, // TODO
+                value: TypeOrDecl::Decl(Rc::from(Decl::Class(ClassDecl {
+                    ident: Ident {
+                        span: DUMMY_SP,
+                        sym: id,
+                        optional: false,
+                    },
+                    declare: false,
+                    class: Box::new(Class {
+                        span: class.span,
+                        decorators: vec![],
+                        body: vec![],
+                        super_class: None,
+                        is_abstract: class.is_abstract,
+                        type_params: None,
+                        super_type_params: None,
+                        implements: vec![],
+                    }),
+                }))),
+            },
+        );
+    }
+}
+
+#[inline]
+fn is_declare(module_item: &ModuleItem) -> bool {
+    match module_item {
+        ModuleItem::ModuleDecl(_) => false,
+        ModuleItem::Stmt(stmt) => match stmt {
+            Stmt::Decl(d) => match d {
+                Decl::Class(c) => c.declare,
+                Decl::Fn(f) => f.declare,
+                Decl::Var(v) => v.declare,
+                Decl::Using(_) => false,
+                Decl::TsInterface(i) => i.declare,
+                Decl::TsTypeAlias(t) => t.declare,
+                Decl::TsEnum(e) => e.declare,
+                Decl::TsModule(m) => m.declare,
+            },
+            _ => false,
+        },
+    }
+}
+
 flagset::flags! {
     #[derive(AsRefStr, EnumString, IntoStaticStr)]
     pub enum Types: usize {
@@ -1226,6 +1758,18 @@ flagset::flags! {
 pub type TypesSet = FlagSet<Types>;
 
 pub fn infer_runtime_type(
+    ctx: &mut TypeResolveContext,
+    node: &ScopeTypeNode,
+    scope: &TypeScope,
+    is_key_of: bool,
+) -> TypesSet {
+    match node.value {
+        TypeOrDecl::Type(ref ts_type) => infer_runtime_type_type(ctx, ts_type, scope, is_key_of),
+        TypeOrDecl::Decl(ref decl) => infer_runtime_type_declaration(ctx, decl, scope, is_key_of),
+    }
+}
+
+pub fn infer_runtime_type_type(
     ctx: &mut TypeResolveContext,
     ts_type: &TsType,
     scope: &TypeScope,
@@ -1262,71 +1806,7 @@ pub fn infer_runtime_type(
         },
 
         TsType::TsTypeLit(type_lit) => {
-            let mut result: TypesSet = FlagSet::default();
-
-            for member in type_lit.members.iter() {
-                if !is_key_of {
-                    let call_or_construct = matches!(
-                        member,
-                        TsTypeElement::TsCallSignatureDecl(_)
-                            | TsTypeElement::TsConstructSignatureDecl(_)
-                    );
-
-                    result |= if call_or_construct {
-                        Types::Function
-                    } else {
-                        Types::Object
-                    };
-
-                    continue;
-                }
-
-                match member {
-                    TsTypeElement::TsPropertySignature(property_signature)
-                        if matches!(property_signature.key.as_ref(), Expr::Lit(Lit::Num(_))) =>
-                    {
-                        result |= Types::Number;
-                    }
-
-                    TsTypeElement::TsIndexSignature(index_signature) => {
-                        let Some(first_param) = index_signature.params.first() else {
-                            continue;
-                        };
-
-                        let type_ann = match first_param {
-                            TsFnParam::Ident(i) => &i.type_ann,
-                            TsFnParam::Array(a) => &a.type_ann,
-                            TsFnParam::Rest(r) => &r.type_ann,
-                            TsFnParam::Object(o) => &o.type_ann,
-                        };
-
-                        let Some(annotation) = type_ann else {
-                            continue;
-                        };
-
-                        // Here official compiler assumes only one element in the set
-                        let inferred = infer_runtime_type(ctx, &annotation.type_ann, scope, false);
-                        if inferred.contains(Types::Unknown) {
-                            return return_value!(Types::Unknown);
-                        }
-                        result |= inferred;
-                    }
-
-                    _ => {
-                        result |= Types::String;
-                    }
-                }
-            }
-
-            if result.is_empty() {
-                result |= if is_key_of {
-                    Types::Unknown
-                } else {
-                    Types::Object
-                };
-            }
-
-            return result;
+            return infer_runtime_type_type_elements(ctx, &type_lit.members, scope, is_key_of);
         }
 
         TsType::TsFnOrConstructorType(_) => return return_value!(Types::Function),
@@ -1341,7 +1821,7 @@ pub fn infer_runtime_type(
         },
 
         TsType::TsTypeRef(type_ref) => 't: {
-            let resolved = resolve_type_reference(ctx, ts_type, scope);
+            let resolved = resolve_type_reference(ctx, ReferenceTypes::TsType(ts_type), scope);
             if let Some(resolved) = resolved {
                 // TODO Use `resolved._ownerScope`
                 return infer_runtime_type(ctx, resolved, scope, is_key_of);
@@ -1367,14 +1847,14 @@ pub fn infer_runtime_type(
                         if let Some(first_type_param) =
                             type_ref.type_params.as_ref().and_then(|v| v.params.first())
                         {
-                            return infer_runtime_type(ctx, &first_type_param, scope, true);
+                            return infer_runtime_type_type(ctx, &first_type_param, scope, true);
                         };
                     }
                     "Pick" | "Extract" => {
                         if let Some(second_type_param) =
                             type_ref.type_params.as_ref().and_then(|v| v.params.get(1))
                         {
-                            return infer_runtime_type(ctx, &second_type_param, scope, false);
+                            return infer_runtime_type_type(ctx, &second_type_param, scope, false);
                         };
                     }
 
@@ -1422,7 +1902,7 @@ pub fn infer_runtime_type(
                             type_ref.type_params.as_ref().and_then(|v| v.params.first())
                         {
                             let mut inferred =
-                                infer_runtime_type(ctx, &first_type_param, scope, false);
+                                infer_runtime_type_type(ctx, &first_type_param, scope, false);
                             inferred -= Types::Null;
                             return inferred;
                         };
@@ -1432,7 +1912,7 @@ pub fn infer_runtime_type(
                         if let Some(second_type_param) =
                             type_ref.type_params.as_ref().and_then(|v| v.params.get(1))
                         {
-                            return infer_runtime_type(ctx, &second_type_param, scope, false);
+                            return infer_runtime_type_type(ctx, &second_type_param, scope, false);
                         };
                     }
 
@@ -1440,7 +1920,7 @@ pub fn infer_runtime_type(
                         if let Some(first_type_param) =
                             type_ref.type_params.as_ref().and_then(|v| v.params.first())
                         {
-                            return infer_runtime_type(ctx, &first_type_param, scope, false);
+                            return infer_runtime_type_type(ctx, &first_type_param, scope, false);
                         };
                     }
 
@@ -1450,7 +1930,7 @@ pub fn infer_runtime_type(
         }
 
         TsType::TsParenthesizedType(paren) => {
-            return infer_runtime_type(ctx, &paren.type_ann, scope, false);
+            return infer_runtime_type_type(ctx, &paren.type_ann, scope, false);
         }
 
         TsType::TsUnionOrIntersectionType(union_or_intersection) => {
@@ -1494,7 +1974,7 @@ pub fn infer_runtime_type(
         // `keyof`, `unique`, `readonly`
         TsType::TsTypeOperator(type_operator) => {
             let is_key_of = matches!(type_operator.op, TsTypeOperatorOp::KeyOf);
-            return infer_runtime_type(ctx, &type_operator.type_ann, scope, is_key_of);
+            return infer_runtime_type_type(ctx, &type_operator.type_ann, scope, is_key_of);
         }
 
         _ => {}
@@ -1502,6 +1982,94 @@ pub fn infer_runtime_type(
 
     // No runtime check at this point
     FlagSet::from(Types::Unknown)
+}
+
+pub fn infer_runtime_type_declaration(
+    ctx: &mut TypeResolveContext,
+    decl: &Decl,
+    scope: &TypeScope,
+    is_key_of: bool,
+) -> TypesSet {
+    match decl {
+        Decl::TsInterface(interface) => {
+            infer_runtime_type_type_elements(ctx, &interface.body.body, scope, is_key_of)
+        }
+        Decl::TsEnum(ts_enum) => infer_enum_type(ts_enum),
+        Decl::Class(_) => TypesSet::from(Types::Object),
+        _ => TypesSet::from(Types::Unknown),
+    }
+}
+
+fn infer_runtime_type_type_elements(
+    ctx: &mut TypeResolveContext,
+    elements: &[TsTypeElement],
+    scope: &TypeScope,
+    is_key_of: bool,
+) -> TypesSet {
+    let mut result: TypesSet = FlagSet::default();
+
+    for member in elements.iter() {
+        if !is_key_of {
+            let call_or_construct = matches!(
+                member,
+                TsTypeElement::TsCallSignatureDecl(_) | TsTypeElement::TsConstructSignatureDecl(_)
+            );
+
+            result |= if call_or_construct {
+                Types::Function
+            } else {
+                Types::Object
+            };
+
+            continue;
+        }
+
+        match member {
+            TsTypeElement::TsPropertySignature(property_signature)
+                if matches!(property_signature.key.as_ref(), Expr::Lit(Lit::Num(_))) =>
+            {
+                result |= Types::Number;
+            }
+
+            TsTypeElement::TsIndexSignature(index_signature) => {
+                let Some(first_param) = index_signature.params.first() else {
+                    continue;
+                };
+
+                let type_ann = match first_param {
+                    TsFnParam::Ident(i) => &i.type_ann,
+                    TsFnParam::Array(a) => &a.type_ann,
+                    TsFnParam::Rest(r) => &r.type_ann,
+                    TsFnParam::Object(o) => &o.type_ann,
+                };
+
+                let Some(annotation) = type_ann else {
+                    continue;
+                };
+
+                // Here official compiler assumes only one element in the set
+                let inferred = infer_runtime_type_type(ctx, &annotation.type_ann, scope, false);
+                if inferred.contains(Types::Unknown) {
+                    return TypesSet::from(Types::Unknown);
+                }
+                result |= inferred;
+            }
+
+            _ => {
+                result |= Types::String;
+            }
+        }
+    }
+
+    if result.is_empty() {
+        result |= if is_key_of {
+            Types::Unknown
+        } else {
+            Types::Object
+        };
+    }
+
+    return result;
 }
 
 pub fn infer_runtime_type_type_element(
@@ -1529,7 +2097,7 @@ pub fn infer_runtime_type_type_element(
         return unknown!();
     };
 
-    infer_runtime_type(ctx, &type_ann.type_ann, scope, false)
+    infer_runtime_type_type(ctx, &type_ann.type_ann, scope, false)
 }
 
 fn flatten_types(
@@ -1540,8 +2108,34 @@ fn flatten_types(
 ) -> TypesSet {
     let mut result = FlagSet::<Types>::default();
     for ts_type in types {
-        result |= infer_runtime_type(ctx, &ts_type, scope, is_key_of);
+        result |= infer_runtime_type_type(ctx, &ts_type, scope, is_key_of);
     }
+    result
+}
+
+fn infer_enum_type(ts_enum: &TsEnumDecl) -> TypesSet {
+    let mut result = TypesSet::default();
+
+    for m in ts_enum.members.iter() {
+        let Some(ref initializer) = m.init else {
+            continue;
+        };
+
+        let Expr::Lit(ref lit) = initializer.as_ref() else {
+            continue;
+        };
+
+        match lit {
+            Lit::Str(_) => result |= Types::String,
+            Lit::Num(_) => result |= Types::Number,
+            _ => {}
+        }
+    }
+
+    if result.is_empty() {
+        result |= Types::Number;
+    }
+
     result
 }
 

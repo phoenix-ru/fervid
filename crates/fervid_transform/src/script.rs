@@ -1,13 +1,14 @@
 //! Responsible for `<script>` and `<script setup>` transformations and analysis.
 
-use fervid_core::{SfcScriptBlock, TemplateGenerationMode};
+use fervid_core::SfcScriptBlock;
+use resolve_type::record_types;
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{Function, Module, ObjectLit},
 };
 
 use crate::{
-    error::TransformError, structs::TransformScriptsResult, BindingsHelper, TransformSfcContext,
+    error::TransformError, structs::TransformScriptsResult, TransformSfcContext,
 };
 
 use self::{
@@ -34,19 +35,56 @@ pub mod utils;
 /// - (TODO) Imported `.vue` component bindings;
 pub fn transform_and_record_scripts(
     ctx: &mut TransformSfcContext,
-    script_setup: Option<SfcScriptBlock>,
-    mut script_legacy: Option<SfcScriptBlock>,
-    bindings_helper: &mut BindingsHelper,
+    mut script_setup: Option<SfcScriptBlock>,
+    mut script_options: Option<SfcScriptBlock>,
     errors: &mut Vec<TransformError>,
 ) -> TransformScriptsResult {
-    // Set inline flag in `BindingsHelper`
-    if bindings_helper.is_prod && script_setup.is_some() {
-        bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
-    }
+    //
+    // STEP 1: Imports and type collection.
+    //
+    // Imports are collected early because ES6 imports are hoisted and usage like this is valid:
+    // ```ts
+    // const bar = x(1)
+    // import { reactive as x } from 'vue'
+    // ```
+    //
+    // Official compiler does lazy type recording using the source AST,
+    // but we are modifying the source AST and thus cannot use it at a later stage.
+    // Therefore, types are eagerly recorded.
 
     // 1.1. Imports in `<script>`
-    if let Some(ref mut script_options) = script_legacy {
-        process_imports(&mut script_options.content, bindings_helper, false, errors);
+    if let Some(ref mut script_options) = script_options {
+        process_imports(
+            &mut script_options.content,
+            &mut ctx.bindings_helper,
+            false,
+            errors,
+        );
+    }
+
+    // 1.2. Imports in `<script setup>`
+    if let Some(ref mut script_setup) = script_setup {
+        process_imports(
+            &mut script_setup.content,
+            &mut ctx.bindings_helper,
+            true,
+            errors,
+        );
+    }
+
+    // 1.3. Record types for to support type-only `defineProps` and `defineEmits`
+    if ctx.bindings_helper.is_ts {
+        let scope = ctx.scope.clone();
+        let mut scope = (*scope).borrow_mut();
+        scope.imports = ctx.bindings_helper.user_imports.clone();
+
+        record_types(
+            ctx,
+            script_setup.as_ref(),
+            script_options.as_ref(),
+            &mut scope,
+            false,
+        );
     }
 
     //
@@ -55,7 +93,7 @@ pub fn transform_and_record_scripts(
     let mut script_module: Option<Box<Module>> = None;
     let mut script_default_export: Option<ObjectLit> = None;
 
-    if let Some(script_options_block) = script_legacy {
+    if let Some(script_options_block) = script_options {
         let mut module = script_options_block.content;
 
         let transform_result = transform_and_record_script_options_api(
@@ -64,7 +102,7 @@ pub fn transform_and_record_scripts(
                 collect_top_level_stmts: script_setup.is_some(),
                 ..Default::default()
             },
-            bindings_helper,
+            &mut ctx.bindings_helper,
             errors,
         );
 
@@ -94,8 +132,7 @@ pub fn transform_and_record_scripts(
 
     let mut setup_fn: Option<Box<Function>> = None;
     if let Some(script_setup) = script_setup {
-        let setup_transform_result =
-            transform_and_record_script_setup(ctx, script_setup, bindings_helper, errors);
+        let setup_transform_result = transform_and_record_script_setup(ctx, script_setup, errors);
 
         // TODO Push imports at module top or bottom? Or smart merge?
         // TODO Merge Vue imports produced by module transformation
@@ -191,15 +228,9 @@ mod tests {
         let mut ctx = TransformSfcContext::anonymous();
 
         // Do work
-        let mut bindings_helper = BindingsHelper::default();
         let mut errors = Vec::new();
-        let res = transform_and_record_scripts(
-            &mut ctx,
-            Some(script_setup),
-            Some(script),
-            &mut bindings_helper,
-            &mut errors,
-        );
+        let res =
+            transform_and_record_scripts(&mut ctx, Some(script_setup), Some(script), &mut errors);
 
         // Emitting the result requires some setup with SWC
         let cm: Lrc<SourceMap> = Default::default();
