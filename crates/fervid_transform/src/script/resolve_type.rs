@@ -176,7 +176,8 @@ fn resolve_type_elements_impl_type(
             // return resolveTypeElements(ctx, resolved, resolved._ownerScope)
             // }
             // break
-            todo!()
+
+            Err(error(ScriptErrorKind::ResolveTypeUnsupported, import_type.span))
         }
 
         TsType::TsTypeQuery(type_query) => {
@@ -227,13 +228,7 @@ fn resolve_type_elements_impl_decl(
 
     match decl {
         Decl::TsInterface(interface) => resolve_interface_members(ctx, interface, scope),
-        Decl::Class(_) => todo!(),
-        Decl::Fn(_) => todo!(),
-        Decl::Var(_) => todo!(),
-        Decl::Using(_) => todo!(),
-        Decl::TsTypeAlias(_) => todo!(),
-        Decl::TsEnum(_) => todo!(),
-        Decl::TsModule(_) => todo!(),
+        _ => Err(error(ScriptErrorKind::ResolveTypeUnresolvable, decl.span())),
     }
 }
 
@@ -361,8 +356,44 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
             ));
         };
 
-        if let Some(ret) = resolve_return_type(ctx, first_type_param, scope) {
-            return resolve_type_elements_impl_type(ctx, ret, scope);
+        // Inline implementation of `resolve_return_type` to avoid unnecessary clones
+        'resolve_return_type: {
+            let ts_type = first_type_param.as_ref();
+            let mut resolved: Option<ScopeTypeNode> = None;
+            if matches!(
+                ts_type,
+                TsType::TsTypeRef(_) | TsType::TsTypeQuery(_) | TsType::TsImportType(_)
+            ) {
+                resolved = resolve_type_reference(ctx, ReferenceTypes::TsType(&ts_type), scope);
+            }
+
+            let Some(resolved) = resolved else {
+                break 'resolve_return_type;
+            };
+
+            let return_type = match resolved.value {
+                TypeOrDecl::Type(ref ts_type) => match ts_type.as_ref() {
+                    TsType::TsFnOrConstructorType(TsFnOrConstructorType::TsFnType(fn_type)) => {
+                        Some(fn_type.type_ann.type_ann.as_ref())
+                    }
+
+                    _ => None,
+                },
+
+                TypeOrDecl::Decl(ref decl) => match decl.as_ref() {
+                    Decl::Fn(fn_decl) => fn_decl
+                        .function
+                        .return_type
+                        .as_ref()
+                        .map(|v| v.type_ann.as_ref()),
+
+                    _ => None,
+                },
+            };
+
+            if let Some(ret) = return_type {
+                return resolve_type_elements_impl_type(ctx, ret, scope);
+            }
         }
     }
 
@@ -405,10 +436,10 @@ fn type_elements_to_map(elements: &Vec<TsTypeElement>) -> ResolutionResult<Resol
                 result.calls.push(Either::Right(signature.to_owned()));
             }
 
-            // TsTypeElement::TsConstructSignatureDecl(_) => todo!(),
-            // TsTypeElement::TsGetterSignature(_) => todo!(),
-            // TsTypeElement::TsSetterSignature(_) => todo!(),
-            // TsTypeElement::TsIndexSignature(_) => todo!(),
+            // TsTypeElement::TsConstructSignatureDecl(_) => {},
+            // TsTypeElement::TsGetterSignature(_) => {},
+            // TsTypeElement::TsSetterSignature(_) => {},
+            // TsTypeElement::TsIndexSignature(_) => {},
             _ => {}
         }
     }
@@ -495,11 +526,11 @@ fn merge_elements(
                             implementation!(signature);
                         }
 
-                        // TsTypeElement::TsCallSignatureDecl(_) => todo!(),
-                        // TsTypeElement::TsGetterSignature(_) => todo!(),
-                        // TsTypeElement::TsConstructSignatureDecl(_) => todo!(),
-                        // TsTypeElement::TsSetterSignature(_) => todo!(),
-                        // TsTypeElement::TsIndexSignature(_) => todo!(),
+                        // TsTypeElement::TsCallSignatureDecl(_) => {},
+                        // TsTypeElement::TsGetterSignature(_) => {},
+                        // TsTypeElement::TsConstructSignatureDecl(_) => {},
+                        // TsTypeElement::TsSetterSignature(_) => {},
+                        // TsTypeElement::TsIndexSignature(_) => {},
                         _ => {
                             // ??
                         }
@@ -606,8 +637,7 @@ fn resolve_index_type(
         ..
     }) = index_type.as_ref()
     {
-        return resolve_array_element_type(ctx, &obj_type, scope)
-            .map(|v| v.into_iter().map(|v| Box::new(v.clone())).collect_vec());
+        return resolve_array_element_type(ctx, &obj_type, scope);
     }
 
     let resolved = resolve_type_elements_impl_type(ctx, &obj_type, scope)?;
@@ -652,20 +682,20 @@ fn resolve_index_type(
     Ok(types)
 }
 
-fn resolve_array_element_type<'t>(
+fn resolve_array_element_type(
     ctx: &mut TypeResolveContext,
-    array_element_type: &'t TsType,
-    scope: &'t TypeScope,
-) -> ResolutionResult<Vec<&'t TsType>> {
+    array_element_type: &TsType,
+    scope: &TypeScope,
+) -> ResolutionResult<Vec<Box<TsType>>> {
     match array_element_type {
         // type[]
-        TsType::TsArrayType(array_type) => Ok(vec![&array_type.elem_type]),
+        TsType::TsArrayType(array_type) => Ok(vec![array_type.elem_type.to_owned()]),
 
         // tuple
         TsType::TsTupleType(tuple_type) => Ok(tuple_type
             .elem_types
             .iter()
-            .map(|t| t.ty.as_ref())
+            .map(|t| t.ty.to_owned())
             .collect_vec()),
 
         TsType::TsTypeRef(ref type_ref) => {
@@ -681,7 +711,7 @@ fn resolve_array_element_type<'t>(
                 return Ok(type_params
                     .params
                     .iter()
-                    .map(|it| it.as_ref())
+                    .map(|it| it.to_owned())
                     .collect_vec());
             }
 
@@ -790,7 +820,7 @@ fn resolve_type_from_import<'t>(
     _ts_type: ReferenceTypes<'t>,
     _name: &str,
     _scope: &TypeScope,
-) -> Option<&'t ScopeTypeNode> {
+) -> Option<ScopeTypeNode> {
     // const { source, imported } = scope.imports[name]
     // const sourceScope = importSourceToScope(ctx, node, scope, source)
     // return resolveTypeReference(ctx, node, sourceScope, imported, true)
@@ -1117,95 +1147,60 @@ fn find_static_property_type<'t>(ts_type: &'t TsTypeLit, key: &str) -> Option<&'
     })
 }
 
-fn resolve_return_type<'t>(
+pub fn resolve_union_type(
     ctx: &mut TypeResolveContext,
-    ts_type: &'t TsType,
-    scope: &'t TypeScope,
-) -> Option<&'t TsType> {
-    let mut resolved = Option::<&ScopeTypeNode>::None;
-    if matches!(
-        ts_type,
-        TsType::TsTypeRef(_) | TsType::TsTypeQuery(_) | TsType::TsImportType(_)
-    ) {
-        resolved = resolve_type_reference(ctx, ReferenceTypes::TsType(&ts_type), scope);
-    }
-
-    let Some(resolved) = resolved else {
-        return None;
-    };
-
-    match &resolved.value {
-        TypeOrDecl::Type(ts_type) => match ts_type.as_ref() {
-            TsType::TsFnOrConstructorType(TsFnOrConstructorType::TsFnType(fn_type)) => {
-                Some(&fn_type.type_ann.type_ann)
-            }
-
-            _ => None,
-        },
-
-        TypeOrDecl::Decl(decl) => match decl.as_ref() {
-            Decl::Fn(fn_decl) => fn_decl
-                .function
-                .return_type
-                .as_ref()
-                .map(|v| v.type_ann.as_ref()),
-
-            _ => None,
-        },
-
-        _ => None,
-    }
-}
-
-pub enum TypeOrDeclRef<'t> {
-    Type(&'t TsType),
-    Decl(&'t Decl),
-}
-
-pub fn resolve_union_type<'t>(
-    ctx: &mut TypeResolveContext,
-    ts_type: &'t TsType,
-    scope: &'t TypeScope,
-) -> Vec<TypeOrDeclRef<'t>> {
+    ts_type: &TsType,
+    scope: &TypeScope,
+) -> Vec<TypeOrDecl> {
     let mut result = Vec::new();
     resolve_union_type_impl(ctx, ts_type, scope, &mut result);
     result
 }
 
-fn resolve_union_type_impl<'t>(
+fn resolve_union_type_impl(
     ctx: &mut TypeResolveContext,
-    ts_type: &'t TsType,
-    scope: &'t TypeScope,
-    out: &mut Vec<TypeOrDeclRef<'t>>,
+    ts_type: &TsType,
+    scope: &TypeScope,
+    out: &mut Vec<TypeOrDecl>,
 ) {
-    let mut ts_type = ts_type;
+    macro_rules! union_or_intersection {
+        ($ts_type: expr, $ts_type_else: expr) => {
+            if let TsType::TsUnionOrIntersectionType(TsUnionOrIntersectionType::TsUnionType(
+                union_type,
+            )) = $ts_type
+            {
+                for union_type_child in union_type.types.iter() {
+                    resolve_union_type_impl(ctx, &union_type_child, scope, out);
+                }
+            } else {
+                out.push(TypeOrDecl::Type($ts_type_else));
+            }
+        };
+    }
 
     // Try resolving a type reference
     if let TsType::TsTypeRef(_) = ts_type {
-        if let Some(resolved) = resolve_type_reference(ctx, ReferenceTypes::TsType(ts_type), scope)
-        {
-            match resolved.value {
-                TypeOrDecl::Type(ref t) => {
+        let resolved = resolve_type_reference(ctx, ReferenceTypes::TsType(&ts_type), scope);
+
+        if let Some(resolved) = resolved {
+            let ts_type = match resolved.value {
+                TypeOrDecl::Type(t) => {
                     // Use resolved type as target
-                    ts_type = &t
+                    t
                 }
                 TypeOrDecl::Decl(ref decl) => {
-                    out.push(TypeOrDeclRef::Decl(decl));
+                    out.push(TypeOrDecl::Decl(decl.clone()));
                     return;
                 }
-            }
+            };
+
+            // We duplicate the condition because of borrow-checks on Rc<TsType> vs &TsType
+            union_or_intersection!(ts_type.as_ref(), ts_type);
+            return;
         }
     }
 
-    if let TsType::TsUnionOrIntersectionType(TsUnionOrIntersectionType::TsUnionType(union_type)) =
-        ts_type
-    {
-        for union_type_child in union_type.types.iter() {
-            resolve_union_type_impl(ctx, &union_type_child, scope, out);
-        }
-    } else {
-        out.push(TypeOrDeclRef::Type(&ts_type))
-    }
+    union_or_intersection!(ts_type, Rc::from(ts_type.to_owned()));
 }
 
 #[derive(Clone, Copy)]
@@ -1218,7 +1213,7 @@ fn resolve_type_reference<'t>(
     ctx: &mut TypeResolveContext,
     ts_type: ReferenceTypes<'t>,
     scope: &'t TypeScope,
-) -> Option<&'t ScopeTypeNode> {
+) -> Option<ScopeTypeNode> {
     // TODO No type resolution is implemented yet
     // TODO Implementing this requires scopes
     // TODO It also requires a FS layer to work the same way as in official compiler
@@ -1239,7 +1234,7 @@ fn inner_resolve_type_reference<'t>(
     scope: &'t TypeScope,
     name: &[FervidAtom],
     only_exported: bool,
-) -> Option<&'t ScopeTypeNode> {
+) -> Option<ScopeTypeNode> {
     let name_single = if name.len() == 1 {
         Some(&name[0])
     } else if name.len() > 1 {
@@ -1263,7 +1258,7 @@ fn inner_resolve_type_reference<'t>(
         };
 
         if let Some(found) = lookup_source.get(name_single) {
-            return Some(found);
+            return Some(found.to_owned());
         }
 
         // fallback to global
@@ -1275,10 +1270,9 @@ fn inner_resolve_type_reference<'t>(
                 } else {
                     &s.types
                 };
-                if let Some(_found) = src.get(name_single) {
-                    // TODO ;(ctx.deps || (ctx.deps = new Set())).add(s.filename)
-                    // return Some(found);
-                    todo!();
+                if let Some(found) = src.get(name_single) {
+                    ctx.deps.insert(s.filename.to_owned());
+                    return Some(found.to_owned());
                 }
             }
         }
@@ -1824,7 +1818,7 @@ pub fn infer_runtime_type_type(
             let resolved = resolve_type_reference(ctx, ReferenceTypes::TsType(ts_type), scope);
             if let Some(resolved) = resolved {
                 // TODO Use `resolved._ownerScope`
-                return infer_runtime_type(ctx, resolved, scope, is_key_of);
+                return infer_runtime_type(ctx, &resolved, scope, is_key_of);
             }
 
             let TsEntityName::Ident(ref ident) = type_ref.type_name else {
@@ -1955,7 +1949,9 @@ pub fn infer_runtime_type_type(
             return flatten_types(ctx, &types, scope, false);
         }
 
-        TsType::TsImportType(_) => todo!(),
+        TsType::TsImportType(_) => {
+            // TODO
+        },
 
         TsType::TsTypeQuery(type_query) => 't: {
             let TsTypeQueryExpr::TsEntityName(TsEntityName::Ident(ref ident)) =

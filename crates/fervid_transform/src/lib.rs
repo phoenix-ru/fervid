@@ -75,14 +75,18 @@ pub fn transform_sfc<'o>(
 }
 
 impl TransformSfcContext {
-    pub fn new(sfc_descriptor: &SfcDescriptor, options: &TransformSfcOptions) -> TransformSfcContext {
+    pub fn new(
+        sfc_descriptor: &SfcDescriptor,
+        options: &TransformSfcOptions,
+    ) -> TransformSfcContext {
         // Create the bindings helper
         let mut bindings_helper = BindingsHelper::default();
         bindings_helper.is_prod = options.is_prod;
 
         // TS if any of scripts is TS.
         // Unlike the official compiler, we don't care if languages are mixed, because nothing changes.
-        let recognize_lang = |script: &SfcScriptBlock| matches!(script.lang, SfcScriptLang::Typescript);
+        let recognize_lang =
+            |script: &SfcScriptBlock| matches!(script.lang, SfcScriptLang::Typescript);
         bindings_helper.is_ts = sfc_descriptor
             .script_setup
             .as_ref()
@@ -104,6 +108,7 @@ impl TransformSfcContext {
             is_ce: false, // todo
             bindings_helper,
             scope,
+            deps: Default::default(),
         }
     }
 }

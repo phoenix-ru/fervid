@@ -18,13 +18,13 @@ use crate::{
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::{
         resolve_type::{
-            resolve_type_elements, resolve_union_type, ResolvedElements, TypeOrDeclRef,
+            resolve_type_elements, resolve_union_type, ResolvedElements,
             TypeResolveContext,
         },
         setup::define_props::{process_define_props, process_with_defaults},
     },
     structs::{SfcDefineModel, SfcExportedObjectHelper},
-    BindingsHelper,
+    BindingsHelper, TypeOrDecl,
 };
 
 pub enum TransformMacroResult {
@@ -599,11 +599,11 @@ fn extract_event_names(
 
     let types = resolve_union_type(ctx, &type_annotation.type_ann, &scope);
     for ts_type in types {
-        let TypeOrDeclRef::Type(ts_type) = ts_type else {
+        let TypeOrDecl::Type(ts_type) = ts_type else {
             continue;
         };
 
-        if let TsType::TsLitType(ts_lit_type) = ts_type {
+        if let TsType::TsLitType(ts_lit_type) = ts_type.as_ref() {
             // No UnaryExpression
             match ts_lit_type.lit {
                 TsLit::Number(ref n) => {

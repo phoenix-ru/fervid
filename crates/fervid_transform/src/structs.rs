@@ -1,12 +1,16 @@
 //! Exports data structs used by the crate
 
-use std::{cell::RefCell, hash::{Hash, Hasher}, rc::Rc};
+use std::{
+    cell::RefCell,
+    hash::{Hash, Hasher},
+    rc::Rc,
+};
 
 use fervid_core::{
     BindingTypes, ComponentBinding, CustomDirectiveBinding, FervidAtom, SfcCustomBlock,
     SfcStyleBlock, SfcTemplateBlock, TemplateGenerationMode, VueImportsSet,
 };
-use fxhash::{FxHashMap as HashMap, FxHasher64};
+use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet, FxHasher64};
 use smallvec::SmallVec;
 use swc_core::ecma::{
     ast::{Decl, Expr, ExprOrSpread, Function, Id, Module, ObjectLit, PropOrSpread, TsType},
@@ -21,6 +25,7 @@ pub struct TransformSfcContext {
     pub is_ce: bool,
     pub bindings_helper: BindingsHelper,
     pub scope: Rc<RefCell<TypeScope>>,
+    pub deps: HashSet<String>,
 }
 
 /// A helper which encompasses all the logic related to bindings,
@@ -201,6 +206,7 @@ impl TransformSfcContext {
             bindings_helper: BindingsHelper::default(),
             is_ce: false,
             scope: Rc::new(TypeScope::new(filename).into()),
+            deps: HashSet::default(),
         }
     }
 }
