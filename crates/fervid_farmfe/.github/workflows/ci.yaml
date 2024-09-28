@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       # batch download artifacts
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           path: /tmp/artifacts
       - name: Check Artifacts

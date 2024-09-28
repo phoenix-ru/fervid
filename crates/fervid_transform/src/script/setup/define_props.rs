@@ -19,7 +19,7 @@ use crate::{
         },
         utils::{collect_obj_fields, collect_string_arr},
     },
-    BindingsHelper, SetupBinding, SfcExportedObjectHelper,
+    SetupBinding, SfcExportedObjectHelper,
 };
 
 use super::macros::TransformMacroResult;
@@ -40,17 +40,10 @@ pub fn process_define_props(
     call_expr: &CallExpr,
     is_var_decl: bool,
     sfc_object_helper: &mut SfcExportedObjectHelper,
-    bindings_helper: &mut BindingsHelper,
 ) -> TransformMacroResult {
     let mut define_props = DefineProps::default();
     extract_from_define_props(call_expr, &mut define_props);
-    process_define_props_impl(
-        ctx,
-        define_props,
-        is_var_decl,
-        sfc_object_helper,
-        bindings_helper,
-    )
+    process_define_props_impl(ctx, define_props, is_var_decl, sfc_object_helper)
 }
 
 pub fn process_with_defaults(
@@ -58,7 +51,6 @@ pub fn process_with_defaults(
     with_defaults_call: &CallExpr,
     is_var_decl: bool,
     sfc_object_helper: &mut SfcExportedObjectHelper,
-    bindings_helper: &mut BindingsHelper,
 ) -> TransformMacroResult {
     macro_rules! bail_no_define_props {
         () => {
@@ -94,13 +86,7 @@ pub fn process_with_defaults(
     define_props.defaults = with_defaults_call.args.get(1).map(|v| v.expr.to_owned());
 
     // Process
-    process_define_props_impl(
-        ctx,
-        define_props,
-        is_var_decl,
-        sfc_object_helper,
-        bindings_helper,
-    )
+    process_define_props_impl(ctx, define_props, is_var_decl, sfc_object_helper)
 
     // TODO Implement a more generic `process_define_props_impl` function
     // which will return values to be assembled by `process_define_props` and `process_with_defaults`.
@@ -128,7 +114,6 @@ fn process_define_props_impl(
     define_props: DefineProps,
     is_var_decl: bool,
     sfc_object_helper: &mut SfcExportedObjectHelper,
-    bindings_helper: &mut BindingsHelper,
 ) -> TransformMacroResult {
     // Check duplicate
     if sfc_object_helper.props.is_some() {
@@ -168,7 +153,7 @@ fn process_define_props_impl(
             _ => {}
         }
 
-        bindings_helper.setup_bindings.extend(
+        ctx.bindings_helper.setup_bindings.extend(
             raw_bindings
                 .into_iter()
                 .map(|raw| SetupBinding(raw, BindingTypes::Props)),
@@ -176,12 +161,8 @@ fn process_define_props_impl(
 
         Some(runtime_decl)
     } else if let Some(type_decl) = define_props.type_decl {
-        let extracted_props_result = extract_runtime_props(
-            ctx,
-            &type_decl,
-            define_props.defaults.as_deref(),
-            bindings_helper,
-        );
+        let extracted_props_result =
+            extract_runtime_props(ctx, &type_decl, define_props.defaults.as_deref());
 
         match extracted_props_result {
             Ok(v) => v,
@@ -224,7 +205,6 @@ fn extract_runtime_props(
     ctx: &mut TypeResolveContext,
     type_decl: &TsType,
     defaults: Option<&Expr>,
-    bindings_helper: &mut BindingsHelper,
 ) -> ResolutionResult<Option<Box<Expr>>> {
     let props = resolve_runtime_props_from_type(ctx, type_decl)?;
     if props.is_empty() {
@@ -255,8 +235,13 @@ fn extract_runtime_props(
         // }>()
         // const foo = ref() // <- this should prevail
         // ```
-        if !bindings_helper.setup_bindings.iter().any(|it| it.0 == key) {
-            bindings_helper
+        if !ctx
+            .bindings_helper
+            .setup_bindings
+            .iter()
+            .any(|it| it.0 == key)
+        {
+            ctx.bindings_helper
                 .setup_bindings
                 .push(SetupBinding(key, BindingTypes::Props));
         }
@@ -267,7 +252,7 @@ fn extract_runtime_props(
     // Has defaults, but they are not static
     if let (false, Some(defaults)) = (has_static_defaults, defaults) {
         let merge_defaults_helper = VueImports::MergeDefaults;
-        bindings_helper.vue_imports |= merge_defaults_helper;
+        ctx.bindings_helper.vue_imports |= merge_defaults_helper;
 
         // TODO /*#__PURE__*/ comment
         props_decl = Box::new(Expr::Call(CallExpr {
@@ -305,7 +290,7 @@ fn resolve_runtime_props_from_type(
 
     for (key, element) in elements.props {
         // TODO Use `element._ownerScope`
-        let mut types = infer_runtime_type_type_element(ctx, &element, &ctx_scope);
+        let mut types = infer_runtime_type_type_element(ctx, &element, &ctx_scope.borrow());
 
         // Skip check for result containing unknown types
         let mut skip_check = false;
@@ -480,7 +465,7 @@ fn get_runtime_prop_from_type(
         };
     }
 
-    if !ctx.is_prod {
+    if !ctx.bindings_helper.is_prod {
         // e.g. `type: Number`
         add_field!("type", to_runtime_type_string(prop.types));
 

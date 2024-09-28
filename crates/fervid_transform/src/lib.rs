@@ -1,5 +1,7 @@
+use std::{cell::RefCell, rc::Rc};
+
 use error::TransformError;
-use fervid_core::{SfcDescriptor, SfcScriptBlock, SfcScriptLang};
+use fervid_core::{SfcDescriptor, SfcScriptBlock, SfcScriptLang, TemplateGenerationMode};
 use misc::infer_name;
 use script::transform_and_record_scripts;
 use style::{attach_scope_id, create_style_scope, transform_style_blocks};
@@ -29,40 +31,21 @@ pub fn transform_sfc<'o>(
     options: TransformSfcOptions<'o>,
     errors: &mut Vec<TransformError>,
 ) -> TransformSfcResult {
-    // Create the bindings helper
-    let mut bindings_helper = BindingsHelper::default();
-    bindings_helper.is_prod = options.is_prod;
-
     // Create the context
-    let mut ctx = TransformSfcContext {
-        filename: options.filename.to_string()
-    };
-
-    // TS if any of scripts is TS.
-    // Unlike the official compiler, we don't care if languages are mixed, because nothing changes.
-    let recognize_lang = |script: &SfcScriptBlock| matches!(script.lang, SfcScriptLang::Typescript);
-    bindings_helper.is_ts = sfc_descriptor
-        .script_setup
-        .as_ref()
-        .map_or(false, recognize_lang)
-        || sfc_descriptor
-            .script_legacy
-            .as_ref()
-            .map_or(false, recognize_lang);
+    let mut ctx = TransformSfcContext::new(&sfc_descriptor, &options);
 
     // Transform the scripts
     let mut transform_result = transform_and_record_scripts(
         &mut ctx,
         sfc_descriptor.script_setup,
         sfc_descriptor.script_legacy,
-        &mut bindings_helper,
         errors,
     );
 
     // Transform the template if it is present
     let mut template_block = None;
     if let Some(mut template) = sfc_descriptor.template {
-        transform_and_record_template(&mut template, &mut bindings_helper);
+        transform_and_record_template(&mut template, &mut ctx.bindings_helper);
         if !template.roots.is_empty() {
             template_block = Some(template);
         }
@@ -81,12 +64,51 @@ pub fn transform_sfc<'o>(
     infer_name(&mut exported_obj, &options.filename);
 
     TransformSfcResult {
-        bindings_helper,
+        bindings_helper: ctx.bindings_helper,
         exported_obj,
         module: transform_result.module,
         setup_fn: transform_result.setup_fn,
         template_block,
         style_blocks,
         custom_blocks: sfc_descriptor.custom_blocks,
+    }
+}
+
+impl TransformSfcContext {
+    pub fn new(
+        sfc_descriptor: &SfcDescriptor,
+        options: &TransformSfcOptions,
+    ) -> TransformSfcContext {
+        // Create the bindings helper
+        let mut bindings_helper = BindingsHelper::default();
+        bindings_helper.is_prod = options.is_prod;
+
+        // TS if any of scripts is TS.
+        // Unlike the official compiler, we don't care if languages are mixed, because nothing changes.
+        let recognize_lang =
+            |script: &SfcScriptBlock| matches!(script.lang, SfcScriptLang::Typescript);
+        bindings_helper.is_ts = sfc_descriptor
+            .script_setup
+            .as_ref()
+            .map_or(false, recognize_lang)
+            || sfc_descriptor
+                .script_legacy
+                .as_ref()
+                .map_or(false, recognize_lang);
+
+        // Set inline flag in `BindingsHelper`
+        if bindings_helper.is_prod && sfc_descriptor.script_setup.is_some() {
+            bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
+        }
+
+        let scope = Rc::new(RefCell::from(TypeScope::new(options.filename.to_string())));
+
+        TransformSfcContext {
+            filename: options.filename.to_string(),
+            is_ce: false, // todo
+            bindings_helper,
+            scope,
+            deps: Default::default(),
+        }
     }
 }

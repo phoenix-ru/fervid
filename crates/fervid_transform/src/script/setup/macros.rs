@@ -18,12 +18,13 @@ use crate::{
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::{
         resolve_type::{
-            resolve_type_elements, resolve_union_type, ResolvedElements, TypeResolveContext,
+            resolve_type_elements, resolve_union_type, ResolvedElements,
+            TypeResolveContext,
         },
         setup::define_props::{process_define_props, process_with_defaults},
     },
     structs::{SfcDefineModel, SfcExportedObjectHelper},
-    BindingsHelper,
+    BindingsHelper, TypeOrDecl,
 };
 
 pub enum TransformMacroResult {
@@ -40,12 +41,13 @@ pub enum TransformMacroResult {
 pub fn transform_script_setup_macro_expr(
     ctx: &mut TypeResolveContext,
     expr: &Expr,
-    bindings_helper: &mut BindingsHelper,
     sfc_object_helper: &mut SfcExportedObjectHelper,
     is_var_decl: bool,
 ) -> TransformMacroResult {
     // `defineExpose` and `defineModel` actually generate something
     // https://play.vuejs.org/#eNp9kE1LxDAQhv/KmEtXWOphb8sqqBRU8AMVveRS2mnNmiYhk66F0v/uJGVXD8ueEt7nTfJkRnHtXL7rUazFhiqvXADC0LsraVTnrA8wgscGJmi87SDjaiaNNJU1FKCjFi4jX2R3qLWFT+t1fZadx0qNjTJYDM4SLsbUnRjM8aOtUS+yLi4fpeZbGW0uZgV+XCxFIH6kUW2+JWvYb5QGQIrKdk5p9M8uKJaQYg2JRFayw89DyoLvcbnPqy+svo/kWxpiJsWLR0K/QykOLJS+xTDj4u0JB94fIHv3mtsn4CuS1X10nGs3valZ+18v2d6nKSvTvlMxBDS0/1QUjc0p9aXgyd+e+Pqf7ipfpXPSTGL6BRH3n+Q=
+
+    let bindings_helper = &mut ctx.bindings_helper;
 
     /// Signify that this is not a macro
     macro_rules! bail {
@@ -86,9 +88,9 @@ pub fn transform_script_setup_macro_expr(
     let sym = &callee_ident.sym;
     let span = call_expr.span;
     if DEFINE_PROPS.eq(sym) {
-        process_define_props(ctx, call_expr, is_var_decl, sfc_object_helper, bindings_helper)
+        process_define_props(ctx, call_expr, is_var_decl, sfc_object_helper)
     } else if WITH_DEFAULTS.eq(sym) {
-        process_with_defaults(ctx, call_expr, is_var_decl, sfc_object_helper, bindings_helper)
+        process_with_defaults(ctx, call_expr, is_var_decl, sfc_object_helper)
     } else if DEFINE_EMITS.eq(sym) {
         // Validation: duplicate call
         if sfc_object_helper.emits.is_some() {
@@ -593,10 +595,15 @@ fn extract_event_names(
     };
 
     let scope = ctx.scope.clone();
+    let scope = scope.borrow();
 
     let types = resolve_union_type(ctx, &type_annotation.type_ann, &scope);
     for ts_type in types {
-        if let TsType::TsLitType(ts_lit_type) = ts_type {
+        let TypeOrDecl::Type(ts_type) = ts_type else {
+            continue;
+        };
+
+        if let TsType::TsLitType(ts_lit_type) = ts_type.as_ref() {
             // No UnaryExpression
             match ts_lit_type.lit {
                 TsLit::Number(ref n) => {

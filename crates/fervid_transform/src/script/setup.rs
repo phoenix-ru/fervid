@@ -20,7 +20,7 @@ use crate::{
         utils::is_static,
     },
     structs::SfcExportedObjectHelper,
-    BindingsHelper, SetupBinding, TransformSfcContext,
+    SetupBinding, TransformSfcContext,
 };
 
 mod await_detection;
@@ -32,7 +32,7 @@ use self::{
     macros::{postprocess_macros, transform_script_setup_macro_expr},
 };
 
-use super::{imports::process_imports, resolve_type::TypeResolveContext};
+use super::resolve_type::TypeResolveContext;
 
 pub struct TransformScriptSetupResult {
     /// All the imports (and maybe exports) of the `<script setup>`
@@ -46,31 +46,23 @@ pub struct TransformScriptSetupResult {
 /// Transforms the `<script setup>` block and records its bindings
 pub fn transform_and_record_script_setup(
     ctx: &mut TransformSfcContext,
-    mut script_setup: SfcScriptBlock,
-    bindings_helper: &mut BindingsHelper,
+    script_setup: SfcScriptBlock,
     errors: &mut Vec<TransformError>,
 ) -> TransformScriptSetupResult {
     let span = script_setup.content.span;
-
-    // Context for type resolution
-    let mut ctx = TypeResolveContext::new(ctx.filename.to_owned(), bindings_helper.is_prod);
 
     let mut module_items = Vec::<ModuleItem>::new();
     let mut sfc_object_helper = SfcExportedObjectHelper::default();
 
     let mut setup_body_stmts = Vec::<Stmt>::new();
 
-    // Perform these tasks first:
-    // 1. Collect imports
-    // This is because ES6 imports are hoisted and usage like this is valid:
-    // const bar = x(1)
-    // import { reactive as x } from 'vue'
-    // 2. Detect `await` usage
-    process_imports(&mut script_setup.content, bindings_helper, true, errors);
+    // Detect `await` usage
     for module_item in script_setup.content.body.iter() {
-        if !sfc_object_helper.is_async_setup {
-            sfc_object_helper.is_async_setup |= detect_await_module_item(module_item);
+        if sfc_object_helper.is_async_setup {
+            break;
         }
+
+        sfc_object_helper.is_async_setup |= detect_await_module_item(module_item);
     }
 
     // Go over the whole script setup: process all the statements and declarations
@@ -99,9 +91,8 @@ pub fn transform_and_record_script_setup(
                 let span = expr_stmt.span;
 
                 let transform_macro_result = transform_script_setup_macro_expr(
-                    &mut ctx,
+                    ctx,
                     &expr_stmt.expr,
-                    bindings_helper,
                     &mut sfc_object_helper,
                     false,
                 );
@@ -125,8 +116,7 @@ pub fn transform_and_record_script_setup(
             }
 
             Stmt::Decl(decl) => {
-                transform_decl_stmt(&mut ctx, decl, bindings_helper, &mut sfc_object_helper)
-                    .map(Stmt::Decl)
+                transform_decl_stmt(ctx, decl, &mut sfc_object_helper).map(Stmt::Decl)
             }
 
             // By default, just return the same statement
@@ -139,7 +129,7 @@ pub fn transform_and_record_script_setup(
     }
 
     // Post-process macros, e.g. merge models to `props` and `emits`
-    postprocess_macros(bindings_helper, &mut sfc_object_helper);
+    postprocess_macros(&mut ctx.bindings_helper, &mut sfc_object_helper);
 
     // Should we check that this function was not assigned anywhere else?
     let setup_fn = Some(Box::new(Function {
@@ -168,13 +158,12 @@ pub fn transform_and_record_script_setup(
 fn transform_decl_stmt(
     ctx: &mut TypeResolveContext,
     decl: Decl,
-    bindings_helper: &mut BindingsHelper,
     sfc_object_helper: &mut SfcExportedObjectHelper,
 ) -> Option<Decl> {
     /// Pushes the binding type and returns the same passed `Decl`
     macro_rules! push_return {
         ($binding: expr) => {
-            bindings_helper.setup_bindings.push($binding);
+            ctx.bindings_helper.setup_bindings.push($binding);
             // By default, just return the same declaration
             return Some(decl);
         };
@@ -204,13 +193,8 @@ fn transform_decl_stmt(
 
                 // Process RHS
                 if let Some(ref init_expr) = var_declarator.init {
-                    let transform_macro_result = transform_script_setup_macro_expr(
-                        ctx,
-                        init_expr,
-                        bindings_helper,
-                        sfc_object_helper,
-                        true,
-                    );
+                    let transform_macro_result =
+                        transform_script_setup_macro_expr(ctx, init_expr, sfc_object_helper, true);
 
                     if let TransformMacroResult::ValidMacro(transformed_expr) =
                         transform_macro_result
@@ -221,13 +205,13 @@ fn transform_decl_stmt(
                         // Resolve only when this is a constant identifier.
                         // For destructures correct bindings are already assigned.
                         let rhs_type =
-                            categorize_expr(init_expr, &bindings_helper.vue_resolved_imports);
+                            categorize_expr(init_expr, &ctx.bindings_helper.vue_resolved_imports);
 
                         enrich_binding_types(&mut collected_bindings, rhs_type, is_const, is_ident);
                     }
                 }
 
-                bindings_helper
+                ctx.bindings_helper
                     .setup_bindings
                     .extend(collected_bindings.drain(..));
             }
@@ -380,27 +364,20 @@ fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param
 #[cfg(test)]
 mod tests {
     use crate::{
-        error::{ScriptError, ScriptErrorKind, TransformError},
-        test_utils::parser::*,
-        BindingsHelper, SetupBinding, TransformSfcContext,
+        error::{ScriptError, ScriptErrorKind, TransformError}, script::imports::process_imports, test_utils::parser::*, SetupBinding, TransformSfcContext
     };
     use fervid_core::{fervid_atom, BindingTypes, SfcScriptBlock};
     use swc_core::common::DUMMY_SP;
 
     use super::transform_and_record_script_setup;
 
-    fn analyze_bindings(script_setup: SfcScriptBlock) -> Vec<SetupBinding> {
-        let mut bindings_helper = BindingsHelper::default();
+    fn analyze_bindings(mut script_setup: SfcScriptBlock) -> Vec<SetupBinding> {
         let mut ctx = TransformSfcContext::anonymous();
         let mut errors = Vec::new();
-        transform_and_record_script_setup(
-            &mut ctx,
-            script_setup,
-            &mut bindings_helper,
-            &mut errors,
-        );
+        process_imports(&mut script_setup.content, &mut ctx.bindings_helper, true, &mut errors);
+        transform_and_record_script_setup(&mut ctx, script_setup, &mut errors);
 
-        bindings_helper.setup_bindings
+        ctx.bindings_helper.setup_bindings
     }
 
     fn analyze_js_bindings(input: &str) -> Vec<SetupBinding> {
@@ -734,15 +711,9 @@ mod tests {
                     span: DUMMY_SP,
                 };
 
-                let mut bindings_helper = BindingsHelper::default();
                 let mut ctx = TransformSfcContext::anonymous();
                 let mut errors = Vec::new();
-                transform_and_record_script_setup(
-                    &mut ctx,
-                    script_setup,
-                    &mut bindings_helper,
-                    &mut errors,
-                );
+                transform_and_record_script_setup(&mut ctx, script_setup, &mut errors);
 
                 if $should_error {
                     let error = errors.first().expect("Should have error");

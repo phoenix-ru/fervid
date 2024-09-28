@@ -1,19 +1,31 @@
 //! Exports data structs used by the crate
 
+use std::{
+    cell::RefCell,
+    hash::{Hash, Hasher},
+    rc::Rc,
+};
+
 use fervid_core::{
     BindingTypes, ComponentBinding, CustomDirectiveBinding, FervidAtom, SfcCustomBlock,
     SfcStyleBlock, SfcTemplateBlock, TemplateGenerationMode, VueImportsSet,
 };
-use fxhash::FxHashMap as HashMap;
+use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet, FxHasher64};
 use smallvec::SmallVec;
 use swc_core::ecma::{
-    ast::{Expr, ExprOrSpread, Function, Id, Module, ObjectLit, PropOrSpread},
+    ast::{Decl, Expr, ExprOrSpread, Function, Id, Module, ObjectLit, PropOrSpread, TsType},
     atoms::JsWord,
 };
 
 /// Context object. Currently very minimal but may grow over time.
 pub struct TransformSfcContext {
     pub filename: String,
+    // pub is_prod: bool, // This is a part of BindingsHelper
+    /// For Custom Elements
+    pub is_ce: bool,
+    pub bindings_helper: BindingsHelper,
+    pub scope: Rc<RefCell<TypeScope>>,
+    pub deps: HashSet<String>,
 }
 
 /// A helper which encompasses all the logic related to bindings,
@@ -50,6 +62,33 @@ pub struct BindingsHelper {
     pub vue_resolved_imports: Box<VueResolvedImports>,
 }
 
+#[derive(Clone)]
+pub struct ScopeTypeNode {
+    pub value: TypeOrDecl,
+    pub owner_scope: u64,
+    pub namespace: Option<Rc<RefCell<Decl>>>,
+}
+
+#[derive(Clone)]
+pub enum TypeOrDecl {
+    Type(Rc<TsType>),
+    Decl(Rc<RefCell<Decl>>),
+}
+
+pub struct TypeScope {
+    pub id: u64,
+    pub filename: String,
+    // source: String,
+    // offset: usize,
+    pub imports: HashMap<FervidAtom, ImportBinding>,
+    pub types: HashMap<FervidAtom, ScopeTypeNode>,
+    pub declares: HashMap<FervidAtom, ScopeTypeNode>,
+    pub is_generic_scope: bool,
+    // resolved_import_sources: HashMap<FervidAtom, String>,
+    pub exported_types: HashMap<FervidAtom, ScopeTypeNode>,
+    pub exported_declares: HashMap<FervidAtom, ScopeTypeNode>,
+}
+
 // Todo maybe use SmallVec?
 #[derive(Debug, Default, PartialEq)]
 pub struct OptionsApiBindings {
@@ -72,7 +111,7 @@ pub struct OptionsApiBindings {
 #[derive(Debug, PartialEq)]
 pub struct SetupBinding(pub FervidAtom, pub BindingTypes);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ImportBinding {
     /// Where it was imported from
     pub source: FervidAtom,
@@ -162,8 +201,51 @@ pub struct TransformSfcResult {
 #[cfg(test)]
 impl TransformSfcContext {
     pub fn anonymous() -> TransformSfcContext {
+        let filename = "anonymous.vue".to_string();
         TransformSfcContext {
-            filename: "anonymous.vue".to_string(),
+            filename: filename.to_owned(),
+            bindings_helper: BindingsHelper::default(),
+            is_ce: false,
+            scope: Rc::new(TypeScope::new(filename).into()),
+            deps: HashSet::default(),
         }
+    }
+}
+
+impl TypeScope {
+    pub fn new(filename: String) -> TypeScope {
+        // TODO Ensure scopes do not clash by other means
+        let mut hasher = FxHasher64::default();
+        filename.hash(&mut hasher);
+        let id = hasher.finish();
+
+        TypeScope {
+            id,
+            filename,
+            imports: Default::default(),
+            types: Default::default(),
+            declares: Default::default(),
+            is_generic_scope: false,
+            exported_types: Default::default(),
+            exported_declares: Default::default(),
+        }
+    }
+}
+
+impl ScopeTypeNode {
+    pub fn new(value: TypeOrDecl) -> ScopeTypeNode {
+        ScopeTypeNode {
+            value,
+            owner_scope: 0,
+            namespace: None,
+        }
+    }
+
+    pub fn from_decl(decl: Decl) -> ScopeTypeNode {
+        ScopeTypeNode::new(TypeOrDecl::Decl(Rc::new(decl.into())))
+    }
+
+    pub fn from_type(ts_type: TsType) -> ScopeTypeNode {
+        ScopeTypeNode::new(TypeOrDecl::Type(Rc::new(ts_type)))
     }
 }

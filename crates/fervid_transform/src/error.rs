@@ -34,6 +34,8 @@ pub enum ScriptErrorKind {
     DuplicateImport,
     /// Could not resolve array element type
     ResolveTypeElementType,
+    /// "Failed to resolve extends base type"
+    ResolveTypeExtendsBaseType,
     /// A type param was not provided,
     /// e.g. `ExtractPropTypes<>`
     ResolveTypeMissingTypeParam,
