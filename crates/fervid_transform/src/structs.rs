@@ -66,12 +66,13 @@ pub struct BindingsHelper {
 pub struct ScopeTypeNode {
     pub value: TypeOrDecl,
     pub owner_scope: u64,
+    pub namespace: Option<Rc<RefCell<Decl>>>,
 }
 
 #[derive(Clone)]
 pub enum TypeOrDecl {
     Type(Rc<TsType>),
-    Decl(Rc<Decl>),
+    Decl(Rc<RefCell<Decl>>),
 }
 
 pub struct TypeScope {
@@ -232,10 +233,19 @@ impl TypeScope {
 }
 
 impl ScopeTypeNode {
-    pub fn dummy(value: TypeOrDecl) -> ScopeTypeNode {
+    pub fn new(value: TypeOrDecl) -> ScopeTypeNode {
         ScopeTypeNode {
             value,
             owner_scope: 0,
+            namespace: None,
         }
+    }
+
+    pub fn from_decl(decl: Decl) -> ScopeTypeNode {
+        ScopeTypeNode::new(TypeOrDecl::Decl(Rc::new(decl.into())))
+    }
+
+    pub fn from_type(ts_type: TsType) -> ScopeTypeNode {
+        ScopeTypeNode::new(TypeOrDecl::Type(Rc::new(ts_type)))
     }
 }

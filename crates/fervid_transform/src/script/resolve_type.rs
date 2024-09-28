@@ -1,6 +1,10 @@
 //! Adapted from https://github.com/vuejs/core/blob/main/packages/compiler-sfc/src/script/resolveType.ts
 
-use std::rc::Rc;
+use std::{
+    cell::{Ref, RefCell},
+    ops::Deref,
+    rc::Rc,
+};
 
 use fervid_core::{fervid_atom, FervidAtom, SfcScriptBlock};
 use flagset::FlagSet;
@@ -11,14 +15,14 @@ use strum_macros::{AsRefStr, EnumString, IntoStaticStr};
 use swc_core::{
     common::{pass::Either, Span, Spanned, DUMMY_SP},
     ecma::ast::{
-        BinExpr, BinaryOp, Class, ClassDecl, Decl, DefaultDecl, ExportSpecifier, Expr, FnDecl,
-        Function, Ident, Lit, ModuleDecl, ModuleExportName, ModuleItem, Pat, Stmt, Tpl,
-        TsCallSignatureDecl, TsEntityName, TsEnumDecl, TsExprWithTypeArgs, TsFnOrConstructorType,
-        TsFnParam, TsFnType, TsGetterSignature, TsIndexedAccessType, TsInterfaceDecl,
-        TsIntersectionType, TsKeywordType, TsKeywordTypeKind, TsLit, TsLitType, TsMappedType,
-        TsModuleName, TsNamespaceBody, TsQualifiedName, TsTplLitType, TsType, TsTypeAnn,
-        TsTypeElement, TsTypeLit, TsTypeOperatorOp, TsTypeQueryExpr, TsTypeRef,
-        TsUnionOrIntersectionType, TsUnionType,
+        BinExpr, BinaryOp, Class, ClassDecl, Decl, DefaultDecl, ExportDecl, ExportSpecifier, Expr,
+        FnDecl, FnExpr, Function, Ident, Lit, ModuleDecl, ModuleExportName, ModuleItem, Pat, Stmt,
+        Tpl, TsCallSignatureDecl, TsEntityName, TsEnumDecl, TsExprWithTypeArgs,
+        TsFnOrConstructorType, TsFnParam, TsFnType, TsGetterSignature, TsIndexedAccessType,
+        TsInterfaceDecl, TsIntersectionType, TsKeywordType, TsKeywordTypeKind, TsLit, TsLitType,
+        TsMappedType, TsModuleDecl, TsModuleName, TsNamespaceBody, TsNamespaceDecl,
+        TsQualifiedName, TsTplLitType, TsType, TsTypeAnn, TsTypeElement, TsTypeLit,
+        TsTypeOperatorOp, TsTypeQueryExpr, TsTypeRef, TsUnionOrIntersectionType, TsUnionType,
     },
 };
 
@@ -177,7 +181,10 @@ fn resolve_type_elements_impl_type(
             // }
             // break
 
-            Err(error(ScriptErrorKind::ResolveTypeUnsupported, import_type.span))
+            Err(error(
+                ScriptErrorKind::ResolveTypeUnsupported,
+                import_type.span,
+            ))
         }
 
         TsType::TsTypeQuery(type_query) => {
@@ -188,7 +195,9 @@ fn resolve_type_elements_impl_type(
                     TypeOrDecl::Type(ts_type) => {
                         resolve_type_elements_impl_type(ctx, &ts_type, scope)
                     }
-                    TypeOrDecl::Decl(decl) => resolve_type_elements_impl_decl(ctx, &decl, scope),
+                    TypeOrDecl::Decl(decl) => {
+                        resolve_type_elements_impl_decl(ctx, &decl.borrow(), scope)
+                    }
                 }
             } else {
                 Err(error(
@@ -325,7 +334,9 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
         // TODO `resolved._ownerScope`
         return match resolved.value {
             TypeOrDecl::Type(ref ts_type) => resolve_type_elements_impl_type(ctx, &ts_type, scope),
-            TypeOrDecl::Decl(ref decl) => resolve_type_elements_impl_decl(ctx, &decl, scope),
+            TypeOrDecl::Decl(ref decl) => {
+                resolve_type_elements_impl_decl(ctx, &decl.borrow(), scope)
+            }
         };
     }
 
@@ -371,6 +382,9 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
                 break 'resolve_return_type;
             };
 
+            // Fight borrow checker
+            let mut _decl_tmp: Option<Ref<Decl>> = None;
+
             let return_type = match resolved.value {
                 TypeOrDecl::Type(ref ts_type) => match ts_type.as_ref() {
                     TsType::TsFnOrConstructorType(TsFnOrConstructorType::TsFnType(fn_type)) => {
@@ -380,15 +394,24 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
                     _ => None,
                 },
 
-                TypeOrDecl::Decl(ref decl) => match decl.as_ref() {
-                    Decl::Fn(fn_decl) => fn_decl
-                        .function
-                        .return_type
-                        .as_ref()
-                        .map(|v| v.type_ann.as_ref()),
+                TypeOrDecl::Decl(ref decl) => {
+                    _decl_tmp = Some(decl.borrow());
 
-                    _ => None,
-                },
+                    // We need to do type juggling because RefCell :/
+                    let Some(ref decl) = _decl_tmp else {
+                        unreachable!()
+                    };
+
+                    match decl.deref() {
+                        Decl::Fn(ref fn_decl) => fn_decl
+                            .function
+                            .return_type
+                            .as_ref()
+                            .map(|v| v.type_ann.as_ref()),
+
+                        _ => None,
+                    }
+                }
             };
 
             if let Some(ret) = return_type {
@@ -1283,7 +1306,7 @@ fn inner_resolve_type_reference<'t>(
 
     let ns = inner_resolve_type_reference(ctx, ts_type, scope, &name[0..1], only_exported);
     if let Some(_ns) = ns {
-        // TODO This is pretty much impossible to cover
+        // TODO This is pretty much impossible to cover yet
         //   1: TSModuleDeclaration is not a part of TsType;
         //   2: It's not possible to attach meta-information;
         //
@@ -1308,8 +1331,8 @@ fn inner_resolve_type_reference<'t>(
 
 pub fn record_types(
     _ctx: &mut TransformSfcContext,
-    script_setup: Option<&SfcScriptBlock>,
-    script_options: Option<&SfcScriptBlock>,
+    script_setup: Option<&mut SfcScriptBlock>,
+    script_options: Option<&mut SfcScriptBlock>,
     scope: &mut TypeScope,
     as_global: bool,
 ) {
@@ -1322,22 +1345,47 @@ pub fn record_types(
         ..
     } = scope;
 
-    let (body, setup_offset) = match (script_setup, script_options) {
+    // Because we can't reuse IterMut, we have to build it several times.
+    // It's done in 2 steps: preparation and iterator creation.
+
+    // Step 1: Prepare iterator and meta-info
+    let mut scripts = (script_setup, script_options);
+    let (mut setup_body, mut options_body, setup_offset) = match scripts {
         (None, None) => return,
-        (None, Some(o)) => (Either::Left(o.content.body.iter()), None),
-        (Some(s), None) => (Either::Left(s.content.body.iter()), Some(0)),
-        (Some(s), Some(o)) => (
-            Either::Right(o.content.body.iter().chain(s.content.body.iter())),
-            Some(o.content.body.len()),
-        ),
+        (None, Some(ref mut o)) => (None, Some(&mut o.content.body), None),
+        (Some(ref mut s), None) => (Some(&mut s.content.body), None, Some(0)),
+        (Some(ref mut s), Some(ref mut o)) => {
+            let setup_offset = o.content.body.len();
+            (
+                Some(&mut s.content.body),
+                Some(&mut o.content.body),
+                Some(setup_offset),
+            )
+        }
     };
 
     // Ambient means no imports or exports present
-    let is_ambient = as_global && !body.clone().any(|s| matches!(s, ModuleItem::ModuleDecl(_)));
+    let is_ambient_check =
+        |body: &&mut Vec<ModuleItem>| !body.iter().any(|s| matches!(s, ModuleItem::ModuleDecl(_)));
+    let is_ambient = as_global
+        && (setup_body.as_ref().is_some_and(is_ambient_check)
+            || options_body.as_ref().is_some_and(is_ambient_check));
+
+    // Step 2: iterator creation fn
+    macro_rules! get_body {
+        () => {
+            match (setup_body.as_mut(), options_body.as_mut()) {
+                (None, None) => unreachable!(),
+                (None, Some(o)) => Either::Left(o.iter_mut()),
+                (Some(s), None) => Either::Left(s.iter_mut()),
+                (Some(s), Some(o)) => Either::Right(o.iter_mut().chain(s.iter_mut())),
+            }
+        };
+    }
 
     // We clone the iterator several times so that it can be used again.
     // This has no impact on perf.
-    for module_item in body.clone() {
+    for module_item in get_body!() {
         if as_global {
             if is_ambient {
                 if is_declare(module_item) {}
@@ -1346,11 +1394,11 @@ pub fn record_types(
                     break;
                 }
 
-                let Some(TsNamespaceBody::TsModuleBlock(ref module)) = module.body else {
+                let Some(TsNamespaceBody::TsModuleBlock(ref mut module)) = module.body else {
                     break;
                 };
 
-                for s in module.body.iter() {
+                for s in module.body.iter_mut() {
                     record_type_module_item(s, types, declares, None);
                 }
             }
@@ -1360,12 +1408,12 @@ pub fn record_types(
     }
 
     if !as_global {
-        for (idx, stmt) in body.enumerate() {
+        for (idx, stmt) in get_body!().enumerate() {
             match stmt {
                 ModuleItem::ModuleDecl(module_decl) => match module_decl {
                     ModuleDecl::ExportDecl(decl) => {
-                        record_type_decl(&decl.decl, types, declares, None);
-                        record_type_decl(&decl.decl, exported_types, exported_declares, None);
+                        record_type_decl(&mut decl.decl, types, declares, None);
+                        record_type_decl(&mut decl.decl, exported_types, exported_declares, None);
                     }
 
                     ModuleDecl::ExportNamed(named) => {
@@ -1406,20 +1454,15 @@ pub fn record_types(
                                 // We can use IDs for scopes (lookup by ID, store ID on the scope level and on ScopeTypeNode)
                                 exported_types.insert(
                                     exported,
-                                    ScopeTypeNode {
-                                        owner_scope: scope.id,
-                                        value: TypeOrDecl::Type(Rc::from(TsType::TsTypeRef(
-                                            TsTypeRef {
-                                                span: DUMMY_SP,
-                                                type_name: TsEntityName::Ident(Ident {
-                                                    span: DUMMY_SP,
-                                                    sym: local,
-                                                    optional: false,
-                                                }),
-                                                type_params: None,
-                                            },
-                                        ))),
-                                    },
+                                    ScopeTypeNode::from_type(TsType::TsTypeRef(TsTypeRef {
+                                        span: DUMMY_SP,
+                                        type_name: TsEntityName::Ident(Ident {
+                                            span: DUMMY_SP,
+                                            sym: local,
+                                            optional: false,
+                                        }),
+                                        type_params: None,
+                                    })),
                                 );
                             } else if let Some(local_type) = types.get(&local) {
                                 // exporting local defined type
@@ -1440,13 +1483,19 @@ pub fn record_types(
                     }
 
                     ModuleDecl::ExportDefaultDecl(decl) => {
+                        let overwrite_id = Some(fervid_atom!("default"));
+
                         match decl.decl {
                             DefaultDecl::TsInterfaceDecl(ref interface_decl) => {
-                                record_type_interface_decl(interface_decl, types, declares);
+                                record_type_interface_decl(
+                                    interface_decl,
+                                    types,
+                                    overwrite_id.to_owned(),
+                                );
                                 record_type_interface_decl(
                                     interface_decl,
                                     exported_types,
-                                    exported_declares,
+                                    overwrite_id,
                                 );
                             }
 
@@ -1455,18 +1504,19 @@ pub fn record_types(
                                     &class.class,
                                     class.ident.as_ref(),
                                     types,
-                                    Some(fervid_atom!("default")),
+                                    overwrite_id.to_owned(),
                                 );
                                 record_type_class(
                                     &class.class,
                                     class.ident.as_ref(),
                                     exported_types,
-                                    Some(fervid_atom!("default")),
+                                    overwrite_id,
                                 );
                             }
 
                             DefaultDecl::Fn(ref fn_decl) => {
-                                // todo
+                                record_type_fn(Either::Right(fn_decl), declares);
+                                record_type_fn(Either::Right(fn_decl), exported_declares);
                             }
                         }
                     }
@@ -1505,7 +1555,7 @@ pub fn record_types(
 }
 
 fn record_type_module_item(
-    module_item: &ModuleItem,
+    module_item: &mut ModuleItem,
     types: &mut HashMap<FervidAtom, ScopeTypeNode>,
     declares: &mut HashMap<FervidAtom, ScopeTypeNode>,
     overwrite_id: Option<FervidAtom>,
@@ -1517,7 +1567,7 @@ fn record_type_module_item(
 }
 
 fn record_type_stmt(
-    s: &Stmt,
+    s: &mut Stmt,
     types: &mut HashMap<FervidAtom, ScopeTypeNode>,
     declares: &mut HashMap<FervidAtom, ScopeTypeNode>,
     overwrite_id: Option<FervidAtom>,
@@ -1529,7 +1579,7 @@ fn record_type_stmt(
 }
 
 fn record_type_decl(
-    decl: &Decl,
+    decl: &mut Decl,
     types: &mut HashMap<FervidAtom, ScopeTypeNode>,
     declares: &mut HashMap<FervidAtom, ScopeTypeNode>,
     overwrite_id: Option<FervidAtom>,
@@ -1540,97 +1590,34 @@ fn record_type_decl(
         }
 
         Decl::TsInterface(ts_interface) => {
-            let id = overwrite_id.unwrap_or_else(|| ts_interface.id.sym.to_owned());
-
-            let Some(_existing) = types.get_mut(&id) else {
-                types.insert(
-                    id,
-                    ScopeTypeNode {
-                        value: TypeOrDecl::Decl(Rc::new(decl.clone())),
-                        owner_scope: 0, // TODO
-                    },
-                );
-                return;
-            };
-
-            // TODO Existing
+            record_type_interface_decl(&ts_interface, types, overwrite_id)
         }
 
-        Decl::TsEnum(ts_enum) => {
-            let id = overwrite_id.unwrap_or_else(|| ts_enum.id.sym.to_owned());
-
-            let Some(_existing) = types.get_mut(&id) else {
-                types.insert(
-                    id,
-                    ScopeTypeNode {
-                        value: TypeOrDecl::Decl(Rc::new(decl.clone())),
-                        owner_scope: 0, // TODO
-                    },
-                );
-                return;
-            };
-
-            // TODO Existing
+        Decl::TsEnum(ts_enum_decl) => {
+            record_type_enum_decl(ts_enum_decl, types, overwrite_id);
         }
 
-        Decl::TsModule(ts_module) => {
-            let id = overwrite_id.unwrap_or_else(|| match &ts_module.id {
-                TsModuleName::Ident(id) => id.sym.to_owned(),
-                TsModuleName::Str(s) => s.value.to_owned(),
-            });
-
-            let Some(_existing) = types.get_mut(&id) else {
-                types.insert(
-                    id,
-                    ScopeTypeNode {
-                        value: TypeOrDecl::Decl(Rc::new(decl.clone())),
-                        owner_scope: 0, // TODO
-                    },
-                );
-                return;
-            };
-
-            // TODO Existing
+        Decl::TsModule(ts_module_decl) => {
+            record_type_module_decl(ts_module_decl, types, overwrite_id);
         }
 
         Decl::TsTypeAlias(ts_type_alias) => {
             let to_insert = if ts_type_alias.type_params.is_some() {
-                TypeOrDecl::Decl(Rc::new(decl.to_owned()))
+                TypeOrDecl::Decl(Rc::new(RefCell::new(Decl::TsTypeAlias(
+                    ts_type_alias.to_owned(),
+                ))))
             } else {
                 TypeOrDecl::Type(Rc::from(ts_type_alias.type_ann.clone()))
             };
 
             types.insert(
                 ts_type_alias.id.sym.to_owned(),
-                ScopeTypeNode {
-                    value: to_insert,
-                    owner_scope: 0, // TODO
-                },
+                ScopeTypeNode::new(to_insert),
             );
         }
 
         Decl::Fn(fn_decl) => {
-            // Shallow clone (without body)
-            declares.insert(
-                fn_decl.ident.sym.to_owned(),
-                ScopeTypeNode {
-                    value: TypeOrDecl::Decl(Rc::new(Decl::Fn(FnDecl {
-                        ident: fn_decl.ident.to_owned(),
-                        declare: fn_decl.declare,
-                        function: Box::new(Function {
-                            params: fn_decl.function.params.clone(),
-                            decorators: vec![],
-                            span: fn_decl.function.span,
-                            body: None,
-                            is_generator: fn_decl.function.is_generator,
-                            is_async: fn_decl.function.is_generator,
-                            type_params: fn_decl.function.type_params.clone(),
-                            return_type: fn_decl.function.return_type.clone(),
-                        }),
-                    }))),
-                    owner_scope: 0, // TODO
-                },
-            );
+            record_type_fn(Either::Left(fn_decl), declares);
         }
 
         Decl::Var(var_decl) => {
@@ -1649,24 +1636,13 @@ fn record_type_decl(
 
                 declares.insert(
                     ident.sym.to_owned(),
-                    ScopeTypeNode {
-                        value: TypeOrDecl::Type(Rc::from(type_ann.type_ann.clone())),
-                        owner_scope: 0, // TODO
-                    },
+                    ScopeTypeNode::from_type((*type_ann.type_ann).clone()),
                 );
             }
         }
 
         Decl::Using(_) => {}
     }
-}
-
-fn record_type_interface_decl(
-    interface_decl: &TsInterfaceDecl,
-    types: &mut HashMap<FervidAtom, ScopeTypeNode>,
-    declares: &mut HashMap<FervidAtom, ScopeTypeNode>,
-) {
-    // todo
 }
 
 fn record_type_class(
@@ -1681,28 +1657,304 @@ fn record_type_class(
         // Shallow copy
         types.insert(
             id.clone(),
-            ScopeTypeNode {
-                owner_scope: 0, // TODO
-                value: TypeOrDecl::Decl(Rc::from(Decl::Class(ClassDecl {
-                    ident: Ident {
-                        span: DUMMY_SP,
-                        sym: id,
-                        optional: false,
-                    },
-                    declare: false,
-                    class: Box::new(Class {
-                        span: class.span,
-                        decorators: vec![],
-                        body: vec![],
-                        super_class: None,
-                        is_abstract: class.is_abstract,
-                        type_params: None,
-                        super_type_params: None,
-                        implements: vec![],
-                    }),
-                }))),
-            },
+            ScopeTypeNode::from_decl(Decl::Class(ClassDecl {
+                ident: Ident {
+                    span: DUMMY_SP,
+                    sym: id,
+                    optional: false,
+                },
+                declare: false,
+                class: Box::new(Class {
+                    span: class.span,
+                    decorators: vec![],
+                    body: vec![],
+                    super_class: None,
+                    is_abstract: class.is_abstract,
+                    type_params: None,
+                    super_type_params: None,
+                    implements: vec![],
+                }),
+            })),
         );
+    }
+}
+
+fn record_type_interface_decl(
+    interface_decl: &TsInterfaceDecl,
+    types: &mut HashMap<FervidAtom, ScopeTypeNode>,
+    overwrite_id: Option<FervidAtom>,
+) {
+    let id = overwrite_id.unwrap_or_else(|| interface_decl.id.sym.to_owned());
+
+    let Some(existing) = types.get_mut(&id) else {
+        types.insert(
+            id,
+            ScopeTypeNode::from_decl(Decl::TsInterface(Box::new(interface_decl.to_owned()))),
+        );
+        return;
+    };
+
+    // Only Decl supported
+    let TypeOrDecl::Decl(ref existing_decl) = existing.value else {
+        return;
+    };
+
+    // Existing is TsModuleDecl
+    if existing_decl.borrow().is_ts_module() {
+        // Replace and attach namespace
+        let mut node =
+            ScopeTypeNode::from_decl(Decl::TsInterface(Box::new(interface_decl.to_owned())));
+
+        attach_namespace(&mut node, existing_decl.clone());
+
+        types.insert(id, node);
+        return;
+    }
+
+    // Existing is TsInterfaceDecl
+    let mut existing_borrow = existing_decl.borrow_mut();
+    if let Some(existing_interface_decl) = existing_borrow.as_mut_ts_interface() {
+        existing_interface_decl
+            .body
+            .body
+            .extend(interface_decl.body.body.iter().cloned());
+    }
+}
+
+fn record_type_module_decl(
+    ts_module_decl: &mut TsModuleDecl,
+    types: &mut HashMap<FervidAtom, ScopeTypeNode>,
+    overwrite_id: Option<FervidAtom>,
+) {
+    let id = overwrite_id.unwrap_or_else(|| match &ts_module_decl.id {
+        TsModuleName::Ident(id) => id.sym.to_owned(),
+        TsModuleName::Str(s) => s.value.to_owned(),
+    });
+
+    let Some(existing) = types.get_mut(&id) else {
+        types.insert(
+            id,
+            ScopeTypeNode::from_decl(Decl::TsModule(Box::new(ts_module_decl.to_owned()))),
+        );
+        return;
+    };
+
+    // Only Decl supported
+    let TypeOrDecl::Decl(ref existing_decl) = existing.value else {
+        return;
+    };
+
+    // Existing is TsModuleDecl
+    if let Some(ref mut existing_module_decl) = existing_decl.borrow_mut().as_mut_ts_module() {
+        merge_namespaces(existing_module_decl, ts_module_decl);
+        return;
+    }
+
+    // Existing is not TsModuleDecl.
+    // It is okay to construct a new namespace because `record_type_module_decl` (<- `record_type_decl`)
+    //  is not called from an existing Rc<RefCell<Decl>>
+    attach_namespace(
+        existing,
+        Rc::new(RefCell::new(Decl::TsModule(Box::new(
+            ts_module_decl.to_owned(),
+        )))),
+    );
+}
+
+fn record_type_enum_decl(
+    ts_enum_decl: &mut TsEnumDecl,
+    types: &mut HashMap<FervidAtom, ScopeTypeNode>,
+    overwrite_id: Option<FervidAtom>,
+) {
+    let id = overwrite_id.unwrap_or_else(|| ts_enum_decl.id.sym.to_owned());
+
+    let Some(existing) = types.get_mut(&id) else {
+        types.insert(
+            id,
+            ScopeTypeNode::from_decl(Decl::TsEnum(Box::new(ts_enum_decl.to_owned()))),
+        );
+        return;
+    };
+
+    // Only Decl supported
+    let TypeOrDecl::Decl(ref existing_decl) = existing.value else {
+        return;
+    };
+
+    // Existing is TsModuleDecl
+    if existing_decl.borrow().is_ts_module() {
+        // Replace and attach namespace
+        let mut node = ScopeTypeNode::from_decl(Decl::TsEnum(Box::new(ts_enum_decl.to_owned())));
+
+        attach_namespace(&mut node, existing_decl.clone());
+
+        types.insert(id, node);
+        return;
+    }
+
+    // Existing is TsEnumDecl
+    let mut existing_borrow = existing_decl.borrow_mut();
+    if let Some(existing_enum_decl) = existing_borrow.as_mut_ts_enum() {
+        existing_enum_decl
+            .members
+            .extend(ts_enum_decl.members.iter().cloned());
+    };
+}
+
+fn record_type_fn(
+    fn_decl_or_expr: Either<&FnDecl, &FnExpr>,
+    declares: &mut HashMap<FervidAtom, ScopeTypeNode>,
+) {
+    let (ident, function, declare) = match fn_decl_or_expr {
+        Either::Left(fn_decl) => (&fn_decl.ident, &fn_decl.function, fn_decl.declare),
+        Either::Right(fn_expr) => {
+            let Some(ident) = fn_expr.ident.as_ref() else {
+                return;
+            };
+
+            (ident, &fn_expr.function, false)
+        }
+    };
+
+    // Shallow clone (without body)
+    declares.insert(
+        ident.sym.to_owned(),
+        ScopeTypeNode::from_decl(Decl::Fn(FnDecl {
+            ident: ident.to_owned(),
+            declare,
+            function: Box::new(Function {
+                params: function.params.clone(),
+                decorators: vec![],
+                span: function.span,
+                body: None,
+                is_generator: function.is_generator,
+                is_async: function.is_generator,
+                type_params: function.type_params.clone(),
+                return_type: function.return_type.clone(),
+            }),
+        })),
+    );
+}
+
+fn merge_namespaces(to: &mut TsModuleDecl, from: &mut TsModuleDecl) {
+    let Some(ref mut to_body) = to.body else {
+        return;
+    };
+    let Some(ref mut from_body) = from.body else {
+        return;
+    };
+
+    match (to_body, from_body) {
+        // both decl
+        (
+            TsNamespaceBody::TsNamespaceDecl(to_decl),
+            TsNamespaceBody::TsNamespaceDecl(from_decl),
+        ) => merge_namespaces_namespace_decl(to_decl, from_decl),
+
+        // to: decl -> from: block
+        (TsNamespaceBody::TsNamespaceDecl(to_decl), TsNamespaceBody::TsModuleBlock(from_block)) => {
+            from_block
+                .body
+                .push(ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(ExportDecl {
+                    span: DUMMY_SP,
+                    decl: Decl::TsModule(Box::new(TsModuleDecl {
+                        span: to_decl.span,
+                        declare: to_decl.declare,
+                        global: to_decl.declare,
+                        id: TsModuleName::Ident(to_decl.id.to_owned()),
+                        body: Some((*to_decl.body).to_owned()),
+                    })),
+                })))
+        }
+
+        // to: block <- from: decl
+        (TsNamespaceBody::TsModuleBlock(to_block), TsNamespaceBody::TsNamespaceDecl(from_decl)) => {
+            to_block
+                .body
+                .push(ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(ExportDecl {
+                    span: DUMMY_SP,
+                    decl: Decl::TsModule(Box::new(TsModuleDecl {
+                        span: from_decl.span,
+                        declare: from_decl.declare,
+                        global: from_decl.declare,
+                        id: TsModuleName::Ident(from_decl.id.to_owned()),
+                        body: Some((*from_decl.body).to_owned()),
+                    })),
+                })))
+        }
+
+        // both block
+        (TsNamespaceBody::TsModuleBlock(to_block), TsNamespaceBody::TsModuleBlock(from_block)) => {
+            to_block.body.extend(from_block.body.iter().cloned())
+        }
+    }
+}
+
+/// Sister implementation because SWC uses different types for TsModuleDecl and TsNamespaceDecl
+fn merge_namespaces_namespace_decl(to: &mut TsNamespaceDecl, from: &mut TsNamespaceDecl) {
+    match (to.body.as_mut(), from.body.as_mut()) {
+        // both decl
+        (
+            TsNamespaceBody::TsNamespaceDecl(to_decl),
+            TsNamespaceBody::TsNamespaceDecl(from_decl),
+        ) => merge_namespaces_namespace_decl(to_decl, from_decl),
+
+        // to: decl -> from: block
+        (TsNamespaceBody::TsNamespaceDecl(to_decl), TsNamespaceBody::TsModuleBlock(from_block)) => {
+            from_block
+                .body
+                .push(ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(ExportDecl {
+                    span: DUMMY_SP,
+                    decl: Decl::TsModule(Box::new(TsModuleDecl {
+                        span: to_decl.span,
+                        declare: to_decl.declare,
+                        global: to_decl.declare,
+                        id: TsModuleName::Ident(to_decl.id.to_owned()),
+                        body: Some((*to_decl.body).to_owned()),
+                    })),
+                })))
+        }
+
+        // to: block <- from: decl
+        (TsNamespaceBody::TsModuleBlock(to_block), TsNamespaceBody::TsNamespaceDecl(from_decl)) => {
+            to_block
+                .body
+                .push(ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(ExportDecl {
+                    span: DUMMY_SP,
+                    decl: Decl::TsModule(Box::new(TsModuleDecl {
+                        span: from_decl.span,
+                        declare: from_decl.declare,
+                        global: from_decl.declare,
+                        id: TsModuleName::Ident(from_decl.id.to_owned()),
+                        body: Some((*from_decl.body).to_owned()),
+                    })),
+                })))
+        }
+
+        // both block
+        (TsNamespaceBody::TsModuleBlock(to_block), TsNamespaceBody::TsModuleBlock(from_block)) => {
+            to_block.body.extend(from_block.body.iter().cloned())
+        }
+    }
+}
+
+fn attach_namespace(to: &mut ScopeTypeNode, ns: Rc<RefCell<Decl>>) {
+    match to.namespace {
+        Some(ref to_ns) => {
+            let to_ns = &mut to_ns.borrow_mut();
+            let Some(ref mut to_module_decl) = to_ns.as_mut_ts_module() else {
+                unreachable!("ScopeTypeNode namespace should be TsModuleDecl: to")
+            };
+
+            let ns = &mut ns.borrow_mut();
+            let Some(ref mut ns_module_decl) = ns.as_mut_ts_module() else {
+                unreachable!("ScopeTypeNode namespace should be TsModuleDecl: ns")
+            };
+
+            // Ensure both are TsModuleDecl
+            merge_namespaces(to_module_decl, ns_module_decl)
+        }
+        None => to.namespace = Some(ns.clone()),
     }
 }
 
@@ -1759,7 +2011,9 @@ pub fn infer_runtime_type(
 ) -> TypesSet {
     match node.value {
         TypeOrDecl::Type(ref ts_type) => infer_runtime_type_type(ctx, ts_type, scope, is_key_of),
-        TypeOrDecl::Decl(ref decl) => infer_runtime_type_declaration(ctx, decl, scope, is_key_of),
+        TypeOrDecl::Decl(ref decl) => {
+            infer_runtime_type_declaration(ctx, &decl.borrow(), scope, is_key_of)
+        }
     }
 }
 
@@ -1951,7 +2205,7 @@ pub fn infer_runtime_type_type(
 
         TsType::TsImportType(_) => {
             // TODO
-        },
+        }
 
         TsType::TsTypeQuery(type_query) => 't: {
             let TsTypeQueryExpr::TsEntityName(TsEntityName::Ident(ref ident)) =
@@ -2084,7 +2338,7 @@ pub fn infer_runtime_type_type_element(
         TsTypeElement::TsConstructSignatureDecl(d) => &d.type_ann,
         TsTypeElement::TsPropertySignature(s) => &s.type_ann,
         TsTypeElement::TsGetterSignature(s) => &s.type_ann,
-        TsTypeElement::TsSetterSignature(s) => return unknown!(),
+        TsTypeElement::TsSetterSignature(_) => return unknown!(),
         TsTypeElement::TsMethodSignature(s) => &s.type_ann,
         TsTypeElement::TsIndexSignature(s) => &s.type_ann,
     };

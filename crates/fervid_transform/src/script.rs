@@ -80,8 +80,8 @@ pub fn transform_and_record_scripts(
 
         record_types(
             ctx,
-            script_setup.as_ref(),
-            script_options.as_ref(),
+            script_setup.as_mut(),
+            script_options.as_mut(),
             &mut scope,
             false,
         );
