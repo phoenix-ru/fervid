@@ -1,7 +1,7 @@
 use fervid_core::fervid_atom;
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{Expr, Ident, KeyValueProp, Prop, PropName, PropOrSpread},
+    ecma::ast::{Expr, IdentName, KeyValueProp, Prop, PropName, PropOrSpread},
 };
 
 use crate::CodegenContext;
@@ -16,10 +16,9 @@ impl CodegenContext {
     /// patch flags: `8 /* PROPS */` and `"innerHTML"` in props array.
     pub fn generate_v_html(&self, expr: &Expr) -> PropOrSpread {
         PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-            key: PropName::Ident(Ident {
+            key: PropName::Ident(IdentName {
                 span: DUMMY_SP, // TODO?
                 sym: fervid_atom!("innerHTML"),
-                optional: false,
             }),
             value: Box::new(expr.to_owned()),
         })))
@@ -28,7 +27,7 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{ElementKind, ElementNode, StartingTag, VueDirectives};
+    use fervid_core::{ElementKind, ElementNode, IntoIdent, StartingTag, VueDirectives};
     use swc_core::ecma::ast::BinExpr;
 
     use super::*;
@@ -47,16 +46,8 @@ mod tests {
                         v_html: Some(Box::new(Expr::Bin(BinExpr {
                             span: DUMMY_SP,
                             op: swc_core::ecma::ast::BinaryOp::Add,
-                            left: Box::new(Expr::Ident(Ident {
-                                span: DUMMY_SP,
-                                sym: fervid_atom!("foo"),
-                                optional: false,
-                            })),
-                            right: Box::new(Expr::Ident(Ident {
-                                span: DUMMY_SP,
-                                sym: fervid_atom!("bar"),
-                                optional: false,
-                            })),
+                            left: Box::new(Expr::Ident(fervid_atom!("foo").into_ident())),
+                            right: Box::new(Expr::Ident(fervid_atom!("bar").into_ident())),
                         }))),
                         ..Default::default()
                     })),
@@ -84,16 +75,8 @@ mod tests {
                         v_html: Some(Box::new(Expr::Bin(BinExpr {
                             span: DUMMY_SP,
                             op: swc_core::ecma::ast::BinaryOp::Add,
-                            left: Box::new(Expr::Ident(Ident {
-                                span: DUMMY_SP,
-                                sym: fervid_atom!("foo"),
-                                optional: false,
-                            })),
-                            right: Box::new(Expr::Ident(Ident {
-                                span: DUMMY_SP,
-                                sym: fervid_atom!("bar"),
-                                optional: false,
-                            })),
+                            left: Box::new(Expr::Ident(fervid_atom!("foo").into_ident())),
+                            right: Box::new(Expr::Ident(fervid_atom!("bar").into_ident())),
                         }))),
                         ..Default::default()
                     })),

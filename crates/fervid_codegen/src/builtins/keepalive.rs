@@ -1,5 +1,5 @@
-use fervid_core::{ElementNode, PatchFlags, PatchFlagsSet, PatchHints, VueImports};
-use swc_core::ecma::ast::{ArrayLit, Expr, ExprOrSpread, Ident};
+use fervid_core::{ElementNode, IntoIdent, PatchFlags, PatchFlagsSet, PatchHints, VueImports};
+use swc_core::ecma::ast::{ArrayLit, Expr, ExprOrSpread};
 
 use crate::CodegenContext;
 
@@ -9,11 +9,10 @@ impl CodegenContext {
         let span = element_node.span;
 
         // _KeepAlive
-        let keepalive_identifier = Expr::Ident(Ident {
-            span,
-            sym: self.get_and_add_import_ident(VueImports::KeepAlive),
-            optional: false,
-        });
+        let keepalive_identifier = Expr::Ident(
+            self.get_and_add_import_ident(VueImports::KeepAlive)
+                .into_ident_spanned(span),
+        );
 
         let keepalive_attrs =
             self.generate_builtin_attrs(&element_node.starting_tag.attributes, span);
@@ -46,7 +45,7 @@ impl CodegenContext {
                 PatchFlagsSet::default()
             },
             props: vec![],
-            should_use_block
+            should_use_block,
         };
 
         self.generate_componentlike(

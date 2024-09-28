@@ -1,10 +1,9 @@
-use fervid_core::{ElementKind, ElementNode, Node, VueImports};
+use fervid_core::{ElementKind, ElementNode, IntoIdent, Node, VueImports};
 use smallvec::SmallVec;
 use swc_core::{
-    common::{BytePos, Span, SyntaxContext},
+    common::{BytePos, Span},
     ecma::ast::{
-        BinExpr, BinaryOp, CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, Number, ParenExpr,
-        SeqExpr,
+        BinExpr, BinaryOp, CallExpr, Callee, Expr, ExprOrSpread, Lit, Number, ParenExpr, SeqExpr,
     },
 };
 
@@ -69,7 +68,8 @@ impl CodegenContext {
                     result = self.generate_v_for(v_for, Box::new(result));
                 }
                 (Some(v_for), Some(v_memo)) => {
-                    result = self.generate_v_for_memoized(v_for, Box::new(result), v_memo.to_owned());
+                    result =
+                        self.generate_v_for_memoized(v_for, Box::new(result), v_memo.to_owned());
                 }
             }
         }
@@ -116,7 +116,6 @@ impl CodegenContext {
                         Span {
                             lo: text_nodes_span[0],
                             hi: text_nodes_span[1],
-                            ctxt: SyntaxContext::empty(),
                         },
                         patch_flag_text,
                     );
@@ -176,11 +175,11 @@ impl CodegenContext {
                     // openBlock()
                     Box::new(Expr::Call(CallExpr {
                         span,
-                        callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                            span,
-                            sym: self.get_and_add_import_ident(VueImports::OpenBlock),
-                            optional: false,
-                        }))),
+                        ctxt: Default::default(),
+                        callee: Callee::Expr(Box::new(Expr::Ident(
+                            self.get_and_add_import_ident(VueImports::OpenBlock)
+                                .into_ident_spanned(span),
+                        ))),
                         args: Vec::new(),
                         type_args: None,
                     })),
@@ -251,11 +250,11 @@ impl CodegenContext {
         // createTextVNode(/* args */)
         Expr::Call(CallExpr {
             span,
-            callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                span,
-                sym: self.get_and_add_import_ident(VueImports::CreateTextVNode),
-                optional: false,
-            }))),
+            ctxt: Default::default(),
+            callee: Callee::Expr(Box::new(Expr::Ident(
+                self.get_and_add_import_ident(VueImports::CreateTextVNode)
+                    .into_ident_spanned(span),
+            ))),
             args: create_text_vnode_args,
             type_args: None,
         })

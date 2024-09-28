@@ -6,7 +6,7 @@ use std::{
     rc::Rc,
 };
 
-use fervid_core::{fervid_atom, FervidAtom, SfcScriptBlock};
+use fervid_core::{fervid_atom, FervidAtom, IntoIdent, SfcScriptBlock};
 use flagset::FlagSet;
 use fxhash::FxHashMap as HashMap;
 use itertools::Itertools;
@@ -491,7 +491,6 @@ fn merge_elements(
                 Some(existing_value) => {
                     let optional = match existing_value {
                         TsTypeElement::TsPropertySignature(s) => s.optional,
-                        TsTypeElement::TsGetterSignature(s) => s.optional,
                         TsTypeElement::TsMethodSignature(s) => s.optional,
                         _ => false,
                     };
@@ -627,11 +626,7 @@ fn resolve_mapped_type(
 
     for key in keys {
         let property = create_property(
-            Box::new(Expr::Ident(Ident {
-                span: DUMMY_SP,
-                sym: key.to_owned(),
-                optional: false,
-            })),
+            Box::new(Expr::Ident(key.to_owned().into_ident())),
             type_ann.to_owned(),
             mapped_type.optional.is_some(),
         );
@@ -797,28 +792,25 @@ fn get_reference_name_from_entity(ts_entity_name: &TsEntityName) -> Vec<FervidAt
 }
 
 fn qualified_name_to_path(qual_name: &TsQualifiedName) -> Vec<FervidAtom> {
-    let mut idents = vec![&qual_name.right];
+    let mut idents: Vec<FervidAtom> = vec![qual_name.right.sym.to_owned()];
     let mut next_entity = &qual_name.left;
     let mut has_next = true;
     while has_next {
         match next_entity {
             TsEntityName::TsQualifiedName(next_qual_name) => {
-                idents.push(&next_qual_name.right);
+                idents.push(next_qual_name.right.sym.to_owned());
                 next_entity = &next_qual_name.left;
                 has_next = true;
             }
             TsEntityName::Ident(ref ident) => {
-                idents.push(ident);
+                idents.push(ident.sym.to_owned());
                 has_next = false;
             }
         }
     }
 
+    idents.reverse();
     idents
-        .into_iter()
-        .rev()
-        .map(|ident| ident.sym.to_owned())
-        .collect_vec()
 }
 
 fn resolve_global_scope(_ctx: &mut TypeResolveContext) -> Result<Option<Vec<TypeScope>>, ()> {
@@ -1114,8 +1106,6 @@ fn resolve_builtin(
             for prop in t.props.values_mut() {
                 match prop {
                     TsTypeElement::TsPropertySignature(s) => s.optional = is_optional,
-                    TsTypeElement::TsGetterSignature(s) => s.optional = is_optional,
-                    TsTypeElement::TsSetterSignature(s) => s.optional = is_optional,
                     TsTypeElement::TsMethodSignature(s) => s.optional = is_optional,
                     _ => {}
                 }
@@ -1456,11 +1446,7 @@ pub fn record_types(
                                     exported,
                                     ScopeTypeNode::from_type(TsType::TsTypeRef(TsTypeRef {
                                         span: DUMMY_SP,
-                                        type_name: TsEntityName::Ident(Ident {
-                                            span: DUMMY_SP,
-                                            sym: local,
-                                            optional: false,
-                                        }),
+                                        type_name: TsEntityName::Ident(local.into_ident()),
                                         type_params: None,
                                     })),
                                 );
@@ -1658,14 +1644,11 @@ fn record_type_class(
         types.insert(
             id.clone(),
             ScopeTypeNode::from_decl(Decl::Class(ClassDecl {
-                ident: Ident {
-                    span: DUMMY_SP,
-                    sym: id,
-                    optional: false,
-                },
+                ident: id.into_ident(),
                 declare: false,
                 class: Box::new(Class {
                     span: class.span,
+                    ctxt: Default::default(),
                     decorators: vec![],
                     body: vec![],
                     super_class: None,
@@ -1826,6 +1809,7 @@ fn record_type_fn(
                 params: function.params.clone(),
                 decorators: vec![],
                 span: function.span,
+                ctxt: Default::default(),
                 body: None,
                 is_generator: function.is_generator,
                 is_async: function.is_generator,
@@ -2533,14 +2517,12 @@ fn get_id(expr: &Expr) -> Option<FervidAtom> {
 fn create_property(
     key: Box<Expr>,
     type_annotation: Box<TsType>,
-    optional: bool,
+    _optional: bool,
 ) -> TsGetterSignature {
     TsGetterSignature {
         span: DUMMY_SP,
-        readonly: false,
         key,
         computed: false,
-        optional,
         type_ann: Some(Box::new(TsTypeAnn {
             span: DUMMY_SP,
             type_ann: type_annotation,
@@ -2571,11 +2553,7 @@ fn ctor_to_type(ctor_type: &str) -> Box<TsType> {
         "Array" | "Function" | "Object" | "Set" | "Map" | "WeakSet" | "WeakMap" | "Date"
         | "Promise" => Box::new(TsType::TsTypeRef(TsTypeRef {
             span: DUMMY_SP,
-            type_name: TsEntityName::Ident(Ident {
-                span: DUMMY_SP,
-                sym: FervidAtom::from(ctor),
-                optional: false,
-            }),
+            type_name: TsEntityName::Ident(FervidAtom::from(ctor).into_ident()),
             type_params: None,
         })),
 
@@ -2609,6 +2587,8 @@ fn error(kind: ScriptErrorKind, span: Span) -> ScriptError {
 
 #[cfg(test)]
 mod tests {
+    use swc_core::ecma::ast::IdentName;
+
     use super::*;
     use crate::test_utils::parser::parse_typescript_expr;
 
@@ -2642,11 +2622,19 @@ mod tests {
     fn it_resolves_qualified_names() {
         // A.B.C
         let a_b_c = TsQualifiedName {
+            span: DUMMY_SP,
             left: TsEntityName::TsQualifiedName(Box::new(TsQualifiedName {
-                left: TsEntityName::Ident(Ident::new("A".into(), DUMMY_SP)),
-                right: Ident::new("B".into(), DUMMY_SP),
+                span: DUMMY_SP,
+                left: TsEntityName::Ident(fervid_atom!("A").into_ident()),
+                right: IdentName {
+                    span: DUMMY_SP,
+                    sym: fervid_atom!("B")
+                }
             })),
-            right: Ident::new("C".into(), DUMMY_SP),
+            right: IdentName {
+                span: DUMMY_SP,
+                sym: fervid_atom!("C")
+            }
         };
 
         let result = qualified_name_to_path(&a_b_c);

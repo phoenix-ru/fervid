@@ -26,7 +26,6 @@ impl SfcParser<'_, '_, '_> {
                 span: Span {
                     lo: BytePos(1),
                     hi: BytePos(self.input.len() as u32),
-                    ctxt: Default::default(),
                 },
             }
         })?;
@@ -178,7 +177,6 @@ impl SfcParser<'_, '_, '_> {
             Some(Span {
                 lo: first.span_lo(),
                 hi: last.span_hi(),
-                ctxt: Default::default(),
             })
         } else {
             None

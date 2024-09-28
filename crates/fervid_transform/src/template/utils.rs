@@ -46,6 +46,7 @@ pub fn wrap_in_event_arrow(expr: Box<Expr>) -> Box<Expr> {
     let evt_param = Pat::Ident(BindingIdent {
         id: Ident {
             span: DUMMY_SP,
+            ctxt: Default::default(),
             sym: FervidAtom::from("$event"),
             optional: false,
         },
@@ -54,6 +55,7 @@ pub fn wrap_in_event_arrow(expr: Box<Expr>) -> Box<Expr> {
 
     Box::new(Expr::Arrow(ArrowExpr {
         span: DUMMY_SP,
+        ctxt: Default::default(),
         params: vec![evt_param],
         body: Box::new(BlockStmtOrExpr::Expr(expr)),
         is_async: false,

@@ -1,10 +1,10 @@
-use fervid_core::{BindingTypes, SfcScriptBlock};
+use fervid_core::{BindingTypes, IntoIdent, SfcScriptBlock};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::ast::{
-        BindingIdent, BlockStmt, Decl, ExprStmt, Function, Ident, KeyValuePatProp, KeyValueProp,
-        ModuleDecl, ModuleItem, ObjectPat, ObjectPatProp, Param, Pat, Prop, PropName, PropOrSpread,
-        Stmt, VarDeclKind,
+        BindingIdent, BlockStmt, Decl, ExprStmt, Function, IdentName, KeyValuePatProp,
+        KeyValueProp, ModuleDecl, ModuleItem, ObjectPat, ObjectPatProp, Param, Pat, Prop, PropName,
+        PropOrSpread, Stmt, VarDeclKind,
     },
 };
 
@@ -136,8 +136,10 @@ pub fn transform_and_record_script_setup(
         params: get_setup_fn_params(&sfc_object_helper),
         decorators: vec![],
         span,
+        ctxt: Default::default(),
         body: Some(BlockStmt {
             span,
+            ctxt: Default::default(),
             stmts: setup_body_stmts,
         }),
         is_generator: false,
@@ -250,10 +252,9 @@ pub fn merge_sfc_helper(sfc_helper: SfcExportedObjectHelper, dest: &mut Vec<Prop
         ($field: ident, $span: expr, $sym: expr) => {
             if let Some(value) = sfc_helper.$field {
                 dest.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                    key: PropName::Ident(Ident {
+                    key: PropName::Ident(IdentName {
                         span: $span,
                         sym: $sym,
-                        optional: false,
                     }),
                     value,
                 }))));
@@ -306,11 +307,7 @@ fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param
             span: DUMMY_SP,
             decorators: vec![],
             pat: Pat::Ident(BindingIdent {
-                id: Ident {
-                    span: DUMMY_SP,
-                    sym: PROPS_HELPER.to_owned(),
-                    optional: false,
-                },
+                id: PROPS_HELPER.to_owned().into_ident(),
                 type_ann: None,
             }),
         });
@@ -322,17 +319,12 @@ fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param
         macro_rules! add_prop {
             ($prop_sym: expr, $rename_to: expr) => {
                 ctx_props.push(ObjectPatProp::KeyValue(KeyValuePatProp {
-                    key: swc_core::ecma::ast::PropName::Ident(Ident {
+                    key: PropName::Ident(IdentName {
                         span: DUMMY_SP,
                         sym: $prop_sym,
-                        optional: false,
                     }),
                     value: Box::new(Pat::Ident(BindingIdent {
-                        id: Ident {
-                            span: DUMMY_SP,
-                            sym: $rename_to,
-                            optional: false,
-                        },
+                        id: $rename_to.into_ident(),
                         type_ann: None,
                     })),
                 }))
@@ -364,7 +356,10 @@ fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param
 #[cfg(test)]
 mod tests {
     use crate::{
-        error::{ScriptError, ScriptErrorKind, TransformError}, script::imports::process_imports, test_utils::parser::*, SetupBinding, TransformSfcContext
+        error::{ScriptError, ScriptErrorKind, TransformError},
+        script::imports::process_imports,
+        test_utils::parser::*,
+        SetupBinding, TransformSfcContext,
     };
     use fervid_core::{fervid_atom, BindingTypes, SfcScriptBlock};
     use swc_core::common::DUMMY_SP;
@@ -374,7 +369,12 @@ mod tests {
     fn analyze_bindings(mut script_setup: SfcScriptBlock) -> Vec<SetupBinding> {
         let mut ctx = TransformSfcContext::anonymous();
         let mut errors = Vec::new();
-        process_imports(&mut script_setup.content, &mut ctx.bindings_helper, true, &mut errors);
+        process_imports(
+            &mut script_setup.content,
+            &mut ctx.bindings_helper,
+            true,
+            &mut errors,
+        );
         transform_and_record_script_setup(&mut ctx, script_setup, &mut errors);
 
         ctx.bindings_helper.setup_bindings

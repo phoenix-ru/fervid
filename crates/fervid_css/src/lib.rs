@@ -14,7 +14,6 @@
 //! let span = Span::new(
 //!     BytePos(1),
 //!     BytePos(1 + input.len() as u32),
-//!     Default::default(),
 //! );
 //! let mut errors = Vec::new();
 //!
@@ -50,7 +49,6 @@ mod tests {
             let span = Span::new(
                 BytePos(1),
                 BytePos(1 + $input.len() as u32),
-                Default::default(),
             );
             let mut errors = Vec::new();
             let out = css::transform_css($input, span, Some("data-v-abcd1234"), &mut errors, Default::default());

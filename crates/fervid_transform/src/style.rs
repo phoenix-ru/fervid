@@ -2,7 +2,7 @@ use fervid_core::{fervid_atom, SfcStyleBlock};
 use fervid_css::*;
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{Expr, Ident, KeyValueProp, Lit, Prop, PropName, PropOrSpread, Str},
+    ecma::ast::{Expr, IdentName, KeyValueProp, Lit, Prop, PropName, PropOrSpread, Str},
 };
 
 use crate::{error::TransformError, structs::TransformScriptsResult};
@@ -15,10 +15,9 @@ pub fn attach_scope_id(transform_result: &mut TransformScriptsResult, scope: &st
         .export_obj
         .props
         .push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-            key: PropName::Ident(Ident {
+            key: PropName::Ident(IdentName {
                 span: DUMMY_SP,
                 sym: fervid_atom!("__scopeId"),
-                optional: false,
             }),
             value: Box::new(Expr::Lit(Lit::Str(Str {
                 span: DUMMY_SP,

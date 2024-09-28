@@ -48,8 +48,10 @@ impl CodegenContext {
         // resolveDynamicComponent(is_attribute)
         let identifier = Expr::Call(CallExpr {
             span,
+            ctxt: Default::default(),
             callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                 span,
+                ctxt: Default::default(),
                 sym: self.get_and_add_import_ident(VueImports::ResolveDynamicComponent),
                 optional: false,
             }))),

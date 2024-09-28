@@ -1,14 +1,14 @@
 use fervid_core::{
-    fervid_atom, AttributeOrBinding, FervidAtom, StrOrExpr, VBindDirective, VOnDirective,
-    VueImports,
+    fervid_atom, AttributeOrBinding, FervidAtom, IntoIdent, StrOrExpr, VBindDirective,
+    VOnDirective, VueImports,
 };
 use regex::Regex;
 use swc_core::{
     common::{Span, Spanned, DUMMY_SP},
     ecma::ast::{
         ArrayLit, ArrowExpr, BinExpr, BinaryOp, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
-        ComputedPropName, Expr, ExprOrSpread, Ident, KeyValueProp, Lit, ObjectLit, Prop, PropName,
-        PropOrSpread, Str,
+        ComputedPropName, Expr, ExprOrSpread, Ident, IdentName, KeyValueProp, Lit, ObjectLit, Prop,
+        PropName, PropOrSpread, Str,
     },
 };
 
@@ -223,11 +223,10 @@ impl CodegenContext {
                         // `_withModifiers(transformed, ["modifier"]))`
                         Box::new(Expr::Call(CallExpr {
                             span,
-                            callee: Callee::Expr(Box::from(Expr::Ident(Ident {
-                                span,
-                                sym: with_modifiers_import,
-                                optional: false,
-                            }))),
+                            ctxt: Default::default(),
+                            callee: Callee::Expr(Box::from(Expr::Ident(
+                                with_modifiers_import.into_ident_spanned(span),
+                            ))),
                             args: vec![
                                 ExprOrSpread {
                                     expr: handler,
@@ -348,11 +347,11 @@ impl CodegenContext {
                 // `normalizeClass(["regular classes", boundClasses])`
                 expr = Some(Expr::Call(CallExpr {
                     span: bound_span,
-                    callee: Callee::Expr(Box::from(Expr::Ident(Ident {
-                        span: bound_span,
-                        sym: self.get_and_add_import_ident(VueImports::NormalizeClass),
-                        optional: false,
-                    }))),
+                    ctxt: Default::default(),
+                    callee: Callee::Expr(Box::from(Expr::Ident(
+                        self.get_and_add_import_ident(VueImports::NormalizeClass)
+                            .into_ident_spanned(bound_span),
+                    ))),
                     args: vec![ExprOrSpread {
                         spread: None,
                         expr: Box::from(Expr::Array(normalize_array)),
@@ -381,11 +380,11 @@ impl CodegenContext {
                 // `normalizeClass(boundClasses)`
                 expr = Some(Expr::Call(CallExpr {
                     span,
-                    callee: Callee::Expr(Box::from(Expr::Ident(Ident {
-                        span,
-                        sym: self.get_and_add_import_ident(VueImports::NormalizeClass),
-                        optional: false,
-                    }))),
+                    ctxt: Default::default(),
+                    callee: Callee::Expr(Box::from(Expr::Ident(
+                        self.get_and_add_import_ident(VueImports::NormalizeClass)
+                            .into_ident_spanned(span),
+                    ))),
                     args: vec![ExprOrSpread {
                         spread: None,
                         expr: bound_value,
@@ -404,7 +403,10 @@ impl CodegenContext {
         if let Some(expr) = expr {
             out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                 KeyValueProp {
-                    key: PropName::Ident(Ident::new(fervid_atom!("class"), expr.span())),
+                    key: PropName::Ident(IdentName {
+                        sym: fervid_atom!("class"),
+                        span: expr.span(),
+                    }),
                     value: Box::from(expr),
                 },
             ))));
@@ -459,11 +461,11 @@ impl CodegenContext {
                 // `normalizeClass([{ regular: "styles as an object" }, boundStyles])`
                 expr = Some(Expr::Call(CallExpr {
                     span: bound_span,
-                    callee: Callee::Expr(Box::from(Expr::Ident(Ident {
-                        span: bound_span,
-                        sym: self.get_and_add_import_ident(VueImports::NormalizeStyle),
-                        optional: false,
-                    }))),
+                    ctxt: Default::default(),
+                    callee: Callee::Expr(Box::from(Expr::Ident(
+                        self.get_and_add_import_ident(VueImports::NormalizeStyle)
+                            .into_ident_spanned(bound_span),
+                    ))),
                     args: vec![ExprOrSpread {
                         spread: None,
                         expr: Box::from(Expr::Array(normalize_array)),
@@ -488,8 +490,10 @@ impl CodegenContext {
                 // `normalizeStyle(boundStyles)`
                 expr = Some(Expr::Call(CallExpr {
                     span,
+                    ctxt: Default::default(),
                     callee: Callee::Expr(Box::from(Expr::Ident(Ident {
                         span,
+                        ctxt: Default::default(),
                         sym: self.get_and_add_import_ident(VueImports::NormalizeStyle),
                         optional: false,
                     }))),
@@ -510,7 +514,10 @@ impl CodegenContext {
         if let Some(expr) = expr {
             out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                 KeyValueProp {
-                    key: PropName::Ident(Ident::new(fervid_atom!("style"), expr.span())),
+                    key: PropName::Ident(IdentName {
+                        sym: fervid_atom!("style"),
+                        span: expr.span(),
+                    }),
                     value: Box::from(expr),
                 },
             ))));
@@ -559,9 +566,11 @@ fn generate_regular_style(style: &str, span: Span) -> ObjectLit {
 fn empty_arrow_expr(span: Span) -> Expr {
     Expr::Arrow(ArrowExpr {
         span,
+        ctxt: Default::default(),
         params: vec![],
         body: Box::from(BlockStmtOrExpr::BlockStmt(BlockStmt {
             span,
+            ctxt: Default::default(),
             stmts: vec![],
         })),
         is_async: false,

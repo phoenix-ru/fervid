@@ -242,7 +242,7 @@ pub fn is_static(expr: &Expr) -> bool {
 ///     span: DUMMY_SP,
 ///     expr: Expr::Seq(SeqExpr {
 ///         exprs: vec![
-///             Expr::Ident(Ident::new(FervidAtom::from("a"), DUMMY_SP)).into(),
+///             Expr::Ident(Ident::new(FervidAtom::from("a"), DUMMY_SP, Default::default())).into(),
 ///             Expr::Paren(ParenExpr {
 ///                 expr: Expr::Seq(SeqExpr {
 ///                     span: DUMMY_SP,

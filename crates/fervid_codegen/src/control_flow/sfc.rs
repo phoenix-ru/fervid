@@ -1,19 +1,14 @@
 use fervid_core::{
-    fervid_atom, BindingTypes, FervidAtom, SfcTemplateBlock, TemplateGenerationMode, VueImports,
+    fervid_atom, BindingTypes, FervidAtom, IntoIdent, SfcTemplateBlock, TemplateGenerationMode, VueImports
 };
 use swc_core::{
     atoms::Atom,
     common::{
-        collections::AHashMap, source_map::SourceMapGenConfig, BytePos, FileName, SourceMap,
-        DUMMY_SP,
+        collections::AHashMap, source_map::SourceMapGenConfig, sync::Lrc, BytePos, FileName, SourceMap, DUMMY_SP
     },
     ecma::{
         ast::{
-            ArrowExpr, AssignExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
-            Decl, ExportDefaultExpr, Expr, ExprOrSpread, ExprStmt, Function, GetterProp, Ident,
-            ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit, Param, Pat, Prop,
-            PropName, PropOrSpread, ReturnStmt, SetterProp, Stmt, Str, VarDecl, VarDeclKind,
-            VarDeclarator,
+            ArrowExpr, AssignExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, CallExpr, Callee, Decl, ExportDefaultExpr, Expr, ExprOrSpread, ExprStmt, Function, GetterProp, Ident, IdentName, ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit, Param, Pat, Prop, PropName, PropOrSpread, ReturnStmt, SetterProp, Stmt, Str, VarDecl, VarDeclKind, VarDeclarator
         },
         visit::{noop_visit_type, Visit, VisitWith},
     },
@@ -69,6 +64,7 @@ impl CodegenContext {
                             params: vec![],
                             decorators: vec![],
                             span: DUMMY_SP,
+                            ctxt: Default::default(),
                             body: None,
                             is_generator: false,
                             is_async: false,
@@ -79,6 +75,7 @@ impl CodegenContext {
 
                     let setup_body = setup_function.body.get_or_insert_with(|| BlockStmt {
                         span: DUMMY_SP,
+                        ctxt: Default::default(),
                         stmts: Vec::with_capacity(1),
                     });
 
@@ -116,10 +113,9 @@ impl CodegenContext {
                     sfc_export_obj
                         .props
                         .push(PropOrSpread::Prop(Box::new(Prop::Method(MethodProp {
-                            key: PropName::Ident(Ident {
+                            key: PropName::Ident(IdentName {
                                 span: DUMMY_SP,
                                 sym: FervidAtom::from("render"),
-                                optional: false,
                             }),
                             function: Box::new(render_fn),
                         }))));
@@ -148,10 +144,9 @@ impl CodegenContext {
                     sfc_export_obj
                         .props
                         .push(PropOrSpread::Prop(Box::new(Prop::Method(MethodProp {
-                            key: PropName::Ident(Ident {
+                            key: PropName::Ident(IdentName {
                                 span: DUMMY_SP,
                                 sym: FervidAtom::from("setup"),
-                                optional: false,
                             }),
                             function: setup_fn,
                         }))));
@@ -171,8 +166,10 @@ impl CodegenContext {
 
             Box::new(Expr::Call(CallExpr {
                 span: obj_span,
+                ctxt: Default::default(),
                 callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                     span: DUMMY_SP,
+                    ctxt: Default::default(),
                     sym: self.get_and_add_import_ident(VueImports::DefineComponent),
                     optional: false,
                 }))),
@@ -190,6 +187,7 @@ impl CodegenContext {
         let gen_default_as = if let Some(options_gen_default_as) = gen_default_as {
             ModuleItem::Stmt(Stmt::Decl(Decl::Var(Box::new(VarDecl {
                 span: DUMMY_SP,
+                ctxt: Default::default(),
                 kind: VarDeclKind::Const,
                 declare: false,
                 decls: vec![VarDeclarator {
@@ -197,6 +195,7 @@ impl CodegenContext {
                     name: Pat::Ident(BindingIdent {
                         id: Ident {
                             span: DUMMY_SP,
+                            ctxt: Default::default(),
                             sym: FervidAtom::from(options_gen_default_as),
                             optional: false,
                         },
@@ -258,6 +257,7 @@ impl CodegenContext {
             // Add resolves
             stmts.push(Stmt::Decl(Decl::Var(Box::new(VarDecl {
                 span: DUMMY_SP,
+                ctxt: Default::default(),
                 kind: VarDeclKind::Const,
                 declare: false,
                 decls: component_resolves,
@@ -271,6 +271,7 @@ impl CodegenContext {
 
             Box::new(BlockStmtOrExpr::BlockStmt(BlockStmt {
                 span: DUMMY_SP,
+                ctxt: Default::default(),
                 stmts,
             }))
         };
@@ -280,6 +281,7 @@ impl CodegenContext {
                 Pat::Ident(BindingIdent {
                     id: Ident {
                         span: DUMMY_SP,
+                        ctxt: Default::default(),
                         sym: FervidAtom::from($ident),
                         optional: false,
                     },
@@ -290,6 +292,7 @@ impl CodegenContext {
 
         ArrowExpr {
             span: DUMMY_SP,
+            ctxt: Default::default(),
             params: vec![param!("_ctx"), param!("_cache")],
             body,
             is_async: false,
@@ -316,6 +319,7 @@ impl CodegenContext {
 
             fn_body_stmts.push(Stmt::Decl(Decl::Var(Box::new(VarDecl {
                 span: DUMMY_SP,
+                ctxt: Default::default(),
                 kind: VarDeclKind::Const,
                 declare: false,
                 decls: component_resolves,
@@ -336,6 +340,7 @@ impl CodegenContext {
                     pat: Pat::Ident(BindingIdent {
                         id: Ident {
                             span: DUMMY_SP,
+                            ctxt: Default::default(),
                             sym: FervidAtom::from($ident),
                             optional: false,
                         },
@@ -357,8 +362,10 @@ impl CodegenContext {
             ],
             decorators: vec![],
             span: DUMMY_SP,
+            ctxt: Default::default(),
             body: Some(BlockStmt {
                 span: DUMMY_SP,
+                ctxt: Default::default(),
                 stmts: fn_body_stmts,
             }),
             is_generator: false,
@@ -399,15 +406,17 @@ impl CodegenContext {
 
                     let ident = Ident {
                         span: DUMMY_SP,
+                        ctxt: Default::default(),
                         sym: binding.0.to_owned(),
                         optional: false,
                     };
                     props.push(PropOrSpread::Prop(Box::new(Prop::Getter(GetterProp {
                         span: DUMMY_SP,
-                        key: PropName::Ident(ident.to_owned()),
+                        key: PropName::Ident(ident.to_owned().into()),
                         type_ann: None,
                         body: Some(BlockStmt {
                             span: DUMMY_SP,
+                            ctxt: Default::default(),
                             stmts: vec![Stmt::Return(ReturnStmt {
                                 span: DUMMY_SP,
                                 arg: Some(Box::new(Expr::Ident(ident))),
@@ -421,6 +430,7 @@ impl CodegenContext {
                 BindingTypes::SetupLet => {
                     let ident = Ident {
                         span: DUMMY_SP,
+                        ctxt: Default::default(),
                         sym: binding.0.to_owned(),
                         optional: false,
                     };
@@ -428,10 +438,11 @@ impl CodegenContext {
                     // `get smth() { return smth }`
                     props.push(PropOrSpread::Prop(Box::new(Prop::Getter(GetterProp {
                         span: DUMMY_SP,
-                        key: PropName::Ident(ident.to_owned()),
+                        key: PropName::Ident(ident.to_owned().into()),
                         type_ann: None,
                         body: Some(BlockStmt {
                             span: DUMMY_SP,
+                            ctxt: Default::default(),
                             stmts: vec![Stmt::Return(ReturnStmt {
                                 span: DUMMY_SP,
                                 arg: Some(Box::new(Expr::Ident(ident.to_owned()))),
@@ -447,11 +458,12 @@ impl CodegenContext {
                     };
                     props.push(PropOrSpread::Prop(Box::new(Prop::Setter(SetterProp {
                         span: DUMMY_SP,
-                        key: PropName::Ident(ident.to_owned()),
+                        key: PropName::Ident(ident.to_owned().into()),
                         this_param: None,
                         param: Box::new(Pat::Ident(BindingIdent {
                             id: Ident {
                                 span: DUMMY_SP,
+                                ctxt: Default::default(),
                                 sym: set_arg.to_owned(),
                                 optional: false,
                             },
@@ -459,6 +471,7 @@ impl CodegenContext {
                         })),
                         body: Some(BlockStmt {
                             span: DUMMY_SP,
+                            ctxt: Default::default(),
                             stmts: vec![Stmt::Expr(ExprStmt {
                                 span: DUMMY_SP,
                                 expr: Box::new(Expr::Assign(AssignExpr {
@@ -472,11 +485,7 @@ impl CodegenContext {
                                             },
                                         ),
                                     ),
-                                    right: Box::new(Expr::Ident(Ident {
-                                        span: DUMMY_SP,
-                                        sym: set_arg,
-                                        optional: false,
-                                    })),
+                                    right: Box::new(Expr::Ident(set_arg.into_ident())),
                                 })),
                             })],
                         }),
@@ -491,6 +500,7 @@ impl CodegenContext {
                 | BindingTypes::LiteralConst => {
                     props.push(PropOrSpread::Prop(Box::new(Prop::Shorthand(Ident {
                         span: DUMMY_SP,
+                        ctxt: Default::default(),
                         sym: binding.0.to_owned(),
                         optional: false,
                     }))));
@@ -523,8 +533,8 @@ impl CodegenContext {
         T: Node + VisitWith<IdentCollector>,
     {
         // Emitting the result requires some setup with SWC
-        let cm: swc_core::common::sync::Lrc<SourceMap> = Default::default();
-        cm.new_source_file(filename.to_owned(), source.to_owned());
+        let cm: Lrc<SourceMap> = Default::default();
+        cm.new_source_file(Lrc::new(filename.to_owned()), source.to_owned());
 
         let mut source_map_buf = vec![];
 

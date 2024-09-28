@@ -1,7 +1,10 @@
-use fervid_core::{fervid_atom, VueImports};
+use fervid_core::{fervid_atom, IntoIdent, VueImports};
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{AssignExpr, AssignOp, AssignTarget, BinExpr, BinaryOp, CallExpr, Callee, ComputedPropName, Expr, ExprOrSpread, Ident, Lit, MemberExpr, Number, ParenExpr, SeqExpr, SimpleAssignTarget},
+    ecma::ast::{
+        AssignExpr, AssignOp, AssignTarget, BinExpr, BinaryOp, CallExpr, Callee, ComputedPropName,
+        Expr, ExprOrSpread, Lit, MemberExpr, Number, ParenExpr, SeqExpr, SimpleAssignTarget,
+    },
 };
 
 use crate::CodegenContext;
@@ -26,17 +29,17 @@ impl CodegenContext {
         // Prepare
         let cache_idx = self.allocate_next_cache_entry();
         let cache_ident = fervid_atom!("_cache");
-        let set_block_tracking_ident = Box::new(Expr::Ident(Ident {
-            span: DUMMY_SP,
-            sym: self.get_and_add_import_ident(VueImports::SetBlockTracking),
-            optional: false,
-        }));
+        let set_block_tracking_ident = Box::new(Expr::Ident(
+            self.get_and_add_import_ident(VueImports::SetBlockTracking)
+                .into_ident(),
+        ));
 
         // `_setBlockTracking($value)`
         macro_rules! set_block_tracking {
             ($value: literal, $ident: expr) => {
                 Box::new(Expr::Call(CallExpr {
                     span: DUMMY_SP,
+                    ctxt: Default::default(),
                     callee: Callee::Expr($ident),
                     args: vec![ExprOrSpread {
                         spread: None,
@@ -54,17 +57,21 @@ impl CodegenContext {
         // 1. `_cache[cache_idx]`
         let cache_member_expr = MemberExpr {
             span: DUMMY_SP,
-            obj: Box::new(Expr::Ident(Ident { span: DUMMY_SP, sym: cache_ident, optional: false })),
+            obj: Box::new(Expr::Ident(cache_ident.into_ident())),
             prop: swc_core::ecma::ast::MemberProp::Computed(ComputedPropName {
                 span: DUMMY_SP,
-                expr: Box::new(Expr::Lit(Lit::Num(Number { span: DUMMY_SP, value: cache_idx as f64, raw: None }))),
+                expr: Box::new(Expr::Lit(Lit::Num(Number {
+                    span: DUMMY_SP,
+                    value: cache_idx as f64,
+                    raw: None,
+                }))),
             }),
         };
         let cache_expr = Box::new(Expr::Member(cache_member_expr.to_owned()));
 
         // 2. `_setBlockTracking(-1)`
         let decrement_tracking = set_block_tracking!(-1.0, set_block_tracking_ident.to_owned());
-        
+
         // 3. `_cache[idx] = item_render_expr`
         let cache_assign = Box::new(Expr::Assign(AssignExpr {
             span: DUMMY_SP,
@@ -91,7 +98,7 @@ impl CodegenContext {
                     decrement_tracking,
                     cache_assign,
                     increment_tracking,
-                    cache_expr.to_owned()
+                    cache_expr.to_owned(),
                 ],
             })),
         }));

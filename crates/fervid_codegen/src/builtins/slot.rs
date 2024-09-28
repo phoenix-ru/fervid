@@ -1,6 +1,8 @@
-use fervid_core::{check_attribute_name, fervid_atom, AttributeOrBinding, ElementNode, VueImports};
+use fervid_core::{
+    check_attribute_name, fervid_atom, AttributeOrBinding, ElementNode, IntoIdent, VueImports,
+};
 use swc_core::ecma::ast::{
-    ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, MemberExpr, MemberProp, ObjectLit,
+    ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Lit, MemberExpr, MemberProp, ObjectLit,
     Str,
 };
 
@@ -47,16 +49,8 @@ impl CodegenContext {
             spread: None,
             expr: Box::new(Expr::Member(MemberExpr {
                 span,
-                obj: Box::new(Expr::Ident(Ident {
-                    span,
-                    sym: fervid_atom!("_ctx"),
-                    optional: false,
-                })),
-                prop: MemberProp::Ident(Ident {
-                    span,
-                    sym: fervid_atom!("$slots"),
-                    optional: false,
-                }),
+                obj: Box::new(Expr::Ident(fervid_atom!("_ctx").into_ident_spanned(span))),
+                prop: MemberProp::Ident(fervid_atom!("$slots").into_ident_spanned(span).into()),
             })),
         });
 
@@ -155,11 +149,11 @@ impl CodegenContext {
         // `renderSlot(_ctx.$slots, "slot-name", { slot: attributes }, [slot, children])`
         Expr::Call(CallExpr {
             span,
-            callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                span,
-                sym: self.get_and_add_import_ident(VueImports::RenderSlot),
-                optional: false,
-            }))),
+            ctxt: Default::default(),
+            callee: Callee::Expr(Box::new(Expr::Ident(
+                self.get_and_add_import_ident(VueImports::RenderSlot)
+                    .into_ident_spanned(span),
+            ))),
             args: render_slot_args,
             type_args: None,
         })

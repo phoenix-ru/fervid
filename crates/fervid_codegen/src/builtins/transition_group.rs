@@ -10,6 +10,7 @@ impl CodegenContext {
         // _TransitionGroup
         let transition_group_identifier = Expr::Ident(Ident {
             span,
+            ctxt: Default::default(),
             sym: self.get_and_add_import_ident(VueImports::TransitionGroup),
             optional: false,
         });

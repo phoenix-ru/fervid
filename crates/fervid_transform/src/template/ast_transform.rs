@@ -1,13 +1,13 @@
 use fervid_core::{
     check_attribute_name, fervid_atom, is_from_default_slot, is_html_tag, AttributeOrBinding,
     BindingTypes, BuiltinType, Conditional, ConditionalNodeSequence, ElementKind, ElementNode,
-    FervidAtom, Interpolation, Node, PatchFlags, SfcTemplateBlock, StartingTag, StrOrExpr,
-    TemplateGenerationMode, VBindDirective, VSlotDirective, VUE_BUILTINS,
+    FervidAtom, Interpolation, IntoIdent, Node, PatchFlags, SfcTemplateBlock, StartingTag,
+    StrOrExpr, TemplateGenerationMode, VBindDirective, VSlotDirective, VUE_BUILTINS,
 };
 use smallvec::SmallVec;
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{Bool, Expr, Ident, Lit},
+    ecma::ast::{Bool, Expr, Lit},
 };
 
 use crate::{BindingsHelper, TemplateScope};
@@ -524,11 +524,7 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                             attr,
                             AttributeOrBinding::VBind(VBindDirective {
                                 argument: Some(StrOrExpr::Str(fervid_atom!("ref"))),
-                                value: Box::new(Expr::Ident(Ident {
-                                    span,
-                                    sym: value,
-                                    optional: false,
-                                })),
+                                value: Box::new(Expr::Ident(value.into_ident_spanned(span))),
                                 is_camel: false,
                                 is_prop: false,
                                 is_attr: false,

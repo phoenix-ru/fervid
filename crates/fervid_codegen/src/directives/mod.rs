@@ -41,6 +41,7 @@ impl CodegenContext {
             let span = DUMMY_SP; // TODO Span
             let v_show_identifier = Expr::Ident(Ident {
                 span,
+                ctxt: Default::default(),
                 sym: self.get_and_add_import_ident(VueImports::VShow),
                 optional: false,
             });
@@ -87,8 +88,10 @@ impl CodegenContext {
 
         Expr::Call(CallExpr {
             span: DUMMY_SP, // TODO Span
+            ctxt: Default::default(),
             callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                 span: DUMMY_SP,
+                ctxt: Default::default(),
                 sym: self.get_and_add_import_ident(VueImports::WithDirectives),
                 optional: false,
             }))),
@@ -238,6 +241,7 @@ impl CodegenContext {
         // and later `withDirectives(/*component*/, [[_directive_custom]])`
         let resolve_identifier = Ident {
             span,
+            ctxt: Default::default(),
             sym: directive_ident_atom,
             optional: false,
         };
@@ -289,8 +293,10 @@ impl CodegenContext {
                 }),
                 init: Some(Box::new(Expr::Call(CallExpr {
                     span: DUMMY_SP,
+                    ctxt: Default::default(),
                     callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                         span: DUMMY_SP,
+                        ctxt: Default::default(),
                         sym: resolve_directive_ident.to_owned(),
                         optional: false,
                     }))),

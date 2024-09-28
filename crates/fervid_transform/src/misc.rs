@@ -1,8 +1,10 @@
+use fervid_core::fervid_atom;
 use swc_core::{
     atoms::Atom,
     common::DUMMY_SP,
     ecma::ast::{
-        Expr, GetterProp, Ident, KeyValueProp, Lit, ObjectLit, Prop, PropName, PropOrSpread, Str,
+        Expr, GetterProp, IdentName, KeyValueProp, Lit, ObjectLit, Prop, PropName, PropOrSpread,
+        Str,
     },
 };
 
@@ -37,10 +39,9 @@ pub fn infer_name(exported_obj: &mut ObjectLit, filename: &str) {
     exported_obj
         .props
         .push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-            key: PropName::Ident(Ident {
+            key: PropName::Ident(IdentName {
                 span: DUMMY_SP,
-                sym: "__name".into(),
-                optional: false,
+                sym: fervid_atom!("__name"),
             }),
             value: Box::new(Expr::Lit(Lit::Str(Str {
                 span: DUMMY_SP,
