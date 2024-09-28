@@ -109,7 +109,7 @@ jobs:
         run: ${{ matrix.settings.build }}
         shell: bash
       - name: Upload Plugin
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ github.sha }}-${{ matrix.settings.abi }}-plugin
           path: npm/${{ matrix.settings.abi }}/index.farm
