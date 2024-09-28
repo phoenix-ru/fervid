@@ -3,7 +3,7 @@ use swc_core::{
     common::Span,
     ecma::ast::{Expr, Module, Pat},
 };
-use swc_ecma_parser::{lexer::Lexer, EsConfig, Parser, StringInput, Syntax, TsConfig};
+use swc_ecma_parser::{lexer::Lexer, EsSyntax, Parser, StringInput, Syntax, TsSyntax};
 use swc_html_ast::{Child, Element};
 
 use crate::{error::ParseErrorKind, ParseError, SfcParser};
@@ -89,9 +89,9 @@ impl SfcParser<'_, '_, '_> {
         let module_content = self.parse_module(
             &script_content.data,
             if matches!(lang, SfcScriptLang::Typescript) {
-                Syntax::Typescript(TsConfig::default())
+                Syntax::Typescript(TsSyntax::default())
             } else {
-                Syntax::Es(EsConfig::default())
+                Syntax::Es(EsSyntax::default())
             },
             script_content.span,
         )?;

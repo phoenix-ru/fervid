@@ -3,7 +3,7 @@
 use std::fmt::{Write, Error};
 
 use fervid_core::{FervidAtom, StrOrExpr};
-use swc_core::{ecma::ast::{Ident, IdentExt, PropName, Str, ComputedPropName}, common::Span};
+use swc_core::{common::Span, ecma::ast::{ComputedPropName, Ident, EsReserved, IdentName, PropName, Str}};
 
 /// Adapted from SWC Ident::verify_symbol
 #[inline]
@@ -25,7 +25,7 @@ pub fn is_valid_ident(s: &str) -> bool {
 
 pub fn str_to_propname(s: &str, span: Span) -> PropName {
     if is_valid_ident(s) {
-        PropName::Ident(Ident { span, sym: s.into(), optional: false })
+        PropName::Ident(IdentName { span, sym: s.into() })
     } else {
         PropName::Str(Str {
             span,
@@ -37,7 +37,7 @@ pub fn str_to_propname(s: &str, span: Span) -> PropName {
 
 pub fn atom_to_propname(sym: FervidAtom, span: Span) -> PropName {
     if is_valid_ident(&sym) {
-        PropName::Ident(Ident { span, sym, optional: false })
+        PropName::Ident(IdentName { span, sym })
     } else {
         PropName::Str(Str {
             span,

@@ -1,11 +1,12 @@
-use fervid_core::{fervid_atom, BindingTypes, FervidAtom, VueImports};
+use fervid_core::{fervid_atom, BindingTypes, FervidAtom, IntoIdent, VueImports};
 use flagset::FlagSet;
 use itertools::Itertools;
 use swc_core::{
     common::{Span, Spanned, DUMMY_SP},
     ecma::ast::{
-        ArrayLit, Bool, CallExpr, Callee, Expr, ExprOrSpread, GetterProp, Ident, KeyValueProp, Lit,
-        MethodProp, ObjectLit, Prop, PropName, PropOrSpread, SetterProp, TsType, TsTypeElement,
+        ArrayLit, Bool, CallExpr, Callee, Expr, ExprOrSpread, GetterProp, IdentName, KeyValueProp,
+        Lit, MethodProp, ObjectLit, Prop, PropName, PropOrSpread, SetterProp, TsType,
+        TsTypeElement,
     },
 };
 
@@ -181,11 +182,11 @@ fn process_define_props_impl(
     if is_var_decl {
         sfc_object_helper.is_setup_props_referenced = true;
 
-        TransformMacroResult::ValidMacro(Some(Box::new(Expr::Ident(Ident {
-            span: define_props.span,
-            sym: PROPS_HELPER.to_owned(),
-            optional: false,
-        }))))
+        TransformMacroResult::ValidMacro(Some(Box::new(Expr::Ident(
+            PROPS_HELPER
+                .to_owned()
+                .into_ident_spanned(define_props.span),
+        ))))
     } else {
         TransformMacroResult::ValidMacro(None)
     }
@@ -257,11 +258,10 @@ fn extract_runtime_props(
         // TODO /*#__PURE__*/ comment
         props_decl = Box::new(Expr::Call(CallExpr {
             span: DUMMY_SP,
-            callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                span: DUMMY_SP,
-                sym: merge_defaults_helper.as_atom(),
-                optional: false,
-            }))),
+            ctxt: Default::default(),
+            callee: Callee::Expr(Box::new(Expr::Ident(
+                merge_defaults_helper.as_atom().into_ident(),
+            ))),
             args: vec![
                 ExprOrSpread {
                     spread: None,
@@ -307,8 +307,8 @@ fn resolve_runtime_props_from_type(
             TsTypeElement::TsCallSignatureDecl(_) => true,
             TsTypeElement::TsConstructSignatureDecl(_) => true,
             TsTypeElement::TsPropertySignature(s) => !s.optional,
-            TsTypeElement::TsGetterSignature(s) => !s.optional,
-            TsTypeElement::TsSetterSignature(s) => !s.optional,
+            TsTypeElement::TsGetterSignature(_) => true,
+            TsTypeElement::TsSetterSignature(_) => true,
             TsTypeElement::TsMethodSignature(s) => !s.optional,
             TsTypeElement::TsIndexSignature(_) => true,
         };
@@ -331,10 +331,9 @@ fn get_runtime_prop_from_type(
     has_static_defaults: bool,
 ) -> PropOrSpread {
     let mut default: Option<Box<Prop>> = None;
-    let default_prop_name = PropName::Ident(Ident {
+    let default_prop_name = PropName::Ident(IdentName {
         span: DUMMY_SP,
         sym: fervid_atom!("default"),
-        optional: false,
     });
 
     let PropTypeData { key, .. } = prop;
@@ -437,10 +436,9 @@ fn get_runtime_prop_from_type(
     macro_rules! add_field {
         ($name: literal, $value: expr) => {
             prop_object_fields.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                key: PropName::Ident(Ident {
+                key: PropName::Ident(IdentName {
                     span: DUMMY_SP,
                     sym: fervid_atom!($name),
-                    optional: false,
                 }),
                 value: $value,
             }))))
@@ -451,10 +449,9 @@ fn get_runtime_prop_from_type(
         ($prop_object_fields: ident) => {
             PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
                 // TODO Better span is probably possible (preserve prop name span)
-                key: PropName::Ident(Ident {
+                key: PropName::Ident(IdentName {
                     span: DUMMY_SP,
                     sym: key.to_owned(),
-                    optional: false,
                 }),
                 value: Box::new(Expr::Object(ObjectLit {
                     // TODO Better span is probably possible (preserve prop defaults span?)
@@ -578,11 +575,7 @@ fn to_runtime_type_string(types: TypesSet) -> Box<Expr> {
     }
 
     if idents.len() == 1 {
-        return Box::new(Expr::Ident(Ident {
-            span: DUMMY_SP,
-            sym: FervidAtom::from(idents[0]),
-            optional: false,
-        }));
+        return Box::new(Expr::Ident(FervidAtom::from(idents[0]).into_ident()));
     }
 
     let array_elems = idents
@@ -590,11 +583,7 @@ fn to_runtime_type_string(types: TypesSet) -> Box<Expr> {
         .map(|ident| {
             Some(ExprOrSpread {
                 spread: None,
-                expr: Box::new(Expr::Ident(Ident {
-                    span: DUMMY_SP,
-                    sym: FervidAtom::from(ident),
-                    optional: false,
-                })),
+                expr: Box::new(Expr::Ident(FervidAtom::from(ident).into_ident())),
             })
         })
         .collect_vec();

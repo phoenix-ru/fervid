@@ -162,8 +162,10 @@ impl CodegenContext {
         // `createVNode(_component_name, {component:attrs}, {component:slots}, PATCH_FLAGS)`
         let create_component_fn_call = Expr::Call(CallExpr {
             span,
+            ctxt: Default::default(),
             callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                 span,
+                ctxt: Default::default(),
                 sym: create_component_fn_ident,
                 optional: false,
             }))),
@@ -221,8 +223,10 @@ impl CodegenContext {
                 }),
                 init: Some(Box::new(Expr::Call(CallExpr {
                     span: DUMMY_SP,
+                    ctxt: Default::default(),
                     callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                         span: DUMMY_SP,
+                        ctxt: Default::default(),
                         sym: resolve_component_ident.to_owned(),
                         optional: false,
                     }))),
@@ -534,6 +538,7 @@ impl CodegenContext {
         // and later used in `createVNode(_component_custom)`
         let resolve_identifier = Ident {
             span,
+            ctxt: Default::default(),
             sym: component_name,
             optional: false,
         };
@@ -602,9 +607,11 @@ impl CodegenContext {
             key: str_or_expr_to_propname(slot_name, span),
             value: Box::new(Expr::Call(CallExpr {
                 span,
+                ctxt: Default::default(),
                 // withCtx
                 callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                     span,
+                    ctxt: Default::default(),
                     sym: self.get_and_add_import_ident(VueImports::WithCtx),
                     optional: false,
                 }))),
@@ -613,6 +620,7 @@ impl CodegenContext {
                     // () => [child1, child2, child3]
                     expr: Box::new(Expr::Arrow(ArrowExpr {
                         span,
+                        ctxt: Default::default(),
                         params,
                         body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::Array(children_arr)))),
                         is_async: false,

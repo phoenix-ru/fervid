@@ -1,5 +1,5 @@
 use fervid_core::{
-    fervid_atom, BindingTypes, FervidAtom, PatchFlags, PatchHints, StrOrExpr,
+    fervid_atom, BindingTypes, FervidAtom, IntoIdent, PatchFlags, PatchHints, StrOrExpr,
     TemplateGenerationMode, VModelDirective, VueImports,
 };
 use swc_core::{
@@ -7,7 +7,7 @@ use swc_core::{
     ecma::{
         ast::{
             ArrayLit, ArrayPat, AssignExpr, AssignOp, AssignTarget, AssignTargetPat, BindingIdent,
-            BlockStmt, CallExpr, Callee, CondExpr, Decl, Expr, ExprOrSpread, Ident,
+            BlockStmt, CallExpr, Callee, CondExpr, Decl, Expr, ExprOrSpread, Ident, IdentName,
             KeyValuePatProp, KeyValueProp, Lit, MemberExpr, MemberProp, Null, ObjectLit, ObjectPat,
             ObjectPatProp, Pat, Prop, PropName, PropOrSpread, SimpleAssignTarget, Stmt, UpdateExpr,
             UpdateOp,
@@ -114,11 +114,7 @@ impl BindingsHelperTransform for BindingsHelper {
         };
 
         // 1. Create handler: wrap in `$event => value = $event`
-        let event_expr = Box::new(Expr::Ident(Ident {
-            span: DUMMY_SP,
-            sym: FervidAtom::from("$event"),
-            optional: false,
-        }));
+        let event_expr = Box::new(Expr::Ident(FervidAtom::from("$event").into_ident()));
         let mut handler = wrap_in_event_arrow(wrap_in_assignment(
             assign_target,
             event_expr,
@@ -388,11 +384,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                 *expr = Expr::Member(MemberExpr {
                     span,
                     obj: Box::new(expr.to_owned()),
-                    prop: MemberProp::Ident(Ident {
-                        span: DUMMY_SP,
-                        sym: "value".into(),
-                        optional: false,
-                    }),
+                    prop: MemberProp::Ident(fervid_atom!("value").into_ident().into()),
                 });
                 return;
             }
@@ -402,11 +394,10 @@ impl<'s> VisitMut for TransformVisitor<'s> {
 
                 *expr = Expr::Call(CallExpr {
                     span,
-                    callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                        span,
-                        sym: VueImports::Unref.as_atom(),
-                        optional: false,
-                    }))),
+                    ctxt: Default::default(),
+                    callee: Callee::Expr(Box::new(Expr::Ident(
+                        VueImports::Unref.as_atom().into_ident_spanned(span),
+                    ))),
                     args: vec![ExprOrSpread {
                         spread: None,
                         expr: Box::new(expr.to_owned()),
@@ -419,12 +410,8 @@ impl<'s> VisitMut for TransformVisitor<'s> {
             IdentTransformStrategy::Prefix(prefix) => {
                 *expr = Expr::Member(MemberExpr {
                     span,
-                    obj: Box::new(Expr::Ident(Ident {
-                        span,
-                        sym: prefix,
-                        optional: false,
-                    })),
-                    prop: MemberProp::Ident(ident.to_owned()),
+                    obj: Box::new(Expr::Ident(prefix.into_ident_spanned(span))),
+                    prop: MemberProp::Ident(ident.to_owned().into()),
                 });
                 return;
             }
@@ -462,7 +449,10 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                 PropOrSpread::Prop(ref mut prop) => {
                     // For shorthand, expand it and visit the value part
                     if let Some(shorthand) = prop.as_mut_shorthand() {
-                        let prop_name = PropName::Ident(shorthand.to_owned());
+                        let prop_name = PropName::Ident(IdentName {
+                            span: shorthand.span,
+                            sym: shorthand.sym.to_owned(),
+                        });
 
                         let mut value_expr = Expr::Ident(shorthand.to_owned());
                         value_expr.visit_mut_with(self);
@@ -540,10 +530,9 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                             *n = AssignTarget::Simple(SimpleAssignTarget::Member(MemberExpr {
                                 span,
                                 obj: Box::new(Expr::Ident(ident.id.to_owned())),
-                                prop: MemberProp::Ident(Ident {
+                                prop: MemberProp::Ident(IdentName {
                                     span: DUMMY_SP,
                                     sym: fervid_atom!("value"),
-                                    optional: false,
                                 }),
                             }));
                             return;
@@ -552,12 +541,8 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                         IdentTransformStrategy::Prefix(prefix) => {
                             *n = AssignTarget::Simple(SimpleAssignTarget::Member(MemberExpr {
                                 span,
-                                obj: Box::new(Expr::Ident(Ident {
-                                    span: DUMMY_SP,
-                                    sym: prefix,
-                                    optional: false,
-                                })),
-                                prop: MemberProp::Ident(ident.id.to_owned()),
+                                obj: Box::new(Expr::Ident(prefix.into_ident())),
+                                prop: MemberProp::Ident(ident.id.to_owned().into()),
                             }));
                             return;
                         }
@@ -619,10 +604,9 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                         *n = Pat::Expr(Box::new(Expr::Member(MemberExpr {
                             span,
                             obj: Box::new(Expr::Ident(ident.id.to_owned())),
-                            prop: MemberProp::Ident(Ident {
+                            prop: MemberProp::Ident(IdentName {
                                 span: DUMMY_SP,
                                 sym: fervid_atom!("value"),
-                                optional: false,
                             }),
                         })));
                         return;
@@ -631,12 +615,8 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     IdentTransformStrategy::Prefix(prefix) => {
                         *n = Pat::Expr(Box::new(Expr::Member(MemberExpr {
                             span: DUMMY_SP,
-                            obj: Box::new(Expr::Ident(Ident {
-                                span: DUMMY_SP,
-                                sym: prefix,
-                                optional: false,
-                            })),
-                            prop: MemberProp::Ident(ident.id.to_owned()),
+                            obj: Box::new(Expr::Ident(prefix.into_ident())),
+                            prop: MemberProp::Ident(ident.id.to_owned().into()),
                         })));
                         return;
                     }
@@ -703,7 +683,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                                 let mut value = Box::new(Pat::Ident(assign.key.to_owned()));
                                 value.visit_mut_with(self);
                                 *elem = ObjectPatProp::KeyValue(KeyValuePatProp {
-                                    key: PropName::Ident(assign.key.id.to_owned()),
+                                    key: PropName::Ident(assign.key.id.to_owned().into()),
                                     value,
                                 })
                             }
@@ -850,11 +830,8 @@ fn generate_is_ref_check_assignment(
     // `isRef(ident)`
     let condition = Box::new(Expr::Call(CallExpr {
         span: DUMMY_SP,
-        callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-            span: DUMMY_SP,
-            sym: is_ref_ident,
-            optional: false,
-        }))),
+        ctxt: Default::default(),
+        callee: Callee::Expr(Box::new(Expr::Ident(is_ref_ident.into_ident()))),
         args: vec![ExprOrSpread {
             spread: None,
             expr: ident_expr.to_owned(),
@@ -866,10 +843,9 @@ fn generate_is_ref_check_assignment(
     let ident_dot_value = AssignTarget::Simple(SimpleAssignTarget::Member(MemberExpr {
         span: DUMMY_SP,
         obj: ident_expr.to_owned(),
-        prop: MemberProp::Ident(Ident {
+        prop: MemberProp::Ident(IdentName {
             span: DUMMY_SP,
             sym: FervidAtom::from("value"),
-            optional: false,
         }),
     }));
 
@@ -908,11 +884,8 @@ fn generate_is_ref_check_update(
     // `isRef(ident)`
     let condition = Box::new(Expr::Call(CallExpr {
         span: DUMMY_SP,
-        callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-            span: DUMMY_SP,
-            sym: is_ref_ident,
-            optional: false,
-        }))),
+        ctxt: Default::default(),
+        callee: Callee::Expr(Box::new(Expr::Ident(is_ref_ident.into_ident()))),
         args: vec![ExprOrSpread {
             spread: None,
             expr: ident_expr.to_owned(),
@@ -924,10 +897,9 @@ fn generate_is_ref_check_update(
     let ident_dot_value = Box::new(Expr::Member(MemberExpr {
         span: DUMMY_SP,
         obj: ident_expr.to_owned(),
-        prop: MemberProp::Ident(Ident {
+        prop: MemberProp::Ident(IdentName {
             span: DUMMY_SP,
             sym: FervidAtom::from("value"),
-            optional: false,
         }),
     }));
 

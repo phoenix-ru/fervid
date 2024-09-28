@@ -498,13 +498,11 @@ fn split_itervar_and_iterable<'a>(
     let new_span_itervar = Span {
         lo: itervar_lo,
         hi: itervar_hi,
-        ctxt: original_span.ctxt,
     };
 
     let new_span_iterable = Span {
         lo: iterable_lo,
         hi: iterable_hi,
-        ctxt: original_span.ctxt,
     };
 
     Some(((itervar, new_span_itervar), (iterable, new_span_iterable)))
@@ -522,7 +520,6 @@ mod tests {
                 let span = Span {
                     lo: BytePos(1),
                     hi: BytePos((input.len() + 1) as u32),
-                    ctxt: Default::default(),
                 };
 
                 let Some(((itervar, itervar_span), (iterable, iterable_span))) =

@@ -1,7 +1,7 @@
-use fervid_core::{fervid_atom, AttributeOrBinding, ElementNode};
+use fervid_core::{fervid_atom, AttributeOrBinding, ElementNode, IntoIdent};
 use swc_core::{
     common::{Span, DUMMY_SP},
-    ecma::ast::{Expr, Ident, KeyValueProp, Lit, Number, ObjectLit, Prop, PropName, PropOrSpread},
+    ecma::ast::{Expr, KeyValueProp, Lit, Number, ObjectLit, Prop, PropName, PropOrSpread},
 };
 
 use crate::CodegenContext;
@@ -30,11 +30,7 @@ impl CodegenContext {
         if let Some(Expr::Object(ref mut obj)) = slots {
             obj.props
                 .push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                    key: PropName::Ident(Ident {
-                        span: DUMMY_SP,
-                        sym: fervid_atom!("_"),
-                        optional: false,
-                    }),
+                    key: PropName::Ident(fervid_atom!("_").into_ident().into()),
                     value: Box::new(Expr::Lit(Lit::Num(Number {
                         span: DUMMY_SP,
                         value: 1.0,

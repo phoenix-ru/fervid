@@ -1,8 +1,5 @@
-use fervid_core::{BindingTypes, ComponentBinding, CustomDirectiveBinding, FervidAtom};
-use swc_core::{
-    common::DUMMY_SP,
-    ecma::ast::{Expr, Ident},
-};
+use fervid_core::{BindingTypes, ComponentBinding, CustomDirectiveBinding, FervidAtom, IntoIdent};
+use swc_core::ecma::ast::Expr;
 
 use crate::SetupBinding;
 
@@ -39,11 +36,7 @@ impl TemplateVisitor<'_> {
         // TODO Auto-importing the components can happen here
 
         if let Some(found) = found {
-            let mut resolved_to = Expr::Ident(Ident {
-                span: DUMMY_SP,
-                sym: found.0.to_owned(),
-                optional: false,
-            });
+            let mut resolved_to = Expr::Ident(found.0.to_owned().into_ident());
 
             // For `Component` binding types, do not transform.
             // TODO I am not sure about `Imported` though,
@@ -99,11 +92,7 @@ impl TemplateVisitor<'_> {
         // TODO Auto-importing the directives can happen here
 
         if let Some(found) = found {
-            let mut resolved_to = Expr::Ident(Ident {
-                span: DUMMY_SP,
-                sym: found.0.to_owned(),
-                optional: false,
-            });
+            let mut resolved_to = Expr::Ident(found.0.to_owned().into_ident());
 
             // Transform the identifier
             self.bindings_helper

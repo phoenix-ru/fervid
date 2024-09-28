@@ -30,7 +30,7 @@ pub fn parse_complex_selector(
 
 #[cfg(test)]
 mod tests {
-    use swc_core::common::{BytePos, SyntaxContext};
+    use swc_core::common::BytePos;
 
     use super::*;
 
@@ -63,11 +63,7 @@ mod tests {
     }
 
     fn test_parse(input: &str) -> (Result<Stylesheet, ParseError>, Vec<ParseError>) {
-        let span = Span::new(
-            BytePos(1),
-            BytePos(1 + input.len() as u32),
-            SyntaxContext::default(),
-        );
+        let span = Span::new(BytePos(1), BytePos(1 + input.len() as u32));
         let mut errors = Vec::new();
         let parsed = parse_stylesheet(input, span, ParserConfig::default(), &mut errors);
 

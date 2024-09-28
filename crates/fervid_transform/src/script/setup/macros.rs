@@ -1,11 +1,12 @@
-use fervid_core::{fervid_atom, FervidAtom, VueImports};
+use fervid_core::{fervid_atom, FervidAtom, IntoIdent, VueImports};
 use fxhash::FxHashSet;
 use itertools::{Either, Itertools};
 use swc_core::{
     common::{Spanned, DUMMY_SP},
     ecma::ast::{
-        ArrayLit, Bool, CallExpr, Callee, Expr, ExprOrSpread, Ident, KeyValueProp, Lit, ObjectLit,
-        Prop, PropName, PropOrSpread, Str, TsFnOrConstructorType, TsFnParam, TsLit, TsType,
+        ArrayLit, Bool, CallExpr, Callee, Expr, ExprOrSpread, Ident, IdentName, KeyValueProp, Lit,
+        ObjectLit, Prop, PropName, PropOrSpread, Str, TsFnOrConstructorType, TsFnParam, TsLit,
+        TsType,
     },
 };
 
@@ -18,8 +19,7 @@ use crate::{
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::{
         resolve_type::{
-            resolve_type_elements, resolve_union_type, ResolvedElements,
-            TypeResolveContext,
+            resolve_type_elements, resolve_union_type, ResolvedElements, TypeResolveContext,
         },
         setup::define_props::{process_define_props, process_with_defaults},
     },
@@ -149,6 +149,7 @@ pub fn transform_script_setup_macro_expr(
 
             valid_macro!(Some(Box::new(Expr::Ident(Ident {
                 span,
+                ctxt: Default::default(),
                 sym: EMIT_HELPER.to_owned(),
                 optional: false,
             }))))
@@ -161,6 +162,7 @@ pub fn transform_script_setup_macro_expr(
         // __expose
         let new_callee_ident = Ident {
             span: callee_ident.span,
+            ctxt: Default::default(),
             sym: EXPOSE_HELPER.to_owned(),
             optional: false,
         };
@@ -168,6 +170,7 @@ pub fn transform_script_setup_macro_expr(
         // __expose(%call_expr.args%)
         valid_macro!(Some(Box::new(Expr::Call(CallExpr {
             span,
+            ctxt: Default::default(),
             callee: Callee::Expr(Box::new(Expr::Ident(new_callee_ident))),
             args: call_expr.args.to_owned(),
             type_args: None,
@@ -182,6 +185,7 @@ pub fn transform_script_setup_macro_expr(
 
         let use_model_ident = Ident {
             span,
+            ctxt: Default::default(),
             sym: USE_MODEL_HELPER.to_owned(),
             optional: false,
         };
@@ -195,6 +199,7 @@ pub fn transform_script_setup_macro_expr(
             spread: None,
             expr: Box::new(Expr::Ident(Ident {
                 span,
+                ctxt: Default::default(),
                 sym: PROPS_HELPER.to_owned(),
                 optional: false,
             })),
@@ -217,10 +222,9 @@ pub fn transform_script_setup_macro_expr(
                 expr: Box::new(Expr::Object(ObjectLit {
                     span,
                     props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                        key: PropName::Ident(Ident {
+                        key: PropName::Ident(IdentName {
                             span,
                             sym: fervid_atom!("local"),
-                            optional: false,
                         }),
                         value: Box::new(Expr::Lit(Lit::Bool(Bool { span, value: true }))),
                     })))],
@@ -233,6 +237,7 @@ pub fn transform_script_setup_macro_expr(
         // _useModel(__props, "model-name", %model options%)
         valid_macro!(Some(Box::new(Expr::Call(CallExpr {
             span,
+            ctxt: Default::default(),
             callee: Callee::Expr(Box::new(Expr::Ident(use_model_ident))),
             args: use_model_args,
             type_args: None,
@@ -247,6 +252,7 @@ pub fn transform_script_setup_macro_expr(
         bindings_helper.vue_imports |= VueImports::UseSlots;
         let use_slots_ident = Ident {
             span,
+            ctxt: Default::default(),
             sym: VueImports::UseSlots.as_atom(),
             optional: false,
         };
@@ -257,6 +263,7 @@ pub fn transform_script_setup_macro_expr(
         // _useSlots()
         valid_macro!(Some(Box::new(Expr::Call(CallExpr {
             span,
+            ctxt: Default::default(),
             callee: Callee::Expr(Box::new(Expr::Ident(use_slots_ident))),
             args: vec![],
             type_args: None,
@@ -358,11 +365,8 @@ pub fn postprocess_macros(
 
                 let new_props = Expr::Call(CallExpr {
                     span: DUMMY_SP,
-                    callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                        span: DUMMY_SP,
-                        sym: merge_models_ident,
-                        optional: false,
-                    }))),
+                    ctxt: Default::default(),
+                    callee: Callee::Expr(Box::new(Expr::Ident(merge_models_ident.into_ident()))),
                     args: vec![
                         ExprOrSpread {
                             spread: None,
@@ -412,11 +416,8 @@ pub fn postprocess_macros(
 
                 let new_emits = Expr::Call(CallExpr {
                     span: DUMMY_SP,
-                    callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                        span: DUMMY_SP,
-                        sym: merge_models_ident,
-                        optional: false,
-                    }))),
+                    ctxt: Default::default(),
+                    callee: Callee::Expr(Box::new(Expr::Ident(merge_models_ident.into_ident()))),
                     args: vec![
                         ExprOrSpread {
                             spread: None,

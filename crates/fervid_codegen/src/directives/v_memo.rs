@@ -1,7 +1,7 @@
-use fervid_core::fervid_atom;
+use fervid_core::{fervid_atom, IntoIdent};
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{ArrowExpr, CallExpr, Expr, ExprOrSpread, Ident, Number},
+    ecma::ast::{ArrowExpr, CallExpr, Callee, Expr, ExprOrSpread, Number},
 };
 
 use crate::CodegenContext;
@@ -30,6 +30,7 @@ impl CodegenContext {
             spread: None,
             expr: Box::new(Expr::Arrow(ArrowExpr {
                 span: DUMMY_SP,
+                ctxt: Default::default(),
                 params: vec![],
                 body: Box::new(swc_core::ecma::ast::BlockStmtOrExpr::Expr(item_render_expr)),
                 is_async: false,
@@ -42,11 +43,7 @@ impl CodegenContext {
         // 3. `_cache`
         let cache_ident = ExprOrSpread {
             spread: None,
-            expr: Box::new(Expr::Ident(Ident {
-                span: DUMMY_SP,
-                sym: fervid_atom!("_cache"),
-                optional: false,
-            })),
+            expr: Box::new(Expr::Ident(fervid_atom!("_cache").into_ident())),
         };
 
         // 4. Cache index
@@ -61,11 +58,11 @@ impl CodegenContext {
 
         Expr::Call(CallExpr {
             span: DUMMY_SP,
-            callee: swc_core::ecma::ast::Callee::Expr(Box::new(Expr::Ident(Ident {
-                span: DUMMY_SP,
-                sym: self.get_and_add_import_ident(fervid_core::VueImports::WithMemo),
-                optional: false,
-            }))),
+            ctxt: Default::default(),
+            callee: Callee::Expr(Box::new(Expr::Ident(
+                self.get_and_add_import_ident(fervid_core::VueImports::WithMemo)
+                    .into_ident(),
+            ))),
             args: vec![memo, render_arrow, cache_ident, cache_idx_expr],
             type_args: None,
         })

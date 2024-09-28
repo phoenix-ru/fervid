@@ -1,9 +1,9 @@
-use fervid_core::{fervid_atom, BindingTypes, FervidAtom, StrOrExpr, VOnDirective};
+use fervid_core::{fervid_atom, BindingTypes, FervidAtom, IntoIdent, StrOrExpr, VOnDirective};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
         ArrowExpr, BinExpr, BinaryOp, BindingIdent, BlockStmtOrExpr, CallExpr, Callee, Expr,
-        ExprOrSpread, Ident, Pat, RestPat,
+        ExprOrSpread, Pat, RestPat,
     },
 };
 
@@ -193,15 +193,12 @@ fn wrap_in_args_arrow(mut expr: Box<Expr>, needs_check: bool) -> Box<Expr> {
         None
     };
 
-    let args_ident = Ident {
-        span: DUMMY_SP,
-        sym: fervid_atom!("args"),
-        optional: false,
-    };
+    let args_ident = fervid_atom!("args").into_ident();
 
     // Modify to call expression
     expr = Box::new(Expr::Call(CallExpr {
         span: DUMMY_SP,
+        ctxt: Default::default(),
         callee: Callee::Expr(expr),
         args: vec![ExprOrSpread {
             spread: Some(DUMMY_SP),
@@ -234,6 +231,7 @@ fn wrap_in_args_arrow(mut expr: Box<Expr>, needs_check: bool) -> Box<Expr> {
     // Return arrow
     Box::new(Expr::Arrow(ArrowExpr {
         span: DUMMY_SP,
+        ctxt: Default::default(),
         params: vec![args_pat],
         body: Box::new(BlockStmtOrExpr::Expr(expr)),
         is_async: false,
@@ -248,17 +246,18 @@ fn unwrap_parens(expr: &Expr) -> &Expr {
     let Expr::Paren(p) = expr else {
         return expr;
     };
-    
+
     return &p.expr;
 }
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{
-        fervid_atom, BindingTypes, TemplateGenerationMode,
-    };
+    use fervid_core::{fervid_atom, BindingTypes, TemplateGenerationMode};
 
-    use crate::{test_utils::{to_str, ts}, BindingsHelper, SetupBinding};
+    use crate::{
+        test_utils::{to_str, ts},
+        BindingsHelper, SetupBinding,
+    };
 
     use super::*;
 

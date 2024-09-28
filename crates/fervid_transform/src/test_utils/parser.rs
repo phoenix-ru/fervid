@@ -1,24 +1,23 @@
 use swc_core::{
-    common::{comments::SingleThreadedComments, BytePos, Span, SyntaxContext},
-    ecma::ast::{EsVersion, Module, Expr},
+    common::{comments::SingleThreadedComments, BytePos, Span},
+    ecma::ast::{EsVersion, Expr, Module},
 };
-use swc_ecma_parser::{lexer::Lexer, EsConfig, Parser, StringInput, Syntax, TsConfig};
+use swc_ecma_parser::{lexer::Lexer, EsSyntax, Parser, StringInput, Syntax, TsSyntax};
 
 pub fn parse_javascript_module(
     input: &str,
     span_start: u32,
-    es_config: EsConfig,
+    es_syntax: EsSyntax,
 ) -> Result<(Module, SingleThreadedComments), swc_ecma_parser::error::Error> {
     let span = Span::new(
         BytePos(span_start),
         BytePos(span_start + input.len() as u32),
-        SyntaxContext::empty(),
     );
 
     let comments = SingleThreadedComments::default();
 
     let lexer = Lexer::new(
-        Syntax::Es(es_config),
+        Syntax::Es(es_syntax),
         EsVersion::EsNext,
         StringInput::new(input, span.lo, span.hi),
         Some(&comments),
@@ -32,18 +31,17 @@ pub fn parse_javascript_module(
 pub fn parse_typescript_module(
     input: &str,
     span_start: u32,
-    ts_config: TsConfig,
+    ts_syntax: TsSyntax,
 ) -> Result<(Module, SingleThreadedComments), swc_ecma_parser::error::Error> {
     let span = Span::new(
         BytePos(span_start),
         BytePos(span_start + input.len() as u32),
-        SyntaxContext::empty(),
     );
 
     let comments = SingleThreadedComments::default();
 
     let lexer = Lexer::new(
-        Syntax::Typescript(ts_config),
+        Syntax::Typescript(ts_syntax),
         EsVersion::EsNext,
         StringInput::new(input, span.lo, span.hi),
         Some(&comments),
@@ -51,24 +49,25 @@ pub fn parse_typescript_module(
 
     let mut parser = Parser::new_from(lexer);
 
-    parser.parse_typescript_module().map(|module| (module, comments))
+    parser
+        .parse_typescript_module()
+        .map(|module| (module, comments))
 }
 
 pub fn parse_javascript_expr(
     input: &str,
     span_start: u32,
-    es_config: EsConfig,
+    es_syntax: EsSyntax,
 ) -> Result<(Box<Expr>, SingleThreadedComments), swc_ecma_parser::error::Error> {
     let span = Span::new(
         BytePos(span_start),
         BytePos(span_start + input.len() as u32),
-        SyntaxContext::empty(),
     );
 
     let comments = SingleThreadedComments::default();
 
     let lexer = Lexer::new(
-        Syntax::Es(es_config),
+        Syntax::Es(es_syntax),
         EsVersion::EsNext,
         StringInput::new(input, span.lo, span.hi),
         Some(&comments),
@@ -82,18 +81,17 @@ pub fn parse_javascript_expr(
 pub fn parse_typescript_expr(
     input: &str,
     span_start: u32,
-    ts_config: TsConfig,
+    ts_syntax: TsSyntax,
 ) -> Result<(Box<Expr>, SingleThreadedComments), swc_ecma_parser::error::Error> {
     let span = Span::new(
         BytePos(span_start),
         BytePos(span_start + input.len() as u32),
-        SyntaxContext::empty(),
     );
 
     let comments = SingleThreadedComments::default();
 
     let lexer = Lexer::new(
-        Syntax::Typescript(ts_config),
+        Syntax::Typescript(ts_syntax),
         EsVersion::EsNext,
         StringInput::new(input, span.lo, span.hi),
         Some(&comments),

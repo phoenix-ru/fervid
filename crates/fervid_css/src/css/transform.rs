@@ -301,7 +301,6 @@ fn process_pseudo_class_children(
     let span = Span {
         lo: first_child.span_lo(),
         hi: last_child.span_hi(),
-        ctxt: Default::default(),
     };
 
     // Stringify
@@ -341,7 +340,6 @@ fn process_pseudo_element_children(
     let span = Span {
         lo: first_child.span_lo(),
         hi: last_child.span_hi(),
-        ctxt: Default::default(),
     };
 
     // Stringify

@@ -210,7 +210,6 @@ mod tests {
             span: Span {
                 lo: swc_core::common::BytePos(1),
                 hi: swc_core::common::BytePos(script_content.len() as u32 + 1),
-                ctxt: Default::default(),
             },
         };
         let script_setup = SfcScriptBlock {
@@ -220,7 +219,6 @@ mod tests {
             span: Span {
                 lo: swc_core::common::BytePos(script_content.len() as u32 + 2),
                 hi: swc_core::common::BytePos(script_setup_content.len() as u32 + 1),
-                ctxt: Default::default(),
             },
         };
 
@@ -240,7 +238,7 @@ mod tests {
         // For possible errors, otherwise SWC does not like it
         let mut source = String::from(script_content);
         source.push_str(script_setup_content);
-        cm.new_source_file(swc_core::common::FileName::Anon, source);
+        cm.new_source_file(Lrc::new(swc_core::common::FileName::Anon), source);
 
         let mut emitter_cfg = swc_ecma_codegen::Config::default();
         emitter_cfg.minify = false;

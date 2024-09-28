@@ -11,6 +11,7 @@ impl CodegenContext {
         // _Suspense
         let suspense_identifier = Expr::Ident(Ident {
             span,
+            ctxt: Default::default(),
             sym: self.get_and_add_import_ident(VueImports::Suspense),
             optional: false,
         });

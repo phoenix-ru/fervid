@@ -3,7 +3,7 @@ use fervid_core::{
     PatchHints, SfcTemplateBlock, StartingTag, VueDirectives,
 };
 use swc_core::common::{BytePos, Span};
-use swc_ecma_parser::{Syntax, TsConfig};
+use swc_ecma_parser::{Syntax, TsSyntax};
 use swc_html_ast::{Child, Element, Text};
 
 use crate::SfcParser;
@@ -180,7 +180,6 @@ impl SfcParser<'_, '_, '_> {
                 let text_span = Span {
                     lo: BytePos(offset),
                     hi: BytePos(offset + text.len() as u32),
-                    ctxt: Default::default(),
                 };
 
                 out.push(Node::Text(FervidAtom::from(text), text_span));
@@ -195,12 +194,11 @@ impl SfcParser<'_, '_, '_> {
             let interpolation_span = Span::new(
                 BytePos(offset),
                 BytePos(offset + interpolation.len() as u32),
-                Default::default(),
             );
 
             match self.parse_expr(
                 interpolation,
-                Syntax::Typescript(TsConfig::default()),
+                Syntax::Typescript(TsSyntax::default()),
                 interpolation_span,
             ) {
                 Ok(parsed_interpolation) => out.push(Node::Interpolation(Interpolation {
@@ -218,7 +216,6 @@ impl SfcParser<'_, '_, '_> {
             let text_span = Span::new(
                 BytePos(span.lo.0 + text_start_idx as u32),
                 span.hi,
-                span.ctxt,
             );
             out.push(Node::Text(
                 FervidAtom::from(&raw[text_start_idx..]),

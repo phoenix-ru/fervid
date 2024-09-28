@@ -1,4 +1,10 @@
-use swc_core::{ecma::{ast::{Expr, Pat}, atoms::{JsWord, Atom}}, common::Span};
+use swc_core::{
+    common::{Span, DUMMY_SP},
+    ecma::{
+        ast::{Expr, Ident, Pat},
+        atoms::{Atom, JsWord},
+    },
+};
 
 pub type FervidAtom = Atom;
 
@@ -8,6 +14,30 @@ macro_rules! fervid_atom {
     ($lit: literal) => {
         fervid_core::FervidAtom::from($lit)
     };
+}
+
+pub trait IntoIdent {
+    fn into_ident(self) -> Ident;
+    fn into_ident_spanned(self, span: Span) -> Ident;
+}
+
+impl IntoIdent for FervidAtom {
+    fn into_ident(self) -> Ident {
+        Ident {
+            span: DUMMY_SP,
+            ctxt: Default::default(),
+            sym: self,
+            optional: false,
+        }
+    }
+    fn into_ident_spanned(self, span: Span) -> Ident {
+        Ident {
+            span,
+            ctxt: Default::default(),
+            sym: self,
+            optional: false,
+        }
+    }
 }
 
 /// A Node represents a part of the Abstract Syntax Tree (AST).
@@ -37,7 +67,6 @@ pub enum Node {
     /// `ConditionalSeq` is a representation of `v-if`/`v-else-if`/`v-else` node sequence.
     /// Its children are the other `Node`s, this node is just a wrapper.
     ConditionalSeq(ConditionalNodeSequence),
-
     // /// `ForFragment` is a representation of a `v-for` node.
     // /// This type is for ergonomics,
     // /// i.e. to separate patch flags and `key` of the repeater from the repeatable.
@@ -57,7 +86,7 @@ pub struct ElementNode {
     pub children: Vec<Node>,
     pub template_scope: u32,
     pub patch_hints: PatchHints,
-    pub span: Span
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -108,7 +137,7 @@ pub struct Interpolation {
     pub value: Box<Expr>,
     pub template_scope: u32,
     pub patch_flag: bool,
-    pub span: Span
+    pub span: Span,
 }
 
 /// Starting tag represents [`ElementNode`]'s tag name and attributes
@@ -126,7 +155,11 @@ pub struct StartingTag {
 #[derive(Debug, Clone)]
 pub enum AttributeOrBinding {
     /// `RegularAttribute` is a plain HTML attribute without any associated logic
-    RegularAttribute { name: FervidAtom, value: FervidAtom, span: Span },
+    RegularAttribute {
+        name: FervidAtom,
+        value: FervidAtom,
+        span: Span,
+    },
     /// `v-bind` directive
     VBind(VBindDirective),
     /// `v-on` directive
@@ -159,7 +192,7 @@ pub struct PatchHints {
     /// Dynamic props
     pub props: Vec<JsWord>,
     /// Whether the node codegen needs to be surrounded by `(openBlock(),`
-    pub should_use_block: bool
+    pub should_use_block: bool,
 }
 
 flagset::flags! {
@@ -303,7 +336,7 @@ pub struct VForDirective {
     /// `foo` in `v-for="foo in bar"`
     pub itervar: Box<Expr>,
     pub patch_flags: PatchFlagsSet,
-    pub span: Span
+    pub span: Span,
 }
 
 /// `v-on` and its shorthand `@`
@@ -316,7 +349,7 @@ pub struct VOnDirective {
     /// A list of modifiers after the dot, e.g. `stop` and `prevent` in `@click.stop.prevent="handleClick"`
     pub modifiers: Vec<FervidAtom>,
     /// Byte location in source
-    pub span: Span
+    pub span: Span,
 }
 
 /// `v-bind` and its shorthand `:`
@@ -347,7 +380,7 @@ pub struct VModelDirective {
     pub update_handler: Option<Box<Expr>>,
     /// `lazy` and `trim` in `v-model.lazy.trim`
     pub modifiers: Vec<FervidAtom>,
-    pub span: Span
+    pub span: Span,
 }
 
 /// `v-slot`
@@ -402,7 +435,6 @@ pub enum BindingTypes {
     LiteralConst,
 
     // Introduced by fervid:
-
     /// a `.vue` import or `defineComponent` call
     Component,
     /// an import which is not a `.vue` or `from 'vue'`
@@ -429,5 +461,5 @@ pub enum TemplateGenerationMode {
     /// Variable access will be translated to object property access,
     /// e.g. `const foo = ref(0)` and `foo.bar` -> `$setup.foo.bar`.
     #[default]
-    RenderFn
+    RenderFn,
 }

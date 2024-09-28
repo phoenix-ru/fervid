@@ -11,6 +11,7 @@ impl CodegenContext {
         // _Teleport
         let teleport_identifier = Expr::Ident(Ident {
             span,
+            ctxt: Default::default(),
             sym: self.get_and_add_import_ident(VueImports::Teleport),
             optional: false,
         });

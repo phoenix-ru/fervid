@@ -5,7 +5,7 @@ extern crate wee_alloc;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 use fervid::{compile, CompileOptions, CompileResult};
-use swc_core::common::{SourceMap, Spanned};
+use swc_core::common::{sync::Lrc, SourceMap, Spanned};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(getter_with_clone)]
@@ -51,8 +51,11 @@ fn convert_compile_result(compiled: CompileResult, source: &str) -> WasmCompileR
 
     let mut errors = vec![];
     if !compiled.errors.is_empty() {
-        let cm: swc_core::common::sync::Lrc<SourceMap> = Default::default();
-        cm.new_source_file(swc_core::common::FileName::Anon, source.to_owned());
+        let cm: Lrc<SourceMap> = Default::default();
+        cm.new_source_file(
+            Lrc::new(swc_core::common::FileName::Anon),
+            source.to_owned(),
+        );
         errors.reserve(compiled.errors.len());
 
         for error in compiled.errors {

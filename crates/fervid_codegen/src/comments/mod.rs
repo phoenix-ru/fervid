@@ -1,7 +1,7 @@
-use fervid_core::{FervidAtom, VueImports};
+use fervid_core::{FervidAtom, IntoIdent, VueImports};
 use swc_core::{
     common::Span,
-    ecma::ast::{CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, Str},
+    ecma::ast::{CallExpr, Callee, Expr, ExprOrSpread, Lit, Str},
 };
 
 use crate::context::CodegenContext;
@@ -11,12 +11,12 @@ impl CodegenContext {
     pub fn generate_comment_vnode(&mut self, comment: &str, span: Span) -> Expr {
         Expr::Call(CallExpr {
             span,
+            ctxt: Default::default(),
             // createCommentVNode
-            callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                span,
-                sym: self.get_and_add_import_ident(VueImports::CreateCommentVNode),
-                optional: false,
-            }))),
+            callee: Callee::Expr(Box::new(Expr::Ident(
+                self.get_and_add_import_ident(VueImports::CreateCommentVNode)
+                    .into_ident_spanned(span),
+            ))),
             // "comment"
             args: vec![ExprOrSpread {
                 spread: None,

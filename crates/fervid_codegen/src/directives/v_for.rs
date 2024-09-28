@@ -1,8 +1,11 @@
-use fervid_core::{fervid_atom, VForDirective, VueImports};
+use fervid_core::{fervid_atom, IntoIdent, VForDirective, VueImports};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
-        ArrowExpr, AssignExpr, AssignOp, AssignTarget, BinExpr, BinaryOp, BindingIdent, BlockStmt, BlockStmtOrExpr, CallExpr, Callee, Decl, Expr, ExprOrSpread, ExprStmt, Ident, IfStmt, Lit, MemberExpr, Null, Number, Pat, ReturnStmt, SimpleAssignTarget, Stmt, VarDecl, VarDeclKind, VarDeclarator
+        ArrowExpr, AssignExpr, AssignOp, AssignTarget, BinExpr, BinaryOp, BindingIdent, BlockStmt,
+        BlockStmtOrExpr, CallExpr, Callee, Decl, Expr, ExprOrSpread, ExprStmt, Ident, IfStmt, Lit,
+        MemberExpr, MemberProp, Null, Number, Pat, ReturnStmt, SimpleAssignTarget, Stmt, VarDecl,
+        VarDeclKind, VarDeclarator,
     },
 };
 
@@ -16,6 +19,7 @@ impl CodegenContext {
         // Arrow function which renders each individual item
         let render_list_arrow = Expr::Arrow(ArrowExpr {
             span,
+            ctxt: Default::default(),
             params: vec![Pat::Expr(v_for.itervar.to_owned())],
             body: Box::new(BlockStmtOrExpr::Expr(item_render_expr)),
             is_async: false,
@@ -41,8 +45,10 @@ impl CodegenContext {
         // `_renderList(iterable, render_list_arrow)`
         let render_list_call_expr = Expr::Call(CallExpr {
             span,
+            ctxt: Default::default(),
             callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                 span,
+                ctxt: Default::default(),
                 sym: self.get_and_add_import_ident(VueImports::RenderList),
                 optional: false,
             }))),
@@ -60,6 +66,7 @@ impl CodegenContext {
             spread: None,
             expr: Box::new(Expr::Ident(Ident {
                 span,
+                ctxt: Default::default(),
                 sym: self.get_and_add_import_ident(VueImports::Fragment),
                 optional: false,
             })),
@@ -83,8 +90,10 @@ impl CodegenContext {
 
         let create_element_block = Expr::Call(CallExpr {
             span,
+            ctxt: Default::default(),
             callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                 span,
+                ctxt: Default::default(),
                 sym: self.get_and_add_import_ident(VueImports::CreateElementBlock),
                 optional: false,
             }))),
@@ -139,11 +148,7 @@ impl CodegenContext {
         // 1.3. `_renderList` third argument - `_cache`
         let render_list_cache = ExprOrSpread {
             spread: None,
-            expr: Box::new(Expr::Ident(Ident {
-                span,
-                sym: fervid_atom!("_cache"),
-                optional: false,
-            })),
+            expr: Box::new(Expr::Ident(fervid_atom!("_cache").into_ident())),
         };
 
         // 1.4. `_renderList` fourth argument - cache index
@@ -159,8 +164,10 @@ impl CodegenContext {
         // 1.5. Generate `_renderList` call
         let render_list = Box::new(Expr::Call(CallExpr {
             span,
+            ctxt: Default::default(),
             callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                 span,
+                ctxt: Default::default(),
                 sym: self.get_and_add_import_ident(VueImports::RenderList),
                 optional: false,
             }))),
@@ -178,6 +185,7 @@ impl CodegenContext {
             spread: None,
             expr: Box::new(Expr::Ident(Ident {
                 span,
+                ctxt: Default::default(),
                 sym: self.get_and_add_import_ident(VueImports::Fragment),
                 optional: false,
             })),
@@ -208,8 +216,10 @@ impl CodegenContext {
         // 2.5. Generate `_createElementBlock`
         let create_element_block = Expr::Call(CallExpr {
             span,
+            ctxt: Default::default(),
             callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                 span,
+                ctxt: Default::default(),
                 sym: self.get_and_add_import_ident(VueImports::CreateElementBlock),
                 optional: false,
             }))),
@@ -247,28 +257,16 @@ impl CodegenContext {
         memo_expr: Box<Expr>,
     ) -> Box<Expr> {
         // `_cached`
-        let cached_ident = Ident {
-            span: DUMMY_SP,
-            sym: fervid_atom!("_cached"),
-            optional: false,
-        };
+        let cached_ident = fervid_atom!("_cached").into_ident();
 
         // `_memo`
-        let memo_ident = Ident {
-            span: DUMMY_SP,
-            sym: fervid_atom!("_memo"),
-            optional: false,
-        };
+        let memo_ident = fervid_atom!("_memo").into_ident();
 
         // Params for the function
         macro_rules! param {
             ($ident: literal) => {
                 Pat::Ident(BindingIdent {
-                    id: Ident {
-                        span: DUMMY_SP,
-                        sym: fervid_atom!($ident),
-                        optional: false,
-                    },
+                    id: fervid_atom!($ident).into_ident(),
                     type_ann: None,
                 })
             };
@@ -286,6 +284,7 @@ impl CodegenContext {
         // `const _memo = ([])`
         let const_memo = Stmt::Decl(Decl::Var(Box::new(VarDecl {
             span: DUMMY_SP,
+            ctxt: Default::default(),
             kind: VarDeclKind::Const,
             declare: false,
             decls: vec![VarDeclarator {
@@ -302,8 +301,10 @@ impl CodegenContext {
         // `_isMemoSame(_cached, _memo)`
         let is_memo_same = Box::new(Expr::Call(CallExpr {
             span: DUMMY_SP,
+            ctxt: Default::default(),
             callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                 span: DUMMY_SP,
+                ctxt: Default::default(),
                 sym: self.get_and_add_import_ident(VueImports::IsMemoSame),
                 optional: false,
             }))),
@@ -340,15 +341,12 @@ impl CodegenContext {
         });
 
         // `_item`
-        let item_ident = Ident {
-            span: DUMMY_SP,
-            sym: fervid_atom!("_item"),
-            optional: false,
-        };
+        let item_ident = fervid_atom!("_item").into_ident();
 
         // `const _item = item_render_expr`
         let const_item = Stmt::Decl(Decl::Var(Box::new(VarDecl {
             span: DUMMY_SP,
+            ctxt: Default::default(),
             kind: VarDeclKind::Const,
             declare: false,
             decls: vec![VarDeclarator {
@@ -371,11 +369,7 @@ impl CodegenContext {
                 left: AssignTarget::Simple(SimpleAssignTarget::Member(MemberExpr {
                     span: DUMMY_SP,
                     obj: Box::new(Expr::Ident(item_ident.to_owned())),
-                    prop: swc_core::ecma::ast::MemberProp::Ident(Ident {
-                        span: DUMMY_SP,
-                        sym: fervid_atom!("memo"),
-                        optional: false,
-                    }),
+                    prop: MemberProp::Ident(fervid_atom!("memo").into_ident().into()),
                 })),
                 right: Box::new(Expr::Ident(memo_ident)),
             })),
@@ -398,9 +392,11 @@ impl CodegenContext {
 
         Box::new(Expr::Arrow(ArrowExpr {
             span: DUMMY_SP,
+            ctxt: Default::default(),
             params: arrow_params,
             body: Box::new(BlockStmtOrExpr::BlockStmt(BlockStmt {
                 span: DUMMY_SP,
+                ctxt: Default::default(),
                 stmts: arrow_body_stmts,
             })),
             is_async: false,

@@ -1,7 +1,7 @@
-use fervid_core::{FervidAtom, VueImports};
+use fervid_core::{FervidAtom, IntoIdent, VueImports};
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{Ident, ImportNamedSpecifier, ImportSpecifier, ModuleExportName},
+    ecma::ast::{ImportNamedSpecifier, ImportSpecifier, ModuleExportName},
 };
 
 use super::context::CodegenContext;
@@ -28,17 +28,11 @@ impl CodegenContext {
         for import in self.bindings_helper.vue_imports.into_iter() {
             let import_raw = import.as_str();
 
-            let import_local = Ident {
-                span: DUMMY_SP,
-                sym: import.as_atom(),
-                optional: false,
-            };
+            let import_local = import.as_atom().into_ident();
 
-            let import_vue = Some(ModuleExportName::Ident(Ident {
-                span: DUMMY_SP,
-                sym: FervidAtom::from(&import_raw[1..]),
-                optional: false,
-            }));
+            let import_vue = Some(ModuleExportName::Ident(
+                FervidAtom::from(&import_raw[1..]).into_ident(),
+            ));
 
             result.push(ImportSpecifier::Named(ImportNamedSpecifier {
                 span: DUMMY_SP,

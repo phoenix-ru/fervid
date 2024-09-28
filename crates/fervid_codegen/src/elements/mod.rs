@@ -1,11 +1,11 @@
 use fervid_core::{
-    AttributeOrBinding, ElementNode, StartingTag, StrOrExpr, VBindDirective, VueImports,
+    AttributeOrBinding, ElementNode, IntoIdent, StartingTag, StrOrExpr, VBindDirective, VueImports,
 };
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
         ast::{
-            ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, Null, Number, ObjectLit,
+            ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Lit, Null, Number, ObjectLit,
             PropOrSpread, Str,
         },
         atoms::JsWord,
@@ -74,11 +74,10 @@ impl CodegenContext {
 
         // Arg 1: element name. Either a stringified name or Fragment
         let element_name_expr = if should_generate_fragment_instead {
-            Expr::Ident(Ident {
-                span,
-                sym: self.get_and_add_import_ident(VueImports::Fragment),
-                optional: false,
-            })
+            Expr::Ident(
+                self.get_and_add_import_ident(VueImports::Fragment)
+                    .into_ident_spanned(span),
+            )
         } else {
             Expr::Lit(Lit::Str(Str {
                 span,
@@ -190,11 +189,10 @@ impl CodegenContext {
         // `createElementVNode("element-name", {element:attrs}, [element, children], PATCH_FLAGS)`
         let create_element_fn_call = Expr::Call(CallExpr {
             span,
-            callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                span,
-                sym: create_element_fn_ident,
-                optional: false,
-            }))),
+            ctxt: Default::default(),
+            callee: Callee::Expr(Box::new(Expr::Ident(
+                create_element_fn_ident.into_ident_spanned(span),
+            ))),
             args: create_element_args,
             type_args: None,
         });
@@ -295,11 +293,10 @@ impl CodegenContext {
         // Element `v-model` needs a special processing compared to a component one
         if directives.v_model.len() != 0 {
             let span = DUMMY_SP; // TODO Span
-            let v_model_identifier = Expr::Ident(Ident {
-                span,
-                sym: self.get_element_vmodel_directive_name(&element_node.starting_tag),
-                optional: false,
-            });
+            let v_model_identifier = Expr::Ident(
+                self.get_element_vmodel_directive_name(&element_node.starting_tag)
+                    .into_ident_spanned(span),
+            );
 
             for v_model in directives.v_model.iter() {
                 out.push(Some(ExprOrSpread {
