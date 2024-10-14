@@ -18,9 +18,9 @@ use swc_core::{
         BinExpr, BinaryOp, Class, ClassDecl, Decl, DefaultDecl, ExportDecl, ExportSpecifier, Expr,
         FnDecl, FnExpr, Function, Ident, Lit, ModuleDecl, ModuleExportName, ModuleItem, Pat, Stmt,
         Tpl, TsCallSignatureDecl, TsEntityName, TsEnumDecl, TsExprWithTypeArgs,
-        TsFnOrConstructorType, TsFnParam, TsFnType, TsGetterSignature, TsIndexedAccessType,
-        TsInterfaceDecl, TsIntersectionType, TsKeywordType, TsKeywordTypeKind, TsLit, TsLitType,
-        TsMappedType, TsModuleDecl, TsModuleName, TsNamespaceBody, TsNamespaceDecl,
+        TsFnOrConstructorType, TsFnParam, TsFnType, TsIndexedAccessType, TsInterfaceDecl,
+        TsIntersectionType, TsKeywordType, TsKeywordTypeKind, TsLit, TsLitType, TsMappedType,
+        TsModuleDecl, TsModuleName, TsNamespaceBody, TsNamespaceDecl, TsPropertySignature,
         TsQualifiedName, TsTplLitType, TsType, TsTypeAnn, TsTypeElement, TsTypeLit,
         TsTypeOperatorOp, TsTypeQueryExpr, TsTypeRef, TsUnionOrIntersectionType, TsUnionType,
     },
@@ -41,7 +41,7 @@ static SUPPORTED_BUILTINS_SET: Set<&'static str> = phf_set! {
 
 pub type ResolutionResult<T> = Result<T, ScriptError>;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct ResolvedElements {
     pub props: HashMap<FervidAtom, TsTypeElement>,
     pub calls: Vec<Either<TsFnType, TsCallSignatureDecl>>,
@@ -79,7 +79,7 @@ fn resolve_type_elements_impl_type(
     // }
 
     match ts_type {
-        TsType::TsTypeLit(type_lit) => type_elements_to_map(&type_lit.members),
+        TsType::TsTypeLit(type_lit) => type_elements_to_map(ctx, &type_lit.members, scope),
         TsType::TsParenthesizedType(paren) => {
             resolve_type_elements_impl_type(ctx, &paren.type_ann, scope)
         }
@@ -124,10 +124,12 @@ fn resolve_type_elements_impl_type(
                 }
             }
 
-            Ok(merge_elements(
+            dbg!("We have resolved an intersection", &resolved_elements);
+
+            dbg!(Ok(merge_elements(
                 resolved_elements,
                 MergeElementsAs::Intersection,
-            ))
+            )))
         }
 
         TsType::TsMappedType(mapped_type) => resolve_mapped_type(ctx, mapped_type, scope),
@@ -423,7 +425,11 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
     Err(error(ScriptErrorKind::ResolveTypeUnsupported, span))
 }
 
-fn type_elements_to_map(elements: &Vec<TsTypeElement>) -> ResolutionResult<ResolvedElements> {
+fn type_elements_to_map(
+    ctx: &mut TypeResolveContext,
+    elements: &Vec<TsTypeElement>,
+    scope: &TypeScope,
+) -> ResolutionResult<ResolvedElements> {
     let mut result = ResolvedElements::default();
 
     for ts_type_element in elements.iter() {
@@ -435,7 +441,7 @@ fn type_elements_to_map(elements: &Vec<TsTypeElement>) -> ResolutionResult<Resol
                 if let (Some(name), false) = (name, $signature.computed) {
                     result.props.insert(name, ts_type_element.to_owned());
                 } else if let Expr::Tpl(tpl) = $signature.key.as_ref() {
-                    let keys = resolve_template_keys(&tpl)?;
+                    let keys = resolve_template_keys(ctx, &tpl, scope)?;
                     for key in keys {
                         result.props.insert(key, ts_type_element.to_owned());
                     }
@@ -483,82 +489,64 @@ fn merge_elements(
     for ResolvedElements { props, mut calls } in elements {
         // Add props
         for (key, new_value) in props {
-            match result.props.get(&key) {
-                None => {
-                    result.props.insert(key, new_value);
+            let Some(existing_value) = result.props.get(&key) else {
+                result.props.insert(key, new_value);
+                continue;
+            };
+
+            let (existing_type_ann, existing_optional) = match existing_value {
+                TsTypeElement::TsPropertySignature(s) => (s.type_ann.as_ref(), s.optional),
+                TsTypeElement::TsMethodSignature(s) => (s.type_ann.as_ref(), s.optional),
+                _ => (None, false),
+            };
+
+            let Some(existing_type_ann) = existing_type_ann.map(|v| v.type_ann.as_ref()) else {
+                // No type annotation is not supported
+                continue;
+            };
+
+            let (new_type_ann, new_optional, new_key) = match new_value {
+                TsTypeElement::TsPropertySignature(ref s) => {
+                    (s.type_ann.as_ref(), s.optional, &s.key)
                 }
-
-                Some(existing_value) => {
-                    let optional = match existing_value {
-                        TsTypeElement::TsPropertySignature(s) => s.optional,
-                        TsTypeElement::TsMethodSignature(s) => s.optional,
-                        _ => false,
-                    };
-
-                    macro_rules! implementation {
-                        ($signature: ident) => {
-                            // TODO Validate. Probably just pushing to existing is better?
-                            let types: Vec<Box<TsType>> = vec![
-                                // existing
-                                Box::new(TsType::TsTypeLit(TsTypeLit {
-                                    span: DUMMY_SP,
-                                    members: vec![existing_value.to_owned()],
-                                })),
-                                // new
-                                Box::new(TsType::TsTypeLit(TsTypeLit {
-                                    span: DUMMY_SP,
-                                    members: vec![new_value.to_owned()],
-                                })),
-                            ];
-
-                            let union_or_intersection = match merge_as {
-                                MergeElementsAs::Union => {
-                                    TsUnionOrIntersectionType::TsUnionType(TsUnionType {
-                                        span: DUMMY_SP,
-                                        types,
-                                    })
-                                }
-                                MergeElementsAs::Intersection => {
-                                    TsUnionOrIntersectionType::TsIntersectionType(
-                                        TsIntersectionType {
-                                            span: DUMMY_SP,
-                                            types,
-                                        },
-                                    )
-                                }
-                            };
-
-                            let property = create_property(
-                                $signature.key.to_owned(),
-                                Box::new(TsType::TsUnionOrIntersectionType(union_or_intersection)),
-                                $signature.optional || optional,
-                            );
-
-                            result
-                                .props
-                                .insert(key, TsTypeElement::TsGetterSignature(property));
-                        };
-                    }
-
-                    match new_value {
-                        TsTypeElement::TsMethodSignature(ref signature) => {
-                            implementation!(signature);
-                        }
-                        TsTypeElement::TsPropertySignature(ref signature) => {
-                            implementation!(signature);
-                        }
-
-                        // TsTypeElement::TsCallSignatureDecl(_) => {},
-                        // TsTypeElement::TsGetterSignature(_) => {},
-                        // TsTypeElement::TsConstructSignatureDecl(_) => {},
-                        // TsTypeElement::TsSetterSignature(_) => {},
-                        // TsTypeElement::TsIndexSignature(_) => {},
-                        _ => {
-                            // ??
-                        }
-                    }
+                TsTypeElement::TsMethodSignature(ref s) => {
+                    (s.type_ann.as_ref(), s.optional, &s.key)
                 }
-            }
+                _ => continue,
+            };
+
+            let Some(new_type_ann) = new_type_ann.map(|v| v.type_ann.as_ref()) else {
+                // No type annotation is not supported
+                continue;
+            };
+
+            let types: Vec<Box<TsType>> = vec![
+                Box::new(existing_type_ann.to_owned()),
+                Box::new(new_type_ann.to_owned()),
+            ];
+
+            let union_or_intersection = match merge_as {
+                MergeElementsAs::Union => TsUnionOrIntersectionType::TsUnionType(TsUnionType {
+                    span: DUMMY_SP,
+                    types,
+                }),
+                MergeElementsAs::Intersection => {
+                    TsUnionOrIntersectionType::TsIntersectionType(TsIntersectionType {
+                        span: DUMMY_SP,
+                        types,
+                    })
+                }
+            };
+
+            let property = create_property(
+                new_key.to_owned(),
+                Box::new(TsType::TsUnionOrIntersectionType(union_or_intersection)),
+                new_optional || existing_optional,
+            );
+
+            result
+                .props
+                .insert(key, TsTypeElement::TsPropertySignature(property));
         }
 
         // Add calls
@@ -573,7 +561,7 @@ fn resolve_interface_members(
     interface_decl: &TsInterfaceDecl,
     scope: &TypeScope, // TODO Type parameters
 ) -> ResolutionResult<ResolvedElements> {
-    let mut base = type_elements_to_map(&interface_decl.body.body)?;
+    let mut base = type_elements_to_map(ctx, &interface_decl.body.body, scope)?;
 
     for ext in interface_decl.extends.iter() {
         let Ok(mut resolved) = resolve_type_elements_impl_type_ref_or_expr_with_type_args(
@@ -633,7 +621,7 @@ fn resolve_mapped_type(
 
         result
             .props
-            .insert(key, TsTypeElement::TsGetterSignature(property));
+            .insert(key, TsTypeElement::TsPropertySignature(property));
     }
 
     Ok(result)
@@ -650,8 +638,13 @@ fn resolve_index_type(
         ..
     } = index_type;
 
+    // Number, e.g. `arr[0]` or `arr[number]`
     if let TsType::TsLitType(TsLitType {
         lit: TsLit::Number(_),
+        ..
+    })
+    | TsType::TsKeywordType(TsKeywordType {
+        kind: TsKeywordTypeKind::TsNumberKeyword,
         ..
     }) = index_type.as_ref()
     {
@@ -844,7 +837,11 @@ fn resolve_type_from_import<'t>(
     None
 }
 
-fn resolve_template_keys(tpl: &Tpl) -> ResolutionResult<Vec<FervidAtom>> {
+fn resolve_template_keys(
+    ctx: &mut TypeResolveContext,
+    tpl: &Tpl,
+    scope: &TypeScope,
+) -> ResolutionResult<Vec<FervidAtom>> {
     struct StackItem {
         expr_idx: usize,
         quasi_idx: usize,
@@ -872,7 +869,7 @@ fn resolve_template_keys(tpl: &Tpl) -> ResolutionResult<Vec<FervidAtom>> {
             continue;
         }
 
-        let resolved = resolve_string_type_expr(&tpl.exprs[expr_idx])?;
+        let resolved = resolve_string_type_expr(ctx, &tpl.exprs[expr_idx], scope)?;
 
         for r in resolved {
             stack.push(StackItem {
@@ -1042,7 +1039,11 @@ fn resolve_string_type(
     }
 }
 
-fn resolve_string_type_expr(expr: &Expr) -> ResolutionResult<Vec<FervidAtom>> {
+fn resolve_string_type_expr(
+    ctx: &mut TypeResolveContext,
+    expr: &Expr,
+    scope: &TypeScope,
+) -> ResolutionResult<Vec<FervidAtom>> {
     match expr {
         Expr::Lit(Lit::Str(s)) => Ok(vec![s.value.to_owned()]),
 
@@ -1054,13 +1055,24 @@ fn resolve_string_type_expr(expr: &Expr) -> ResolutionResult<Vec<FervidAtom>> {
             right,
             ..
         }) => {
-            let mut left = resolve_string_type_expr(&left)?;
-            let mut right = resolve_string_type_expr(&right)?;
+            let mut left = resolve_string_type_expr(ctx, &left, scope)?;
+            let mut right = resolve_string_type_expr(ctx, &right, scope)?;
             left.append(&mut right);
             Ok(left)
         }
 
-        Expr::Tpl(tpl) => resolve_template_keys(tpl),
+        Expr::Tpl(tpl) => resolve_template_keys(ctx, tpl, scope),
+
+        // Remap Ident to TsTypeRef
+        Expr::Ident(ident) => {
+            let remapped = TsType::TsTypeRef(TsTypeRef {
+                span: ident.span,
+                type_name: TsEntityName::Ident(ident.to_owned()),
+                type_params: None,
+            });
+
+            resolve_string_type(ctx, &remapped, scope)
+        }
 
         // Type references are not supported (since Expr is not a proper TS type)
         x => Err(error(
@@ -2172,6 +2184,7 @@ pub fn infer_runtime_type_type(
                     (&intersection.types, true)
                 }
             };
+            dbg!("We are flattening", &types);
             let mut flattened = flatten_types(ctx, &types, scope, is_key_of);
             if is_intersection {
                 flattened -= Types::Unknown;
@@ -2252,6 +2265,7 @@ fn infer_runtime_type_type_elements(
             result |= if call_or_construct {
                 Types::Function
             } else {
+                dbg!("We are here", member);
                 Types::Object
             };
 
@@ -2318,12 +2332,14 @@ pub fn infer_runtime_type_type_element(
     }
 
     let type_ann = match ts_type_element {
-        TsTypeElement::TsCallSignatureDecl(d) => &d.type_ann,
+        TsTypeElement::TsCallSignatureDecl(_) | TsTypeElement::TsMethodSignature(_) => {
+            return TypesSet::from(Types::Function)
+        }
+
         TsTypeElement::TsConstructSignatureDecl(d) => &d.type_ann,
         TsTypeElement::TsPropertySignature(s) => &s.type_ann,
         TsTypeElement::TsGetterSignature(s) => &s.type_ann,
         TsTypeElement::TsSetterSignature(_) => return unknown!(),
-        TsTypeElement::TsMethodSignature(s) => &s.type_ann,
         TsTypeElement::TsIndexSignature(s) => &s.type_ann,
     };
 
@@ -2344,6 +2360,7 @@ fn flatten_types(
     for ts_type in types {
         result |= infer_runtime_type_type(ctx, &ts_type, scope, is_key_of);
     }
+    dbg!("We have flattened", result);
     result
 }
 
@@ -2444,7 +2461,7 @@ fn reverse_infer_type_impl(
                 let type_name = type_ref_ident.sym.as_str();
 
                 if type_name.ends_with("Constructor") {
-                    return TsTypeElement::TsGetterSignature(create_property(
+                    return TsTypeElement::TsPropertySignature(create_property(
                         Box::new(key.to_owned()),
                         ctor_to_type(type_name),
                         optional,
@@ -2454,7 +2471,7 @@ fn reverse_infer_type_impl(
                 {
                     if let Some(first_type_param) = type_params.params.first() {
                         // PropType<{}>
-                        return TsTypeElement::TsGetterSignature(create_property(
+                        return TsTypeElement::TsPropertySignature(create_property(
                             Box::new(key.to_owned()),
                             first_type_param.to_owned(),
                             optional,
@@ -2496,7 +2513,7 @@ fn reverse_infer_type_impl(
     }
 
     // When couldn't infer, simply return `null`
-    TsTypeElement::TsGetterSignature(create_property(
+    TsTypeElement::TsPropertySignature(create_property(
         Box::new(key.to_owned()),
         Box::new(TsType::TsKeywordType(TsKeywordType {
             span: DUMMY_SP,
@@ -2517,12 +2534,14 @@ fn get_id(expr: &Expr) -> Option<FervidAtom> {
 fn create_property(
     key: Box<Expr>,
     type_annotation: Box<TsType>,
-    _optional: bool,
-) -> TsGetterSignature {
-    TsGetterSignature {
+    optional: bool,
+) -> TsPropertySignature {
+    TsPropertySignature {
         span: DUMMY_SP,
+        readonly: false,
         key,
         computed: false,
+        optional,
         type_ann: Some(Box::new(TsTypeAnn {
             span: DUMMY_SP,
             type_ann: type_annotation,
@@ -2587,13 +2606,23 @@ fn error(kind: ScriptErrorKind, span: Span) -> ScriptError {
 
 #[cfg(test)]
 mod tests {
-    use swc_core::ecma::ast::IdentName;
+    use fervid_core::SfcDescriptor;
+    use fxhash::FxHashSet;
+    use swc_core::{alloc::collections::FxHashMap, ecma::ast::IdentName};
+    use swc_ecma_parser::TsSyntax;
 
     use super::*;
-    use crate::test_utils::parser::parse_typescript_expr;
+    use crate::{
+        script::imports::process_imports,
+        test_utils::parser::{parse_typescript_expr, parse_typescript_module},
+    };
 
     #[test]
     fn it_resolves_template_literal_keys() {
+        let mut ctx = TypeResolveContext::anonymous();
+        let scope = ctx.scope.clone();
+        let scope = (*scope).borrow();
+
         let expr = parse_typescript_expr(
             "`${'foo' | 'bar' | 'baz'}2${'baz' | 'qux'}3${'2'}`",
             0,
@@ -2603,7 +2632,7 @@ mod tests {
         .0
         .expect_tpl();
 
-        let result = resolve_template_keys(&expr).expect("Should not error");
+        let result = resolve_template_keys(&mut ctx, &expr, &scope).expect("Should not error");
 
         assert_eq!(
             result,
@@ -2628,13 +2657,13 @@ mod tests {
                 left: TsEntityName::Ident(fervid_atom!("A").into_ident()),
                 right: IdentName {
                     span: DUMMY_SP,
-                    sym: fervid_atom!("B")
-                }
+                    sym: fervid_atom!("B"),
+                },
             })),
             right: IdentName {
                 span: DUMMY_SP,
-                sym: fervid_atom!("C")
-            }
+                sym: fervid_atom!("C"),
+            },
         };
 
         let result = qualified_name_to_path(&a_b_c);
@@ -2654,5 +2683,803 @@ mod tests {
         let mut atoms = vec!["Foo".into(), "BazBar".into(), "".into()];
         capitalize_or_uncapitalize_atoms(&mut atoms, false);
         assert_eq!(atoms, vec!["foo", "bazBar", ""]);
+    }
+
+    // From https://github.com/vuejs/core/blob/770ea67a9cdbb9f01bd7098b8c63978037d0e3fd/packages/compiler-sfc/__tests__/compileScript/resolveType.spec.ts
+    #[test]
+    fn type_literal() {
+        let resolved = resolve(
+            "
+            defineProps<{
+                foo: number // property
+                bar(): void // method
+                'baz': string // string literal key
+                (e: 'foo'): void // call signature
+                (e: 'bar'): void
+            }>()",
+        );
+
+        let props = resolved.props;
+        assert_eq!(
+            props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Number))
+        );
+        assert_eq!(
+            props.get(&fervid_atom!("bar")),
+            Some(&FlagSet::from(Types::Function))
+        );
+        assert_eq!(
+            props.get(&fervid_atom!("baz")),
+            Some(&FlagSet::from(Types::String))
+        );
+
+        assert_eq!(resolved.calls.len(), 2);
+    }
+
+    #[test]
+    fn reference_type() {
+        let resolved = resolve(
+            "
+            type Aliased = { foo: number }
+            defineProps<Aliased>()",
+        );
+
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Number))
+        );
+    }
+
+    #[test]
+    fn reference_exported_type() {
+        let resolved = resolve(
+            "
+            export type Aliased = { foo: number }
+            defineProps<Aliased>()",
+        );
+
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Number))
+        );
+    }
+
+    #[test]
+    fn reference_interface() {
+        let resolved = resolve(
+            "
+            interface Aliased { foo: number }
+            defineProps<Aliased>()",
+        );
+
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Number))
+        );
+    }
+
+    #[test]
+    fn reference_exported_interface() {
+        let resolved = resolve(
+            "
+            export interface Aliased { foo: number }
+            defineProps<Aliased>()",
+        );
+
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Number))
+        );
+    }
+
+    #[test]
+    fn reference_interface_extends() {
+        let resolved = resolve(
+            "
+            export interface A { a(): void }
+            export interface B extends A { b: boolean }
+            interface C { c: string }
+            interface Aliased extends B, C { foo: number }
+            defineProps<Aliased>()",
+        );
+
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("a")),
+            Some(&FlagSet::from(Types::Function))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("b")),
+            Some(&FlagSet::from(Types::Boolean))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("c")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Number))
+        );
+    }
+
+    #[test]
+    fn reference_class() {
+        let resolved = resolve(
+            "
+            class Foo {}
+            defineProps<{ foo: Foo }>()",
+        );
+
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Object))
+        );
+    }
+
+    #[test]
+    fn function_type() {
+        let resolved = resolve("defineProps<(e: 'foo') => void>()");
+
+        assert_eq!(resolved.calls.len(), 1);
+    }
+
+    #[test]
+    fn reference_function_type() {
+        let resolved = resolve(
+            "
+            type Fn = (e: 'foo') => void
+            defineProps<Fn>()",
+        );
+
+        assert_eq!(resolved.calls.len(), 1);
+    }
+
+    #[test]
+    fn intersection_type() {
+        let resolved = resolve(
+            "
+            type Foo = { foo: number }
+            type Bar = { bar: string }
+            type Baz = { bar: string | boolean }
+            defineProps<{ self: any } & Foo & Bar & Baz>()",
+        );
+
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("self")),
+            Some(&FlagSet::from(Types::Unknown))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Number))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("bar")),
+            Some(&FlagSet::from(Types::String | Types::Boolean))
+        );
+    }
+
+    #[test]
+    fn intersection_type_with_ignore() {
+        let resolved = resolve(
+            "
+            type Foo = { foo: number }
+            type Bar = { bar: string }
+            defineProps<Foo & /* @vue-ignore */ Bar>()",
+        );
+
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Number))
+        );
+
+        // TODO Support @vue-ignore
+        // assert_eq!(
+        //     resolved.props.get(&fervid_atom!("bar")),
+        //     None
+        // );
+    }
+
+    #[test]
+    fn union_type() {
+        let resolved = resolve(
+            "
+            interface CommonProps {
+                size?: 'xl' | 'l' | 'm' | 's' | 'xs'
+            }
+
+            type ConditionalProps =
+                | {
+                    color: 'normal' | 'primary' | 'secondary'
+                    appearance: 'normal' | 'outline' | 'text'
+                    }
+                | {
+                    color: number
+                    appearance: 'outline'
+                    note: string
+                }
+
+            defineProps<CommonProps & ConditionalProps>()",
+        );
+
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("size")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("color")),
+            Some(&FlagSet::from(Types::String | Types::Number))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("appearance")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("note")),
+            Some(&FlagSet::from(Types::String))
+        );
+    }
+
+    #[test]
+    fn template_string_type() {
+        let resolved = resolve(
+            r"
+            type T = 'foo' | 'bar'
+            type S = 'x' | 'y'
+            defineProps<{
+                [`_${T}_${S}_`]: string
+            }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 4);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("_foo_x_")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("_foo_y_")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("_bar_x_")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("_bar_y_")),
+            Some(&FlagSet::from(Types::String))
+        );
+    }
+
+    #[test]
+    fn mapped_types_with_string_manipulation() {
+        let resolved = resolve(
+            r"
+            type T = 'foo' | 'bar'
+            defineProps<{ [K in T]: string | number } & {
+                [K in 'optional']?: boolean
+            } & {
+                [K in Capitalize<T>]: string
+            } & {
+                [K in Uppercase<Extract<T, 'foo'>>]: string
+            } & {
+                [K in `x${T}`]: string
+            }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 8);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String | Types::Number))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("bar")),
+            Some(&FlagSet::from(Types::String | Types::Number))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("Foo")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("Bar")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("FOO")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("xfoo")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("xbar")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("optional")),
+            Some(&FlagSet::from(Types::Boolean))
+        );
+    }
+
+    #[test]
+    fn utility_type_partial() {
+        let resolved = resolve(
+            "
+            type T = { foo: number, bar: string }
+            defineProps<Partial<T>>()",
+        );
+
+        assert_eq!(resolved.raw_props.len(), 2);
+        assert!(matches!(
+            resolved.raw_props.get(&fervid_atom!("foo")),
+            Some(&TsTypeElement::TsPropertySignature(TsPropertySignature {
+                optional: true,
+                ..
+            }))
+        ));
+        assert!(matches!(
+            resolved.raw_props.get(&fervid_atom!("bar")),
+            Some(&TsTypeElement::TsPropertySignature(TsPropertySignature {
+                optional: true,
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn utility_type_required() {
+        let resolved = resolve(
+            "
+            type T = { foo?: number, bar?: string }
+            defineProps<Required<T>>()",
+        );
+
+        assert_eq!(resolved.raw_props.len(), 2);
+        assert!(matches!(
+            resolved.raw_props.get(&fervid_atom!("foo")),
+            Some(&TsTypeElement::TsPropertySignature(TsPropertySignature {
+                optional: false,
+                ..
+            }))
+        ));
+        assert!(matches!(
+            resolved.raw_props.get(&fervid_atom!("bar")),
+            Some(&TsTypeElement::TsPropertySignature(TsPropertySignature {
+                optional: false,
+                ..
+            }))
+        ));
+    }
+
+    #[test]
+    fn utility_type_pick() {
+        let resolved = resolve(
+            "
+            type T = { foo: number, bar: string, baz: boolean }
+            type K = 'foo' | 'bar'
+            defineProps<Pick<T, K>>()",
+        );
+
+        assert_eq!(resolved.props.len(), 2);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Number))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("bar")),
+            Some(&FlagSet::from(Types::String))
+        );
+    }
+
+    #[test]
+    fn utility_type_omit() {
+        let resolved = resolve(
+            "
+            type T = { foo: number, bar: string, baz: boolean }
+            type K = 'foo' | 'bar'
+            defineProps<Omit<T, K>>()",
+        );
+
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("baz")),
+            Some(&FlagSet::from(Types::Boolean))
+        );
+    }
+
+    #[test]
+    fn utility_type_readonly_array() {
+        let resolved = resolve("defineProps<{ foo: ReadonlyArray<string> }>()");
+
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Array))
+        );
+    }
+
+    #[test]
+    fn utility_type_readonly_map_readonly_set() {
+        let resolved = resolve(
+            "defineProps<{ foo: ReadonlyMap<string, unknown>, bar: ReadonlySet<string> }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 2);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Map))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("bar")),
+            Some(&FlagSet::from(Types::Set))
+        );
+    }
+
+    #[test]
+    fn indexed_access_type_literal() {
+        let resolved = resolve(
+            "
+            type T = { bar: number }
+            type S = { nested: { foo: T['bar'] }}
+            defineProps<S['nested']>()",
+        );
+
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Number))
+        );
+    }
+
+    #[test]
+    fn indexed_access_type_advanced() {
+        let resolved = resolve(
+            "
+            type K = 'foo' | 'bar'
+            type T = { foo: string, bar: number }
+            type S = { foo: { foo: T[string] }, bar: { bar: string } }
+            defineProps<S[K]>()",
+        );
+
+        assert_eq!(resolved.props.len(), 2);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Number | Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("bar")),
+            Some(&FlagSet::from(Types::String))
+        );
+    }
+
+    #[test]
+    fn indexed_access_type_number() {
+        let resolved = resolve(
+            "
+            type A = (string | number)[]
+            type AA = Array<string>
+            type T = [1, 'foo']
+            type TT = [foo: 1, bar: 'foo']
+            defineProps<{ foo: A[number], bar: AA[number], tuple: T[number], namedTuple: TT[number] }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 4);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Number | Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("bar")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("tuple")),
+            Some(&FlagSet::from(Types::Number | Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("namedTuple")),
+            Some(&FlagSet::from(Types::Number | Types::String))
+        );
+    }
+
+    // TODO Namespace support
+    // #[test]
+    // fn namespace() {
+    //     let resolved = resolve(
+    //         "
+    //         type X = string
+    //         namespace Foo {
+    //             type X = number
+    //             export namespace Bar {
+    //                 export type A = {
+    //                     foo: X
+    //                 }
+    //             }
+    //         }
+    //         defineProps<Foo.Bar.A>()",
+    //     );
+
+    //     assert_eq!(resolved.props.len(), 1);
+    //     assert_eq!(
+    //         resolved.props.get(&fervid_atom!("foo")),
+    //         Some(&FlagSet::from(Types::Number))
+    //     );
+    // }
+
+    #[test]
+    fn interface_merging() {
+        let resolved = resolve(
+            "
+            interface Foo {
+                a: string
+            }
+            interface Foo {
+                b: number
+            }
+            defineProps<{
+                foo: Foo['a'],
+                bar: Foo['b']
+            }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 2);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("bar")),
+            Some(&FlagSet::from(Types::Number))
+        );
+    }
+
+    // TODO Namespace support
+    // #[test]
+    // fn namespace_merging() {
+    //     let resolved = resolve(
+    //         "
+    //         namespace Foo {
+    //             export type A = string
+    //         }
+    //         namespace Foo {
+    //             export type B = number
+    //         }
+    //         defineProps<{
+    //             foo: Foo.A,
+    //             bar: Foo.B
+    //         }>()",
+    //     );
+
+    //     assert_eq!(resolved.props.len(), 2);
+    //     assert_eq!(
+    //         resolved.props.get(&fervid_atom!("foo")),
+    //         Some(&FlagSet::from(Types::String))
+    //     );
+    //     assert_eq!(
+    //         resolved.props.get(&fervid_atom!("bar")),
+    //         Some(&FlagSet::from(Types::Number))
+    //     );
+    // }
+
+    // TODO Namespace support
+    // #[test]
+    // fn namespace_merging_with_other_types() {
+    //     let resolved = resolve(
+    //         "
+    //         namespace Foo {
+    //             export type A = string
+    //         }
+    //         interface Foo {
+    //             b: number
+    //         }
+    //         defineProps<{
+    //             foo: Foo.A,
+    //             bar: Foo['b']
+    //         }>()",
+    //     );
+
+    //     assert_eq!(resolved.props.len(), 2);
+    //     assert_eq!(
+    //         resolved.props.get(&fervid_atom!("foo")),
+    //         Some(&FlagSet::from(Types::String))
+    //     );
+    //     assert_eq!(
+    //         resolved.props.get(&fervid_atom!("bar")),
+    //         Some(&FlagSet::from(Types::Number))
+    //     );
+    // }
+
+    // TODO Enum merging
+    // #[test]
+    // fn enum_merging() {
+    //     let resolved = resolve(
+    //         "
+    //         enum Foo {
+    //             A = 1
+    //         }
+    //         enum Foo {
+    //             B = 'hi'
+    //         }
+    //         defineProps<{
+    //             foo: Foo
+    //         }>()",
+    //     );
+
+    //     assert_eq!(resolved.props.len(), 1);
+    //     assert_eq!(
+    //         resolved.props.get(&fervid_atom!("foo")),
+    //         Some(&FlagSet::from(Types::String | Types::String))
+    //     );
+    // }
+
+    #[test]
+    fn typeof_() {
+        let resolved = resolve(
+            "
+            declare const a: string
+            defineProps<{ foo: typeof a }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String))
+        );
+    }
+
+    #[test]
+    fn readonly() {
+        let resolved = resolve(
+            "defineProps<{ foo: readonly unknown[] }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Array))
+        );
+    }
+
+    // TODO Other types
+    // TODO Remove all dbg!
+
+    // TODO Support
+    // #[test]
+    // fn correctly_parse_type_annotation_for_declared_function() {
+    //     let resolved = resolve(
+    //         "
+    //         import { ExtractPropTypes } from 'vue'
+    //         interface UploadFile<T = any> {
+    //             xhr?: T
+    //         }
+    //         declare function uploadProps<T = any>(): {
+    //             fileList: {
+    //                 type: PropType<UploadFile<T>[]>
+    //                 default: UploadFile<T>[]
+    //             }
+    //         }
+    //         type UploadProps = ExtractPropTypes<ReturnType<typeof uploadProps>>
+    //         defineProps<UploadProps>()",
+    //     );
+
+    //     assert_eq!(resolved.props.len(), 1);
+    //     assert_eq!(
+    //         resolved.props.get(&fervid_atom!("fileList")),
+    //         Some(&FlagSet::from(Types::Array))
+    //     );
+    // }
+
+    struct ResolveResult {
+        props: FxHashMap<FervidAtom, TypesSet>,
+        calls: Vec<Either<TsFnType, TsCallSignatureDecl>>,
+        #[allow(dead_code)]
+        deps: FxHashSet<String>,
+        raw_props: HashMap<FervidAtom, TsTypeElement>,
+    }
+
+    fn resolve(code: &str) -> ResolveResult {
+        let (script_setup_content, _) =
+            parse_typescript_module(code, 0, TsSyntax::default()).expect("Should parse");
+
+        let span = script_setup_content.span;
+        let mut sfc_descriptor = SfcDescriptor {
+            template: None,
+            script_legacy: None,
+            script_setup: Some(SfcScriptBlock {
+                content: Box::new(script_setup_content),
+                lang: fervid_core::SfcScriptLang::Typescript,
+                is_setup: true,
+                span,
+            }),
+            styles: vec![],
+            custom_blocks: vec![],
+        };
+        let mut ctx = TypeResolveContext::new(
+            &sfc_descriptor,
+            &crate::TransformSfcOptions {
+                is_prod: true,
+                scope_id: "test",
+                filename: "./Test.vue",
+            },
+        );
+
+        let mut errors = vec![];
+        if let Some(ref mut script_setup) = sfc_descriptor.script_setup {
+            process_imports(
+                &mut script_setup.content,
+                &mut ctx.bindings_helper,
+                true,
+                &mut errors,
+            );
+        }
+
+        // Record types to support type-only `defineProps` and `defineEmits`
+        let scope = ctx.scope.clone();
+        if ctx.bindings_helper.is_ts {
+            let mut scope = (*scope).borrow_mut();
+            scope.imports = ctx.bindings_helper.user_imports.clone();
+
+            record_types(
+                &mut ctx,
+                sfc_descriptor.script_setup.as_mut(),
+                sfc_descriptor.script_legacy.as_mut(),
+                &mut scope,
+                false,
+            );
+        }
+        let scope = (*scope).borrow();
+
+        let mut script_setup = sfc_descriptor
+            .script_setup
+            .expect("Script setup is present");
+
+        dbg!(&script_setup.content);
+
+        // Target is the type param of `defineProps`
+        let target: &mut Box<TsType> = script_setup
+            .content
+            .body
+            .iter_mut()
+            .find_map(|module_item| {
+                let Some(call_expr) = module_item
+                    .as_mut_stmt()
+                    .and_then(|v| v.as_mut_expr())
+                    .and_then(|v| v.expr.as_mut_call())
+                else {
+                    return None;
+                };
+
+                let Some(callee_ident) = call_expr.callee.as_expr().and_then(|v| v.as_ident())
+                else {
+                    return None;
+                };
+
+                if callee_ident.sym == "defineProps" {
+                    let Some(ref mut type_args) = call_expr.type_args else {
+                        return None;
+                    };
+
+                    return type_args.params.first_mut();
+                }
+
+                None
+            })
+            .expect("defineProps should exist");
+
+        let raw = resolve_type_elements(&mut ctx, target).expect("Should resolve");
+
+        let mut props = FxHashMap::default();
+        let raw_props = raw.props;
+        for (prop_name, prop_type) in raw_props.iter() {
+            props.insert(
+                prop_name.to_owned(),
+                infer_runtime_type_type_element(&mut ctx, prop_type, &scope),
+            );
+        }
+
+        ResolveResult {
+            props,
+            calls: raw.calls,
+            deps: ctx.deps,
+            raw_props,
+        }
     }
 }
