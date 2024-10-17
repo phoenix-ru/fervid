@@ -2197,7 +2197,7 @@ pub fn infer_runtime_type_type(
                 // Soft-fail
                 return return_value!(Types::Unknown);
             };
-            return flatten_types(ctx, &types, scope, false);
+            return flatten_types(ctx, &types, scope, is_key_of);
         }
 
         TsType::TsImportType(_) => {
@@ -3338,8 +3338,314 @@ mod tests {
         );
     }
 
-    // TODO Other types
-    // TODO Remove all dbg!
+    #[test]
+    fn keyof() {
+        // TODO Support files
+        // const files = {
+        //   '/foo.ts': `export type IMP = { ${1}: 1 };`,
+        // }
+        let resolved = resolve(
+            "
+            export type IMP = { 1: 1 };
+            interface Foo { foo: 1, 1: 1 }
+            type Bar = { bar: 1 }
+            declare const obj: Bar
+            declare const set: Set<any>
+            declare const arr: Array<any>
+
+            defineProps<{
+                imp: keyof IMP,
+                foo: keyof Foo,
+                bar: keyof Bar,
+                obj: keyof typeof obj,
+                set: keyof typeof set,
+                arr: keyof typeof arr
+            }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 6);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("imp")),
+            Some(&FlagSet::from(Types::Number))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String | Types::Number))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("bar")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("obj")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("set")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("arr")),
+            Some(&FlagSet::from(Types::String | Types::Number))
+        );
+    }
+
+    #[test]
+    fn keyof_index_signature() {
+        let resolved = resolve(
+            "
+            declare const num: number;
+            interface Foo {
+                [key: symbol]: 1
+                [key: string]: 1
+                [key: typeof num]: 1,
+            }
+
+            type Test<T> = T
+            type Bar = {
+                [key: string]: 1
+                [key: Test<number>]: 1
+            }
+
+            defineProps<{
+                foo: keyof Foo 
+                bar: keyof Bar
+            }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 2);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Symbol | Types::String | Types::Number))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("bar")),
+            Some(&FlagSet::from(Types::Unknown))
+        );
+    }
+
+    #[test]
+    fn keyof_intersection_type() {
+        let resolved = resolve(
+            "
+            type A = { name: string }
+            type B = A & { [key: number]: string }
+            defineProps<{
+                foo: keyof B
+            }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String | Types::Number))
+        );
+    }
+
+    #[test]
+    fn keyof_union_type() {
+        let resolved = resolve(
+            "
+            type A = { name: string }
+            type B = A | { [key: number]: string }
+            defineProps<{
+                foo: keyof B
+            }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String | Types::Number))
+        );
+    }
+
+    #[test]
+    fn keyof_utility_type() {
+        let resolved = resolve(
+            "
+            type Foo = Record<symbol | string, any>
+            type Bar = { [key: string]: any }
+            type AnyRecord = Record<keyof any, any>
+            type Baz = { a: 1, 1: 2, b: 3}
+
+            defineProps<{
+                record: keyof Foo,
+                anyRecord: keyof AnyRecord 
+                partial: keyof Partial<Bar>,
+                required: keyof Required<Bar>,
+                readonly: keyof Readonly<Bar>,
+                pick: keyof Pick<Baz, 'a' | 1>
+                extract: keyof Extract<keyof Baz, 'a' | 1>
+            }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 7);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("record")),
+            Some(&FlagSet::from(Types::String | Types::Symbol))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("anyRecord")),
+            Some(&FlagSet::from(Types::String | Types::Number | Types::Symbol))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("partial")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("required")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("readonly")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("pick")),
+            Some(&FlagSet::from(Types::String | Types::Number))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("extract")),
+            Some(&FlagSet::from(Types::String | Types::Number))
+        );
+    }
+
+    #[test]
+    fn keyof_fallback_to_unknown() {
+        let resolved = resolve(
+            "
+            interface Barr {}
+            interface Bar extends Barr {}
+            type Foo = keyof Bar
+            defineProps<{ foo: Foo }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::Unknown))
+        );
+    }
+
+    #[test]
+    fn keyof_nested_object_with_number() {
+        let resolved = resolve(
+            "
+            interface Type {
+                deep: {
+                    1: any
+                }
+            }
+
+            defineProps<{
+                route: keyof Type['deep']
+            }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("route")),
+            Some(&FlagSet::from(Types::Number))
+        );
+    }
+
+    #[test]
+    fn keyof_nested_object_with_string() {
+        let resolved = resolve(
+            "
+            interface Type {
+                deep: {
+                    foo: any
+                }
+            }
+
+            defineProps<{
+                route: keyof Type['deep']
+            }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("route")),
+            Some(&FlagSet::from(Types::String))
+        );
+    }
+
+    #[test]
+    fn keyof_nested_object_with_intermediate() {
+        let resolved = resolve(
+            "
+            interface Type {
+                deep: {
+                    foo: any
+                }
+            }
+
+            type Foo = Type['deep']
+
+            defineProps<{
+                route: keyof Foo
+            }>()",
+        );
+
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("route")),
+            Some(&FlagSet::from(Types::String))
+        );
+    }
+
+    // TODO How to support this?
+    // #[test]
+    // fn extract_prop_types_element_plus() {
+    //     let resolved = resolve(
+    //         "
+    //         import { ExtractPropTypes } from 'vue'
+    //         declare const props: {
+    //             foo: StringConstructor,
+    //             bar: {
+    //                 type: import('foo').EpPropFinalized<BooleanConstructor>,
+    //                 required: true
+    //             }
+    //         }
+    //         type Props = ExtractPropTypes<typeof props>
+    //         defineProps<Props>()",
+    //     );
+
+    //     assert_eq!(resolved.props.len(), 2);
+    //     assert_eq!(
+    //         resolved.props.get(&fervid_atom!("foo")),
+    //         Some(&FlagSet::from(Types::String))
+    //     );
+    //     assert_eq!(
+    //         resolved.props.get(&fervid_atom!("bar")),
+    //         Some(&FlagSet::from(Types::Boolean))
+    //     );
+    // }
+
+    #[test]
+    fn extract_prop_types_antd() {
+        let resolved = resolve(
+            "
+            declare const props: () => {
+                foo: StringConstructor,
+                bar: { type: PropType<boolean> }
+            }
+            type Props = Partial<import('vue').ExtractPropTypes<ReturnType<typeof props>>>
+            defineProps<Props>()",
+        );
+
+        assert_eq!(resolved.props.len(), 2);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("bar")),
+            Some(&FlagSet::from(Types::Boolean))
+        );
+    }
 
     // TODO Support
     // #[test]
@@ -3364,6 +3670,25 @@ mod tests {
     //     assert_eq!(
     //         resolved.props.get(&fervid_atom!("fileList")),
     //         Some(&FlagSet::from(Types::Array))
+    //     );
+    // }
+
+    // TODO Other types
+    // TODO Remove all dbg!
+
+    // TODO Support generics
+    // #[test]
+    // fn generic_with_type_literal() {
+    //     let resolved = resolve(
+    //         "
+    //         type Props<T> = T
+    //         defineProps<Props<{ foo: string }>>()",
+    //     );
+
+    //     assert_eq!(resolved.props.len(), 1);
+    //     assert_eq!(
+    //         resolved.props.get(&fervid_atom!("foo")),
+    //         Some(&FlagSet::from(Types::String))
     //     );
     // }
 
