@@ -422,7 +422,7 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
         }
     }
 
-    Err(error(ScriptErrorKind::ResolveTypeUnsupported, span))
+    Err(error(ScriptErrorKind::ResolveTypeUnresolvable, span))
 }
 
 fn type_elements_to_map(
@@ -975,14 +975,14 @@ fn resolve_string_type(
                 ));
             };
 
-            let Some(ref type_params) = type_ref.type_params else {
-                return Err(error(
-                    ScriptErrorKind::ResolveTypeMissingTypeParams,
-                    type_ref.span,
-                ));
-            };
-
             let mut get_param = |idx: usize| {
+                let Some(ref type_params) = type_ref.type_params else {
+                    return Err(error(
+                        ScriptErrorKind::ResolveTypeMissingTypeParams,
+                        type_ref.span,
+                    ));
+                };
+
                 let param = type_params.params.get(idx);
                 match param {
                     Some(p) => resolve_string_type(ctx, &p, scope),
@@ -3327,9 +3327,7 @@ mod tests {
 
     #[test]
     fn readonly() {
-        let resolved = resolve(
-            "defineProps<{ foo: readonly unknown[] }>()",
-        );
+        let resolved = resolve("defineProps<{ foo: readonly unknown[] }>()");
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
@@ -3416,7 +3414,9 @@ mod tests {
         assert_eq!(resolved.props.len(), 2);
         assert_eq!(
             resolved.props.get(&fervid_atom!("foo")),
-            Some(&FlagSet::from(Types::Symbol | Types::String | Types::Number))
+            Some(&FlagSet::from(
+                Types::Symbol | Types::String | Types::Number
+            ))
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("bar")),
@@ -3487,7 +3487,9 @@ mod tests {
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("anyRecord")),
-            Some(&FlagSet::from(Types::String | Types::Number | Types::Symbol))
+            Some(&FlagSet::from(
+                Types::String | Types::Number | Types::Symbol
+            ))
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("partial")),
@@ -3692,6 +3694,68 @@ mod tests {
     //     );
     // }
 
+    #[test]
+    fn failed_type_reference() {
+        let result = try_resolve("defineProps<X>()");
+
+        assert!(result.is_err_and(|e| matches!(e.kind, ScriptErrorKind::ResolveTypeUnresolvable)));
+    }
+
+    #[test]
+    fn unsupported_computed_keys() {
+        let result = try_resolve("defineProps<{ [Foo]: string }>()");
+
+        assert!(result
+            .is_err_and(|e| matches!(e.kind, ScriptErrorKind::ResolveTypeUnsupportedComputedKey)));
+    }
+
+    #[test]
+    fn unsupported_index_type() {
+        let result_official = try_resolve("defineProps<X[K]>()");
+
+        // NOTE: This is a difference with the official compiler.
+        // Official implementation looks at index type first (in this case `K`) and finds an issue there,
+        // but fervid looks at referenced type first (`X`) and it cannot resolve TypeRef which is a different error.
+        assert!(result_official
+            .is_err_and(|e| matches!(e.kind, ScriptErrorKind::ResolveTypeUnresolvable)));
+
+        // This case compensates for the above difference
+        let result_fervid = try_resolve(
+            "
+            type X = {}
+            defineProps<X[K]>()
+            ",
+        );
+
+        assert!(result_fervid
+            .is_err_and(|e| matches!(e.kind, ScriptErrorKind::ResolveTypeUnsupportedIndexType)));
+    }
+
+    #[test]
+    fn failed_import_source_resolve() {
+        let result = try_resolve("import { X } from './foo'; defineProps<X>()");
+
+        // TODO Error should be different (when imports are implemented)
+        assert!(result
+            .is_err_and(|e| matches!(e.kind, ScriptErrorKind::ResolveTypeUnresolvable)));
+    }
+
+    #[test]
+    fn should_not_error_on_unresolved_type_when_inferring_runtime_type() {
+        assert!(
+            try_resolve("defineProps<{ foo: T }>()").is_ok()
+        );
+        assert!(
+            try_resolve("defineProps<{ foo: T['bar'] }>()").is_ok()
+        );
+        assert!(
+            try_resolve("
+            import type P from 'unknown'
+            defineProps<{ foo: P }>()").is_ok()
+        );
+    }
+
+    #[derive(Debug)]
     struct ResolveResult {
         props: FxHashMap<FervidAtom, TypesSet>,
         calls: Vec<Either<TsFnType, TsCallSignatureDecl>>,
@@ -3701,6 +3765,10 @@ mod tests {
     }
 
     fn resolve(code: &str) -> ResolveResult {
+        try_resolve(code).expect("Should resolve")
+    }
+
+    fn try_resolve(code: &str) -> ResolutionResult<ResolveResult> {
         let (script_setup_content, _) =
             parse_typescript_module(code, 0, TsSyntax::default()).expect("Should parse");
 
@@ -3789,7 +3857,7 @@ mod tests {
             })
             .expect("defineProps should exist");
 
-        let raw = resolve_type_elements(&mut ctx, target).expect("Should resolve");
+        let raw = resolve_type_elements(&mut ctx, target)?;
 
         let mut props = FxHashMap::default();
         let raw_props = raw.props;
@@ -3800,11 +3868,11 @@ mod tests {
             );
         }
 
-        ResolveResult {
+        Ok(ResolveResult {
             props,
             calls: raw.calls,
             deps: ctx.deps,
             raw_props,
-        }
+        })
     }
 }
