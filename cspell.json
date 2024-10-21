@@ -127,7 +127,9 @@
     "stringifier",
     "preprocessors",
     "bitflags",
-    "keyof"
+    "keyof",
+    "xfoo",
+    "xbar"
   ],
   "ignorePaths": [
     ".github/**",
