@@ -3734,33 +3734,32 @@ mod tests {
         );
     }
 
-    // TODO How to support this?
-    // #[test]
-    // fn extract_prop_types_element_plus() {
-    //     let resolved = resolve(
-    //         "
-    //         import { ExtractPropTypes } from 'vue'
-    //         declare const props: {
-    //             foo: StringConstructor,
-    //             bar: {
-    //                 type: import('foo').EpPropFinalized<BooleanConstructor>,
-    //                 required: true
-    //             }
-    //         }
-    //         type Props = ExtractPropTypes<typeof props>
-    //         defineProps<Props>()",
-    //     );
+    #[test]
+    fn extract_prop_types_element_plus() {
+        let resolved = resolve(
+            "
+            import { ExtractPropTypes } from 'vue'
+            declare const props: {
+                foo: StringConstructor,
+                bar: {
+                    type: import('foo').EpPropFinalized<BooleanConstructor>,
+                    required: true
+                }
+            }
+            type Props = ExtractPropTypes<typeof props>
+            defineProps<Props>()",
+        );
 
-    //     assert_eq!(resolved.props.len(), 2);
-    //     assert_eq!(
-    //         resolved.props.get(&fervid_atom!("foo")),
-    //         Some(&FlagSet::from(Types::String))
-    //     );
-    //     assert_eq!(
-    //         resolved.props.get(&fervid_atom!("bar")),
-    //         Some(&FlagSet::from(Types::Boolean))
-    //     );
-    // }
+        assert_eq!(resolved.props.len(), 2);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("bar")),
+            Some(&FlagSet::from(Types::Boolean))
+        );
+    }
 
     #[test]
     fn extract_prop_types_antd() {
@@ -3785,31 +3784,30 @@ mod tests {
         );
     }
 
-    // TODO Support
-    // #[test]
-    // fn correctly_parse_type_annotation_for_declared_function() {
-    //     let resolved = resolve(
-    //         "
-    //         import { ExtractPropTypes } from 'vue'
-    //         interface UploadFile<T = any> {
-    //             xhr?: T
-    //         }
-    //         declare function uploadProps<T = any>(): {
-    //             fileList: {
-    //                 type: PropType<UploadFile<T>[]>
-    //                 default: UploadFile<T>[]
-    //             }
-    //         }
-    //         type UploadProps = ExtractPropTypes<ReturnType<typeof uploadProps>>
-    //         defineProps<UploadProps>()",
-    //     );
+    #[test]
+    fn correctly_parse_type_annotation_for_declared_function() {
+        let resolved = resolve(
+            "
+            import { ExtractPropTypes } from 'vue'
+            interface UploadFile<T = any> {
+                xhr?: T
+            }
+            declare function uploadProps<T = any>(): {
+                fileList: {
+                    type: PropType<UploadFile<T>[]>
+                    default: UploadFile<T>[]
+                }
+            }
+            type UploadProps = ExtractPropTypes<ReturnType<typeof uploadProps>>
+            defineProps<UploadProps>()",
+        );
 
-    //     assert_eq!(resolved.props.len(), 1);
-    //     assert_eq!(
-    //         resolved.props.get(&fervid_atom!("fileList")),
-    //         Some(&FlagSet::from(Types::Array))
-    //     );
-    // }
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("fileList")),
+            Some(&FlagSet::from(Types::Array))
+        );
+    }
 
     // TODO Other types
     // TODO Remove all dbg!
