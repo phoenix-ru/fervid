@@ -20,15 +20,16 @@ use swc_core::{
         Tpl, TsCallSignatureDecl, TsEntityName, TsEnumDecl, TsExprWithTypeArgs,
         TsFnOrConstructorType, TsFnParam, TsFnType, TsIndexedAccessType, TsInterfaceDecl,
         TsIntersectionType, TsKeywordType, TsKeywordTypeKind, TsLit, TsLitType, TsMappedType,
-        TsModuleDecl, TsModuleName, TsNamespaceBody, TsNamespaceDecl, TsPropertySignature,
-        TsQualifiedName, TsTplLitType, TsType, TsTypeAnn, TsTypeElement, TsTypeLit,
-        TsTypeOperatorOp, TsTypeQueryExpr, TsTypeRef, TsUnionOrIntersectionType, TsUnionType,
+        TsMethodSignature, TsModuleDecl, TsModuleName, TsNamespaceBody, TsNamespaceDecl,
+        TsPropertySignature, TsQualifiedName, TsTplLitType, TsType, TsTypeAnn, TsTypeElement,
+        TsTypeLit, TsTypeOperatorOp, TsTypeQueryExpr, TsTypeRef, TsUnionOrIntersectionType,
+        TsUnionType,
     },
 };
 
 use crate::{
     error::{ScriptError, ScriptErrorKind},
-    ImportBinding, ScopeTypeNode, TransformSfcContext, TypeOrDecl, TypeScope,
+    ImportBinding, ScopeTypeNode, TransformSfcContext, TypeOrDecl, TypeScope, TypeScopeContainer,
 };
 
 static SUPPORTED_BUILTINS_SET: Set<&'static str> = phf_set! {
@@ -43,11 +44,25 @@ pub type ResolutionResult<T> = Result<T, ScriptError>;
 
 #[derive(Default, Debug)]
 pub struct ResolvedElements {
-    pub props: HashMap<FervidAtom, TsTypeElement>,
+    pub props: HashMap<FervidAtom, ResolvedProp>,
     pub calls: Vec<Either<TsFnType, TsCallSignatureDecl>>,
 }
 
+#[derive(Debug)]
+pub struct ResolvedProp {
+    pub owner_scope: usize,
+    pub value: ResolvedPropValue,
+}
+
+#[derive(Debug)]
+pub enum ResolvedPropValue {
+    TsPropertySignature(TsPropertySignature),
+    TsMethodSignature(TsMethodSignature),
+}
+
 pub type TypeResolveContext = TransformSfcContext;
+
+pub type TypeParameters<'m> = Option<&'m HashMap<FervidAtom, TsType>>;
 
 enum MergeElementsAs {
     Union,
@@ -61,14 +76,15 @@ pub fn resolve_type_elements(
     ts_type: &TsType,
 ) -> ResolutionResult<ResolvedElements> {
     // No cache present
-    let scope = ctx.scope.clone();
-    return resolve_type_elements_impl_type(ctx, ts_type, &scope.borrow());
+    let scope = ctx.root_scope();
+    return resolve_type_elements_impl_type(ctx, ts_type, &scope.borrow(), None);
 }
 
 fn resolve_type_elements_impl_type(
     ctx: &mut TypeResolveContext,
     ts_type: &TsType,
     scope: &TypeScope,
+    type_parameters: TypeParameters,
 ) -> ResolutionResult<ResolvedElements> {
     // TODO Implementing a check for `@vue-ignore` requires access to comments
     // if (
@@ -79,9 +95,11 @@ fn resolve_type_elements_impl_type(
     // }
 
     match ts_type {
-        TsType::TsTypeLit(type_lit) => type_elements_to_map(ctx, &type_lit.members, scope),
+        TsType::TsTypeLit(type_lit) => {
+            type_elements_to_map(ctx, &type_lit.members, scope, type_parameters)
+        }
         TsType::TsParenthesizedType(paren) => {
-            resolve_type_elements_impl_type(ctx, &paren.type_ann, scope)
+            resolve_type_elements_impl_type(ctx, &paren.type_ann, scope, type_parameters)
         }
         TsType::TsFnOrConstructorType(fn_or_constructor) => match fn_or_constructor {
             TsFnOrConstructorType::TsFnType(fn_type) => Ok(ResolvedElements {
@@ -98,7 +116,7 @@ fn resolve_type_elements_impl_type(
             let mut resolved_elements =
                 Vec::<ResolvedElements>::with_capacity(union_type.types.len());
             for t in union_type.types.iter() {
-                match resolve_type_elements_impl_type(ctx, t, scope) {
+                match resolve_type_elements_impl_type(ctx, t, scope, type_parameters) {
                     Ok(v) => {
                         resolved_elements.push(v);
                     }
@@ -116,7 +134,7 @@ fn resolve_type_elements_impl_type(
                 Vec::<ResolvedElements>::with_capacity(intersection_type.types.len());
 
             for t in intersection_type.types.iter() {
-                match resolve_type_elements_impl_type(ctx, t, scope) {
+                match resolve_type_elements_impl_type(ctx, t, scope, type_parameters) {
                     Ok(v) => {
                         resolved_elements.push(v);
                     }
@@ -124,21 +142,22 @@ fn resolve_type_elements_impl_type(
                 }
             }
 
-            dbg!("We have resolved an intersection", &resolved_elements);
-
-            dbg!(Ok(merge_elements(
+            Ok(merge_elements(
                 resolved_elements,
                 MergeElementsAs::Intersection,
-            )))
+            ))
         }
 
-        TsType::TsMappedType(mapped_type) => resolve_mapped_type(ctx, mapped_type, scope),
+        TsType::TsMappedType(mapped_type) => {
+            resolve_mapped_type(ctx, mapped_type, scope, type_parameters)
+        }
 
         TsType::TsIndexedAccessType(indexed_access_type) => {
             let types = resolve_index_type(ctx, indexed_access_type, scope)?;
             let mut resolved_elements = Vec::with_capacity(types.len());
             for t in types.iter() {
-                let resolved = resolve_type_elements_impl_type(ctx, &t, scope)?;
+                // TODO No _ownerScope is supported
+                let resolved = resolve_type_elements_impl_type(ctx, &t, scope, None)?;
                 resolved_elements.push(resolved);
             }
 
@@ -149,6 +168,7 @@ fn resolve_type_elements_impl_type(
             ctx,
             TypeRefOrExprWithTypeArgs::TsTypeRef(type_ref, ts_type),
             scope,
+            type_parameters,
         ),
 
         TsType::TsImportType(import_type) => {
@@ -164,9 +184,9 @@ fn resolve_type_elements_impl_type(
                     };
 
                     let resolved_elements =
-                        resolve_type_elements_impl_type(ctx, &first_type_param, scope)?;
+                        resolve_type_elements_impl_type(ctx, &first_type_param, scope, None)?;
 
-                    return resolve_extract_prop_types(ctx, resolved_elements);
+                    return resolve_extract_prop_types(ctx, resolved_elements, scope.id);
                 }
             }
 
@@ -190,15 +210,17 @@ fn resolve_type_elements_impl_type(
         }
 
         TsType::TsTypeQuery(type_query) => {
-            if let Some(resolved) =
-                resolve_type_reference(ctx, ReferenceTypes::TsType(ts_type), scope)
-            {
+            let resolved = resolve_type_reference(ctx, ReferenceTypes::TsType(ts_type), scope);
+            if let Some(resolved) = resolved {
+                let scope = ctx.get_scope_or_root(resolved.owner_scope);
+                let scope = &*scope.borrow();
+
                 match &resolved.value {
                     TypeOrDecl::Type(ts_type) => {
-                        resolve_type_elements_impl_type(ctx, &ts_type, scope)
+                        resolve_type_elements_impl_type(ctx, &ts_type, scope, None)
                     }
                     TypeOrDecl::Decl(decl) => {
-                        resolve_type_elements_impl_decl(ctx, &decl.borrow(), scope)
+                        resolve_type_elements_impl_decl(ctx, &decl.borrow(), scope, None)
                     }
                 }
             } else {
@@ -228,6 +250,7 @@ fn resolve_type_elements_impl_decl(
     ctx: &mut TypeResolveContext,
     decl: &Decl,
     scope: &TypeScope,
+    type_parameters: TypeParameters,
 ) -> ResolutionResult<ResolvedElements> {
     // TODO Implementing a check for `@vue-ignore` requires access to comments
     // if (
@@ -237,8 +260,19 @@ fn resolve_type_elements_impl_decl(
     //   return { props: {} }
     // }
 
+    dbg!(
+        "are we trying to resolve type alias here?",
+        &decl,
+        type_parameters
+    );
+
     match decl {
-        Decl::TsInterface(interface) => resolve_interface_members(ctx, interface, scope),
+        Decl::TsInterface(interface) => {
+            resolve_interface_members(ctx, interface, scope, type_parameters)
+        }
+        Decl::TsTypeAlias(ts_type_alias) => {
+            resolve_type_elements_impl_type(ctx, &ts_type_alias.type_ann, scope, type_parameters)
+        }
         _ => Err(error(ScriptErrorKind::ResolveTypeUnresolvable, decl.span())),
     }
 }
@@ -252,8 +286,9 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
     ctx: &mut TypeResolveContext,
     node: TypeRefOrExprWithTypeArgs,
     scope: &TypeScope,
+    type_parameters: TypeParameters,
 ) -> ResolutionResult<ResolvedElements> {
-    let (reference_type, type_params, span) = match node {
+    let (reference_type, node_type_params, span) = match node {
         TypeRefOrExprWithTypeArgs::TsTypeRef(type_ref, ts_type) => (
             ReferenceTypes::TsType(ts_type),
             type_ref.type_params.as_ref(),
@@ -292,7 +327,7 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
                 break 'm;
             }
 
-            let Some(ref type_params) = type_params else {
+            let Some(ref type_params) = node_type_params else {
                 break 'm;
             };
 
@@ -303,41 +338,59 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
                 ));
             };
 
-            let resolved_elements = resolve_type_elements_impl_type(ctx, &first_type_param, scope)?;
-            return resolve_extract_prop_types(ctx, resolved_elements);
+            let resolved_elements =
+                resolve_type_elements_impl_type(ctx, &first_type_param, scope, type_parameters)?;
+            return resolve_extract_prop_types(ctx, resolved_elements, scope.id);
         }
         _ => {}
     }
 
     let resolved = resolve_type_reference(ctx, reference_type, scope);
     if let Some(resolved) = resolved {
-        // TODO
-        // let typeParams: Record<string, Node> | undefined
-        // if (
-        //     (resolved.type === 'TSTypeAliasDeclaration' ||
-        //     resolved.type === 'TSInterfaceDeclaration') &&
-        //     resolved.typeParameters &&
-        //     node.typeParameters
-        // ) {
-        //     typeParams = Object.create(null)
-        //     resolved.typeParameters.params.forEach((p, i) => {
-        //     let param = typeParameters && typeParameters[p.name]
-        //     if (!param) param = node.typeParameters!.params[i]
-        //     typeParams![p.name] = param
-        //     })
-        // }
-        // return resolveTypeElements(
-        //     ctx,
-        //     resolved,
-        //     resolved._ownerScope,
-        //     typeParams,
-        // )
+        let mut type_params = None;
 
-        // TODO `resolved._ownerScope`
+        // Condition:
+        // (resolved.type === 'TSTypeAliasDeclaration' ||
+        //    resolved.type === 'TSInterfaceDeclaration') &&
+        // resolved.typeParameters &&
+        // node.typeParameters
+        if let TypeOrDecl::Decl(ref rc) = resolved.value {
+            let decl: &Decl = &rc.borrow();
+            let resolved_type_params = match decl {
+                Decl::TsTypeAlias(ts_type_alias_decl) => ts_type_alias_decl.type_params.as_ref(),
+                Decl::TsInterface(ts_interface_decl) => ts_interface_decl.type_params.as_ref(),
+                _ => None,
+            };
+
+            if let (Some(resolved_type_params), Some(node_type_params)) =
+                (resolved_type_params, node_type_params)
+            {
+                let mut new_type_params = HashMap::default();
+                for (i, p) in resolved_type_params.params.iter().enumerate() {
+                    let param: Option<&TsType> = type_parameters
+                        .and_then(|v| v.get(&p.name.sym))
+                        .or_else(|| node_type_params.params.get(i).map(|v| v.as_ref()));
+
+                    if let Some(param) = param {
+                        new_type_params.insert(p.name.sym.to_owned(), param.to_owned());
+                    }
+                }
+
+                type_params = Some(new_type_params);
+            }
+        }
+
+        dbg!("we are here type ref", &type_params);
+
+        let scope = ctx.get_scope_or_root(resolved.owner_scope);
+        let scope = &*scope.borrow();
+
         return match resolved.value {
-            TypeOrDecl::Type(ref ts_type) => resolve_type_elements_impl_type(ctx, &ts_type, scope),
+            TypeOrDecl::Type(ref ts_type) => {
+                resolve_type_elements_impl_type(ctx, &ts_type, scope, type_params.as_ref())
+            }
             TypeOrDecl::Decl(ref decl) => {
-                resolve_type_elements_impl_decl(ctx, &decl.borrow(), scope)
+                resolve_type_elements_impl_decl(ctx, &decl.borrow(), scope, type_params.as_ref())
             }
         };
     }
@@ -346,20 +399,17 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
         return Err(error(ScriptErrorKind::ResolveTypeUnsupported, span));
     };
 
-    // TODO typeParameters
-    // if (typeParameters && typeParameters[typeName]) {
-    //     return resolveTypeElements(
-    //         ctx,
-    //         typeParameters[typeName],
-    //         scope,
-    //         typeParameters,
-    //     )
-    // }
+    dbg!(type_parameters, type_name_single);
+
+    if let Some(type_param) = type_parameters.and_then(|v| v.get(type_name_single)) {
+        dbg!("did we reach it?");
+        return resolve_type_elements_impl_type(ctx, type_param, scope, type_parameters);
+    }
 
     if SUPPORTED_BUILTINS_SET.contains(type_name_single) {
-        return resolve_builtin(ctx, node, type_name_single, scope);
+        return resolve_builtin(ctx, node, type_name_single, scope, type_parameters);
     } else if let ("ReturnType", Some(ref type_params)) =
-        (type_name_single.as_str(), type_params.as_ref())
+        (type_name_single.as_str(), node_type_params.as_ref())
     {
         // limited support, only reference types
         let Some(first_type_param) = type_params.params.first() else {
@@ -417,7 +467,7 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
             };
 
             if let Some(ret) = return_type {
-                return resolve_type_elements_impl_type(ctx, ret, scope);
+                return resolve_type_elements_impl_type(ctx, ret, scope, None);
             }
         }
     }
@@ -429,21 +479,47 @@ fn type_elements_to_map(
     ctx: &mut TypeResolveContext,
     elements: &Vec<TsTypeElement>,
     scope: &TypeScope,
+    type_parameters: TypeParameters,
 ) -> ResolutionResult<ResolvedElements> {
     let mut result = ResolvedElements::default();
 
     for ts_type_element in elements.iter() {
         macro_rules! implementation {
-            ($signature: ident) => {
-                // TODO No scopes supported
+            ($signature: ident, $value: expr) => {
+                let mut child_scope: Option<TypeScopeContainer> = None;
+                if let Some(type_parameters) = type_parameters {
+                    // TODO ;(e as MaybeWithScope)._ownerScope = scope
+                    // TODO To support this assignment, we need to have a dedicated type for ResolvedElements.props
+                    let new_child_scope_container = ctx.create_child_scope(scope);
+                    {
+                        let new_child_scope = &mut (*new_child_scope_container.borrow_mut());
+                        new_child_scope.is_generic_scope = true;
+                        new_child_scope.types.extend(
+                            type_parameters.iter().map(|(k, v)| {
+                                (k.to_owned(), ScopeTypeNode::from_type(v.to_owned()))
+                            }),
+                        );
+                    }
+                    child_scope = Some(new_child_scope_container);
+                }
+
+                // Use newly created child scope or the existing parent scope
+                let child_scope_ref = child_scope.as_deref().map(|v| v.borrow());
+                let scope = child_scope_ref.as_deref().unwrap_or(scope);
 
                 let name = get_id(&$signature.key);
                 if let (Some(name), false) = (name, $signature.computed) {
-                    result.props.insert(name, ts_type_element.to_owned());
+                    result.props.insert(name, ResolvedProp {
+                        owner_scope: scope.id,
+                        value: $value
+                    });
                 } else if let Expr::Tpl(tpl) = $signature.key.as_ref() {
                     let keys = resolve_template_keys(ctx, &tpl, scope)?;
                     for key in keys {
-                        result.props.insert(key, ts_type_element.to_owned());
+                        result.props.insert(key, ResolvedProp {
+                            owner_scope: scope.id,
+                            value: $value
+                        });
                     }
                 } else {
                     return Err(error(
@@ -453,12 +529,19 @@ fn type_elements_to_map(
                 }
             };
         }
+
         match ts_type_element {
             TsTypeElement::TsPropertySignature(ref signature) => {
-                implementation!(signature);
+                implementation!(
+                    signature,
+                    ResolvedPropValue::TsPropertySignature(signature.to_owned())
+                );
             }
             TsTypeElement::TsMethodSignature(ref signature) => {
-                implementation!(signature);
+                implementation!(
+                    signature,
+                    ResolvedPropValue::TsMethodSignature(signature.to_owned())
+                );
             }
 
             TsTypeElement::TsCallSignatureDecl(ref signature) => {
@@ -494,10 +577,9 @@ fn merge_elements(
                 continue;
             };
 
-            let (existing_type_ann, existing_optional) = match existing_value {
-                TsTypeElement::TsPropertySignature(s) => (s.type_ann.as_ref(), s.optional),
-                TsTypeElement::TsMethodSignature(s) => (s.type_ann.as_ref(), s.optional),
-                _ => (None, false),
+            let (existing_type_ann, existing_optional) = match existing_value.value {
+                ResolvedPropValue::TsPropertySignature(ref s) => (s.type_ann.as_ref(), s.optional),
+                ResolvedPropValue::TsMethodSignature(ref s) => (s.type_ann.as_ref(), s.optional),
             };
 
             let Some(existing_type_ann) = existing_type_ann.map(|v| v.type_ann.as_ref()) else {
@@ -505,14 +587,13 @@ fn merge_elements(
                 continue;
             };
 
-            let (new_type_ann, new_optional, new_key) = match new_value {
-                TsTypeElement::TsPropertySignature(ref s) => {
+            let (new_type_ann, new_optional, new_key) = match new_value.value {
+                ResolvedPropValue::TsPropertySignature(ref s) => {
                     (s.type_ann.as_ref(), s.optional, &s.key)
                 }
-                TsTypeElement::TsMethodSignature(ref s) => {
+                ResolvedPropValue::TsMethodSignature(ref s) => {
                     (s.type_ann.as_ref(), s.optional, &s.key)
                 }
-                _ => continue,
             };
 
             let Some(new_type_ann) = new_type_ann.map(|v| v.type_ann.as_ref()) else {
@@ -542,11 +623,10 @@ fn merge_elements(
                 new_key.to_owned(),
                 Box::new(TsType::TsUnionOrIntersectionType(union_or_intersection)),
                 new_optional || existing_optional,
+                existing_value.owner_scope,
             );
 
-            result
-                .props
-                .insert(key, TsTypeElement::TsPropertySignature(property));
+            result.props.insert(key, property);
         }
 
         // Add calls
@@ -559,15 +639,17 @@ fn merge_elements(
 fn resolve_interface_members(
     ctx: &mut TypeResolveContext,
     interface_decl: &TsInterfaceDecl,
-    scope: &TypeScope, // TODO Type parameters
+    scope: &TypeScope,
+    type_parameters: TypeParameters,
 ) -> ResolutionResult<ResolvedElements> {
-    let mut base = type_elements_to_map(ctx, &interface_decl.body.body, scope)?;
+    let mut base = type_elements_to_map(ctx, &interface_decl.body.body, scope, type_parameters)?;
 
     for ext in interface_decl.extends.iter() {
         let Ok(mut resolved) = resolve_type_elements_impl_type_ref_or_expr_with_type_args(
             ctx,
             TypeRefOrExprWithTypeArgs::TsExprWithTypeArgs(ext),
             scope,
+            None,
         ) else {
             return Err(error(ScriptErrorKind::ResolveTypeExtendsBaseType, ext.span));
         };
@@ -588,12 +670,33 @@ fn resolve_mapped_type(
     ctx: &mut TypeResolveContext,
     mapped_type: &TsMappedType,
     scope: &TypeScope,
+    type_parameters: TypeParameters,
 ) -> ResolutionResult<ResolvedElements> {
     let mut result = ResolvedElements::default();
 
+    let mut scope_id = scope.id;
+
     let keys = if let Some(ref name_type) = mapped_type.name_type {
-        // TODO Scope
-        resolve_string_type(ctx, &name_type, scope)?
+        let child_scope = ctx.create_child_scope(scope);
+        let child_scope = &mut (*child_scope.borrow_mut());
+        scope_id = child_scope.id;
+
+        if let Some(constraint) = mapped_type.type_param.constraint.as_ref() {
+            // Object.assign(scope.types, { ...typeParameters, [name]: constraint })
+            if let Some(type_parameters) = type_parameters {
+                child_scope.types.extend(
+                    type_parameters
+                        .iter()
+                        .map(|(k, v)| (k.to_owned(), ScopeTypeNode::from_type(v.to_owned()))),
+                );
+            }
+            child_scope.types.insert(
+                mapped_type.type_param.name.sym.to_owned(),
+                ScopeTypeNode::from_type(*constraint.to_owned()),
+            );
+        }
+
+        resolve_string_type(ctx, &name_type, &child_scope)?
     } else if let Some(ref constraint) = mapped_type.type_param.constraint {
         resolve_string_type(ctx, &constraint, scope)?
     } else {
@@ -617,11 +720,10 @@ fn resolve_mapped_type(
             Box::new(Expr::Ident(key.to_owned().into_ident())),
             type_ann.to_owned(),
             mapped_type.optional.is_some(),
+            scope_id,
         );
 
-        result
-            .props
-            .insert(key, TsTypeElement::TsPropertySignature(property));
+        result.props.insert(key, property);
     }
 
     Ok(result)
@@ -651,17 +753,15 @@ fn resolve_index_type(
         return resolve_array_element_type(ctx, &obj_type, scope);
     }
 
-    let resolved = resolve_type_elements_impl_type(ctx, &obj_type, scope)?;
+    let resolved = resolve_type_elements_impl_type(ctx, &obj_type, scope, None)?;
     let mut props = resolved.props;
     let mut types = Vec::<Box<TsType>>::new();
 
     macro_rules! implementation {
-        ($value: ident) => {
-            let target_type = match $value {
-                TsTypeElement::TsPropertySignature(ref s) => &s.type_ann,
-                TsTypeElement::TsGetterSignature(ref s) => &s.type_ann,
-                TsTypeElement::TsMethodSignature(ref s) => &s.type_ann,
-                _ => continue,
+        ($resolved_prop: ident) => {
+            let target_type = match $resolved_prop.value {
+                ResolvedPropValue::TsPropertySignature(ref s) => &s.type_ann,
+                ResolvedPropValue::TsMethodSignature(ref s) => &s.type_ann,
             };
 
             if let Some(ref type_ann) = target_type {
@@ -1087,6 +1187,7 @@ fn resolve_builtin(
     node: TypeRefOrExprWithTypeArgs,
     name: &str,
     scope: &TypeScope,
+    type_parameters: TypeParameters,
 ) -> ResolutionResult<ResolvedElements> {
     let (type_params, span) = match node {
         TypeRefOrExprWithTypeArgs::TsTypeRef(type_ref, _) => {
@@ -1109,17 +1210,16 @@ fn resolve_builtin(
         ));
     };
 
-    let mut t = resolve_type_elements(ctx, &first_type_param)?;
+    let mut t = resolve_type_elements_impl_type(ctx, &first_type_param, scope, type_parameters)?;
 
     match name {
         "Partial" | "Required" => {
             let is_optional = name == "Partial";
 
             for prop in t.props.values_mut() {
-                match prop {
-                    TsTypeElement::TsPropertySignature(s) => s.optional = is_optional,
-                    TsTypeElement::TsMethodSignature(s) => s.optional = is_optional,
-                    _ => {}
+                match prop.value {
+                    ResolvedPropValue::TsPropertySignature(ref mut s) => s.optional = is_optional,
+                    ResolvedPropValue::TsMethodSignature(ref mut s) => s.optional = is_optional,
                 }
             }
 
@@ -2002,9 +2102,12 @@ pub type TypesSet = FlagSet<Types>;
 pub fn infer_runtime_type(
     ctx: &mut TypeResolveContext,
     node: &ScopeTypeNode,
-    scope: &TypeScope,
+    scope_id: usize,
     is_key_of: bool,
 ) -> TypesSet {
+    let scope = ctx.get_scope_or_root(scope_id);
+    let scope = &*scope.borrow();
+
     match node.value {
         TypeOrDecl::Type(ref ts_type) => infer_runtime_type_type(ctx, ts_type, scope, is_key_of),
         TypeOrDecl::Decl(ref decl) => {
@@ -2067,8 +2170,7 @@ pub fn infer_runtime_type_type(
         TsType::TsTypeRef(type_ref) => 't: {
             let resolved = resolve_type_reference(ctx, ReferenceTypes::TsType(ts_type), scope);
             if let Some(resolved) = resolved {
-                // TODO Use `resolved._ownerScope`
-                return infer_runtime_type(ctx, &resolved, scope, is_key_of);
+                return infer_runtime_type(ctx, &resolved, resolved.owner_scope, is_key_of);
             }
 
             let TsEntityName::Ident(ref ident) = type_ref.type_name else {
@@ -2213,8 +2315,7 @@ pub fn infer_runtime_type_type(
 
             let matched = scope.declares.get(&ident.sym);
             if let Some(matched) = matched {
-                // TODO Switch scope to the `matched._ownerScope`
-                return infer_runtime_type(ctx, matched, scope, is_key_of);
+                return infer_runtime_type(ctx, matched, matched.owner_scope, is_key_of);
             }
         }
 
@@ -2320,34 +2421,22 @@ fn infer_runtime_type_type_elements(
     return result;
 }
 
-pub fn infer_runtime_type_type_element(
+pub fn infer_runtime_type_resolved_prop(
     ctx: &mut TypeResolveContext,
-    ts_type_element: &TsTypeElement,
-    scope: &TypeScope,
+    resolved_prop: &ResolvedProp,
 ) -> TypesSet {
-    macro_rules! unknown {
-        () => {
-            FlagSet::from(Types::Unknown)
-        };
-    }
+    let scope = ctx.get_scope_or_root(resolved_prop.owner_scope);
+    let scope = &*scope.borrow();
 
-    let type_ann = match ts_type_element {
-        TsTypeElement::TsCallSignatureDecl(_) | TsTypeElement::TsMethodSignature(_) => {
-            return TypesSet::from(Types::Function)
+    match resolved_prop.value {
+        ResolvedPropValue::TsMethodSignature(_) => TypesSet::from(Types::Function),
+        ResolvedPropValue::TsPropertySignature(ref ts_property_signature) => {
+            match ts_property_signature.type_ann.as_ref() {
+                Some(type_ann) => infer_runtime_type_type(ctx, &type_ann.type_ann, scope, false),
+                None => TypesSet::from(Types::Unknown),
+            }
         }
-
-        TsTypeElement::TsConstructSignatureDecl(d) => &d.type_ann,
-        TsTypeElement::TsPropertySignature(s) => &s.type_ann,
-        TsTypeElement::TsGetterSignature(s) => &s.type_ann,
-        TsTypeElement::TsSetterSignature(_) => return unknown!(),
-        TsTypeElement::TsIndexSignature(s) => &s.type_ann,
-    };
-
-    let Some(type_ann) = type_ann else {
-        return unknown!();
-    };
-
-    infer_runtime_type_type(ctx, &type_ann.type_ann, scope, false)
+    }
 }
 
 fn flatten_types(
@@ -2395,25 +2484,23 @@ fn infer_enum_type(ts_enum: &TsEnumDecl) -> TypesSet {
 fn resolve_extract_prop_types(
     ctx: &TypeResolveContext,
     mut resolved_elements: ResolvedElements,
+    scope_id: usize,
 ) -> ResolutionResult<ResolvedElements> {
     // Reuse the same object, so clear `calls` just to be compatible to the official compiler
     resolved_elements.calls.clear();
 
     for raw in resolved_elements.props.values_mut() {
-        let (key, type_ann) = match raw {
-            TsTypeElement::TsPropertySignature(ref s) => {
+        let (key, type_ann) = match raw.value {
+            ResolvedPropValue::TsPropertySignature(ref s) => {
                 (&s.key, s.type_ann.as_ref().map(|v| &v.type_ann))
             }
-            TsTypeElement::TsMethodSignature(ref s) => {
+            ResolvedPropValue::TsMethodSignature(ref s) => {
                 (&s.key, s.type_ann.as_ref().map(|v| &v.type_ann))
-            }
-            x => {
-                return Err(error(ScriptErrorKind::ResolveTypeUnresolvable, x.span()));
             }
         };
 
         if let Some(type_ann) = type_ann {
-            *raw = reverse_infer_type(ctx, &key, &type_ann);
+            *raw = reverse_infer_type(ctx, &key, &type_ann, scope_id);
         } else {
             return Err(error(ScriptErrorKind::ResolveTypeUnresolvable, raw.span()));
         }
@@ -2423,17 +2510,24 @@ fn resolve_extract_prop_types(
 }
 
 #[inline]
-fn reverse_infer_type(ctx: &TypeResolveContext, expr: &Expr, type_ann: &TsType) -> TsTypeElement {
-    reverse_infer_type_impl(ctx, expr, type_ann, true, true)
+fn reverse_infer_type(
+    ctx: &TypeResolveContext,
+    key: &Expr,
+    ts_type: &TsType,
+    scope_id: usize,
+) -> ResolvedProp {
+    reverse_infer_type_impl(ctx, key, ts_type, scope_id, true, true)
 }
 
+// TODO Is ctx needed?
 fn reverse_infer_type_impl(
     ctx: &TypeResolveContext,
     key: &Expr,
     ts_type: &TsType,
+    scope_id: usize,
     optional: bool,
     check_object_syntax: bool,
-) -> TsTypeElement {
+) -> ResolvedProp {
     if let (true, TsType::TsTypeLit(type_lit)) = (check_object_syntax, ts_type) {
         // check { type: xxx }
         let type_type = find_static_property_type(type_lit, "type");
@@ -2451,7 +2545,7 @@ fn reverse_infer_type_impl(
                 _ => false,
             };
 
-            return reverse_infer_type_impl(ctx, key, type_type, optional, false);
+            return reverse_infer_type_impl(ctx, key, type_type, scope_id, optional, false);
         }
     }
 
@@ -2461,21 +2555,23 @@ fn reverse_infer_type_impl(
                 let type_name = type_ref_ident.sym.as_str();
 
                 if type_name.ends_with("Constructor") {
-                    return TsTypeElement::TsPropertySignature(create_property(
+                    return create_property(
                         Box::new(key.to_owned()),
                         ctor_to_type(type_name),
                         optional,
-                    ));
+                        scope_id,
+                    );
                 } else if let ("PropType", Some(type_params)) =
                     (type_name, type_ref.type_params.as_ref())
                 {
                     if let Some(first_type_param) = type_params.params.first() {
                         // PropType<{}>
-                        return TsTypeElement::TsPropertySignature(create_property(
+                        return create_property(
                             Box::new(key.to_owned()),
                             first_type_param.to_owned(),
                             optional,
-                        ));
+                            scope_id,
+                        );
                     }
                 }
             }
@@ -2488,7 +2584,14 @@ fn reverse_infer_type_impl(
                     // but in reality it will always return on the first param:
                     // https://github.com/vuejs/core/blob/422ef34e487f801e1162bed80c0e88e868576e1d/packages/compiler-sfc/src/script/resolveType.ts#L1857-L1860
 
-                    return reverse_infer_type_impl(ctx, key, first_type_param, optional, true);
+                    return reverse_infer_type_impl(
+                        ctx,
+                        key,
+                        first_type_param,
+                        scope_id,
+                        optional,
+                        true,
+                    );
                 }
             }
         },
@@ -2505,7 +2608,14 @@ fn reverse_infer_type_impl(
                 // but in reality it will always return on the first param:
                 // https://github.com/vuejs/core/blob/422ef34e487f801e1162bed80c0e88e868576e1d/packages/compiler-sfc/src/script/resolveType.ts#L1857-L1860
 
-                return reverse_infer_type_impl(ctx, key, first_type_param, optional, true);
+                return reverse_infer_type_impl(
+                    ctx,
+                    key,
+                    first_type_param,
+                    scope_id,
+                    optional,
+                    true,
+                );
             }
         }
 
@@ -2513,14 +2623,15 @@ fn reverse_infer_type_impl(
     }
 
     // When couldn't infer, simply return `null`
-    TsTypeElement::TsPropertySignature(create_property(
+    create_property(
         Box::new(key.to_owned()),
         Box::new(TsType::TsKeywordType(TsKeywordType {
             span: DUMMY_SP,
             kind: TsKeywordTypeKind::TsNullKeyword,
         })),
         optional,
-    ))
+        scope_id,
+    )
 }
 
 fn get_id(expr: &Expr) -> Option<FervidAtom> {
@@ -2535,17 +2646,21 @@ fn create_property(
     key: Box<Expr>,
     type_annotation: Box<TsType>,
     optional: bool,
-) -> TsPropertySignature {
-    TsPropertySignature {
-        span: DUMMY_SP,
-        readonly: false,
-        key,
-        computed: false,
-        optional,
-        type_ann: Some(Box::new(TsTypeAnn {
+    owner_scope: usize,
+) -> ResolvedProp {
+    ResolvedProp {
+        owner_scope,
+        value: ResolvedPropValue::TsPropertySignature(TsPropertySignature {
             span: DUMMY_SP,
-            type_ann: type_annotation,
-        })),
+            readonly: false,
+            key,
+            computed: false,
+            optional,
+            type_ann: Some(Box::new(TsTypeAnn {
+                span: DUMMY_SP,
+                type_ann: type_annotation,
+            })),
+        }),
     }
 }
 
@@ -2604,6 +2719,15 @@ fn error(kind: ScriptErrorKind, span: Span) -> ScriptError {
     ScriptError { span, kind }
 }
 
+impl Spanned for ResolvedProp {
+    fn span(&self) -> Span {
+        match self.value {
+            ResolvedPropValue::TsPropertySignature(ref s) => s.span,
+            ResolvedPropValue::TsMethodSignature(ref s) => s.span,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use fervid_core::SfcDescriptor;
@@ -2620,7 +2744,7 @@ mod tests {
     #[test]
     fn it_resolves_template_literal_keys() {
         let mut ctx = TypeResolveContext::anonymous();
-        let scope = ctx.scope.clone();
+        let scope = ctx.root_scope();
         let scope = (*scope).borrow();
 
         let expr = parse_typescript_expr(
@@ -3010,17 +3134,23 @@ mod tests {
         assert_eq!(resolved.raw_props.len(), 2);
         assert!(matches!(
             resolved.raw_props.get(&fervid_atom!("foo")),
-            Some(&TsTypeElement::TsPropertySignature(TsPropertySignature {
-                optional: true,
+            Some(&ResolvedProp {
+                value: ResolvedPropValue::TsPropertySignature(TsPropertySignature {
+                    optional: true,
+                    ..
+                }),
                 ..
-            }))
+            })
         ));
         assert!(matches!(
             resolved.raw_props.get(&fervid_atom!("bar")),
-            Some(&TsTypeElement::TsPropertySignature(TsPropertySignature {
-                optional: true,
+            Some(&ResolvedProp {
+                value: ResolvedPropValue::TsPropertySignature(TsPropertySignature {
+                    optional: true,
+                    ..
+                }),
                 ..
-            }))
+            })
         ));
     }
 
@@ -3035,17 +3165,23 @@ mod tests {
         assert_eq!(resolved.raw_props.len(), 2);
         assert!(matches!(
             resolved.raw_props.get(&fervid_atom!("foo")),
-            Some(&TsTypeElement::TsPropertySignature(TsPropertySignature {
-                optional: false,
+            Some(&ResolvedProp {
+                value: ResolvedPropValue::TsPropertySignature(TsPropertySignature {
+                    optional: false,
+                    ..
+                }),
                 ..
-            }))
+            })
         ));
         assert!(matches!(
             resolved.raw_props.get(&fervid_atom!("bar")),
-            Some(&TsTypeElement::TsPropertySignature(TsPropertySignature {
-                optional: false,
+            Some(&ResolvedProp {
+                value: ResolvedPropValue::TsPropertySignature(TsPropertySignature {
+                    optional: false,
+                    ..
+                }),
                 ..
-            }))
+            })
         ));
     }
 
@@ -3678,21 +3814,20 @@ mod tests {
     // TODO Other types
     // TODO Remove all dbg!
 
-    // TODO Support generics
-    // #[test]
-    // fn generic_with_type_literal() {
-    //     let resolved = resolve(
-    //         "
-    //         type Props<T> = T
-    //         defineProps<Props<{ foo: string }>>()",
-    //     );
+    #[test]
+    fn generic_with_type_literal() {
+        let resolved = resolve(
+            "
+            type Props<T> = T
+            defineProps<Props<{ foo: string }>>()",
+        );
 
-    //     assert_eq!(resolved.props.len(), 1);
-    //     assert_eq!(
-    //         resolved.props.get(&fervid_atom!("foo")),
-    //         Some(&FlagSet::from(Types::String))
-    //     );
-    // }
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String))
+        );
+    }
 
     #[test]
     fn failed_type_reference() {
@@ -3736,22 +3871,95 @@ mod tests {
         let result = try_resolve("import { X } from './foo'; defineProps<X>()");
 
         // TODO Error should be different (when imports are implemented)
-        assert!(result
-            .is_err_and(|e| matches!(e.kind, ScriptErrorKind::ResolveTypeUnresolvable)));
+        assert!(result.is_err_and(|e| matches!(e.kind, ScriptErrorKind::ResolveTypeUnresolvable)));
     }
 
     #[test]
     fn should_not_error_on_unresolved_type_when_inferring_runtime_type() {
-        assert!(
-            try_resolve("defineProps<{ foo: T }>()").is_ok()
-        );
-        assert!(
-            try_resolve("defineProps<{ foo: T['bar'] }>()").is_ok()
-        );
-        assert!(
-            try_resolve("
+        assert!(try_resolve("defineProps<{ foo: T }>()").is_ok());
+        assert!(try_resolve("defineProps<{ foo: T['bar'] }>()").is_ok());
+        assert!(try_resolve(
+            "
             import type P from 'unknown'
-            defineProps<{ foo: P }>()").is_ok()
+            defineProps<{ foo: P }>()"
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn error_against_failed_extends() {
+        assert!(try_resolve(
+            "
+            import type Base from 'unknown'
+            interface Props extends Base {}
+            defineProps<Props>()"
+        )
+        .is_err_and(|e| matches!(e.kind, ScriptErrorKind::ResolveTypeExtendsBaseType)));
+    }
+
+    // TODO Support `@vue-ignore`
+    // #[test]
+    // fn allow_ignoring_failed_extends() {
+    //     let res = try_resolve(
+    //         "
+    //         import type Base from 'unknown'
+    //         interface Props extends /*@vue-ignore*/ Base {
+    //             foo: string
+    //         }
+    //         defineProps<Props>()",
+    //     )
+    //     .expect("Should not throw");
+
+    //     assert_eq!(res.props.len(), 1);
+    //     assert_eq!(
+    //         res.props.get(&fervid_atom!("foo")),
+    //         Some(&FlagSet::from(Types::String))
+    //     );
+    // }
+
+    #[test]
+    fn template_literals_mapped_types_with_string_type() {
+        let resolved = resolve(
+            "
+            type X = 'a' | 'b'
+            defineProps<{[K in X as `${K}_foo`]: string}>()",
+        );
+
+        assert_eq!(resolved.props.len(), 2);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("a_foo")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("b_foo")),
+            Some(&FlagSet::from(Types::String))
+        );
+    }
+
+    #[test]
+    fn template_literals_mapped_types_with_generic_parameters() {
+        let resolved = resolve(
+            "
+            type Breakpoints = 'sm' | 'md' | 'lg'
+            type BreakpointFactory<T extends string, V> = {
+                [K in Breakpoints as `${T}${Capitalize<K>}`]: V
+            }
+            type ColsBreakpoints = BreakpointFactory<'cols', number>
+            defineProps<ColsBreakpoints>()",
+        );
+
+        assert_eq!(resolved.props.len(), 3);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("colsSm")),
+            Some(&FlagSet::from(Types::Number))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("colsMd")),
+            Some(&FlagSet::from(Types::Number))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("colsLg")),
+            Some(&FlagSet::from(Types::Number))
         );
     }
 
@@ -3761,7 +3969,7 @@ mod tests {
         calls: Vec<Either<TsFnType, TsCallSignatureDecl>>,
         #[allow(dead_code)]
         deps: FxHashSet<String>,
-        raw_props: HashMap<FervidAtom, TsTypeElement>,
+        raw_props: HashMap<FervidAtom, ResolvedProp>,
     }
 
     fn resolve(code: &str) -> ResolveResult {
@@ -3805,7 +4013,7 @@ mod tests {
         }
 
         // Record types to support type-only `defineProps` and `defineEmits`
-        let scope = ctx.scope.clone();
+        let scope = ctx.root_scope();
         if ctx.bindings_helper.is_ts {
             let mut scope = (*scope).borrow_mut();
             scope.imports = ctx.bindings_helper.user_imports.clone();
@@ -3818,7 +4026,6 @@ mod tests {
                 false,
             );
         }
-        let scope = (*scope).borrow();
 
         let mut script_setup = sfc_descriptor
             .script_setup
@@ -3859,12 +4066,15 @@ mod tests {
 
         let raw = resolve_type_elements(&mut ctx, target)?;
 
+        // TODO We need to support either `_resolvedReference` or `_ownerScope` (better)
+        dbg!("resolved to", &raw);
+
         let mut props = FxHashMap::default();
         let raw_props = raw.props;
         for (prop_name, prop_type) in raw_props.iter() {
             props.insert(
                 prop_name.to_owned(),
-                infer_runtime_type_type_element(&mut ctx, prop_type, &scope),
+                infer_runtime_type_resolved_prop(&mut ctx, prop_type),
             );
         }
 

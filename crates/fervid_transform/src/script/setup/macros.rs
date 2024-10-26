@@ -595,7 +595,7 @@ fn extract_event_names(
         return;
     };
 
-    let scope = ctx.scope.clone();
+    let scope = ctx.root_scope();
     let scope = scope.borrow();
 
     let types = resolve_union_type(ctx, &type_annotation.type_ann, &scope);
