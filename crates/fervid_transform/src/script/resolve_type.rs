@@ -15,15 +15,7 @@ use strum_macros::{AsRefStr, EnumString, IntoStaticStr};
 use swc_core::{
     common::{pass::Either, Span, Spanned, DUMMY_SP},
     ecma::ast::{
-        BinExpr, BinaryOp, Class, ClassDecl, Decl, DefaultDecl, ExportDecl, ExportSpecifier, Expr,
-        FnDecl, FnExpr, Function, Ident, Lit, ModuleDecl, ModuleExportName, ModuleItem, Pat, Stmt,
-        Tpl, TsCallSignatureDecl, TsEntityName, TsEnumDecl, TsExprWithTypeArgs,
-        TsFnOrConstructorType, TsFnParam, TsFnType, TsIndexedAccessType, TsInterfaceDecl,
-        TsIntersectionType, TsKeywordType, TsKeywordTypeKind, TsLit, TsLitType, TsMappedType,
-        TsMethodSignature, TsModuleDecl, TsModuleName, TsNamespaceBody, TsNamespaceDecl,
-        TsPropertySignature, TsQualifiedName, TsTplLitType, TsType, TsTypeAnn, TsTypeElement,
-        TsTypeLit, TsTypeOperatorOp, TsTypeQueryExpr, TsTypeRef, TsUnionOrIntersectionType,
-        TsUnionType,
+        BinExpr, BinaryOp, Class, ClassDecl, Decl, DefaultDecl, ExportDecl, ExportSpecifier, Expr, FnDecl, FnExpr, Function, Ident, Lit, Module, ModuleDecl, ModuleExportName, ModuleItem, Pat, Stmt, Tpl, TsCallSignatureDecl, TsEntityName, TsEnumDecl, TsExprWithTypeArgs, TsFnOrConstructorType, TsFnParam, TsFnType, TsIndexedAccessType, TsInterfaceDecl, TsIntersectionType, TsKeywordType, TsKeywordTypeKind, TsLit, TsLitType, TsMappedType, TsMethodSignature, TsModuleDecl, TsModuleName, TsNamespaceBody, TsNamespaceDecl, TsPropertySignature, TsQualifiedName, TsTplLitType, TsType, TsTypeAnn, TsTypeElement, TsTypeLit, TsTypeOperatorOp, TsTypeQueryExpr, TsTypeRef, TsUnionOrIntersectionType, TsUnionType
     },
 };
 
@@ -488,8 +480,6 @@ fn type_elements_to_map(
             ($signature: ident, $value: expr) => {
                 let mut child_scope: Option<TypeScopeContainer> = None;
                 if let Some(type_parameters) = type_parameters {
-                    // TODO ;(e as MaybeWithScope)._ownerScope = scope
-                    // TODO To support this assignment, we need to have a dedicated type for ResolvedElements.props
                     let new_child_scope_container = ctx.create_child_scope(scope);
                     {
                         let new_child_scope = &mut (*new_child_scope_container.borrow_mut());
@@ -509,17 +499,23 @@ fn type_elements_to_map(
 
                 let name = get_id(&$signature.key);
                 if let (Some(name), false) = (name, $signature.computed) {
-                    result.props.insert(name, ResolvedProp {
-                        owner_scope: scope.id,
-                        value: $value
-                    });
+                    result.props.insert(
+                        name,
+                        ResolvedProp {
+                            owner_scope: scope.id,
+                            value: $value,
+                        },
+                    );
                 } else if let Expr::Tpl(tpl) = $signature.key.as_ref() {
                     let keys = resolve_template_keys(ctx, &tpl, scope)?;
                     for key in keys {
-                        result.props.insert(key, ResolvedProp {
-                            owner_scope: scope.id,
-                            value: $value
-                        });
+                        result.props.insert(
+                            key,
+                            ResolvedProp {
+                                owner_scope: scope.id,
+                                value: $value,
+                            },
+                        );
                     }
                 } else {
                     return Err(error(
@@ -1340,7 +1336,6 @@ fn resolve_type_reference<'t>(
     scope: &'t TypeScope,
 ) -> Option<ScopeTypeNode> {
     // TODO No type resolution is implemented yet
-    // TODO Implementing this requires scopes
     // TODO It also requires a FS layer to work the same way as in official compiler
 
     // TODO No caching is supported
@@ -1407,28 +1402,107 @@ fn inner_resolve_type_reference<'t>(
     }
 
     let ns = inner_resolve_type_reference(ctx, ts_type, scope, &name[0..1], only_exported);
-    if let Some(_ns) = ns {
-        // TODO This is pretty much impossible to cover yet
-        //   1: TSModuleDeclaration is not a part of TsType;
-        //   2: It's not possible to attach meta-information;
-        //
-        // if (ns.type !== 'TSModuleDeclaration') {
-        //   // namespace merged with other types, attached as _ns
-        //   ns = ns._ns
-        // }
-        //         if (ns) {
-        //           const childScope = moduleDeclToScope(ctx, ns, ns._ownerScope || scope)
-        //           return innerResolveTypeReference(
-        //             ctx,
-        //             childScope,
-        //             name.length > 2 ? name.slice(1) : name[name.length - 1],
-        //             node,
-        //             !ns.declare,
-        //           )
-        //         }
+    if let Some(ns) = ns {
+        // Borrow from `ns._ns`
+        let ns_namespace_decl_ref = ns.namespace.as_deref().map(|v| v.borrow());
+        let ns_namespace_decl_ref: Option<&Decl> = ns_namespace_decl_ref.as_deref();
+
+        // Borrow from `ns`
+        let ns_value_decl_ref = match ns.value {
+            TypeOrDecl::Decl(ref rc) => Some(rc.borrow()),
+            _ => None,
+        };
+        let ns_value_decl_ref: Option<&Decl> = ns_value_decl_ref.as_deref();
+
+        // Convert to `TsModuleDecl`
+        let module_decl = ns_value_decl_ref
+            .and_then(|v| v.as_ts_module())
+            .or_else(|| ns_namespace_decl_ref.and_then(|v| v.as_ts_module()));
+
+        dbg!("have we ever reached this ?");
+
+        // `ns._ownerScope || scope`
+        let ns_scope = ctx.get_scope(ns.owner_scope);
+        let ns_scope = ns_scope.as_deref().map(|v| v.borrow());
+        let scope = ns_scope.as_deref().unwrap_or(&scope);
+
+        dbg!(&scope);
+
+        if let Some(module_decl) = module_decl {
+            let child_scope = module_decl_to_scope(ctx, module_decl, scope);
+            let child_scope = &*child_scope.borrow();
+
+            // `name.slice(1)`
+            let name_slice = if name.len() > 1 {
+                &name[1..]
+            } else {
+                &[]
+            };
+
+            return inner_resolve_type_reference(
+                ctx,
+                ts_type,
+                child_scope,
+                name_slice,
+                !module_decl.declare,
+            );
+        }
     }
 
     None
+}
+
+fn module_decl_to_scope(
+    ctx: &mut TypeResolveContext,
+    ts_module_decl: &TsModuleDecl,
+    parent_scope: &TypeScope,
+) -> TypeScopeContainer {
+    let scope_container = ctx.create_child_scope(parent_scope);
+
+    if let Some(TsNamespaceBody::TsNamespaceDecl(ref decl)) = ts_module_decl.body {
+        let id = decl.id.sym.to_owned();
+        let scope = &mut *scope_container.borrow_mut();
+
+        // Coerce TsNamespaceDecl into TsModuleDecl
+        let new_ts_module_decl = TsModuleDecl {
+            span: decl.span,
+            declare: decl.declare,
+            global: decl.global,
+            id: TsModuleName::Ident(decl.id.to_owned()),
+            body: Some(*decl.body.to_owned()),
+        };
+
+        scope.types.insert(
+            id,
+            ScopeTypeNode {
+                value: TypeOrDecl::Decl(Rc::new(RefCell::new(Decl::TsModule(Box::new(
+                    new_ts_module_decl,
+                ))))),
+                owner_scope: scope.id,
+                namespace: None,
+            },
+        );
+    } else if let Some(TsNamespaceBody::TsModuleBlock(ref block)) = ts_module_decl.body {
+        let scope = &mut *scope_container.borrow_mut();
+
+        // TODO Make `record_types` a bit more isomorphic (this would also reduce unnecessary clones)
+        // Coerce to SfcScriptBlock for ease of use
+        let span = block.span;
+        let mut virtual_sfc_block = SfcScriptBlock {
+            content: Box::new(Module {
+                span,
+                body: block.body.clone(),
+                shebang: None,
+            }),
+            lang: fervid_core::SfcScriptLang::Typescript,
+            is_setup: true,
+            span,
+        };
+
+        record_types(ctx, Some(&mut virtual_sfc_block), None, scope, false);
+    }
+
+    scope_container
 }
 
 pub fn record_types(
@@ -1639,12 +1713,20 @@ pub fn record_types(
         }
     }
 
-    // TODO Support both `_ownerScope` and `_ns` (using IDs)
-    // for (const key of Object.keys(types)) {
-    //     const node = types[key]
-    //     node._ownerScope = scope
-    //     if (node._ns) node._ns._ownerScope = scope
-    // }
+    for node in types.values_mut() {
+        // TODO Support both `_ownerScope` and `_ns` (using IDs)
+        // for (const key of Object.keys(types)) {
+        //     const node = types[key]
+        //     node._ownerScope = scope
+        //     if (node._ns) node._ns._ownerScope = scope
+        // }
+        node.owner_scope = scope.id;
+    }
+
+    for declare in declares.values_mut() {
+        declare.owner_scope = scope.id;
+    }
+
 
     // TODO Support declares `_ownerScope`
     // for (const key of Object.keys(declares)) {
@@ -3316,7 +3398,7 @@ mod tests {
         );
     }
 
-    // TODO Namespace support
+    // TODO Namespace support with proper scopes
     // #[test]
     // fn namespace() {
     //     let resolved = resolve(
@@ -3367,61 +3449,59 @@ mod tests {
         );
     }
 
-    // TODO Namespace support
-    // #[test]
-    // fn namespace_merging() {
-    //     let resolved = resolve(
-    //         "
-    //         namespace Foo {
-    //             export type A = string
-    //         }
-    //         namespace Foo {
-    //             export type B = number
-    //         }
-    //         defineProps<{
-    //             foo: Foo.A,
-    //             bar: Foo.B
-    //         }>()",
-    //     );
+    #[test]
+    fn namespace_merging() {
+        let resolved = resolve(
+            "
+            namespace Foo {
+                export type A = string
+            }
+            namespace Foo {
+                export type B = number
+            }
+            defineProps<{
+                foo: Foo.A,
+                bar: Foo.B
+            }>()",
+        );
 
-    //     assert_eq!(resolved.props.len(), 2);
-    //     assert_eq!(
-    //         resolved.props.get(&fervid_atom!("foo")),
-    //         Some(&FlagSet::from(Types::String))
-    //     );
-    //     assert_eq!(
-    //         resolved.props.get(&fervid_atom!("bar")),
-    //         Some(&FlagSet::from(Types::Number))
-    //     );
-    // }
+        assert_eq!(resolved.props.len(), 2);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("bar")),
+            Some(&FlagSet::from(Types::Number))
+        );
+    }
 
-    // TODO Namespace support
-    // #[test]
-    // fn namespace_merging_with_other_types() {
-    //     let resolved = resolve(
-    //         "
-    //         namespace Foo {
-    //             export type A = string
-    //         }
-    //         interface Foo {
-    //             b: number
-    //         }
-    //         defineProps<{
-    //             foo: Foo.A,
-    //             bar: Foo['b']
-    //         }>()",
-    //     );
+    #[test]
+    fn namespace_merging_with_other_types() {
+        let resolved = resolve(
+            "
+            namespace Foo {
+                export type A = string
+            }
+            interface Foo {
+                b: number
+            }
+            defineProps<{
+                foo: Foo.A,
+                bar: Foo['b']
+            }>()",
+        );
 
-    //     assert_eq!(resolved.props.len(), 2);
-    //     assert_eq!(
-    //         resolved.props.get(&fervid_atom!("foo")),
-    //         Some(&FlagSet::from(Types::String))
-    //     );
-    //     assert_eq!(
-    //         resolved.props.get(&fervid_atom!("bar")),
-    //         Some(&FlagSet::from(Types::Number))
-    //     );
-    // }
+        assert_eq!(resolved.props.len(), 2);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("bar")),
+            Some(&FlagSet::from(Types::Number))
+        );
+    }
 
     // TODO Enum merging
     // #[test]

@@ -58,19 +58,20 @@ pub struct BindingsHelper {
     pub vue_resolved_imports: Box<VueResolvedImports>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ScopeTypeNode {
     pub value: TypeOrDecl,
     pub owner_scope: usize,
     pub namespace: Option<Rc<RefCell<Decl>>>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum TypeOrDecl {
     Type(Rc<TsType>),
     Decl(Rc<RefCell<Decl>>),
 }
 
+#[derive(Debug)]
 pub struct TypeScope {
     pub id: usize,
     pub filename: String,
