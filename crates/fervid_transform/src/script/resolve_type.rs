@@ -2531,7 +2531,6 @@ fn flatten_types(
     for ts_type in types {
         result |= infer_runtime_type_type(ctx, &ts_type, scope, is_key_of);
     }
-    dbg!("We have flattened", result);
     result
 }
 
@@ -3503,28 +3502,27 @@ mod tests {
         );
     }
 
-    // TODO Enum merging
-    // #[test]
-    // fn enum_merging() {
-    //     let resolved = resolve(
-    //         "
-    //         enum Foo {
-    //             A = 1
-    //         }
-    //         enum Foo {
-    //             B = 'hi'
-    //         }
-    //         defineProps<{
-    //             foo: Foo
-    //         }>()",
-    //     );
+    #[test]
+    fn enum_merging() {
+        let resolved = resolve(
+            "
+            enum Foo {
+                A = 1
+            }
+            enum Foo {
+                B = 'hi'
+            }
+            defineProps<{
+                foo: Foo
+            }>()",
+        );
 
-    //     assert_eq!(resolved.props.len(), 1);
-    //     assert_eq!(
-    //         resolved.props.get(&fervid_atom!("foo")),
-    //         Some(&FlagSet::from(Types::String | Types::String))
-    //     );
-    // }
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String | Types::Number))
+        );
+    }
 
     #[test]
     fn typeof_() {
