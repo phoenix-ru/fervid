@@ -1,16 +1,12 @@
 //! Exports data structs used by the crate
 
-use std::{
-    cell::RefCell,
-    hash::{Hash, Hasher},
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 
 use fervid_core::{
     BindingTypes, ComponentBinding, CustomDirectiveBinding, FervidAtom, SfcCustomBlock,
     SfcStyleBlock, SfcTemplateBlock, TemplateGenerationMode, VueImportsSet,
 };
-use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet, FxHasher64};
+use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use smallvec::SmallVec;
 use swc_core::ecma::{
     ast::{Decl, Expr, ExprOrSpread, Function, Id, Module, ObjectLit, PropOrSpread, TsType},
@@ -24,8 +20,8 @@ pub struct TransformSfcContext {
     /// For Custom Elements
     pub is_ce: bool,
     pub bindings_helper: BindingsHelper,
-    pub scope: Rc<RefCell<TypeScope>>,
     pub deps: HashSet<String>,
+    pub(crate) scopes: Vec<TypeScopeContainer>,
 }
 
 /// A helper which encompasses all the logic related to bindings,
@@ -62,21 +58,22 @@ pub struct BindingsHelper {
     pub vue_resolved_imports: Box<VueResolvedImports>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ScopeTypeNode {
     pub value: TypeOrDecl,
-    pub owner_scope: u64,
+    pub owner_scope: usize,
     pub namespace: Option<Rc<RefCell<Decl>>>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum TypeOrDecl {
     Type(Rc<TsType>),
     Decl(Rc<RefCell<Decl>>),
 }
 
+#[derive(Debug)]
 pub struct TypeScope {
-    pub id: u64,
+    pub id: usize,
     pub filename: String,
     // source: String,
     // offset: usize,
@@ -88,6 +85,9 @@ pub struct TypeScope {
     pub exported_types: HashMap<FervidAtom, ScopeTypeNode>,
     pub exported_declares: HashMap<FervidAtom, ScopeTypeNode>,
 }
+
+/// Container for easy sharing and modification of scopes
+pub type TypeScopeContainer = Rc<RefCell<TypeScope>>;
 
 // Todo maybe use SmallVec?
 #[derive(Debug, Default, PartialEq)]
@@ -206,19 +206,14 @@ impl TransformSfcContext {
             filename: filename.to_owned(),
             bindings_helper: BindingsHelper::default(),
             is_ce: false,
-            scope: Rc::new(TypeScope::new(filename).into()),
             deps: HashSet::default(),
+            scopes: vec![],
         }
     }
 }
 
 impl TypeScope {
-    pub fn new(filename: String) -> TypeScope {
-        // TODO Ensure scopes do not clash by other means
-        let mut hasher = FxHasher64::default();
-        filename.hash(&mut hasher);
-        let id = hasher.finish();
-
+    pub fn new(id: usize, filename: String) -> TypeScope {
         TypeScope {
             id,
             filename,

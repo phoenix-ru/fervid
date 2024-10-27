@@ -72,9 +72,9 @@ pub fn transform_and_record_scripts(
         );
     }
 
-    // 1.3. Record types for to support type-only `defineProps` and `defineEmits`
+    // 1.3. Record types to support type-only `defineProps` and `defineEmits`
     if ctx.bindings_helper.is_ts {
-        let scope = ctx.scope.clone();
+        let scope = ctx.root_scope();
         let mut scope = (*scope).borrow_mut();
         scope.imports = ctx.bindings_helper.user_imports.clone();
 

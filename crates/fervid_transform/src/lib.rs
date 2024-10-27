@@ -101,14 +101,50 @@ impl TransformSfcContext {
             bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
         }
 
-        let scope = Rc::new(RefCell::from(TypeScope::new(options.filename.to_string())));
-
         TransformSfcContext {
             filename: options.filename.to_string(),
             is_ce: false, // todo
             bindings_helper,
-            scope,
             deps: Default::default(),
+            scopes: vec![],
         }
+    }
+
+    pub fn root_scope(&mut self) -> TypeScopeContainer {
+        if let Some(root_scope) = self.scopes.first() {
+            return root_scope.clone();
+        }
+
+        let root_scope = Rc::new(RefCell::new(TypeScope::new(0, self.filename.to_owned())));
+        self.scopes.push(root_scope.clone());
+
+        root_scope
+    }
+
+    pub fn create_child_scope(&mut self, parent_scope: &TypeScope) -> TypeScopeContainer {
+        let id = self.scopes.len();
+        let child_scope = Rc::new(RefCell::new(TypeScope {
+            id,
+            // We unfortunately have to copy here
+            filename: parent_scope.filename.to_owned(),
+            imports: parent_scope.imports.to_owned(),
+            types: parent_scope.types.to_owned(),
+            declares: parent_scope.declares.to_owned(),
+            is_generic_scope: false,
+            exported_types: Default::default(),
+            exported_declares: Default::default(),
+        }));
+        self.scopes.push(child_scope.clone());
+
+        child_scope
+    }
+
+    #[inline]
+    pub fn get_scope(&self, id: usize) -> Option<TypeScopeContainer> {
+        self.scopes.get(id).cloned()
+    }
+
+    pub fn get_scope_or_root(&mut self, id: usize) -> TypeScopeContainer {
+        self.get_scope(id).unwrap_or_else(|| self.root_scope())
     }
 }

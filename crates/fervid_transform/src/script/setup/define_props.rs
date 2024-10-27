@@ -6,7 +6,6 @@ use swc_core::{
     ecma::ast::{
         ArrayLit, Bool, CallExpr, Callee, Expr, ExprOrSpread, GetterProp, IdentName, KeyValueProp,
         Lit, MethodProp, ObjectLit, Prop, PropName, PropOrSpread, SetterProp, TsType,
-        TsTypeElement,
     },
 };
 
@@ -15,8 +14,8 @@ use crate::{
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::{
         resolve_type::{
-            infer_runtime_type_type_element, resolve_type_elements, ResolutionResult,
-            TypeResolveContext, Types, TypesSet,
+            infer_runtime_type_resolved_prop, resolve_type_elements, ResolutionResult,
+            ResolvedPropValue, TypeResolveContext, Types, TypesSet,
         },
         utils::{collect_obj_fields, collect_string_arr},
     },
@@ -286,11 +285,8 @@ fn resolve_runtime_props_from_type(
     let mut props = vec![];
     let elements = resolve_type_elements(ctx, type_decl)?;
 
-    let ctx_scope = &ctx.scope.clone();
-
     for (key, element) in elements.props {
-        // TODO Use `element._ownerScope`
-        let mut types = infer_runtime_type_type_element(ctx, &element, &ctx_scope.borrow());
+        let mut types = infer_runtime_type_resolved_prop(ctx, &element);
 
         // Skip check for result containing unknown types
         let mut skip_check = false;
@@ -303,14 +299,9 @@ fn resolve_runtime_props_from_type(
             }
         }
 
-        let required = match element {
-            TsTypeElement::TsCallSignatureDecl(_) => true,
-            TsTypeElement::TsConstructSignatureDecl(_) => true,
-            TsTypeElement::TsPropertySignature(s) => !s.optional,
-            TsTypeElement::TsGetterSignature(_) => true,
-            TsTypeElement::TsSetterSignature(_) => true,
-            TsTypeElement::TsMethodSignature(s) => !s.optional,
-            TsTypeElement::TsIndexSignature(_) => true,
+        let required = match element.value {
+            ResolvedPropValue::TsPropertySignature(s) => !s.optional,
+            ResolvedPropValue::TsMethodSignature(s) => !s.optional,
         };
 
         props.push(PropTypeData {

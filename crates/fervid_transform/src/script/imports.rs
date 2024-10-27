@@ -68,6 +68,7 @@ pub fn register_import(
     errors: &mut Vec<TransformError>,
 ) -> bool {
     let mut binding_type = BindingTypes::Imported;
+    let mut should_include_binding = true;
 
     let (local, imported, span) = match import_specifier {
         // e.g. `import * as foo from 'mod.js'`
@@ -126,7 +127,9 @@ pub fn register_import(
                     imported_as.to_id(),
                     &mut bindings_helper.vue_resolved_imports,
                 );
-                return true;
+
+                // Do not include as a binding (is it a correct decision though?)
+                should_include_binding = false;
             } else if is_dot_vue_import && imported_word == "default" {
                 // Only `import { default as Smth }` is supported.
                 // `import { default }` is invalid, and SWC will catch that
@@ -154,11 +157,11 @@ pub fn register_import(
         return false;
     }
 
-    if is_from_setup {
+    if is_from_setup && should_include_binding {
         bindings_helper
             .setup_bindings
             .push(SetupBinding(local.to_owned(), BindingTypes::Imported))
-    } else {
+    } else if should_include_binding {
         let bindings = bindings_helper
             .options_api_bindings
             .get_or_insert_with(|| Default::default());
