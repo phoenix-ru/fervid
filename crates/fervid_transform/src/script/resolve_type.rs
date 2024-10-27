@@ -252,12 +252,6 @@ fn resolve_type_elements_impl_decl(
     //   return { props: {} }
     // }
 
-    dbg!(
-        "are we trying to resolve type alias here?",
-        &decl,
-        type_parameters
-    );
-
     match decl {
         Decl::TsInterface(interface) => {
             resolve_interface_members(ctx, interface, scope, type_parameters)
@@ -372,8 +366,6 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
             }
         }
 
-        dbg!("we are here type ref", &type_params);
-
         let scope = ctx.get_scope_or_root(resolved.owner_scope);
         let scope = &*scope.borrow();
 
@@ -391,10 +383,7 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
         return Err(error(ScriptErrorKind::ResolveTypeUnsupported, span));
     };
 
-    dbg!(type_parameters, type_name_single);
-
     if let Some(type_param) = type_parameters.and_then(|v| v.get(type_name_single)) {
-        dbg!("did we reach it?");
         return resolve_type_elements_impl_type(ctx, type_param, scope, type_parameters);
     }
 
@@ -1419,14 +1408,10 @@ fn inner_resolve_type_reference<'t>(
             .and_then(|v| v.as_ts_module())
             .or_else(|| ns_namespace_decl_ref.and_then(|v| v.as_ts_module()));
 
-        dbg!("have we ever reached this ?");
-
         // `ns._ownerScope || scope`
         let ns_scope = ctx.get_scope(ns.owner_scope);
         let ns_scope = ns_scope.as_deref().map(|v| v.borrow());
         let scope = ns_scope.as_deref().unwrap_or(&scope);
-
-        dbg!(&scope);
 
         if let Some(module_decl) = module_decl {
             let child_scope = module_decl_to_scope(ctx, module_decl, scope);
@@ -2368,7 +2353,6 @@ pub fn infer_runtime_type_type(
                     (&intersection.types, true)
                 }
             };
-            dbg!("We are flattening", &types);
             let mut flattened = flatten_types(ctx, &types, scope, is_key_of);
             if is_intersection {
                 flattened -= Types::Unknown;
@@ -2448,7 +2432,6 @@ fn infer_runtime_type_type_elements(
             result |= if call_or_construct {
                 Types::Function
             } else {
-                dbg!("We are here", member);
                 Types::Object
             };
 
@@ -3887,9 +3870,6 @@ mod tests {
         );
     }
 
-    // TODO Other types
-    // TODO Remove all dbg!
-
     #[test]
     fn generic_with_type_literal() {
         let resolved = resolve(
@@ -3904,6 +3884,102 @@ mod tests {
             Some(&FlagSet::from(Types::String))
         );
     }
+
+    #[test]
+    fn generic_used_in_intersection() {
+        let resolved = resolve(
+            "
+            type Foo = { foo: string; }
+            type Bar = { bar: number; }
+            type Props<T,U> = T & U & { baz: boolean }
+            defineProps<Props<Foo, Bar>>()",
+        );
+
+        assert_eq!(resolved.props.len(), 3);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("bar")),
+            Some(&FlagSet::from(Types::Number))
+        );
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("baz")),
+            Some(&FlagSet::from(Types::Boolean))
+        );
+    }
+
+    #[test]
+    fn generic_type_with_generic_type_alias() {
+        let resolved = resolve(
+            "
+            type Aliased<T> = Readonly<Partial<T>>
+            type Props<T> = Aliased<T>
+            type Foo = { foo: string; }
+            defineProps<Props<Foo>>()",
+        );
+
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String))
+        );
+    }
+
+    #[test]
+    fn generic_type_with_aliased_type_literal() {
+        let resolved = resolve(
+            "
+            type Aliased<T> = { foo: T }
+            defineProps<Aliased<string>>()",
+        );
+
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String))
+        );
+    }
+
+    #[test]
+    fn generic_type_with_interface() {
+        let resolved = resolve(
+            "
+            interface Props<T> {
+                foo: T
+            }
+            type Foo = string
+            defineProps<Props<Foo>>()",
+        );
+
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String))
+        );
+    }
+
+    #[test]
+    fn generic_from_external_file() {
+        // TODO Support importing
+        // const files = {
+        //   '/foo.ts': 'export type P<T> = { foo: T }',
+        // }
+        let resolved = resolve(
+            "
+            type P<T> = { foo: T }
+            defineProps<P<string>>()",
+        );
+
+        assert_eq!(resolved.props.len(), 1);
+        assert_eq!(
+            resolved.props.get(&fervid_atom!("foo")),
+            Some(&FlagSet::from(Types::String))
+        );
+    }
+
+    // TODO Imported types
 
     #[test]
     fn failed_type_reference() {
@@ -4107,8 +4183,6 @@ mod tests {
             .script_setup
             .expect("Script setup is present");
 
-        dbg!(&script_setup.content);
-
         // Target is the type param of `defineProps`
         let target: &mut Box<TsType> = script_setup
             .content
@@ -4141,9 +4215,6 @@ mod tests {
             .expect("defineProps should exist");
 
         let raw = resolve_type_elements(&mut ctx, target)?;
-
-        // TODO We need to support either `_resolvedReference` or `_ownerScope` (better)
-        dbg!("resolved to", &raw);
 
         let mut props = FxHashMap::default();
         let raw_props = raw.props;
