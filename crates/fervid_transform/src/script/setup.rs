@@ -1,10 +1,10 @@
-use fervid_core::{BindingTypes, IntoIdent, SfcScriptBlock};
+use fervid_core::{BindingTypes, IntoIdent, SfcScriptBlock, TemplateGenerationMode};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::ast::{
-        BindingIdent, BlockStmt, Decl, ExprStmt, Function, IdentName, KeyValuePatProp,
-        KeyValueProp, ModuleDecl, ModuleItem, ObjectPat, ObjectPatProp, Param, Pat, Prop, PropName,
-        PropOrSpread, Stmt, VarDeclKind,
+        BindingIdent, BlockStmt, CallExpr, Callee, Decl, Expr, ExprStmt, Function, Ident,
+        IdentName, KeyValuePatProp, KeyValueProp, ModuleDecl, ModuleItem, ObjectPat, ObjectPatProp,
+        Param, Pat, Prop, PropName, PropOrSpread, Stmt, VarDeclKind,
     },
 };
 
@@ -130,6 +130,38 @@ pub fn transform_and_record_script_setup(
 
     // Post-process macros, e.g. merge models to `props` and `emits`
     postprocess_macros(&mut ctx.bindings_helper, &mut sfc_object_helper);
+
+    // Add `__expose()` in non-inline mode when user did not call `defineExpose()`
+    // https://github.com/vuejs/core/blob/664d2e553d8622bbdeae6bc02836233f6113eb4e/packages/compiler-sfc/src/compileScript.ts#L966-L969
+    if !sfc_object_helper.is_setup_expose_referenced
+        && !matches!(
+            ctx.bindings_helper.template_generation_mode,
+            TemplateGenerationMode::Inline
+        )
+    {
+        sfc_object_helper.is_setup_expose_referenced = true;
+
+        // We insert at index 0 to resemble official compiler,
+        // even though `push`ing would be obviously more performant (and likely correct as well)
+        setup_body_stmts.insert(
+            0,
+            Stmt::Expr(ExprStmt {
+                span: DUMMY_SP,
+                expr: Box::new(Expr::Call(CallExpr {
+                    span: DUMMY_SP,
+                    ctxt: Default::default(),
+                    callee: Callee::Expr(Box::new(Expr::Ident(Ident {
+                        span: DUMMY_SP,
+                        ctxt: Default::default(),
+                        sym: EXPOSE_HELPER.to_owned(),
+                        optional: false,
+                    }))),
+                    args: vec![],
+                    type_args: None,
+                })),
+            }),
+        );
+    }
 
     // Should we check that this function was not assigned anywhere else?
     let setup_fn = Some(Box::new(Function {
