@@ -1,8 +1,5 @@
 import { describe, test, expect } from 'vitest'
-import { parse as babelParse } from '@babel/parser'
-import { Compiler, FervidCompileOptions } from '..'
-
-const mockId = 'xxxxxxxx'
+import { assertCode, compile } from './utils'
 
 describe('SFC compile <script setup>', () => {
   // https://github.com/vuejs/core/blob/530d9ec5f69a39246314183d942d37986c01dc46/packages/compiler-sfc/__tests__/compileScript.spec.ts#L16-L52
@@ -332,40 +329,3 @@ describe('SFC genDefaultAs', () => {
     // })
   // })
 })
-
-// https://github.com/vuejs/core/blob/272ab9fbdcb1af0535108b9f888e80d612f9171d/packages/compiler-sfc/__tests__/utils.ts#L11-L24
-function compile(src: string, options?: Partial<FervidCompileOptions>) {
-  const normalizedOptions: FervidCompileOptions = {
-    filename: 'anonymous.vue',
-    id: mockId,
-    ...options,
-  }
-
-  const compiler = new Compiler()
-  const result = compiler.compileSync(src, normalizedOptions)
-
-  if (result.errors.length) {
-    console.warn(result.errors[0])
-  }
-
-  return {
-    content: result.code
-  }
-}
-
-function assertCode(code: string) {
-  // parse the generated code to make sure it is valid
-  try {
-    babelParse(code, {
-      sourceType: 'module',
-      plugins: [
-        'typescript',
-        ['importAttributes', { deprecatedAssertSyntax: true }],
-      ],
-    })
-  } catch (e: any) {
-    console.log(code)
-    throw e
-  }
-  expect(code).toMatchSnapshot()
-}

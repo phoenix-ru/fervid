@@ -32,7 +32,8 @@ test('should work', () => {
                 class: "simple compiler input"
             }, " Hello, " + _toDisplayString($setup.compilerName) + "! ", 1));
         },
-        setup () {
+        setup (__props, { expose: __expose }) {
+            __expose();
             const compilerName = ref('fervid');
             return {
                 compilerName

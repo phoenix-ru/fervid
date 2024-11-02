@@ -1,0 +1,353 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`defineEmits > basic usage 1`] = `
+"export default {
+    emits: [
+        'foo',
+        'bar'
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        const myEmit = __emit;
+        return {
+            myEmit
+        };
+    }
+};
+"
+`;
+
+exports[`defineEmits > w/ runtime options 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        'a',
+        'b'
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        const emit = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
+
+exports[`defineEmits > w/ type (exported interface) 1`] = `
+"export interface Emits {
+    (e: 'foo' | 'bar') : void;
+}
+import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        "foo",
+        "bar"
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        const emit = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
+
+exports[`defineEmits > w/ type (exported type alias) 1`] = `
+"export type Emits = {
+    (e: 'foo' | 'bar') : void;
+};
+import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        "foo",
+        "bar"
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        const emit = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
+
+exports[`defineEmits > w/ type (interface ts type) 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        'foo'
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        interface Emits {
+            (e: 'foo') : void;
+        }
+        const emit: Emits = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
+
+exports[`defineEmits > w/ type (interface w/ extends) 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        "bar",
+        "foo"
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        interface Base {
+            (e: 'foo') : void;
+        }
+        interface Emits extends Base {
+            (e: 'bar') : void;
+        }
+        const emit = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
+
+exports[`defineEmits > w/ type (interface) 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        "foo",
+        "bar"
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        interface Emits {
+            (e: 'foo' | 'bar') : void;
+        }
+        const emit = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
+
+exports[`defineEmits > w/ type (property syntax string literal) 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        "foo:bar"
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        const emit = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
+
+exports[`defineEmits > w/ type (property syntax) 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        "foo",
+        "bar"
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        const emit = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
+
+exports[`defineEmits > w/ type (referenced exported function type) 1`] = `
+"export type Emits = (e: 'foo' | 'bar') => void;
+import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        "foo",
+        "bar"
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        const emit = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
+
+exports[`defineEmits > w/ type (referenced function type) 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        "foo",
+        "bar"
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        type Emits = (e: 'foo' | 'bar') => void;
+        const emit = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
+
+exports[`defineEmits > w/ type (type alias) 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        "foo",
+        "bar"
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        type Emits = {
+            (e: 'foo' | 'bar') : void;
+        };
+        const emit = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
+
+exports[`defineEmits > w/ type (type literal w/ call signatures) 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        "foo",
+        "bar",
+        "baz"
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        const emit = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
+
+exports[`defineEmits > w/ type (type references in union) 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        "another",
+        "some",
+        "emit",
+        "change"
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        type BaseEmit = "change";
+        type Emit = "some" | "emit" | BaseEmit;
+        const emit = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
+
+exports[`defineEmits > w/ type (union) 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        "foo",
+        "bar",
+        "baz"
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        const emit = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
+
+exports[`defineEmits > w/ type 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        "foo",
+        "bar"
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        const emit = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
+
+exports[`defineEmits > w/ type from normal script 1`] = `
+"export interface Emits {
+    (e: 'foo' | 'bar') : void;
+}
+import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    emits: [
+        "foo",
+        "bar"
+    ],
+    __name: "anonymous",
+    setup (__props, { emit: __emit, expose: __expose }) {
+        __expose();
+        const emit = __emit;
+        return {
+            emit
+        };
+    }
+});
+"
+`;
