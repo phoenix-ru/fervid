@@ -1,0 +1,31 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`<script> after <script setup> the script content not end with \`\\n\` 1`] = `
+"const n = 1;
+import { x } from './x';
+export default {
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+        return {
+            n,
+            get x () {
+                return x;
+            }
+        };
+    }
+};
+"
+`;
+
+exports[`defineExpose() 1`] = `
+"export default {
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose({
+            foo: 123
+        });
+    }
+};
+"
+`;
