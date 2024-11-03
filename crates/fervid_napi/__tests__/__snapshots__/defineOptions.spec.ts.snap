@@ -1,0 +1,21 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`defineOptions() > basic usage 1`] = `
+"export default {
+    name: 'FooApp',
+    setup (__props, { expose: __expose }) {
+        __expose();
+    }
+};
+"
+`;
+
+exports[`defineOptions() > empty argument 1`] = `
+"export default {
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+    }
+};
+"
+`;

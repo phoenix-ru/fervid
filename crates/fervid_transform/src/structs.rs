@@ -158,6 +158,8 @@ pub struct SfcExportedObjectHelper {
     pub is_setup_expose_referenced: bool,
     /// Whether `__props` was referenced (e.g. as a result of `const foo = defineProps()` or from `useModel`)
     pub is_setup_props_referenced: bool,
+    /// Whether `defineOptions` was already used
+    pub has_define_options: bool,
     /// To generate two-way binding code, as used in `defineModel`
     pub models: Vec<SfcDefineModel>,
     /// `props` property
