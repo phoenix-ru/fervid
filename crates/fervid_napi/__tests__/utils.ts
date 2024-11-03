@@ -5,7 +5,7 @@ import { Compiler, FervidCompileOptions } from '..'
 const mockId = 'xxxxxxxx'
 
 // https://github.com/vuejs/core/blob/272ab9fbdcb1af0535108b9f888e80d612f9171d/packages/compiler-sfc/__tests__/utils.ts#L11-L24
-export function compile(src: string, options?: Partial<FervidCompileOptions>) {
+export function compile(src: string, options?: Partial<FervidCompileOptions>, logErrors = false) {
   const normalizedOptions: FervidCompileOptions = {
     filename: 'anonymous.vue',
     id: mockId,
@@ -15,7 +15,7 @@ export function compile(src: string, options?: Partial<FervidCompileOptions>) {
   const compiler = new Compiler()
   const result = compiler.compileSync(src, normalizedOptions)
 
-  if (result.errors.length) {
+  if (result.errors.length && logErrors) {
     console.warn(result.errors[0])
   }
 

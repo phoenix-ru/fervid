@@ -25,10 +25,22 @@ pub enum ScriptErrorKind {
     DefineEmitsMixedCallAndPropertySyntax,
     /// `defineProps` was called with both runtime and type arguments
     DefinePropsTypeAndNonTypeArguments,
+    /// "`defineOptions` cannot accept type arguments"
+    DefineOptionsTypeArguments,
+    /// "`defineOptions` cannot be used to declare props. Use defineProps() instead."
+    DefineOptionsProps,
+    /// "`defineOptions` cannot be used to declare emits. Use defineEmits() instead."
+    DefineOptionsEmits,
+    /// "`defineOptions` cannot be used to declare expose. Use defineExpose() instead."
+    DefineOptionsExpose,
+    /// "`defineOptions` cannot be used to declare slots. Use defineSlots() instead."
+    DefineOptionsSlots,
     /// Duplicate `defineEmits` call
     DuplicateDefineEmits,
     /// Duplicate `defineProps` call
     DuplicateDefineProps,
+    /// Duplicate `defineOptions` call
+    DuplicateDefineOptions,
     /// Different imports using the same local symbol,
     /// e.g `import foo from './foo'` and `import { foo } from './bar'`.
     DuplicateImport,

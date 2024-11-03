@@ -21,6 +21,7 @@ use crate::{
         resolve_type::{
             resolve_type_elements, resolve_union_type, ResolvedElements, TypeResolveContext,
         },
+        setup::define_options::process_define_options,
         setup::define_props::{process_define_props, process_with_defaults},
     },
     structs::{SfcDefineModel, SfcExportedObjectHelper},
@@ -43,6 +44,7 @@ pub fn transform_script_setup_macro_expr(
     expr: &Expr,
     sfc_object_helper: &mut SfcExportedObjectHelper,
     is_var_decl: bool,
+    errors: &mut Vec<TransformError>,
 ) -> TransformMacroResult {
     // `defineExpose` and `defineModel` actually generate something
     // https://play.vuejs.org/#eNp9kE1LxDAQhv/KmEtXWOphb8sqqBRU8AMVveRS2mnNmiYhk66F0v/uJGVXD8ueEt7nTfJkRnHtXL7rUazFhiqvXADC0LsraVTnrA8wgscGJmi87SDjaiaNNJU1FKCjFi4jX2R3qLWFT+t1fZadx0qNjTJYDM4SLsbUnRjM8aOtUS+yLi4fpeZbGW0uZgV+XCxFIH6kUW2+JWvYb5QGQIrKdk5p9M8uKJaQYg2JRFayw89DyoLvcbnPqy+svo/kWxpiJsWLR0K/QykOLJS+xTDj4u0JB94fIHv3mtsn4CuS1X10nGs3valZ+18v2d6nKSvTvlMxBDS0/1QUjc0p9aXgyd+e+Pqf7ipfpXPSTGL6BRH3n+Q=
@@ -269,33 +271,7 @@ pub fn transform_script_setup_macro_expr(
             type_args: None,
         }))))
     } else if DEFINE_OPTIONS.eq(sym) {
-        // A variable is not a correct usage
-        if is_var_decl {
-            bail!();
-        }
-
-        // `defineOptions()` without arguments
-        let Some(ExprOrSpread { spread: None, expr }) = call_expr.args.get(0) else {
-            return valid_macro!(None);
-        };
-
-        // Try to take out object, otherwise just use spread
-        let Expr::Object(ref options_object) = **expr else {
-            sfc_object_helper.untyped_fields.push(PropOrSpread::Spread(
-                swc_core::ecma::ast::SpreadElement {
-                    dot3_token: DUMMY_SP,
-                    expr: expr.to_owned(),
-                },
-            ));
-            return valid_macro!(None);
-        };
-
-        // Copy the fields
-        sfc_object_helper
-            .untyped_fields
-            .extend(options_object.props.iter().cloned());
-
-        valid_macro!(None)
+        process_define_options(call_expr, is_var_decl, sfc_object_helper, errors)
     } else {
         TransformMacroResult::NotAMacro
     }

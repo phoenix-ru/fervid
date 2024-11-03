@@ -25,6 +25,7 @@ use crate::{
 
 mod await_detection;
 mod define_props;
+mod define_options;
 mod macros;
 
 use self::{
@@ -95,6 +96,7 @@ pub fn transform_and_record_script_setup(
                     &expr_stmt.expr,
                     &mut sfc_object_helper,
                     false,
+                    errors
                 );
 
                 match transform_macro_result {
@@ -116,7 +118,7 @@ pub fn transform_and_record_script_setup(
             }
 
             Stmt::Decl(decl) => {
-                transform_decl_stmt(ctx, decl, &mut sfc_object_helper).map(Stmt::Decl)
+                transform_decl_stmt(ctx, decl, &mut sfc_object_helper, errors).map(Stmt::Decl)
             }
 
             // By default, just return the same statement
@@ -193,6 +195,7 @@ fn transform_decl_stmt(
     ctx: &mut TypeResolveContext,
     decl: Decl,
     sfc_object_helper: &mut SfcExportedObjectHelper,
+    errors: &mut Vec<TransformError>
 ) -> Option<Decl> {
     /// Pushes the binding type and returns the same passed `Decl`
     macro_rules! push_return {
@@ -228,7 +231,7 @@ fn transform_decl_stmt(
                 // Process RHS
                 if let Some(ref init_expr) = var_declarator.init {
                     let transform_macro_result =
-                        transform_script_setup_macro_expr(ctx, init_expr, sfc_object_helper, true);
+                        transform_script_setup_macro_expr(ctx, init_expr, sfc_object_helper, true, errors);
 
                     if let TransformMacroResult::ValidMacro(transformed_expr) =
                         transform_macro_result
