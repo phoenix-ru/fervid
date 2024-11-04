@@ -35,12 +35,16 @@ pub enum ScriptErrorKind {
     DefineOptionsExpose,
     /// "`defineOptions` cannot be used to declare slots. Use defineSlots() instead."
     DefineOptionsSlots,
+    /// "`defineSlots` cannot accept arguments"
+    DefineSlotsArguments,
     /// Duplicate `defineEmits` call
     DuplicateDefineEmits,
     /// Duplicate `defineProps` call
     DuplicateDefineProps,
     /// Duplicate `defineOptions` call
     DuplicateDefineOptions,
+    /// Duplicate `defineSlots` call
+    DuplicateDefineSlots,
     /// Different imports using the same local symbol,
     /// e.g `import foo from './foo'` and `import { foo } from './bar'`.
     DuplicateImport,

@@ -21,8 +21,7 @@ use crate::{
         resolve_type::{
             resolve_type_elements, resolve_union_type, ResolvedElements, TypeResolveContext,
         },
-        setup::define_options::process_define_options,
-        setup::define_props::{process_define_props, process_with_defaults},
+        setup::{define_options::process_define_options, define_props::{process_define_props, process_with_defaults}, define_slots::process_define_slots},
     },
     structs::{SfcDefineModel, SfcExportedObjectHelper},
     BindingsHelper, TypeOrDecl,
@@ -245,31 +244,7 @@ pub fn transform_script_setup_macro_expr(
             type_args: None,
         }))))
     } else if DEFINE_SLOTS.eq(sym) {
-        // Without a variable to bind to this macro means nothing
-        if !is_var_decl {
-            bail!();
-        }
-
-        // Add to imports and get the identifier
-        bindings_helper.vue_imports |= VueImports::UseSlots;
-        let use_slots_ident = Ident {
-            span,
-            ctxt: Default::default(),
-            sym: VueImports::UseSlots.as_atom(),
-            optional: false,
-        };
-
-        // Add a binding
-        // TODO Integrate closer with `categorize_var_declarator`
-
-        // _useSlots()
-        valid_macro!(Some(Box::new(Expr::Call(CallExpr {
-            span,
-            ctxt: Default::default(),
-            callee: Callee::Expr(Box::new(Expr::Ident(use_slots_ident))),
-            args: vec![],
-            type_args: None,
-        }))))
+        process_define_slots(call_expr, is_var_decl, sfc_object_helper, bindings_helper)
     } else if DEFINE_OPTIONS.eq(sym) {
         process_define_options(call_expr, is_var_decl, sfc_object_helper, errors)
     } else {

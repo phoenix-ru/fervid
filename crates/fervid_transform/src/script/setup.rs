@@ -24,8 +24,9 @@ use crate::{
 };
 
 mod await_detection;
-mod define_props;
 mod define_options;
+mod define_props;
+mod define_slots;
 mod macros;
 
 use self::{
@@ -96,7 +97,7 @@ pub fn transform_and_record_script_setup(
                     &expr_stmt.expr,
                     &mut sfc_object_helper,
                     false,
-                    errors
+                    errors,
                 );
 
                 match transform_macro_result {
@@ -195,7 +196,7 @@ fn transform_decl_stmt(
     ctx: &mut TypeResolveContext,
     decl: Decl,
     sfc_object_helper: &mut SfcExportedObjectHelper,
-    errors: &mut Vec<TransformError>
+    errors: &mut Vec<TransformError>,
 ) -> Option<Decl> {
     /// Pushes the binding type and returns the same passed `Decl`
     macro_rules! push_return {
@@ -230,21 +231,38 @@ fn transform_decl_stmt(
 
                 // Process RHS
                 if let Some(ref init_expr) = var_declarator.init {
-                    let transform_macro_result =
-                        transform_script_setup_macro_expr(ctx, init_expr, sfc_object_helper, true, errors);
+                    let transform_macro_result = transform_script_setup_macro_expr(
+                        ctx,
+                        init_expr,
+                        sfc_object_helper,
+                        true,
+                        errors,
+                    );
 
-                    if let TransformMacroResult::ValidMacro(transformed_expr) =
-                        transform_macro_result
-                    {
-                        // Macros always overwrite the RHS
-                        var_declarator.init = transformed_expr;
-                    } else if is_const && is_ident {
-                        // Resolve only when this is a constant identifier.
-                        // For destructures correct bindings are already assigned.
-                        let rhs_type =
-                            categorize_expr(init_expr, &ctx.bindings_helper.vue_resolved_imports);
+                    match transform_macro_result {
+                        TransformMacroResult::ValidMacro(transformed_expr) => {
+                            // Macros always overwrite the RHS
+                            var_declarator.init = transformed_expr;
+                        }
+                        TransformMacroResult::Error(transform_error) => {
+                            errors.push(transform_error);
+                        }
+                        TransformMacroResult::NotAMacro if is_const && is_ident => {
+                            // Resolve only when this is a constant identifier.
+                            // For destructures correct bindings are already assigned.
+                            let rhs_type = categorize_expr(
+                                init_expr,
+                                &ctx.bindings_helper.vue_resolved_imports,
+                            );
 
-                        enrich_binding_types(&mut collected_bindings, rhs_type, is_const, is_ident);
+                            enrich_binding_types(
+                                &mut collected_bindings,
+                                rhs_type,
+                                is_const,
+                                is_ident,
+                            );
+                        }
+                        _ => {}
                     }
                 }
 
