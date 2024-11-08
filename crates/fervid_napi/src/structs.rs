@@ -1,3 +1,4 @@
+use napi::JsObject;
 use napi_derive::napi;
 use swc_core::common::Spanned;
 
@@ -60,7 +61,7 @@ pub struct FervidJsCompilerOptionsScript {
     /// Default: true
     pub hoist_static: Option<bool>,
     /// Produce source maps
-    pub source_map: Option<bool>
+    pub source_map: Option<bool>,
 }
 
 #[napi(object)]
@@ -79,6 +80,8 @@ pub struct FervidCompileOptions {
     pub filename: String,
     /// Generate a const instead of default export
     pub gen_default_as: Option<String>,
+    /// Whether setup bindings need to be serialized
+    pub output_setup_bindings: Option<bool>,
 }
 
 #[napi(object)]
@@ -87,7 +90,9 @@ pub struct CompileResult {
     pub styles: Vec<Style>,
     pub errors: Vec<SerializedError>,
     pub custom_blocks: Vec<CustomBlock>,
-    pub source_map: Option<String>
+    pub source_map: Option<String>,
+    #[napi(ts_type = "Record<string, BindingTypes> | undefined")]
+    pub setup_bindings: Option<JsObject>,
 }
 
 #[napi(object)]
@@ -111,6 +116,73 @@ pub struct SerializedError {
     pub lo: u32,
     pub hi: u32,
     pub message: String,
+}
+
+/// This is a copied enum from `fervid_core` with `napi` implementation to avoid littering the core crate.
+///
+/// The type of a binding (or identifier) which is used to show where this binding came from,
+/// e.g. `Data` is for Options API `data()`, `SetupRef` if for `ref`s and `computed`s in Composition API.
+///
+/// <https://github.com/vuejs/core/blob/020851e57d9a9f727c6ea07e9c1575430af02b73/packages/compiler-core/src/options.ts#L76>
+#[napi]
+pub enum BindingTypes {
+    /// returned from data()
+    Data,
+    /// declared as a prop
+    Props,
+    /// a local alias of a `<script setup>` destructured prop.
+    /// the original is stored in __propsAliases of the bindingMetadata object.
+    PropsAliased,
+    /// a let binding (may or may not be a ref)
+    SetupLet,
+    /// a const binding that can never be a ref.
+    /// these bindings don't need `unref()` calls when processed in inlined
+    /// template expressions.
+    SetupConst,
+    /// a const binding that does not need `unref()`, but may be mutated.
+    SetupReactiveConst,
+    /// a const binding that may be a ref
+    SetupMaybeRef,
+    /// bindings that are guaranteed to be refs
+    SetupRef,
+    /// declared by other options, e.g. computed, inject
+    Options,
+    /// a literal constant, e.g. 'foo', 1, true
+    LiteralConst,
+
+    // Introduced by fervid:
+    /// a `.vue` import or `defineComponent` call
+    Component,
+    /// an import which is not a `.vue` or `from 'vue'`
+    Imported,
+    /// a variable from the template
+    TemplateLocal,
+    /// a variable in the global Javascript context, e.g. `Array` or `undefined`
+    JsGlobal,
+    /// a non-resolved variable, presumably from the global Vue context
+    Unresolved,
+}
+
+impl From<fervid::BindingTypes> for BindingTypes {
+    fn from(value: fervid::BindingTypes) -> Self {
+        match value {
+            fervid::BindingTypes::Data => BindingTypes::Data,
+            fervid::BindingTypes::Props => BindingTypes::Props,
+            fervid::BindingTypes::PropsAliased => BindingTypes::PropsAliased,
+            fervid::BindingTypes::SetupLet => BindingTypes::SetupLet,
+            fervid::BindingTypes::SetupConst => BindingTypes::SetupConst,
+            fervid::BindingTypes::SetupReactiveConst => BindingTypes::SetupReactiveConst,
+            fervid::BindingTypes::SetupMaybeRef => BindingTypes::SetupMaybeRef,
+            fervid::BindingTypes::SetupRef => BindingTypes::SetupRef,
+            fervid::BindingTypes::Options => BindingTypes::Options,
+            fervid::BindingTypes::LiteralConst => BindingTypes::LiteralConst,
+            fervid::BindingTypes::Component => BindingTypes::Component,
+            fervid::BindingTypes::Imported => BindingTypes::Imported,
+            fervid::BindingTypes::TemplateLocal => BindingTypes::TemplateLocal,
+            fervid::BindingTypes::JsGlobal => BindingTypes::JsGlobal,
+            fervid::BindingTypes::Unresolved => BindingTypes::Unresolved,
+        }
+    }
 }
 
 impl From<fervid::CompileEmittedStyle> for Style {

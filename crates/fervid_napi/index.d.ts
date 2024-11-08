@@ -57,6 +57,8 @@ export interface FervidCompileOptions {
   filename: string
   /** Generate a const instead of default export */
   genDefaultAs?: string
+  /** Whether setup bindings need to be serialized */
+  outputSetupBindings?: boolean
 }
 export interface CompileResult {
   code: string
@@ -64,6 +66,7 @@ export interface CompileResult {
   errors: Array<SerializedError>
   customBlocks: Array<CustomBlock>
   sourceMap?: string
+  setupBindings?: Record<string, BindingTypes> | undefined
 }
 export interface Style {
   code: string
@@ -81,6 +84,53 @@ export interface SerializedError {
   lo: number
   hi: number
   message: string
+}
+/**
+ * This is a copied enum from `fervid_core` with `napi` implementation to avoid littering the core crate.
+ *
+ * The type of a binding (or identifier) which is used to show where this binding came from,
+ * e.g. `Data` is for Options API `data()`, `SetupRef` if for `ref`s and `computed`s in Composition API.
+ *
+ * <https://github.com/vuejs/core/blob/020851e57d9a9f727c6ea07e9c1575430af02b73/packages/compiler-core/src/options.ts#L76>
+ */
+export const enum BindingTypes {
+  /** returned from data() */
+  Data = 0,
+  /** declared as a prop */
+  Props = 1,
+  /**
+   * a local alias of a `<script setup>` destructured prop.
+   * the original is stored in __propsAliases of the bindingMetadata object.
+   */
+  PropsAliased = 2,
+  /** a let binding (may or may not be a ref) */
+  SetupLet = 3,
+  /**
+   * a const binding that can never be a ref.
+   * these bindings don't need `unref()` calls when processed in inlined
+   * template expressions.
+   */
+  SetupConst = 4,
+  /** a const binding that does not need `unref()`, but may be mutated. */
+  SetupReactiveConst = 5,
+  /** a const binding that may be a ref */
+  SetupMaybeRef = 6,
+  /** bindings that are guaranteed to be refs */
+  SetupRef = 7,
+  /** declared by other options, e.g. computed, inject */
+  Options = 8,
+  /** a literal constant, e.g. 'foo', 1, true */
+  LiteralConst = 9,
+  /** a `.vue` import or `defineComponent` call */
+  Component = 10,
+  /** an import which is not a `.vue` or `from 'vue'` */
+  Imported = 11,
+  /** a variable from the template */
+  TemplateLocal = 12,
+  /** a variable in the global Javascript context, e.g. `Array` or `undefined` */
+  JsGlobal = 13,
+  /** a non-resolved variable, presumably from the global Vue context */
+  Unresolved = 14,
 }
 export type FervidJsCompiler = Compiler
 /** Fervid: a compiler for Vue.js written in Rust */

@@ -284,6 +284,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { Compiler } = nativeBinding
+const { Compiler, BindingTypes } = nativeBinding
 
 module.exports.Compiler = Compiler
+module.exports.BindingTypes = BindingTypes

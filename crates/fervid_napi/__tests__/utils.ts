@@ -18,10 +18,11 @@ export function compile(src: string, options?: Partial<FervidCompileOptions>, lo
   if (result.errors.length && logErrors) {
     console.warn(result.errors[0])
   }
-
+  
   return {
     content: result.code,
-    errors: result.errors
+    errors: result.errors,
+    bindings: result.setupBindings,
   }
 }
 

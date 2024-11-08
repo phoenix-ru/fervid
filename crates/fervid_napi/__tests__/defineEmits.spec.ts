@@ -1,18 +1,19 @@
-// import { BindingTypes } from '@vue/compiler-core'
+import { BindingTypes } from '..'
 import { assertCode, compile } from './utils'
 import { describe, expect, test } from 'vitest'
 
 describe('defineEmits', () => {
   test('basic usage', () => {
-    const { content } = compile(`
+    const { content, bindings } = compile(`
 <script setup>
 const myEmit = defineEmits(['foo', 'bar'])
 </script>
-  `)
+  `, { outputSetupBindings: true })
+
     assertCode(content)
-    // expect(bindings).toStrictEqual({
-    //   myEmit: BindingTypes.SETUP_CONST,
-    // })
+    expect(bindings).toStrictEqual({
+      myEmit: BindingTypes.SetupConst,
+    })
 
     // should remove defineEmits import and call
     expect(content).not.toMatch('defineEmits')

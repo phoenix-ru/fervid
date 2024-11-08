@@ -1,30 +1,30 @@
-use fervid_core::{fervid_atom, FervidAtom, IntoIdent, VueImports};
-use fxhash::FxHashSet;
-use itertools::{Either, Itertools};
+use fervid_core::{FervidAtom, IntoIdent, VueImports};
 use swc_core::{
-    common::{Spanned, DUMMY_SP},
+    common::DUMMY_SP,
     ecma::ast::{
-        ArrayLit, Bool, CallExpr, Callee, Expr, ExprOrSpread, Ident, IdentName, KeyValueProp, Lit,
-        ObjectLit, Prop, PropName, PropOrSpread, Str, TsFnOrConstructorType, TsFnParam, TsLit,
-        TsType,
+        ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Ident, KeyValueProp, Lit, ObjectLit, Prop,
+        PropName, PropOrSpread, Str,
     },
 };
 
 use crate::{
     atoms::{
         DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_MODEL, DEFINE_OPTIONS, DEFINE_PROPS, DEFINE_SLOTS,
-        EMIT_HELPER, EXPOSE_HELPER, MERGE_MODELS_HELPER, MODEL_VALUE, PROPS_HELPER,
-        USE_MODEL_HELPER, WITH_DEFAULTS,
+        EXPOSE_HELPER, MERGE_MODELS_HELPER, WITH_DEFAULTS,
     },
-    error::{ScriptError, ScriptErrorKind, TransformError},
+    error::TransformError,
     script::{
-        resolve_type::{
-            resolve_type_elements, resolve_union_type, ResolvedElements, TypeResolveContext,
+        resolve_type::TypeResolveContext,
+        setup::{
+            define_emits::process_define_emits,
+            define_model::process_define_model,
+            define_options::process_define_options,
+            define_props::{process_define_props, process_with_defaults},
+            define_slots::process_define_slots,
         },
-        setup::{define_options::process_define_options, define_props::{process_define_props, process_with_defaults}, define_slots::process_define_slots},
     },
-    structs::{SfcDefineModel, SfcExportedObjectHelper},
-    BindingsHelper, TypeOrDecl,
+    structs::SfcExportedObjectHelper,
+    BindingsHelper, SetupBinding,
 };
 
 pub enum TransformMacroResult {
@@ -43,6 +43,8 @@ pub fn transform_script_setup_macro_expr(
     expr: &Expr,
     sfc_object_helper: &mut SfcExportedObjectHelper,
     is_var_decl: bool,
+    is_ident: bool,
+    var_bindings: Option<&mut Vec<SetupBinding>>,
     errors: &mut Vec<TransformError>,
 ) -> TransformMacroResult {
     // `defineExpose` and `defineModel` actually generate something
@@ -93,70 +95,15 @@ pub fn transform_script_setup_macro_expr(
     } else if WITH_DEFAULTS.eq(sym) {
         process_with_defaults(ctx, call_expr, is_var_decl, sfc_object_helper)
     } else if DEFINE_EMITS.eq(sym) {
-        // Validation: duplicate call
-        if sfc_object_helper.emits.is_some() {
-            return TransformMacroResult::Error(TransformError::ScriptError(ScriptError {
-                span: call_expr.span,
-                kind: ScriptErrorKind::DuplicateDefineEmits,
-            }));
-        }
-
-        // Validation: both runtime and types
-        if !call_expr.args.is_empty() && call_expr.type_args.is_some() {
-            return TransformMacroResult::Error(TransformError::ScriptError(ScriptError {
-                span: call_expr.span,
-                kind: ScriptErrorKind::DefineEmitsTypeAndNonTypeArguments,
-            }));
-        }
-
-        if let Some(arg0) = &call_expr.args.get(0) {
-            sfc_object_helper.emits = Some(arg0.expr.to_owned())
-        } else if let Some(ref type_args) = call_expr.type_args {
-            let Some(ts_type) = type_args.params.first() else {
-                return TransformMacroResult::Error(TransformError::ScriptError(ScriptError {
-                    span: type_args.span,
-                    kind: ScriptErrorKind::DefineEmitsMalformed,
-                }));
-            };
-
-            let runtime_emits = match extract_runtime_emits(ctx, &ts_type) {
-                Ok(v) => v,
-                Err(e) => return TransformMacroResult::Error(TransformError::ScriptError(e)),
-            };
-
-            sfc_object_helper.emits = Some(Box::new(Expr::Array(ArrayLit {
-                span: DUMMY_SP,
-                elems: runtime_emits
-                    .into_iter()
-                    .map(|it| {
-                        Some(ExprOrSpread {
-                            spread: None,
-                            expr: Box::new(Expr::Lit(Lit::Str(Str {
-                                span: DUMMY_SP,
-                                value: it,
-                                raw: None,
-                            }))),
-                        })
-                    })
-                    .collect_vec(),
-            })))
-        }
-
-        // TODO Process type declaration
-
-        // Return `__emits` when in var mode
-        if is_var_decl {
-            sfc_object_helper.is_setup_emit_referenced = true;
-
-            valid_macro!(Some(Box::new(Expr::Ident(Ident {
-                span,
-                ctxt: Default::default(),
-                sym: EMIT_HELPER.to_owned(),
-                optional: false,
-            }))))
-        } else {
-            valid_macro!(None)
-        }
+        process_define_emits(
+            ctx,
+            call_expr,
+            is_var_decl,
+            is_ident,
+            var_bindings,
+            sfc_object_helper,
+            errors,
+        )
     } else if DEFINE_EXPOSE.eq(sym) {
         sfc_object_helper.is_setup_expose_referenced = true;
 
@@ -177,72 +124,14 @@ pub fn transform_script_setup_macro_expr(
             type_args: None,
         }))))
     } else if DEFINE_MODEL.eq(sym) {
-        let define_model = read_define_model(&call_expr.args);
-
-        // Add to imports
-        bindings_helper.vue_imports |= VueImports::UseModel;
-
-        // TODO Add model identifier as a binding (when `is_var_decl == true`)
-
-        let use_model_ident = Ident {
-            span,
-            ctxt: Default::default(),
-            sym: USE_MODEL_HELPER.to_owned(),
-            optional: false,
-        };
-
-        let mut use_model_args =
-            Vec::<ExprOrSpread>::with_capacity(if define_model.local { 3 } else { 2 });
-
-        // __props
-        sfc_object_helper.is_setup_props_referenced = true;
-        use_model_args.push(ExprOrSpread {
-            spread: None,
-            expr: Box::new(Expr::Ident(Ident {
-                span,
-                ctxt: Default::default(),
-                sym: PROPS_HELPER.to_owned(),
-                optional: false,
-            })),
-        });
-
-        // "model-name"
-        use_model_args.push(ExprOrSpread {
-            spread: None,
-            expr: Box::new(Expr::Lit(Lit::Str(Str {
-                span,
-                value: define_model.name.to_owned(),
-                raw: None,
-            }))),
-        });
-
-        // `{ local: true }` if needed
-        if define_model.local {
-            use_model_args.push(ExprOrSpread {
-                spread: None,
-                expr: Box::new(Expr::Object(ObjectLit {
-                    span,
-                    props: vec![PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                        key: PropName::Ident(IdentName {
-                            span,
-                            sym: fervid_atom!("local"),
-                        }),
-                        value: Box::new(Expr::Lit(Lit::Bool(Bool { span, value: true }))),
-                    })))],
-                })),
-            })
-        }
-
-        sfc_object_helper.models.push(define_model);
-
-        // _useModel(__props, "model-name", %model options%)
-        valid_macro!(Some(Box::new(Expr::Call(CallExpr {
-            span,
-            ctxt: Default::default(),
-            callee: Callee::Expr(Box::new(Expr::Ident(use_model_ident))),
-            args: use_model_args,
-            type_args: None,
-        }))))
+        process_define_model(
+            call_expr,
+            is_var_decl,
+            is_ident,
+            var_bindings,
+            sfc_object_helper,
+            bindings_helper,
+        )
     } else if DEFINE_SLOTS.eq(sym) {
         process_define_slots(call_expr, is_var_decl, sfc_object_helper, bindings_helper)
     } else if DEFINE_OPTIONS.eq(sym) {
@@ -395,183 +284,5 @@ pub fn postprocess_macros(
             })))
         }
         _ => {}
-    }
-}
-
-/// Processes `defineModel`
-fn read_define_model(macro_args: &[ExprOrSpread]) -> SfcDefineModel {
-    // 1st arg - model name (string) or model options (object)
-    let first_arg = macro_args.get(0);
-
-    // 2nd arg - model options (object)
-    let second_arg = macro_args.get(1);
-
-    // Get name. It may be a first argument, or may be omitted altogether (defaults to `modelValue`)
-    let (name, is_first_arg_name) = match first_arg {
-        Some(ExprOrSpread { spread: None, expr }) => match **expr {
-            Expr::Lit(Lit::Str(ref name)) => (name.value.to_owned(), true),
-            _ => (MODEL_VALUE.to_owned(), false),
-        },
-
-        _ => (MODEL_VALUE.to_owned(), false),
-    };
-
-    let options: Option<&ExprOrSpread> = if is_first_arg_name {
-        second_arg
-    } else {
-        first_arg
-    };
-
-    // Check if options is an object, we'll need `local` option from it
-    let local = is_local(options);
-
-    SfcDefineModel {
-        name,
-        local,
-        options: options.map(|o| Box::new(o.to_owned())),
-    }
-}
-
-/// Dig into options and find `local` field in the object with a boolean value.
-/// If property is not found or `options` is not a proper object, `false` is returned.
-fn is_local(options: Option<&ExprOrSpread>) -> bool {
-    let Some(ExprOrSpread { spread: None, expr }) = options else {
-        return false;
-    };
-
-    let Expr::Object(ref obj) = **expr else {
-        return false;
-    };
-
-    let local_prop_value = obj.props.iter().find_map(|prop| match prop {
-        PropOrSpread::Prop(prop) => {
-            let Prop::KeyValue(ref key_value) = **prop else {
-                return None;
-            };
-
-            match key_value.key {
-                PropName::Ident(ref ident) if ident.sym == fervid_atom!("local") => {
-                    Some(&key_value.value)
-                }
-
-                PropName::Str(ref s) if s.value == fervid_atom!("local") => Some(&key_value.value),
-
-                _ => None,
-            }
-        }
-        _ => None,
-    });
-
-    let Some(local_prop_value) = local_prop_value else {
-        return false;
-    };
-
-    let Expr::Lit(Lit::Bool(ref local_bool)) = **local_prop_value else {
-        return false;
-    };
-
-    local_bool.value
-}
-
-/// Extracts runtime emits from type-only `defineEmits` declaration
-/// Adapted from https://github.com/vuejs/core/blob/0ac0f2e338f6f8f0bea7237db539c68bfafb88ae/packages/compiler-sfc/src/script/defineEmits.ts#L73-L103
-fn extract_runtime_emits(
-    ctx: &mut TypeResolveContext,
-    type_arg: &TsType,
-) -> Result<FxHashSet<FervidAtom>, ScriptError> {
-    let mut emits = FxHashSet::<FervidAtom>::default();
-
-    // Handle cases like `defineEmits<(e: 'foo' | 'bar') => void>()`
-    if let TsType::TsFnOrConstructorType(TsFnOrConstructorType::TsFnType(ref ts_fn_type)) = type_arg
-    {
-        // Expect first param in fn, e.g. `e: 'foo' | 'bar'` in example above
-        let Some(first_fn_param) = ts_fn_type.params.first() else {
-            return Err(ScriptError {
-                span: ts_fn_type.span,
-                kind: ScriptErrorKind::DefineEmitsMalformed,
-            });
-        };
-
-        extract_event_names(ctx, first_fn_param, &mut emits);
-
-        return Ok(emits);
-    }
-
-    let ResolvedElements { props, calls } = resolve_type_elements(ctx, type_arg)?;
-
-    let mut has_property = false;
-    for key in props.into_keys() {
-        emits.insert(key);
-        has_property = true;
-    }
-
-    if !calls.is_empty() {
-        if has_property {
-            return Err(ScriptError {
-                kind: ScriptErrorKind::DefineEmitsMixedCallAndPropertySyntax,
-                span: type_arg.span(),
-            });
-        }
-
-        for call in calls {
-            let (params, span) = match call {
-                Either::Left(l) => (l.params, l.span),
-                Either::Right(r) => (r.params, r.span),
-            };
-
-            let Some(first_param) = params.first() else {
-                return Err(ScriptError {
-                    span,
-                    kind: ScriptErrorKind::ResolveTypeMissingTypeParam,
-                });
-            };
-            extract_event_names(ctx, first_param, &mut emits);
-        }
-    }
-
-    return Ok(emits);
-}
-
-/// Adapted from https://github.com/vuejs/core/blob/0ac0f2e338f6f8f0bea7237db539c68bfafb88ae/packages/compiler-sfc/src/script/defineEmits.ts#L105-L128
-fn extract_event_names(
-    ctx: &mut TypeResolveContext,
-    event_name: &TsFnParam,
-    emits: &mut FxHashSet<FervidAtom>,
-) {
-    let TsFnParam::Ident(ident) = event_name else {
-        return;
-    };
-
-    let Some(ref type_annotation) = ident.type_ann else {
-        return;
-    };
-
-    let scope = ctx.root_scope();
-    let scope = scope.borrow();
-
-    let types = resolve_union_type(ctx, &type_annotation.type_ann, &scope);
-    for ts_type in types {
-        let TypeOrDecl::Type(ts_type) = ts_type else {
-            continue;
-        };
-
-        if let TsType::TsLitType(ts_lit_type) = ts_type.as_ref() {
-            // No UnaryExpression
-            match ts_lit_type.lit {
-                TsLit::Number(ref n) => {
-                    emits.insert(FervidAtom::from(n.value.to_string()));
-                }
-                TsLit::Str(ref s) => {
-                    emits.insert(s.value.to_owned());
-                }
-                TsLit::Bool(ref b) => {
-                    emits.insert(FervidAtom::from(b.value.to_string()));
-                }
-                TsLit::BigInt(ref big_int) => {
-                    emits.insert(FervidAtom::from(big_int.value.to_string()));
-                }
-                TsLit::Tpl(_) => {}
-            }
-        }
     }
 }

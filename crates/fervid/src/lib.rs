@@ -57,7 +57,9 @@ use errors::CompileError;
 use fervid_codegen::CodegenContext;
 pub use fervid_core::*;
 use fervid_parser::SfcParser;
-use fervid_transform::{style::should_transform_style_block, transform_sfc, TransformSfcOptions};
+use fervid_transform::{
+    style::should_transform_style_block, transform_sfc, SetupBinding, TransformSfcOptions,
+};
 use fxhash::FxHasher32;
 use std::{
     borrow::Cow,
@@ -105,6 +107,7 @@ pub struct CompileResult {
     pub styles: Vec<CompileEmittedStyle>,
     pub other_assets: Vec<CompileEmittedAsset>,
     pub source_map: Option<String>,
+    pub setup_bindings: Vec<SetupBinding>,
 }
 
 pub struct CompileEmittedStyle {
@@ -209,6 +212,7 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
         styles,
         other_assets,
         source_map,
+        setup_bindings: ctx.bindings_helper.setup_bindings,
     })
 }
 

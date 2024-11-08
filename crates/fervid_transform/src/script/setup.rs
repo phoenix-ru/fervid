@@ -24,6 +24,8 @@ use crate::{
 };
 
 mod await_detection;
+mod define_emits;
+mod define_model;
 mod define_options;
 mod define_props;
 mod define_slots;
@@ -97,6 +99,8 @@ pub fn transform_and_record_script_setup(
                     &expr_stmt.expr,
                     &mut sfc_object_helper,
                     false,
+                    false,
+                    None,
                     errors,
                 );
 
@@ -236,6 +240,8 @@ fn transform_decl_stmt(
                         init_expr,
                         sfc_object_helper,
                         true,
+                        is_ident,
+                        Some(&mut collected_bindings),
                         errors,
                     );
 
