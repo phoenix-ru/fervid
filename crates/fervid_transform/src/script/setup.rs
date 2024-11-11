@@ -30,6 +30,7 @@ mod define_options;
 mod define_props;
 mod define_slots;
 mod macros;
+mod utils;
 
 use self::{
     await_detection::detect_await_module_item,
@@ -136,7 +137,7 @@ pub fn transform_and_record_script_setup(
     }
 
     // Post-process macros, e.g. merge models to `props` and `emits`
-    postprocess_macros(&mut ctx.bindings_helper, &mut sfc_object_helper);
+    postprocess_macros(ctx, &mut sfc_object_helper);
 
     // Add `__expose()` in non-inline mode when user did not call `defineExpose()`
     // https://github.com/vuejs/core/blob/664d2e553d8622bbdeae6bc02836233f6113eb4e/packages/compiler-sfc/src/compileScript.ts#L966-L969

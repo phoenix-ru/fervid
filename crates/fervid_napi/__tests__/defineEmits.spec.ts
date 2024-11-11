@@ -12,7 +12,7 @@ const myEmit = defineEmits(['foo', 'bar'])
 
     assertCode(content)
     expect(bindings).toStrictEqual({
-      myEmit: BindingTypes.SetupConst,
+      myEmit: BindingTypes.SETUP_CONST,
     })
 
     // should remove defineEmits import and call

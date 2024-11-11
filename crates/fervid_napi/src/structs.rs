@@ -125,62 +125,63 @@ pub struct SerializedError {
 ///
 /// <https://github.com/vuejs/core/blob/020851e57d9a9f727c6ea07e9c1575430af02b73/packages/compiler-core/src/options.ts#L76>
 #[napi]
+#[allow(non_camel_case_types)]
 pub enum BindingTypes {
     /// returned from data()
-    Data,
+    DATA,
     /// declared as a prop
-    Props,
+    PROPS,
     /// a local alias of a `<script setup>` destructured prop.
     /// the original is stored in __propsAliases of the bindingMetadata object.
-    PropsAliased,
+    PROPS_ALIASED,
     /// a let binding (may or may not be a ref)
-    SetupLet,
+    SETUP_LET,
     /// a const binding that can never be a ref.
     /// these bindings don't need `unref()` calls when processed in inlined
     /// template expressions.
-    SetupConst,
+    SETUP_CONST,
     /// a const binding that does not need `unref()`, but may be mutated.
-    SetupReactiveConst,
+    SETUP_REACTIVE_CONST,
     /// a const binding that may be a ref
-    SetupMaybeRef,
+    SETUP_MAYBE_REF,
     /// bindings that are guaranteed to be refs
-    SetupRef,
+    SETUP_REF,
     /// declared by other options, e.g. computed, inject
-    Options,
+    OPTIONS,
     /// a literal constant, e.g. 'foo', 1, true
-    LiteralConst,
+    LITERAL_CONST,
 
     // Introduced by fervid:
     /// a `.vue` import or `defineComponent` call
-    Component,
+    COMPONENT,
     /// an import which is not a `.vue` or `from 'vue'`
-    Imported,
+    IMPORTED,
     /// a variable from the template
-    TemplateLocal,
+    TEMPLATE_LOCAL,
     /// a variable in the global Javascript context, e.g. `Array` or `undefined`
-    JsGlobal,
+    JS_GLOBAL,
     /// a non-resolved variable, presumably from the global Vue context
-    Unresolved,
+    UNRESOLVED,
 }
 
 impl From<fervid::BindingTypes> for BindingTypes {
     fn from(value: fervid::BindingTypes) -> Self {
         match value {
-            fervid::BindingTypes::Data => BindingTypes::Data,
-            fervid::BindingTypes::Props => BindingTypes::Props,
-            fervid::BindingTypes::PropsAliased => BindingTypes::PropsAliased,
-            fervid::BindingTypes::SetupLet => BindingTypes::SetupLet,
-            fervid::BindingTypes::SetupConst => BindingTypes::SetupConst,
-            fervid::BindingTypes::SetupReactiveConst => BindingTypes::SetupReactiveConst,
-            fervid::BindingTypes::SetupMaybeRef => BindingTypes::SetupMaybeRef,
-            fervid::BindingTypes::SetupRef => BindingTypes::SetupRef,
-            fervid::BindingTypes::Options => BindingTypes::Options,
-            fervid::BindingTypes::LiteralConst => BindingTypes::LiteralConst,
-            fervid::BindingTypes::Component => BindingTypes::Component,
-            fervid::BindingTypes::Imported => BindingTypes::Imported,
-            fervid::BindingTypes::TemplateLocal => BindingTypes::TemplateLocal,
-            fervid::BindingTypes::JsGlobal => BindingTypes::JsGlobal,
-            fervid::BindingTypes::Unresolved => BindingTypes::Unresolved,
+            fervid::BindingTypes::Data => BindingTypes::DATA,
+            fervid::BindingTypes::Props => BindingTypes::PROPS,
+            fervid::BindingTypes::PropsAliased => BindingTypes::PROPS_ALIASED,
+            fervid::BindingTypes::SetupLet => BindingTypes::SETUP_LET,
+            fervid::BindingTypes::SetupConst => BindingTypes::SETUP_CONST,
+            fervid::BindingTypes::SetupReactiveConst => BindingTypes::SETUP_REACTIVE_CONST,
+            fervid::BindingTypes::SetupMaybeRef => BindingTypes::SETUP_MAYBE_REF,
+            fervid::BindingTypes::SetupRef => BindingTypes::SETUP_REF,
+            fervid::BindingTypes::Options => BindingTypes::OPTIONS,
+            fervid::BindingTypes::LiteralConst => BindingTypes::LITERAL_CONST,
+            fervid::BindingTypes::Component => BindingTypes::COMPONENT,
+            fervid::BindingTypes::Imported => BindingTypes::IMPORTED,
+            fervid::BindingTypes::TemplateLocal => BindingTypes::TEMPLATE_LOCAL,
+            fervid::BindingTypes::JsGlobal => BindingTypes::JS_GLOBAL,
+            fervid::BindingTypes::Unresolved => BindingTypes::UNRESOLVED,
         }
     }
 }

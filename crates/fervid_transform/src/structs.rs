@@ -8,9 +8,8 @@ use fervid_core::{
 };
 use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use smallvec::SmallVec;
-use swc_core::ecma::{
-    ast::{Decl, Expr, ExprOrSpread, Function, Id, Module, ObjectLit, PropOrSpread, TsType},
-    atoms::JsWord,
+use swc_core::ecma::ast::{
+    Decl, Expr, ExprOrSpread, Function, Id, Module, ObjectLit, PropOrSpread, Str, TsType,
 };
 
 /// Context object. Currently very minimal but may grow over time.
@@ -141,9 +140,10 @@ pub struct VueResolvedImports {
 
 /// https://github.com/vuejs/rfcs/discussions/503
 pub struct SfcDefineModel {
-    pub name: JsWord,
-    pub options: Option<Box<ExprOrSpread>>,
-    pub local: bool,
+    pub name: Str,
+    pub prop_options: Option<Box<Expr>>,
+    pub use_model_options: Option<Box<ExprOrSpread>>,
+    pub ts_type: Option<TsType>,
 }
 
 #[derive(Default)]
