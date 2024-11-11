@@ -95,42 +95,42 @@ export interface SerializedError {
  */
 export const enum BindingTypes {
   /** returned from data() */
-  Data = 0,
+  DATA = 0,
   /** declared as a prop */
-  Props = 1,
+  PROPS = 1,
   /**
    * a local alias of a `<script setup>` destructured prop.
    * the original is stored in __propsAliases of the bindingMetadata object.
    */
-  PropsAliased = 2,
+  PROPS_ALIASED = 2,
   /** a let binding (may or may not be a ref) */
-  SetupLet = 3,
+  SETUP_LET = 3,
   /**
    * a const binding that can never be a ref.
    * these bindings don't need `unref()` calls when processed in inlined
    * template expressions.
    */
-  SetupConst = 4,
+  SETUP_CONST = 4,
   /** a const binding that does not need `unref()`, but may be mutated. */
-  SetupReactiveConst = 5,
+  SETUP_REACTIVE_CONST = 5,
   /** a const binding that may be a ref */
-  SetupMaybeRef = 6,
+  SETUP_MAYBE_REF = 6,
   /** bindings that are guaranteed to be refs */
-  SetupRef = 7,
+  SETUP_REF = 7,
   /** declared by other options, e.g. computed, inject */
-  Options = 8,
+  OPTIONS = 8,
   /** a literal constant, e.g. 'foo', 1, true */
-  LiteralConst = 9,
+  LITERAL_CONST = 9,
   /** a `.vue` import or `defineComponent` call */
-  Component = 10,
+  COMPONENT = 10,
   /** an import which is not a `.vue` or `from 'vue'` */
-  Imported = 11,
+  IMPORTED = 11,
   /** a variable from the template */
-  TemplateLocal = 12,
+  TEMPLATE_LOCAL = 12,
   /** a variable in the global Javascript context, e.g. `Array` or `undefined` */
-  JsGlobal = 13,
+  JS_GLOBAL = 13,
   /** a non-resolved variable, presumably from the global Vue context */
-  Unresolved = 14,
+  UNRESOLVED = 14,
 }
 export type FervidJsCompiler = Compiler
 /** Fervid: a compiler for Vue.js written in Rust */

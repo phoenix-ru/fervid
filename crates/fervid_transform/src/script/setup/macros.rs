@@ -1,10 +1,7 @@
-use fervid_core::{FervidAtom, IntoIdent, VueImports};
+use fervid_core::{IntoIdent, VueImports};
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{
-        ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Ident, KeyValueProp, Lit, ObjectLit, Prop,
-        PropName, PropOrSpread, Str,
-    },
+    ecma::ast::{ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Ident, ObjectLit, PropOrSpread},
 };
 
 use crate::{
@@ -24,8 +21,10 @@ use crate::{
         },
     },
     structs::SfcExportedObjectHelper,
-    BindingsHelper, SetupBinding,
+    SetupBinding,
 };
+
+use super::define_model::postprocess_models;
 
 pub enum TransformMacroResult {
     NotAMacro,
@@ -143,46 +142,20 @@ pub fn transform_script_setup_macro_expr(
 
 /// Mainly used to process `models` by adding them to `props` and `emits`
 pub fn postprocess_macros(
-    bindings_helper: &mut BindingsHelper,
+    ctx: &mut TypeResolveContext,
     sfc_object_helper: &mut SfcExportedObjectHelper,
 ) {
+    // Capacity is twice the length because for each model we push both the prop and modelModifiers
     let len = sfc_object_helper.models.len();
-    let mut new_props = Vec::<PropOrSpread>::with_capacity(len);
+    let mut new_props = Vec::<PropOrSpread>::with_capacity(len * 2);
     let mut new_emits = Vec::<Option<ExprOrSpread>>::with_capacity(len);
 
-    for model in sfc_object_helper.models.drain(..) {
-        let model_value: Box<Expr> = match model.options {
-            Some(options) => options.expr,
-            None => Box::new(Expr::Object(ObjectLit {
-                span: DUMMY_SP,
-                props: vec![],
-            })),
-        };
-
-        let mut model_update_evt_name = String::with_capacity("update:".len() + model.name.len());
-        model_update_evt_name.push_str("update:");
-        model_update_evt_name.push_str(&model.name);
-
-        // Push a string literal into emits
-        new_emits.push(Some(ExprOrSpread {
-            spread: None,
-            expr: Box::new(Expr::Lit(Lit::Str(Str {
-                span: DUMMY_SP,
-                value: FervidAtom::from(model_update_evt_name),
-                raw: None,
-            }))),
-        }));
-
-        // Push an options object (or expr) into props
-        new_props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-            key: PropName::Str(Str {
-                span: DUMMY_SP,
-                value: model.name,
-                raw: None,
-            }),
-            value: model_value,
-        }))));
-    }
+    postprocess_models(
+        ctx,
+        &mut sfc_object_helper.models,
+        &mut new_props,
+        &mut new_emits,
+    );
 
     // Take existing props if the new ones have something
     let existing_props = if new_props.is_empty() {
@@ -200,7 +173,7 @@ pub fn postprocess_macros(
                 sfc_object_helper.props = Some(existing_props);
             } else {
                 // Use `mergeModels` otherwise
-                bindings_helper.vue_imports |= VueImports::MergeModels;
+                ctx.bindings_helper.vue_imports |= VueImports::MergeModels;
                 let merge_models_ident = MERGE_MODELS_HELPER.to_owned();
 
                 let new_props = Expr::Call(CallExpr {
@@ -251,7 +224,7 @@ pub fn postprocess_macros(
                 sfc_object_helper.emits = Some(existing_emits);
             } else {
                 // Use `mergeModels` otherwise
-                bindings_helper.vue_imports |= VueImports::MergeModels;
+                ctx.bindings_helper.vue_imports |= VueImports::MergeModels;
                 let merge_models_ident = MERGE_MODELS_HELPER.to_owned();
 
                 let new_emits = Expr::Call(CallExpr {

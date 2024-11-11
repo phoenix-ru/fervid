@@ -39,6 +39,8 @@ pub enum ScriptErrorKind {
     DefineSlotsArguments,
     /// Duplicate `defineEmits` call
     DuplicateDefineEmits,
+    /// Duplicate `defineModel` model name
+    DuplicateDefineModelName,
     /// Duplicate `defineProps` call
     DuplicateDefineProps,
     /// Duplicate `defineOptions` call
