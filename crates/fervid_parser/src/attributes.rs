@@ -1,8 +1,13 @@
+use std::borrow::Cow;
+
 use fervid_core::{
     AttributeOrBinding, FervidAtom, StrOrExpr, VBindDirective, VCustomDirective, VForDirective,
     VModelDirective, VOnDirective, VSlotDirective, VueDirectives,
 };
-use swc_core::{common::{BytePos, Span}, ecma::ast::Expr};
+use swc_core::{
+    common::{BytePos, Span},
+    ecma::ast::Expr,
+};
 use swc_ecma_parser::Syntax;
 use swc_html_ast::Attribute;
 
@@ -80,8 +85,16 @@ impl SfcParser<'_, '_, '_> {
                 });
                 return Err(raw_attribute);
             };
+            // Parsing expression failed
             (js, $parse_error: expr) => {
                 self.errors.push($parse_error);
+                return Err(raw_attribute);
+            };
+            ($err_kind: expr, $span: expr) => {
+                self.errors.push(ParseError {
+                    kind: $err_kind,
+                    span: $span,
+                });
                 return Err(raw_attribute);
             };
         }
@@ -92,124 +105,218 @@ impl SfcParser<'_, '_, '_> {
             };
         }
 
-        // TODO Fix and test parsing of directives
-
         // TODO Should the span be narrower? (It can be narrowed with lo = lo + name.len() + 1 and hi = hi - 1)
         let span = raw_attribute.span;
         let raw_name: &str = &raw_attribute.name;
-        let mut chars_iter = raw_name.chars().enumerate().peekable();
+        let mut chars_iter = raw_name.chars().enumerate();
 
-        // Every directive starts with a prefix: `@`, `:`, `.`, `#` or `v-`
-        let Some((_, prefix)) = chars_iter.next() else {
-            bail!(ParseErrorKind::DirectiveSyntax);
-        };
+        enum ParsingMode {
+            DirectivePrefix,
+            DirectiveName,
+            Argument,
+            DynamicArgument,
+            AfterDynamicArgument,
+            Modifier,
+        }
 
         // https://vuejs.org/api/built-in-directives.html#v-bind
+        let mut current_start = 0;
+        let mut directive_name = "";
+        let mut argument_name = "";
+        let mut is_argument_dynamic = false;
         let mut is_bind_prop = false;
-        let mut expect_argument = true;
-        let mut argument_start = 0;
-        let mut argument_end = raw_name.len();
+        let mut current_bracket_level = 0; // for counting `[]` inside dynamic argument
+        let mut dynamic_argument_start = 0;
+        let mut dynamic_argument_end = 0;
+        let mut modifiers = Vec::<FervidAtom>::new();
+        let mut parsing_mode = ParsingMode::DirectivePrefix;
 
-        let directive_name = match prefix {
-            '@' => "on",
-            ':' => "bind",
-            '.' => {
-                is_bind_prop = true;
-                "bind"
-            }
-            '#' => "slot",
-            'v' if matches!(chars_iter.next(), Some((_, '-'))) => {
-                // Read directive name
-                let mut start = 0;
-                let mut end = raw_name.len();
-                while let Some((idx, c)) = chars_iter.next() {
-                    if c == '.' {
-                        expect_argument = false;
-                        argument_end = idx;
-                        end = idx;
-                        break;
+        while let Some((idx, c)) = chars_iter.next() {
+            match (&parsing_mode, c) {
+                // Every directive starts with a prefix: `@`, `:`, `.`, `#` or `v-`
+                (ParsingMode::DirectivePrefix, '@') => {
+                    directive_name = "on";
+                    parsing_mode = ParsingMode::Argument;
+                }
+                (ParsingMode::DirectivePrefix, ':') => {
+                    directive_name = "bind";
+                    parsing_mode = ParsingMode::Argument;
+                }
+                (ParsingMode::DirectivePrefix, '.') => {
+                    directive_name = "bind";
+                    is_bind_prop = true;
+                    parsing_mode = ParsingMode::Argument;
+                }
+                (ParsingMode::DirectivePrefix, '#') => {
+                    directive_name = "slot";
+                    parsing_mode = ParsingMode::Argument;
+                }
+                (ParsingMode::DirectivePrefix, 'v')
+                    if matches!(chars_iter.next(), Some((_, '-'))) =>
+                {
+                    parsing_mode = ParsingMode::DirectiveName;
+                }
+                (ParsingMode::DirectivePrefix, _) => {
+                    // Not a directive
+                    bail!();
+                }
+
+                (ParsingMode::DirectiveName, c) => {
+                    if c == '.' || c == ':' {
+                        if current_start == 0 {
+                            bail!(ParseErrorKind::DirectiveSyntaxDirectiveName);
+                        }
+
+                        directive_name = &raw_name[current_start..idx];
+                        current_start = 0;
+
+                        if c == '.' {
+                            parsing_mode = ParsingMode::Modifier;
+                        } else {
+                            parsing_mode = ParsingMode::Argument;
+                        }
+
+                        continue;
                     }
-                    if c == ':' {
-                        end = idx;
-                        break;
-                    }
-                    if start == 0 {
-                        // `idx` is never 0 because zero-th char is `prefix`
-                        start = idx;
+
+                    if current_start == 0 {
+                        current_start = idx;
                     }
                 }
 
-                // Directive syntax is bad if we could not read the directive name
-                if start == 0 {
-                    bail!(ParseErrorKind::DirectiveSyntax);
+                (ParsingMode::Argument, '.') => {
+                    if current_start == 0 {
+                        bail!(ParseErrorKind::DirectiveSyntaxArgument);
+                    }
+
+                    argument_name = &raw_name[current_start..idx];
+                    current_start = 0;
+                    parsing_mode = ParsingMode::Modifier;
+                }
+                (ParsingMode::Argument, '[') => {
+                    if current_start == 0 {
+                        parsing_mode = ParsingMode::DynamicArgument;
+                    }
+                    // Ignore otherwise - argument will be treated as non-dynamic.
+                    // For example, `:foo[bar]` is not dynamic, while `:[foo]` is
+                }
+                (ParsingMode::Argument, _) => {
+                    if current_start == 0 {
+                        current_start = idx;
+                    }
                 }
 
-                &raw_name[start..end]
+                (ParsingMode::DynamicArgument, '[') => {
+                    current_bracket_level += 1;
+                }
+                (ParsingMode::DynamicArgument, ']') => {
+                    if current_bracket_level == 0 {
+                        if current_start == 0 {
+                            bail!(ParseErrorKind::DirectiveSyntaxDynamicArgument);
+                        }
+
+                        argument_name = &raw_name[current_start..idx];
+                        is_argument_dynamic = true;
+                        dynamic_argument_end = idx;
+                        current_start = 0;
+                        parsing_mode = ParsingMode::AfterDynamicArgument;
+                    } else {
+                        current_bracket_level -= 1;
+                    }
+                }
+                (ParsingMode::DynamicArgument, _) => {
+                    if current_start == 0 {
+                        current_start = idx;
+                        dynamic_argument_start = idx;
+                    }
+                }
+
+                (ParsingMode::AfterDynamicArgument, '.') => {
+                    parsing_mode = ParsingMode::Modifier;
+                }
+                (ParsingMode::AfterDynamicArgument, _) => {
+                    bail!(ParseErrorKind::DirectiveSyntaxUnexpectedCharacterAfterDynamicArgument);
+                }
+
+                (ParsingMode::Modifier, '.') => {
+                    if current_start == 0 {
+                        bail!(ParseErrorKind::DirectiveSyntaxModifier);
+                    }
+
+                    let modifier_name = &raw_name[current_start..idx];
+                    modifiers.push(FervidAtom::from(modifier_name));
+                    current_start = 0;
+                }
+                (ParsingMode::Modifier, _) => {
+                    if current_start == 0 {
+                        current_start = idx;
+                    }
+                }
             }
-            _ => {
+        }
+
+        // Handle end of argument name
+        match parsing_mode {
+            ParsingMode::DirectivePrefix => {
                 bail!();
             }
-        };
+            ParsingMode::DirectiveName => {
+                if current_start == 0 {
+                    bail!(ParseErrorKind::DirectiveSyntaxDirectiveName);
+                } else {
+                    directive_name = &raw_name[current_start..]
+                }
+            }
+            ParsingMode::Argument => {
+                if current_start == 0 {
+                    bail!(ParseErrorKind::DirectiveSyntaxArgument);
+                } else {
+                    argument_name = &raw_name[current_start..];
+                }
+            }
+            ParsingMode::Modifier => {
+                if current_start == 0 {
+                    bail!(ParseErrorKind::DirectiveSyntaxModifier);
+                } else {
+                    let modifier = &raw_name[current_start..];
+                    modifiers.push(FervidAtom::from(modifier));
+                }
+            }
+            ParsingMode::DynamicArgument => {
+                // Doesn't matter if it was started or not - it was not closed
+                bail!(ParseErrorKind::DirectiveSyntaxDynamicArgument);
+            }
+            ParsingMode::AfterDynamicArgument => {
+                // this mode means that we just parsed a dynamic argument
+                // and expect either start of modifier or end of attribute name
+            }
+        }
 
         // Try parsing argument (it is optional and may be empty though)
-        let mut argument: Option<StrOrExpr> = None;
-        if expect_argument {
-            while let Some((idx, c)) = chars_iter.next() {
-                if c == '.' {
-                    argument_end = idx;
-                    break;
-                }
-                if argument_start == 0 {
-                    argument_start = idx;
-                }
-            }
+        let argument = match (argument_name, is_argument_dynamic) {
+            ("", _) => None,
 
-            if argument_start != 0 {
-                let mut raw_argument = &raw_name[argument_start..argument_end];
-                let mut is_dynamic_argument = false;
+            (static_name, false) => Some(StrOrExpr::Str(FervidAtom::from(static_name))),
 
-                // Dynamic argument: `:[dynamic-argument]`
-                if raw_argument.starts_with('[') {
-                    // Check syntax
-                    if !raw_argument.ends_with(']') {
-                        bail!(ParseErrorKind::DynamicArgument);
+            (dynamic_name, true) => {
+                let attr_lo = raw_attribute.span.lo.0;
+                let span_lo = attr_lo + dynamic_argument_start as u32;
+                let span_hi = attr_lo + dynamic_argument_end as u32;
+                let span = Span {
+                    lo: BytePos(span_lo),
+                    hi: BytePos(span_hi),
+                };
+
+                let parsed = match self.parse_expr(&dynamic_name, ts!(), span) {
+                    Ok(parsed) => parsed,
+                    Err(expr_err) => {
+                        bail!(js, expr_err);
                     }
+                };
 
-                    raw_argument =
-                        &raw_argument['['.len_utf8()..(raw_argument.len() - ']'.len_utf8())];
-                    if raw_argument.is_empty() {
-                        bail!(ParseErrorKind::DynamicArgument);
-                    }
-
-                    is_dynamic_argument = true;
-                }
-
-                if is_dynamic_argument {
-                    // TODO Narrower span?
-                    let parsed_argument = match self.parse_expr(raw_argument, ts!(), span) {
-                        Ok(parsed) => parsed,
-                        Err(expr_err) => {
-                            bail!(js, expr_err);
-                        }
-                    };
-
-                    argument = Some(StrOrExpr::Expr(parsed_argument));
-                } else {
-                    argument = Some(StrOrExpr::Str(FervidAtom::from(raw_argument)));
-                }
+                Some(StrOrExpr::Expr(parsed))
             }
-        }
-
-        // Try parsing modifiers, it is a simple string split
-        let mut modifiers = Vec::<FervidAtom>::new();
-        if argument_end != 0 {
-            for modifier in raw_name[argument_end..]
-                .split('.')
-                .filter(|m| !m.is_empty())
-            {
-                modifiers.push(FervidAtom::from(modifier));
-            }
-        }
+        };
 
         /// Unwrapping the value or failing
         macro_rules! expect_value {
@@ -264,7 +371,20 @@ impl SfcParser<'_, '_, '_> {
                     }
                 }
 
-                let value = expect_value!();
+                let value = match raw_attribute.value {
+                    Some(ref value) => Cow::Borrowed(value.as_str()),
+                    None => {
+                        // v-bind without a value is a shorthand (e.g. just `:foo-bar` is `:foo-bar="fooBar"`).
+                        // This only works for static arguments
+                        if let Some(StrOrExpr::Str(ref s)) = argument {
+                            let mut out = String::with_capacity(raw_name.len());
+                            to_camel_case(&s, &mut out);
+                            Cow::Owned(out)
+                        } else {
+                            bail!(ParseErrorKind::DirectiveSyntax);
+                        }
+                    }
+                };
 
                 let parsed_expr = match self.parse_expr(&value, ts!(), span) {
                     Ok(parsed) => parsed,
@@ -508,9 +628,511 @@ fn split_itervar_and_iterable<'a>(
     Some(((itervar, new_span_itervar), (iterable, new_span_iterable)))
 }
 
+/// `foo-bar-baz` -> `fooBarBaz`
+#[inline]
+fn to_camel_case(raw: &str, out: &mut String) {
+    for (idx, word) in raw.split('-').enumerate() {
+        if idx == 0 {
+            out.push_str(word);
+            continue;
+        }
+
+        let first_char = word.chars().next();
+        if let Some(ch) = first_char {
+            // Uppercase the first char and append to buf
+            for ch_component in ch.to_uppercase() {
+                out.push(ch_component);
+            }
+
+            // Push the rest of the word
+            out.push_str(&word[ch.len_utf8()..]);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use swc_core::common::DUMMY_SP;
+
     use super::*;
+
+    #[test]
+    fn it_parses_regular_attr() {
+        test_parse_into_attr("disabled", "true");
+        test_parse_into_attr("foo.bar", "true");
+        test_parse_into_attr("foo:bar", "true");
+        test_parse_into_attr("foo@bar", "true");
+        test_parse_into_attr("foo#bar", "true");
+        test_parse_into_attr("v.", "true");
+    }
+
+    #[test]
+    fn it_parses_v_on() {
+        assert!(matches!(
+            test_parse_into_attr_or_binding("v-on", "handle"),
+            Some(AttributeOrBinding::VOn(VOnDirective {
+                event: None,
+                handler: Some(_),
+                modifiers,
+                ..
+            })) if modifiers.is_empty()
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding("v-on:click", "handle"),
+            Some(AttributeOrBinding::VOn(VOnDirective {
+                event: Some(StrOrExpr::Str(s)),
+                handler: Some(_),
+                modifiers,
+                ..
+            })) if s == "click" && modifiers.is_empty()
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding("@click", "handle"),
+            Some(AttributeOrBinding::VOn(VOnDirective {
+                event: Some(StrOrExpr::Str(s)),
+                handler: Some(_),
+                modifiers,
+                ..
+            })) if s == "click" && modifiers.is_empty()
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding("@click.mod1.mod2", "handle"),
+            Some(AttributeOrBinding::VOn(VOnDirective {
+                event: Some(StrOrExpr::Str(s)),
+                handler: Some(_),
+                modifiers,
+                ..
+            })) if s == "click" && modifiers.len() == 2
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding("@[click]", "handle"),
+            Some(AttributeOrBinding::VOn(VOnDirective {
+                event: Some(StrOrExpr::Expr(expr)),
+                handler: Some(_),
+                modifiers,
+                ..
+            })) if expr.is_ident() && modifiers.is_empty()
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding("@[click.click]", "handle"),
+            Some(AttributeOrBinding::VOn(VOnDirective {
+                event: Some(StrOrExpr::Expr(expr)),
+                handler: Some(_),
+                modifiers,
+                ..
+            })) if expr.is_member() && modifiers.is_empty()
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding("@[click[click]]", "handle"),
+            Some(AttributeOrBinding::VOn(VOnDirective {
+                event: Some(StrOrExpr::Expr(expr)),
+                handler: Some(_),
+                modifiers,
+                ..
+            })) if expr.is_member() && modifiers.is_empty()
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding("@[click].mod1", "handle"),
+            Some(AttributeOrBinding::VOn(VOnDirective {
+                event: Some(StrOrExpr::Expr(expr)),
+                handler: Some(_),
+                modifiers,
+                ..
+            })) if expr.is_ident() && modifiers.len() == 1
+        ));
+    }
+
+    #[test]
+    fn it_parses_v_bind() {
+        assert!(matches!(
+            test_parse_into_attr_or_binding("v-bind", "value"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: None,
+                value,
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                ..
+            })) if value.is_ident()
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding("v-bind:arg-name", "value"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Str(arg)),
+                value,
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                ..
+            })) if value.is_ident() && arg == "arg-name"
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding(":arg-name", "value"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Str(arg)),
+                value,
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                ..
+            })) if value.is_ident() && arg == "arg-name"
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding(":arg.mod1", "value"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Str(arg)),
+                value,
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                ..
+            })) if value.is_ident() && arg == "arg"
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding(":arg.camel", "value"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Str(arg)),
+                value,
+                is_camel: true,
+                is_prop: false,
+                is_attr: false,
+                ..
+            })) if value.is_ident() && arg == "arg"
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding(":arg.prop", "value"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Str(arg)),
+                value,
+                is_camel: false,
+                is_prop: true,
+                is_attr: false,
+                ..
+            })) if value.is_ident() && arg == "arg"
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding(":arg.attr", "value"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Str(arg)),
+                value,
+                is_camel: false,
+                is_prop: false,
+                is_attr: true,
+                ..
+            })) if value.is_ident() && arg == "arg"
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding(":arg.camel.attr.prop.mod", "value"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Str(arg)),
+                value,
+                is_camel: true,
+                is_prop: true,
+                is_attr: true,
+                ..
+            })) if value.is_ident() && arg == "arg"
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding(".foo", "value"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Str(arg)),
+                value,
+                is_camel: false,
+                is_prop: true,
+                is_attr: false,
+                ..
+            })) if value.is_ident() && arg == "foo"
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding(":[arg]", "value"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Expr(arg)),
+                value,
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                ..
+            })) if value.is_ident() && arg.is_ident()
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding(":[arg.name]", "value"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Expr(arg)),
+                value,
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                ..
+            })) if value.is_ident() && arg.is_member()
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding(":[arg[name]]", "value"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Expr(arg)),
+                value,
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                ..
+            })) if value.is_ident() && arg.is_member()
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding(":[arg].mod", "value"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Expr(arg)),
+                value,
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                ..
+            })) if value.is_ident() && arg.is_ident()
+        ));
+        assert!(matches!(
+            test_parse_into_attr_or_binding(":arg[name]", "value"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Str(arg)),
+                value,
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                ..
+            })) if value.is_ident() && arg == "arg[name]"
+        ));
+    }
+
+    #[test]
+    fn it_supports_shorthand_v_bind() {
+        fn test_parse_into_bind(name: &str) -> Option<AttributeOrBinding> {
+            let mut errors = Vec::new();
+            let mut parser = SfcParser::new("", &mut errors);
+
+            let mut attrs_or_bindings = Vec::new();
+            let mut vue_directives = None;
+            let result = parser.try_parse_directive(
+                Attribute {
+                    span: DUMMY_SP,
+                    namespace: None,
+                    prefix: None,
+                    name: FervidAtom::from(name),
+                    raw_name: None,
+                    value: None,
+                    raw_value: None,
+                },
+                &mut attrs_or_bindings,
+                &mut vue_directives,
+            );
+            assert!(result.is_ok());
+            assert!(attrs_or_bindings.len() <= 1);
+            assert!(vue_directives.is_none());
+            assert!(errors.is_empty());
+
+            attrs_or_bindings.pop()
+        }
+
+        assert!(matches!(
+            test_parse_into_bind(":msg"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Str(arg)),
+                value,
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                ..
+            })) if arg == "msg" && value.as_ident().is_some_and(|v| v.sym == "msg")
+        ));
+        assert!(matches!(
+            test_parse_into_bind(":foo-bar"),
+            Some(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Str(arg)),
+                value,
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                ..
+            })) if arg == "foo-bar" && value.as_ident().is_some_and(|v| v.sym == "fooBar")
+        ));
+    }
+
+    #[test]
+    fn it_parses_v_slot() {
+        fn test_parse_into_slot(name: &str, value: &str) -> VSlotDirective {
+            let directives = test_parse_into_vue_directive(name, value);
+            directives.v_slot.expect("Slot directive should exist")
+        }
+
+        assert!(matches!(
+            test_parse_into_slot("v-slot", ""),
+            VSlotDirective {
+                slot_name: None,
+                value: None
+            }
+        ));
+        assert!(matches!(
+            test_parse_into_slot("v-slot", "value"),
+            VSlotDirective {
+                slot_name: None,
+                value: Some(value)
+            } if value.is_ident()
+        ));
+        assert!(matches!(
+            test_parse_into_slot("v-slot:default", "value"),
+            VSlotDirective {
+                slot_name: Some(StrOrExpr::Str(name)),
+                value: Some(value)
+            } if value.is_ident() && name == "default"
+        ));
+        assert!(matches!(
+            test_parse_into_slot("v-slot:[slot]", "value"),
+            VSlotDirective {
+                slot_name: Some(StrOrExpr::Expr(name)),
+                value: Some(value)
+            } if value.is_ident() && name.is_ident()
+        ));
+        assert!(matches!(
+            test_parse_into_slot("v-slot:[slot.name]", "value"),
+            VSlotDirective {
+                slot_name: Some(StrOrExpr::Expr(name)),
+                value: Some(value)
+            } if value.is_ident() && name.is_member()
+        ));
+        assert!(matches!(
+            test_parse_into_slot("v-slot:[slot[name]]", "value"),
+            VSlotDirective {
+                slot_name: Some(StrOrExpr::Expr(name)),
+                value: Some(value)
+            } if value.is_ident() && name.is_member()
+        ));
+        assert!(matches!(
+            test_parse_into_slot("#default", "value"),
+            VSlotDirective {
+                slot_name: Some(StrOrExpr::Str(name)),
+                value: Some(value)
+            } if value.is_ident() && name == "default"
+        ));
+        assert!(matches!(
+            test_parse_into_slot("#[slot]", "value"),
+            VSlotDirective {
+                slot_name: Some(StrOrExpr::Expr(name)),
+                value: Some(value)
+            } if value.is_ident() && name.is_ident()
+        ));
+        assert!(matches!(
+            test_parse_into_slot("#[slot.name]", "value"),
+            VSlotDirective {
+                slot_name: Some(StrOrExpr::Expr(name)),
+                value: Some(value)
+            } if value.is_ident() && name.is_member()
+        ));
+        assert!(matches!(
+            test_parse_into_slot("#[slot[name]]", "value"),
+            VSlotDirective {
+                slot_name: Some(StrOrExpr::Expr(name)),
+                value: Some(value)
+            } if value.is_ident() && name.is_member()
+        ));
+    }
+
+    #[test]
+    fn it_parses_custom_directive() {
+        fn test_parse_into_custom(name: &str, value: &str) -> VCustomDirective {
+            let mut directives = test_parse_into_vue_directive(name, value);
+            directives
+                .custom
+                .pop()
+                .expect("Custom directive should exist")
+        }
+
+        assert!(matches!(
+            test_parse_into_custom("v-custom-dir", "value"),
+            VCustomDirective {
+                name,
+                argument: None,
+                modifiers,
+                value: Some(v)
+            } if name == "custom-dir" && v.is_ident() && modifiers.is_empty()
+        ));
+        assert!(matches!(
+            test_parse_into_custom("v-custom:arg-name", "value"),
+            VCustomDirective {
+                name,
+                argument: Some(StrOrExpr::Str(arg)),
+                modifiers,
+                value: Some(v)
+            } if name == "custom" && arg == "arg-name" && v.is_ident() && modifiers.is_empty()
+        ));
+        assert!(matches!(
+            test_parse_into_custom("v-custom:[arg-name]", "value"),
+            VCustomDirective {
+                name,
+                argument: Some(StrOrExpr::Expr(arg)),
+                modifiers,
+                value: Some(v)
+            } if name == "custom" && arg.is_bin() && v.is_ident() && modifiers.is_empty()
+        ));
+        assert!(matches!(
+            test_parse_into_custom("v-custom:[arg.name]", "value"),
+            VCustomDirective {
+                name,
+                argument: Some(StrOrExpr::Expr(arg)),
+                modifiers,
+                value: Some(v)
+            } if name == "custom" && arg.is_member() && v.is_ident() && modifiers.is_empty()
+        ));
+        assert!(matches!(
+            test_parse_into_custom("v-custom:[arg[name]]", "value"),
+            VCustomDirective {
+                name,
+                argument: Some(StrOrExpr::Expr(arg)),
+                modifiers,
+                value: Some(v)
+            } if name == "custom" && arg.is_member() && v.is_ident() && modifiers.is_empty()
+        ));
+        assert!(matches!(
+            test_parse_into_custom("v-custom:arg[name]", "value"),
+            VCustomDirective {
+                name,
+                argument: Some(StrOrExpr::Str(arg)),
+                modifiers,
+                value: Some(v)
+            } if name == "custom" && arg == "arg[name]" && v.is_ident() && modifiers.is_empty()
+        ));
+        assert!(matches!(
+            test_parse_into_custom("v-custom.mod1.mod2", "value"),
+            VCustomDirective {
+                name,
+                argument: None,
+                modifiers,
+                value: Some(v)
+            } if name == "custom" && v.is_ident() && modifiers.len() == 2
+        ));
+        assert!(matches!(
+            test_parse_into_custom("v-custom.[mod1.mod2]", "value"),
+            VCustomDirective {
+                name,
+                argument: None,
+                modifiers,
+                value: Some(v)
+            } if name == "custom" && v.is_ident() && modifiers.len() == 2
+        ));
+        assert!(matches!(
+            test_parse_into_custom("v-custom:arg.mod1", "value"),
+            VCustomDirective {
+                name,
+                argument: Some(StrOrExpr::Str(arg)),
+                modifiers,
+                value: Some(v)
+            } if name == "custom" && arg == "arg" && v.is_ident() && modifiers.len() == 1
+        ));
+        assert!(matches!(
+            test_parse_into_custom("v-custom:[arg].mod1", "value"),
+            VCustomDirective {
+                name,
+                argument: Some(StrOrExpr::Expr(arg)),
+                modifiers,
+                value: Some(v)
+            } if name == "custom" && arg.is_ident() && v.is_ident() && modifiers.len() == 1
+        ));
+    }
 
     #[test]
     fn it_correctly_splits_itervar_iterable() {
@@ -543,5 +1165,80 @@ mod tests {
 
         // A bit harder
         check!("   item   in \n \t  list   ", "item", 4, 8, "list", 19, 23);
+    }
+
+    fn test_parse_into_attr(name: &str, value: &str) {
+        let mut errors = Vec::new();
+        let mut parser = SfcParser::new("", &mut errors);
+
+        let mut attrs_or_bindings = Vec::new();
+        let mut vue_directives = None;
+        let result = parser.try_parse_directive(
+            Attribute {
+                span: DUMMY_SP,
+                namespace: None,
+                prefix: None,
+                name: FervidAtom::from(name),
+                raw_name: None,
+                value: Some(FervidAtom::from(value)),
+                raw_value: None,
+            },
+            &mut attrs_or_bindings,
+            &mut vue_directives,
+        );
+        assert!(result.is_err());
+    }
+
+    fn test_parse_into_attr_or_binding(name: &str, value: &str) -> Option<AttributeOrBinding> {
+        let mut errors = Vec::new();
+        let mut parser = SfcParser::new("", &mut errors);
+
+        let mut attrs_or_bindings = Vec::new();
+        let mut vue_directives = None;
+        let result = parser.try_parse_directive(
+            Attribute {
+                span: DUMMY_SP,
+                namespace: None,
+                prefix: None,
+                name: FervidAtom::from(name),
+                raw_name: None,
+                value: Some(FervidAtom::from(value)),
+                raw_value: None,
+            },
+            &mut attrs_or_bindings,
+            &mut vue_directives,
+        );
+        assert!(result.is_ok());
+        assert!(attrs_or_bindings.len() <= 1);
+        assert!(vue_directives.is_none());
+        assert!(errors.is_empty());
+
+        attrs_or_bindings.pop()
+    }
+
+    fn test_parse_into_vue_directive(name: &str, value: &str) -> Box<VueDirectives> {
+        let mut errors = Vec::new();
+        let mut parser = SfcParser::new("", &mut errors);
+
+        let mut attrs_or_bindings = Vec::new();
+        let mut vue_directives = None;
+        let result = parser.try_parse_directive(
+            Attribute {
+                span: DUMMY_SP,
+                namespace: None,
+                prefix: None,
+                name: FervidAtom::from(name),
+                raw_name: None,
+                value: Some(FervidAtom::from(value)),
+                raw_value: None,
+            },
+            &mut attrs_or_bindings,
+            &mut vue_directives,
+        );
+        assert!(result.is_ok());
+        assert!(attrs_or_bindings.is_empty());
+        assert!(errors.is_empty());
+
+        vue_directives.expect("Directives should exist")
     }
 }

@@ -213,10 +213,7 @@ impl SfcParser<'_, '_, '_> {
 
         // Add the remaining text if any
         if text_start_idx < raw.len() {
-            let text_span = Span::new(
-                BytePos(span.lo.0 + text_start_idx as u32),
-                span.hi,
-            );
+            let text_span = Span::new(BytePos(span.lo.0 + text_start_idx as u32), span.hi);
             out.push(Node::Text(
                 FervidAtom::from(&raw[text_start_idx..]),
                 text_span,
@@ -281,6 +278,8 @@ impl SfcParser<'_, '_, '_> {
 
 #[cfg(test)]
 mod tests {
+    use swc_core::ecma::ast::Expr;
+
     use super::*;
 
     #[test]
@@ -379,5 +378,29 @@ mod tests {
             panic!("First child of h1 is not interpolation")
         };
         assert!(interpolation.value.is_ident());
+    }
+
+    #[test]
+    fn it_supports_shorthand_v_bind() {
+        let mut errors = Vec::new();
+        let mut parser = SfcParser::new(
+            r#"
+        <template><div :foo-bar-baz></div></template>"#,
+            &mut errors,
+        );
+
+        let parsed = parser.parse_sfc().expect("Should parse");
+        let template = parsed.template.expect("Should have template");
+
+        // Check div
+        let Some(Node::Element(div)) = template.roots.first() else {
+            panic!("First child of root is not div")
+        };
+
+        // Check directive
+        let Some(AttributeOrBinding::VBind(v_bind)) = div.starting_tag.attributes.first() else {
+            panic!("v-bind not found")
+        };
+        assert!(matches!(v_bind.value.as_ref(), Expr::Ident(ident) if ident.sym == "fooBarBaz"));
     }
 }

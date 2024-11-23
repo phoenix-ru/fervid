@@ -406,6 +406,10 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                     }
 
                     let Some(StrOrExpr::Str(ref argument)) = v_bind.argument else {
+                        if let Some(StrOrExpr::Expr(ref mut expr)) = v_bind.argument.as_mut() {
+                            self.bindings_helper.transform_expr(expr, scope_to_use);
+                        }
+
                         // This is dynamic
                         // From docs: [FULL_PROPS is] exclusive with CLASS, STYLE and PROPS.
                         patch_hints.flags &=
@@ -499,6 +503,15 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                 AttributeOrBinding::RegularAttribute { name, value, span } if name == "ref" => {
                     has_ref = true;
 
+                    // Get the binding type regardless of template generation mode to mark the ref as "used".
+                    // This is the importUsageCheck behaviour of the official compiler
+                    let binding_type = if value.is_empty() {
+                        BindingTypes::Unresolved
+                    } else {
+                        self.bindings_helper
+                            .get_var_binding_type(scope_to_use, &value)
+                    };
+
                     // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L506
                     // In inline mode there is no setupState object, so we can't use string
                     // keys to set the ref. Instead, we need to transform it to pass the
@@ -509,11 +522,11 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                             TemplateGenerationMode::Inline
                         )
                         && matches!(
-                            self.bindings_helper
-                                .get_var_binding_type(scope_to_use, &value),
+                            binding_type,
                             BindingTypes::SetupLet
                                 | BindingTypes::SetupRef
                                 | BindingTypes::SetupMaybeRef
+                                | BindingTypes::Imported
                         )
                     {
                         let span = span.to_owned();

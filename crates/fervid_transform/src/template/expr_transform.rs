@@ -360,6 +360,15 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                 }
                 return;
             }
+            
+            // Call expression, type arguments should not be taken into account
+            Expr::Call(call_expr) => {
+                call_expr.callee.visit_mut_with(self);
+                for arg in call_expr.args.iter_mut() {
+                    arg.visit_mut_with(self);
+                }
+                return;
+            }
 
             // Identifier is what we need for the rest of the function
             Expr::Ident(ident_expr) => ident_expr,
