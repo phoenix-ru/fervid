@@ -1,0 +1,384 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`TS annotations 1`] = `
+"import { Foo, Bar, Baz, Qux, Fred } from './x';
+import { createCommentVNode as _createCommentVNode, createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createTextVNode as _createTextVNode, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, openBlock as _openBlock, renderList as _renderList, resolveComponent as _resolveComponent, toDisplayString as _toDisplayString, withCtx as _withCtx } from "vue";
+export default _defineComponent({
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        const _component_Comp = _resolveComponent("Comp");
+        return (_openBlock(), _createElementBlock(_Fragment, null, [
+            _createTextVNode(_toDisplayString(a as Foo) + " "),
+            _createCommentVNode(" {{ b<Bar>() }} "),
+            _createTextVNode(" " + _toDisplayString(Baz) + " "),
+            _createVNode(_component_Comp, null, {
+                "default": _withCtx(()=>[
+                        _createTextVNode(_toDisplayString(data), 1)
+                    ])
+            }),
+            (_openBlock(), _createElementBlock(_Fragment, null, _renderList(_ctx.list as Fred, ({
+                z=x as Qux
+            })=>_createElementVNode("div")), 256))
+        ]));
+    },
+    setup (__props, { expose: __expose }) {
+        __expose();
+        const a = 1;
+        function b() {}
+        return {
+            get Baz () {
+                return Baz;
+            },
+            a,
+            b
+        };
+    }
+});
+"
+`;
+
+exports[`attribute expressions 1`] = `
+"import { bar, baz } from './x';
+import { createElementBlock as _createElementBlock, defineComponent as _defineComponent, normalizeClass as _normalizeClass, normalizeStyle as _normalizeStyle, openBlock as _openBlock } from "vue";
+export default _defineComponent({
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock("div", {
+            class: _normalizeClass([
+                cond ? '' : bar(),
+                'default'
+            ]),
+            style: _normalizeStyle(baz)
+        }));
+    },
+    setup (__props, { expose: __expose }) {
+        __expose();
+        const cond = true;
+        return {
+            get bar () {
+                return bar;
+            },
+            get baz () {
+                return baz;
+            },
+            cond
+        };
+    }
+});
+"
+`;
+
+exports[`components 1`] = `
+"import { FooBar, FooBaz, FooQux, foo } from './x';
+import { createElementBlock as _createElementBlock, createTextVNode as _createTextVNode, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
+export default _defineComponent({
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock(_Fragment, null, [
+            _createVNode(FooBaz),
+            _createVNode(FooQux),
+            _createVNode(foo),
+            _createTextVNode(" FooBar ")
+        ]));
+    },
+    setup (__props, { expose: __expose }) {
+        __expose();
+        const fooBar: FooBar = 1;
+        return {
+            get FooBaz () {
+                return FooBaz;
+            },
+            get FooQux () {
+                return FooQux;
+            },
+            get foo () {
+                return foo;
+            },
+            fooBar
+        };
+    }
+});
+"
+`;
+
+exports[`directive 1`] = `
+"import { vMyDir } from './x';
+import { createElementBlock as _createElementBlock, defineComponent as _defineComponent, openBlock as _openBlock, resolveDirective as _resolveDirective, withDirectives as _withDirectives } from "vue";
+export default _defineComponent({
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return _withDirectives((_openBlock(), _createElementBlock("div", null, null, 512)), [
+            [
+                vMyDir
+            ]
+        ]);
+    },
+    setup (__props, { expose: __expose }) {
+        __expose();
+        return {
+            get vMyDir () {
+                return vMyDir;
+            }
+        };
+    }
+});
+"
+`;
+
+exports[`dynamic arguments 1`] = `
+"import { FooBar, foo, bar, unused, baz, msg } from './x';
+import { createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
+export default _defineComponent({
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock(_Fragment, null, [
+            _createVNode(FooBar),
+            _createVNode(FooBar),
+            _createElementVNode("div", {
+                [bar.attrName || ""]: 15
+            }, null, 16),
+            _createElementVNode("div", {
+                unused: "unused"
+            }),
+            _createElementVNode("div"),
+            _createVNode(FooBar, {
+                msg: msg
+            })
+        ]));
+    },
+    setup (__props, { expose: __expose }) {
+        __expose();
+        return {
+            get FooBar () {
+                return FooBar;
+            },
+            get foo () {
+                return foo;
+            },
+            get bar () {
+                return bar;
+            },
+            get baz () {
+                return baz;
+            },
+            get msg () {
+                return msg;
+            }
+        };
+    }
+});
+"
+`;
+
+exports[`js template string interpolations 1`] = `
+"import { VAR, VAR2, VAR3 } from './x';
+import { defineComponent as _defineComponent, toDisplayString as _toDisplayString } from "vue";
+export default _defineComponent({
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return _toDisplayString(\`\${VAR}VAR2\${VAR3}\`);
+    },
+    setup (__props, { expose: __expose }) {
+        __expose();
+        return {
+            get VAR () {
+                return VAR;
+            },
+            get VAR3 () {
+                return VAR3;
+            }
+        };
+    }
+});
+"
+`;
+
+exports[`last tag 1`] = `
+"import { FooBaz, Last } from './x';
+import { createElementBlock as _createElementBlock, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
+export default _defineComponent({
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock(_Fragment, null, [
+            _createVNode(FooBaz),
+            _createVNode(Last)
+        ]));
+    },
+    setup (__props, { expose: __expose }) {
+        __expose();
+        return {
+            get FooBaz () {
+                return FooBaz;
+            },
+            get Last () {
+                return Last;
+            }
+        };
+    }
+});
+"
+`;
+
+exports[`namespace / dot component usage 1`] = `
+"import * as Foo from './foo';
+import { createBlock as _createBlock, defineComponent as _defineComponent, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
+export default _defineComponent({
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createBlock(Foo.Bar));
+    },
+    setup (__props, { expose: __expose }) {
+        __expose();
+        return {
+            get Foo () {
+                return Foo;
+            }
+        };
+    }
+});
+"
+`;
+
+exports[`namespace / dot component usage lowercase 1`] = `
+"import * as Foo from './foo';
+import { createBlock as _createBlock, defineComponent as _defineComponent, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
+export default _defineComponent({
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createBlock(Foo.bar));
+    },
+    setup (__props, { expose: __expose }) {
+        __expose();
+        return {
+            get Foo () {
+                return Foo;
+            }
+        };
+    }
+});
+"
+`;
+
+exports[`property access (whitespace) 1`] = `
+"import { Foo, Bar, Baz } from './foo';
+import { createElementBlock as _createElementBlock, defineComponent as _defineComponent, openBlock as _openBlock, toDisplayString as _toDisplayString } from "vue";
+export default _defineComponent({
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock("div", null, _toDisplayString(Foo.Bar.Baz)));
+    },
+    setup (__props, { expose: __expose }) {
+        __expose();
+        return {
+            get Foo () {
+                return Foo;
+            }
+        };
+    }
+});
+"
+`;
+
+exports[`property access 1`] = `
+"import { Foo, Bar, Baz } from './foo';
+import { createElementBlock as _createElementBlock, defineComponent as _defineComponent, openBlock as _openBlock, toDisplayString as _toDisplayString } from "vue";
+export default _defineComponent({
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock("div", null, _toDisplayString(Foo.Bar.Baz)));
+    },
+    setup (__props, { expose: __expose }) {
+        __expose();
+        return {
+            get Foo () {
+                return Foo;
+            }
+        };
+    }
+});
+"
+`;
+
+exports[`spread operator 1`] = `
+"import { Foo, Bar, Baz } from './foo';
+import { createElementBlock as _createElementBlock, defineComponent as _defineComponent, openBlock as _openBlock } from "vue";
+export default _defineComponent({
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock("div", null, null, 16));
+    },
+    setup (__props, { expose: __expose }) {
+        __expose();
+        return {
+            get Foo () {
+                return Foo;
+            }
+        };
+    }
+});
+"
+`;
+
+exports[`template ref 1`] = `
+"import { foo, bar, Baz } from './foo';
+import { createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
+export default _defineComponent({
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock(_Fragment, null, [
+            _createElementVNode("div", {
+                ref: "foo"
+            }, null, 512),
+            _createElementVNode("div", {
+                ref: ""
+            }, null, 512),
+            _createVNode(Baz, {
+                ref: "bar"
+            }, null, 512)
+        ]));
+    },
+    setup (__props, { expose: __expose }) {
+        __expose();
+        return {
+            get foo () {
+                return foo;
+            },
+            get bar () {
+                return bar;
+            },
+            get Baz () {
+                return Baz;
+            }
+        };
+    }
+});
+"
+`;
+
+exports[`vue interpolations 1`] = `
+"import { x, y, z, x$y } from './x';
+import { createElementBlock as _createElementBlock, defineComponent as _defineComponent, openBlock as _openBlock, toDisplayString as _toDisplayString } from "vue";
+export default _defineComponent({
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock("div", {
+            id: z + 'y'
+        }, _toDisplayString(x) + " " + _toDisplayString(_ctx.yy) + " " + _toDisplayString(x$y), 1));
+    },
+    setup (__props, { expose: __expose }) {
+        __expose();
+        return {
+            get x () {
+                return x;
+            },
+            get z () {
+                return z;
+            },
+            get x$y () {
+                return x$y;
+            }
+        };
+    }
+});
+"
+`;

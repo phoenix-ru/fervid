@@ -129,7 +129,8 @@
     "bitflags",
     "keyof",
     "xfoo",
-    "xbar"
+    "xbar",
+    "vuejs"
   ],
   "ignorePaths": [
     ".github/**",

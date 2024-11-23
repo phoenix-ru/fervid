@@ -10,6 +10,16 @@ pub struct ParseError {
 pub enum ParseErrorKind {
     /// Malformed directive (e.g. `:`, `@`)
     DirectiveSyntax,
+    /// Malformed directive name (e.g. `v-.`)
+    DirectiveSyntaxDirectiveName,
+    /// Malformed directive argument (e.g. `v-bind:`)
+    DirectiveSyntaxArgument,
+    /// Malformed directive dynamic argument (e.g. `:[foo`)
+    DirectiveSyntaxDynamicArgument,
+    /// Malformed directive - expected modifiers, but got something else (e.g. `:[foo]v`)
+    DirectiveSyntaxUnexpectedCharacterAfterDynamicArgument,
+    /// Malformed directive modifier (e.g. `:smth.`)
+    DirectiveSyntaxModifier,
     /// More than one `<script>`
     DuplicateScriptOptions,
     /// More than one `<script setup>`
@@ -18,8 +28,6 @@ pub enum ParseErrorKind {
     DuplicateTemplate,
     /// More than one attribute with the same name on a root element
     DuplicateAttribute,
-    /// Unclosed dynamic argument, e.g. `:[dynamic`
-    DynamicArgument,
     /// Error while parsing EcmaScript/TypeScript
     EcmaSyntaxError(Box<swc_ecma_parser::error::SyntaxError>),
     /// Unrecoverable error while parsing HTML

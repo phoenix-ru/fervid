@@ -1,7 +1,10 @@
 use fervid_core::{BindingTypes, ComponentBinding, CustomDirectiveBinding, FervidAtom, IntoIdent};
-use swc_core::ecma::ast::Expr;
+use swc_core::{
+    common::DUMMY_SP,
+    ecma::ast::{Expr, IdentName, MemberExpr, MemberProp},
+};
 
-use crate::SetupBinding;
+use crate::{BindingsHelper, SetupBinding};
 
 use super::{
     ast_transform::TemplateVisitor,
@@ -19,21 +22,13 @@ impl TemplateVisitor<'_> {
             return;
         }
 
-        // `component-name`s like that should be transformed to `ComponentName`s
-        let mut searched_pascal = String::with_capacity(tag_name.len());
-        to_pascal_case(tag_name, &mut searched_pascal);
-
-        // and to `componentName`
-        let mut searched_camel = String::with_capacity(tag_name.len());
-        to_camel_case(tag_name, &mut searched_camel);
-
-        let found = self
-            .bindings_helper
-            .setup_bindings
-            .iter()
-            .find(|binding| binding.0 == searched_pascal || binding.0 == searched_camel);
-
-        // TODO Auto-importing the components can happen here
+        // If the tag name contains a dot, it won't be found in the bindings - look directly for a namespaced component
+        // Example: `<Foo.Bar>`
+        let namespace_dot_idx = tag_name.find('.');
+        let found = match namespace_dot_idx {
+            Some(dot_idx) => find_binding(self.bindings_helper, &tag_name[..dot_idx]),
+            None => find_binding(self.bindings_helper, tag_name),
+        };
 
         if let Some(found) = found {
             let mut resolved_to = Expr::Ident(found.0.to_owned().into_ident());
@@ -44,6 +39,18 @@ impl TemplateVisitor<'_> {
             if !matches!(found.1, BindingTypes::Component) {
                 self.bindings_helper
                     .transform_expr(&mut resolved_to, self.current_scope);
+            }
+
+            // For namespaced components, add the second part (`Bar` in `<Foo.Bar>`)
+            if let Some(dot_idx) = namespace_dot_idx {
+                resolved_to = Expr::Member(MemberExpr {
+                    span: DUMMY_SP,
+                    obj: Box::new(resolved_to),
+                    prop: MemberProp::Ident(IdentName {
+                        span: DUMMY_SP,
+                        sym: FervidAtom::from(&tag_name[(dot_idx + 1)..]),
+                    }),
+                })
             }
 
             // Was resolved
@@ -111,6 +118,26 @@ impl TemplateVisitor<'_> {
             );
         }
     }
+}
+
+fn find_binding<'a, 'b>(
+    bindings_helper: &'a mut BindingsHelper,
+    tag_name: &'b str,
+) -> Option<&'a SetupBinding> {
+    // `component-name`s like that should be transformed to `ComponentName`s
+    let mut searched_pascal = String::with_capacity(tag_name.len());
+    to_pascal_case(tag_name, &mut searched_pascal);
+
+    // and to `componentName`
+    let mut searched_camel = String::with_capacity(tag_name.len());
+    to_camel_case(tag_name, &mut searched_camel);
+
+    bindings_helper
+        .setup_bindings
+        .iter()
+        .find(|binding| binding.0 == searched_pascal || binding.0 == searched_camel)
+
+    // TODO Auto-importing the components can happen here
 }
 
 #[cfg(test)]
@@ -240,6 +267,34 @@ mod tests {
         assert!(matches!(
             template_visitor.bindings_helper.components.get(&bar_lower),
             Some(ComponentBinding::Resolved(_))
+        ));
+    }
+
+    #[test]
+    fn it_resolves_components_namespaced() {
+        // `Foo` binding
+        let mut bindings_helper = with_bindings(vec![
+            SetupBinding(fervid_atom!("Foo"), BindingTypes::Imported),
+        ]);
+        let mut template_visitor = from_helper(&mut bindings_helper);
+
+        // `<Foo.Bar>`
+        let namespaced = fervid_atom!("Foo.Bar");
+        template_visitor.maybe_resolve_component(&namespaced);
+        assert!(matches!(
+            template_visitor
+                .bindings_helper
+                .components
+                .get(&namespaced),
+            Some(ComponentBinding::Resolved(e)) if e.is_member()
+        ));
+
+        // `<foo.bar>`
+        let namespaced_lower = fervid_atom!("foo.bar");
+        template_visitor.maybe_resolve_component(&namespaced_lower);
+        assert!(matches!(
+            template_visitor.bindings_helper.components.get(&namespaced_lower),
+            Some(ComponentBinding::Resolved(e)) if e.is_member()
         ));
     }
 
