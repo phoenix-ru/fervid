@@ -504,7 +504,7 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                     has_ref = true;
 
                     // Get the binding type regardless of template generation mode to mark the ref as "used".
-                    // This is the importUsageCheck behaviour of the official compiler
+                    // This is the importUsageCheck behavior of the official compiler
                     let binding_type = if value.is_empty() {
                         BindingTypes::Unresolved
                     } else {
