@@ -1,6 +1,6 @@
 use fervid_core::{
-    fervid_atom, AttributeOrBinding, FervidAtom, IntoIdent, StrOrExpr, VBindDirective,
-    VOnDirective, VueImports,
+    fervid_atom, str_to_propname, AttributeOrBinding, FervidAtom, IntoIdent, StrOrExpr,
+    VBindDirective, VOnDirective, VueImports,
 };
 use regex::Regex;
 use swc_core::{
@@ -12,7 +12,7 @@ use swc_core::{
     },
 };
 
-use crate::{context::CodegenContext, utils::str_to_propname};
+use crate::context::CodegenContext;
 
 lazy_static! {
     static ref CSS_RE: Regex =

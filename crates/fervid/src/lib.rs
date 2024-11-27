@@ -58,7 +58,7 @@ use fervid_codegen::CodegenContext;
 pub use fervid_core::*;
 use fervid_parser::SfcParser;
 use fervid_transform::{
-    style::should_transform_style_block, transform_sfc, SetupBinding, TransformSfcOptions,
+    style::should_transform_style_block, transform_sfc, PropsDestructureConfig, SetupBinding, TransformSfcOptions
 };
 use fxhash::FxHasher32;
 use std::{
@@ -78,7 +78,9 @@ pub struct CompileOptions<'o> {
     // pub scoped: Option<bool>,
     // pub slotted: Option<bool>,
     pub is_prod: Option<bool>,
+    pub is_custom_element: Option<bool>,
     pub ssr: Option<bool>,
+    pub props_destructure: Option<PropsDestructureConfig>,
     // pub ssrCssVars?: string[],
     // pub inMap?: RawSourceMap,
     // pub compiler?: TemplateCompiler,
@@ -131,6 +133,7 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
 
     // Options
     let is_prod = options.is_prod.unwrap_or_default();
+    let is_custom_element = options.is_custom_element.unwrap_or_default();
 
     // Parse
     let mut sfc_parsing_errors = Vec::new();
@@ -151,6 +154,8 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
     let mut transform_errors = Vec::new();
     let transform_options = TransformSfcOptions {
         is_prod,
+        is_ce: is_custom_element,
+        props_destructure: options.props_destructure.unwrap_or_default(),
         scope_id: &file_hash,
         filename: &options.filename,
     };
@@ -246,6 +251,8 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
     let mut transform_errors = Vec::new();
     let transform_options = TransformSfcOptions {
         is_prod,
+        is_ce: false,
+        props_destructure: PropsDestructureConfig::default(),
         scope_id: &file_hash,
         filename: "anonymous.vue".into(),
     };

@@ -28,6 +28,7 @@ mod define_emits;
 mod define_model;
 mod define_options;
 mod define_props;
+mod define_props_destructure;
 mod define_slots;
 mod macros;
 mod utils;
@@ -99,6 +100,7 @@ pub fn transform_and_record_script_setup(
                     ctx,
                     &expr_stmt.expr,
                     &mut sfc_object_helper,
+                    false,
                     false,
                     false,
                     None,
@@ -241,6 +243,7 @@ fn transform_decl_stmt(
                         init_expr,
                         sfc_object_helper,
                         true,
+                        is_const,
                         is_ident,
                         Some(&mut collected_bindings),
                         errors,

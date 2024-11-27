@@ -1,6 +1,6 @@
 use fervid_core::{
-    fervid_atom, ComponentBinding, ElementNode, FervidAtom, Node, PatchHints, StartingTag,
-    StrOrExpr, VSlotDirective, VueDirectives, VueImports,
+    fervid_atom, str_or_expr_to_propname, ComponentBinding, ElementNode, FervidAtom, Node,
+    PatchHints, StartingTag, StrOrExpr, VSlotDirective, VueDirectives, VueImports,
 };
 use swc_core::{
     common::{Span, DUMMY_SP},
@@ -11,9 +11,7 @@ use swc_core::{
     },
 };
 
-use crate::{
-    context::CodegenContext, control_flow::SlottedIterator, utils::str_or_expr_to_propname,
-};
+use crate::{context::CodegenContext, control_flow::SlottedIterator};
 
 impl CodegenContext {
     pub fn generate_component_vnode(

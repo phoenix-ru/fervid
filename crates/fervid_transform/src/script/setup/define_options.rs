@@ -4,8 +4,7 @@ use swc_core::{
 };
 
 use crate::{
-    error::{ScriptError, ScriptErrorKind, TransformError},
-    SfcExportedObjectHelper,
+    error::{ScriptError, ScriptErrorKind, TransformError}, script::setup::utils::unwrap_ts_node_expr, SfcExportedObjectHelper
 };
 
 use super::macros::TransformMacroResult;
@@ -120,15 +119,4 @@ pub fn process_define_options(
         .extend(options_object.props.iter().cloned());
 
     valid_macro!(None)
-}
-
-fn unwrap_ts_node_expr(expr: &Expr) -> &Expr {
-    match expr {
-        Expr::TsConstAssertion(ts_const_assertion) => unwrap_ts_node_expr(&ts_const_assertion.expr),
-        Expr::TsNonNull(ts_non_null_expr) => unwrap_ts_node_expr(&ts_non_null_expr.expr),
-        Expr::TsAs(ts_as_expr) => unwrap_ts_node_expr(&ts_as_expr.expr),
-        Expr::TsInstantiation(ts_instantiation) => unwrap_ts_node_expr(&ts_instantiation.expr),
-        Expr::TsSatisfies(ts_satisfies_expr) => unwrap_ts_node_expr(&ts_satisfies_expr.expr),
-        _ => expr
-    }
 }

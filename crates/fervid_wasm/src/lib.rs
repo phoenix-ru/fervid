@@ -33,6 +33,8 @@ pub fn compile_sync(source: &str, is_prod: Option<bool>) -> Result<WasmCompileRe
             filename: "anonymous.vue".into(),
             id: "".into(),
             is_prod,
+            is_custom_element: Some(false),
+            props_destructure: None,
             ssr: Some(false),
             gen_default_as: None,
             source_map: None,

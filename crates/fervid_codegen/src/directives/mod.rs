@@ -1,4 +1,4 @@
-use fervid_core::{CustomDirectiveBinding, FervidAtom, StrOrExpr, VueDirectives, VueImports};
+use fervid_core::{str_to_propname, CustomDirectiveBinding, FervidAtom, StrOrExpr, VueDirectives, VueImports};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::ast::{
@@ -7,7 +7,7 @@ use swc_core::{
     },
 };
 
-use crate::{utils::str_to_propname, CodegenContext};
+use crate::CodegenContext;
 
 mod v_for;
 mod v_html;
