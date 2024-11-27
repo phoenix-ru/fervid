@@ -142,11 +142,11 @@ export default _defineComponent({
             type: null,
             required: true
         },
-        "til~de": {
+        "da-sh": {
             type: null,
             required: true
         },
-        "da-sh": {
+        "til~de": {
             type: null,
             required: true
         },

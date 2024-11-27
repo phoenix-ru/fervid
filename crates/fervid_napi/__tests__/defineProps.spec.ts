@@ -894,8 +894,8 @@ const props = defineProps({ foo: String })
       'back\`tick': unknown
       'curly{bra}ces': unknown
       'pi|pe': unknown
-      'til~de': unknown
       'da-sh': unknown
+      'til~de': unknown
     }>()
     </script>`, { outputSetupBindings: true })
         assertCode(content)
