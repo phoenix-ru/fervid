@@ -739,7 +739,7 @@ mod tests {
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
-            r#"_createVNode(_component_test_component,null,{"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
+            r#"_createVNode(_component_test_component,null,{default:_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
         );
 
@@ -790,7 +790,7 @@ mod tests {
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
-            r#"_createVNode(_component_test_component,null,{"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
+            r#"_createVNode(_component_test_component,null,{default:_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
         );
     }
@@ -983,7 +983,7 @@ mod tests {
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
-            r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
+            r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),default:_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
         );
 
@@ -1055,7 +1055,7 @@ mod tests {
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
-            r#"_createVNode(_component_test_component,null,{"default":_withCtx(()=>[_createTextVNode("hello from default"),_createElementVNode("div",null,"hello from div")]),"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")])})"#,
+            r#"_createVNode(_component_test_component,null,{default:_withCtx(()=>[_createTextVNode("hello from default"),_createElementVNode("div",null,"hello from div")]),"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")])})"#,
             false,
         );
 
@@ -1108,7 +1108,7 @@ mod tests {
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
-            r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),"default":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
+            r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),default:_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
         );
     }
@@ -1202,7 +1202,7 @@ mod tests {
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
-            r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),"default":_withCtx(()=>[_createTextVNode("hello from default"),_createElementVNode("div",null,"hello from div")]),baz:_withCtx(()=>[_createTextVNode("hello from baz")])})"#,
+            r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),default:_withCtx(()=>[_createTextVNode("hello from default"),_createElementVNode("div",null,"hello from div")]),baz:_withCtx(()=>[_createTextVNode("hello from baz")])})"#,
             false,
         );
     }

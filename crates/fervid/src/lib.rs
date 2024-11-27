@@ -22,6 +22,8 @@
 //! let mut transform_errors = Vec::new();
 //! let transform_options = fervid_transform::TransformSfcOptions {
 //!   is_prod: true,
+//!   is_ce: false,
+//!   props_destructure: fervid_transform::PropsDestructureConfig::default(),
 //!   scope_id: "filehash",
 //!   filename: "input.vue"
 //! };

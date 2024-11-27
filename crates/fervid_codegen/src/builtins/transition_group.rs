@@ -99,7 +99,7 @@ mod tests {
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
-            r#"_createVNode(_TransitionGroup,null,{"default":_withCtx(()=>[_createTextVNode("foobar")]),_:1})"#,
+            r#"_createVNode(_TransitionGroup,null,{default:_withCtx(()=>[_createTextVNode("foobar")]),_:1})"#,
         )
     }
 
@@ -122,7 +122,7 @@ mod tests {
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
-            r#"_createVNode(_TransitionGroup,{foo:"bar",baz:qux},{"default":_withCtx(()=>[_createTextVNode("foobar")]),_:1})"#,
+            r#"_createVNode(_TransitionGroup,{foo:"bar",baz:qux},{default:_withCtx(()=>[_createTextVNode("foobar")]),_:1})"#,
         )
     }
 
