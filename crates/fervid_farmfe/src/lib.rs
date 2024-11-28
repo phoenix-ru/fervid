@@ -81,15 +81,19 @@ impl Plugin for FarmPluginVueFervid {
             return Ok(None);
         }
 
+        let is_custom_element = param.resolved_path.ends_with(".ce.vue");
+
         let file_compile_result = fervid::compile(
             &param.content,
             CompileOptions {
                 filename: std::borrow::Cow::Borrowed(param.resolved_path),
                 id: param.module_id.clone().into(),
                 is_prod: Some(true),
+                is_custom_element: Some(is_custom_element),
+                props_destructure: None,
                 ssr: None,
                 gen_default_as: None,
-                source_map: None
+                source_map: None,
             },
         );
 
@@ -113,12 +117,15 @@ impl Plugin for FarmPluginVueFervid {
                 let virtual_module_id = format!("{module_id}{query}");
                 prepend.push_str(&format!("import '{base_path}{query}'\n"));
 
-                virtual_modules.insert(virtual_module_id, PluginLoadHookResult {
-                    content: style.code,
-                    // TODO Determine based on style lang
-                    module_type: ModuleType::Css,
-                    source_map: None,
-                });
+                virtual_modules.insert(
+                    virtual_module_id,
+                    PluginLoadHookResult {
+                        content: style.code,
+                        // TODO Determine based on style lang
+                        module_type: ModuleType::Css,
+                        source_map: None,
+                    },
+                );
             }
         }
 

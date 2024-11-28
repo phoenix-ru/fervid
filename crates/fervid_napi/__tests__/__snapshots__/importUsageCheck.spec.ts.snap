@@ -12,7 +12,7 @@ export default _defineComponent({
             _createCommentVNode(" {{ b<Bar>() }} "),
             _createTextVNode(" " + _toDisplayString(Baz) + " "),
             _createVNode(_component_Comp, null, {
-                "default": _withCtx(()=>[
+                default: _withCtx(()=>[
                         _createTextVNode(_toDisplayString(data), 1)
                     ])
             }),

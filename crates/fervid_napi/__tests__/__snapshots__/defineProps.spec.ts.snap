@@ -1,0 +1,821 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`defineProps > basic usage 1`] = `
+"export default {
+    props: {
+        foo: String
+    },
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+        const props = __props;
+        const bar = 1;
+        return {
+            props,
+            bar
+        };
+    }
+};
+"
+`;
+
+exports[`defineProps > custom element retains the props type & default value & production mode 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: {
+        foo: {
+            type: Number,
+            default: 5.5
+        }
+    },
+    __name: "app.ce",
+    setup (__props) {
+        interface Props {
+            foo?: number;
+        }
+        const props = __props;
+    }
+});
+"
+`;
+
+exports[`defineProps > custom element retains the props type & production mode 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: {
+        foo: {
+            type: Number
+        }
+    },
+    __name: "app.ce",
+    setup (__props) {
+        const props = __props;
+    }
+});
+"
+`;
+
+exports[`defineProps > defineProps w/ runtime options 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: {
+        foo: String
+    },
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+        const props = __props;
+        return {
+            props
+        };
+    }
+});
+"
+`;
+
+exports[`defineProps > destructure without enabling reactive destructure 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: {
+        foo: {
+            type: null,
+            required: true
+        }
+    },
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+        const { foo } = __props;
+        return {
+            foo
+        };
+    }
+});
+"
+`;
+
+exports[`defineProps > should escape names w/ special symbols 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: {
+        "aste*risk": {
+            type: null,
+            required: true
+        },
+        "back\\\\slash": {
+            type: null,
+            required: true
+        },
+        "semi;colon": {
+            type: null,
+            required: true
+        },
+        "curly{bra}ces": {
+            type: null,
+            required: true
+        },
+        "amper&sand": {
+            type: null,
+            required: true
+        },
+        "round(brack)ets": {
+            type: null,
+            required: true
+        },
+        "pl+us": {
+            type: null,
+            required: true
+        },
+        "exclamation!mark": {
+            type: null,
+            required: true
+        },
+        "single'quote": {
+            type: null,
+            required: true
+        },
+        "square[brack]ets": {
+            type: null,
+            required: true
+        },
+        "pi|pe": {
+            type: null,
+            required: true
+        },
+        "da-sh": {
+            type: null,
+            required: true
+        },
+        "til~de": {
+            type: null,
+            required: true
+        },
+        dollar$sign: {
+            type: null,
+            required: true
+        },
+        "equal=sign": {
+            type: null,
+            required: true
+        },
+        'double"quote': {
+            type: null,
+            required: true
+        },
+        "angle<brack>ets": {
+            type: null,
+            required: true
+        },
+        "spa ce": {
+            type: null,
+            required: true
+        },
+        "com,ma": {
+            type: null,
+            required: true
+        },
+        "do.t": {
+            type: null,
+            required: true
+        },
+        "sla/sh": {
+            type: null,
+            required: true
+        },
+        "co:lon": {
+            type: null,
+            required: true
+        },
+        "at@sign": {
+            type: null,
+            required: true
+        },
+        "percentage%sign": {
+            type: null,
+            required: true
+        },
+        "ca^ret": {
+            type: null,
+            required: true
+        },
+        "question?mark": {
+            type: null,
+            required: true
+        },
+        "hash#tag": {
+            type: null,
+            required: true
+        },
+        "back\`tick": {
+            type: null,
+            required: true
+        }
+    },
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+    }
+});
+"
+`;
+
+exports[`defineProps > w/ TS assertion 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: [
+        'foo'
+    ],
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+    }
+});
+"
+`;
+
+exports[`defineProps > w/ exported interface 1`] = `
+"export interface Props {
+    x?: number;
+}
+import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: {
+        x: {
+            type: Number,
+            required: false
+        }
+    },
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+    }
+});
+"
+`;
+
+exports[`defineProps > w/ exported interface in normal script 1`] = `
+"export interface Props {
+    x?: number;
+}
+import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: {
+        x: {
+            type: Number,
+            required: false
+        }
+    },
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+    }
+});
+"
+`;
+
+exports[`defineProps > w/ exported type alias 1`] = `
+"export type Props = {
+    x?: number;
+};
+import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: {
+        x: {
+            type: Number,
+            required: false
+        }
+    },
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+    }
+});
+"
+`;
+
+exports[`defineProps > w/ extends interface 1`] = `
+"interface Foo {
+    x?: number;
+}
+import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: {
+        z: {
+            type: Number,
+            required: true
+        },
+        y: {
+            type: String,
+            required: true
+        },
+        x: {
+            type: Number,
+            required: false
+        }
+    },
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+        interface Bar extends Foo {
+            y?: number;
+        }
+        interface Props extends Bar {
+            z: number;
+            y: string;
+        }
+    }
+});
+"
+`;
+
+exports[`defineProps > w/ external definition 1`] = `
+"import { propsModel } from './props';
+export default {
+    props: propsModel,
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+        const props = __props;
+        return {
+            get propsModel () {
+                return propsModel;
+            },
+            props
+        };
+    }
+};
+"
+`;
+
+exports[`defineProps > w/ interface 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: {
+        x: {
+            type: Number,
+            required: false
+        }
+    },
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+        interface Props {
+            x?: number;
+        }
+    }
+});
+"
+`;
+
+exports[`defineProps > w/ leading code 1`] = `
+"import { x } from './x';
+export default {
+    props: {},
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+        const props = __props;
+        return {
+            get x () {
+                return x;
+            },
+            props
+        };
+    }
+};
+"
+`;
+
+exports[`defineProps > w/ type 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: {
+        unknownIntersection: {
+            type: Object,
+            required: true
+        },
+        unknown: {
+            type: null,
+            required: true
+        },
+        unknownUnionWithFunction: {
+            type: Function,
+            required: true,
+            skipCheck: true
+        },
+        set: {
+            type: Set,
+            required: true
+        },
+        foo: {
+            type: [
+                null,
+                Function
+            ],
+            required: true
+        },
+        intersection: {
+            type: Object,
+            required: true
+        },
+        unknownUnionWithBoolean: {
+            type: Boolean,
+            required: true,
+            skipCheck: true
+        },
+        recordRef: {
+            type: Object,
+            required: true
+        },
+        literalUnionMixed: {
+            type: [
+                String,
+                Number,
+                Boolean
+            ],
+            required: true
+        },
+        literal: {
+            type: String,
+            required: true
+        },
+        objectRef: {
+            type: Object,
+            required: true
+        },
+        nonNull: {
+            type: String,
+            required: true
+        },
+        intersection2: {
+            type: String,
+            required: true
+        },
+        optional: {
+            type: null,
+            required: false
+        },
+        extract: {
+            type: Number,
+            required: true
+        },
+        array: {
+            type: Array,
+            required: true
+        },
+        tuple: {
+            type: Array,
+            required: true
+        },
+        alias: {
+            type: Array,
+            required: true
+        },
+        interface: {
+            type: Object,
+            required: true
+        },
+        error: {
+            type: Error,
+            required: true
+        },
+        uppercase: {
+            type: String,
+            required: true
+        },
+        exclude: {
+            type: [
+                Number,
+                Boolean
+            ],
+            required: true
+        },
+        objectOrFn: {
+            type: [
+                Object,
+                Function
+            ],
+            required: true
+        },
+        union: {
+            type: [
+                String,
+                Number
+            ],
+            required: true
+        },
+        arrayRef: {
+            type: Array,
+            required: true
+        },
+        boolean: {
+            type: Boolean,
+            required: true
+        },
+        unknownUnion: {
+            type: null,
+            required: true
+        },
+        literalUnionNumber: {
+            type: Number,
+            required: true
+        },
+        object: {
+            type: Object,
+            required: true
+        },
+        objectLiteral: {
+            type: Object,
+            required: true
+        },
+        fn: {
+            type: Function,
+            required: true
+        },
+        string: {
+            type: String,
+            required: true
+        },
+        number: {
+            type: Number,
+            required: true
+        },
+        dateTime: {
+            type: Date,
+            required: true
+        },
+        method: {
+            type: Function,
+            required: true
+        },
+        symbol: {
+            type: Symbol,
+            required: true
+        },
+        params: {
+            type: Array,
+            required: true
+        },
+        literalUnion: {
+            type: String,
+            required: true
+        },
+        functionRef: {
+            type: Function,
+            required: true
+        }
+    },
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+        interface Test {
+        }
+        type Alias = number[];
+    }
+});
+"
+`;
+
+exports[`defineProps > w/ type alias 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: {
+        x: {
+            type: Number,
+            required: false
+        }
+    },
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+        type Props = {
+            x?: number;
+        };
+    }
+});
+"
+`;
+
+exports[`defineProps > withDefaults (dynamic) 1`] = `
+"import { defaults } from './foo';
+import { defineComponent as _defineComponent, mergeDefaults as _mergeDefaults } from "vue";
+export default _defineComponent({
+    props: _mergeDefaults({
+        foo: {
+            type: String,
+            required: false
+        },
+        bar: {
+            type: Number,
+            required: false
+        },
+        baz: {
+            type: Boolean,
+            required: true
+        }
+    }, {
+        ...defaults
+    }),
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+        const props = __props;
+        return {
+            props
+        };
+    }
+});
+"
+`;
+
+exports[`defineProps > withDefaults (dynamic) w/ production mode 1`] = `
+"import { defaults } from './foo';
+import { defineComponent as _defineComponent, mergeDefaults as _mergeDefaults } from "vue";
+export default _defineComponent({
+    props: _mergeDefaults({
+        qux: {},
+        foo: {
+            type: Function
+        },
+        bar: {
+            type: Boolean
+        },
+        baz: {
+            type: [
+                Boolean,
+                Function
+            ]
+        }
+    }, {
+        ...defaults
+    }),
+    __name: "anonymous",
+    setup (__props) {
+        const props = __props;
+    }
+});
+"
+`;
+
+exports[`defineProps > withDefaults (reference) 1`] = `
+"import { defaults } from './foo';
+import { defineComponent as _defineComponent, mergeDefaults as _mergeDefaults } from "vue";
+export default _defineComponent({
+    props: _mergeDefaults({
+        foo: {
+            type: String,
+            required: false
+        },
+        bar: {
+            type: Number,
+            required: false
+        },
+        baz: {
+            type: Boolean,
+            required: true
+        }
+    }, defaults),
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+        const props = __props;
+        return {
+            props
+        };
+    }
+});
+"
+`;
+
+exports[`defineProps > withDefaults (static) + normal script 1`] = `
+"interface Props {
+    a?: string;
+}
+import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: {
+        a: {
+            type: String,
+            required: false,
+            default: "a"
+        }
+    },
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+        const props = __props;
+        return {
+            props
+        };
+    }
+});
+"
+`;
+
+exports[`defineProps > withDefaults (static) 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: {
+        qux: {
+            type: Function,
+            required: false,
+            default () {
+                return 1;
+            }
+        },
+        quux: {
+            type: Function,
+            required: false,
+            default () {}
+        },
+        quuxx: {
+            type: Promise,
+            required: false,
+            async default () {
+                return await Promise.resolve('hi');
+            }
+        },
+        fred: {
+            type: String,
+            required: false,
+            get default () {
+                return 'fred';
+            }
+        },
+        foo: {
+            type: String,
+            required: false,
+            default: 'hi'
+        },
+        bar: {
+            type: Number,
+            required: false
+        },
+        baz: {
+            type: Boolean,
+            required: true
+        }
+    },
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+        const props = __props;
+        return {
+            props
+        };
+    }
+});
+"
+`;
+
+exports[`defineProps > withDefaults (static) w/ production mode 1`] = `
+"import { defineComponent as _defineComponent } from "vue";
+export default _defineComponent({
+    props: {
+        qux: {
+            default: 'hi'
+        },
+        foo: {},
+        bar: {
+            type: Boolean
+        },
+        baz: {
+            type: [
+                Boolean,
+                Function
+            ],
+            default: true
+        }
+    },
+    __name: "anonymous",
+    setup (__props) {
+        const props = __props;
+    }
+});
+"
+`;
+
+exports[`defineProps > withDefaults w/ dynamic object method 1`] = `
+"import { defineComponent as _defineComponent, mergeDefaults as _mergeDefaults } from "vue";
+export default _defineComponent({
+    props: _mergeDefaults({
+        foo: {
+            type: Function,
+            required: false
+        }
+    }, {
+        ['fo' + 'o'] () {
+            return 'foo';
+        }
+    }),
+    __name: "anonymous",
+    setup (__props, { expose: __expose }) {
+        __expose();
+        const props = __props;
+        return {
+            props
+        };
+    }
+});
+"
+`;

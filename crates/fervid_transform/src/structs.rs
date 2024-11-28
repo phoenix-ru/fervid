@@ -16,11 +16,21 @@ use swc_core::ecma::ast::{
 pub struct TransformSfcContext {
     pub filename: String,
     // pub is_prod: bool, // This is a part of BindingsHelper
+    /// Enable/disable the props destructure, or error when usage is encountered
+    pub props_destructure: PropsDestructureConfig,
     /// For Custom Elements
     pub is_ce: bool,
     pub bindings_helper: BindingsHelper,
     pub deps: HashSet<String>,
     pub(crate) scopes: Vec<TypeScopeContainer>,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub enum PropsDestructureConfig {
+    #[default]
+    False,
+    True,
+    Error
 }
 
 /// A helper which encompasses all the logic related to bindings,
@@ -181,6 +191,8 @@ pub struct TransformScriptsResult {
 
 pub struct TransformSfcOptions<'s> {
     pub is_prod: bool,
+    pub is_ce: bool,
+    pub props_destructure: PropsDestructureConfig,
     pub scope_id: &'s str,
     pub filename: &'s str,
 }
@@ -210,6 +222,7 @@ impl TransformSfcContext {
             filename: filename.to_owned(),
             bindings_helper: BindingsHelper::default(),
             is_ce: false,
+            props_destructure: PropsDestructureConfig::default(),
             deps: HashSet::default(),
             scopes: vec![],
         }

@@ -1,4 +1,6 @@
-use fervid_core::{FervidAtom, StrOrExpr, VModelDirective};
+use fervid_core::{
+    str_or_expr_to_propname, str_to_propname, FervidAtom, StrOrExpr, VModelDirective,
+};
 use swc_core::{
     common::Span,
     ecma::ast::{
@@ -7,10 +9,7 @@ use swc_core::{
     },
 };
 
-use crate::{
-    context::CodegenContext,
-    utils::{str_or_expr_to_propname, str_to_propname, to_camelcase},
-};
+use crate::{context::CodegenContext, utils::to_camelcase};
 
 impl CodegenContext {
     /// Generates the `v-model` parts for a component:
@@ -40,7 +39,8 @@ impl CodegenContext {
         }))));
 
         // 3. Generate event handler propname
-        let event_handler_propname = generate_v_model_handler_propname(&bound_attribute, &mut buf, span);
+        let event_handler_propname =
+            generate_v_model_handler_propname(&bound_attribute, &mut buf, span);
 
         // 4. Push the update code,
         // e.g. `v-model="smth"` -> `"onUpdate:modelValue": $event => ((_ctx.smth) = $event)`
@@ -109,7 +109,11 @@ impl CodegenContext {
 
     /// Generates the `v-model` for an element.
     /// This generates the update handler
-    pub fn generate_v_model_for_element(&self, v_model: &VModelDirective, out: &mut Vec<PropOrSpread>) {
+    pub fn generate_v_model_for_element(
+        &self,
+        v_model: &VModelDirective,
+        out: &mut Vec<PropOrSpread>,
+    ) {
         let span = v_model.span;
         let mut buf = String::new();
 
@@ -121,7 +125,8 @@ impl CodegenContext {
             .unwrap_or_else(|| "modelValue".into());
 
         // 2. Generate event handler propname
-        let event_handler_propname = generate_v_model_handler_propname(&bound_attribute, &mut buf, span);
+        let event_handler_propname =
+            generate_v_model_handler_propname(&bound_attribute, &mut buf, span);
 
         // 3. Push the update handler code,
         // e.g. `v-model="smth"` -> `"onUpdate:modelValue": $event => ((_ctx.smth) = $event)`
@@ -141,7 +146,11 @@ impl CodegenContext {
 /// ## Examples
 /// - `v-model="smth"` -> `"onUpdate:modelValue"`;
 /// - `v-model:users-argument="smth"` -> `"onUpdate:usersArgument"`.
-fn generate_v_model_handler_propname(bound_attribute: &StrOrExpr, buf: &mut String, span: Span) -> PropName {
+fn generate_v_model_handler_propname(
+    bound_attribute: &StrOrExpr,
+    buf: &mut String,
+    span: Span,
+) -> PropName {
     match bound_attribute {
         StrOrExpr::Str(ref s) => {
             buf.reserve(9 + s.len());

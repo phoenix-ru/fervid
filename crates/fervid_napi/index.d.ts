@@ -55,8 +55,16 @@ export interface FervidCompileOptions {
   id: string
   /** Filename is used for automatic component name inference and self-referential imports */
   filename: string
+  /**
+   * Is the currently compiled file a custom element.
+   * To give more flexibility, this option only accepts a boolean, allowing to compute the value on the JS side,
+   * instead of relying on a hacky RegEx/JS function calls from the Fervid side.
+   */
+  isCustomElement?: boolean
   /** Generate a const instead of default export */
   genDefaultAs?: string
+  /** Enable, disable or error on props destructure */
+  propsDestructure?: boolean | 'error'
   /** Whether setup bindings need to be serialized */
   outputSetupBindings?: boolean
 }

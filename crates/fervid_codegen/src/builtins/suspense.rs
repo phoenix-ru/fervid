@@ -100,7 +100,7 @@ mod tests {
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
-            r#"(_openBlock(),_createBlock(_Suspense,null,{"default":_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
+            r#"(_openBlock(),_createBlock(_Suspense,null,{default:_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
         )
     }
 
@@ -123,7 +123,7 @@ mod tests {
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
-            r#"(_openBlock(),_createBlock(_Suspense,{foo:"bar",baz:qux},{"default":_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
+            r#"(_openBlock(),_createBlock(_Suspense,{foo:"bar",baz:qux},{default:_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
         )
     }
 

@@ -212,7 +212,7 @@ mod tests {
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
-            r#"(_openBlock(),_createBlock(_resolveDynamicComponent("div"),null,{"default":_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
+            r#"(_openBlock(),_createBlock(_resolveDynamicComponent("div"),null,{default:_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
         )
     }
 
@@ -300,7 +300,7 @@ mod tests {
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
-            r#"(_openBlock(),_createBlock(_resolveDynamicComponent("div"),{foo:"bar",baz:qux},{named:_withCtx(()=>[_createTextVNode("bazqux")]),"default":_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
+            r#"(_openBlock(),_createBlock(_resolveDynamicComponent("div"),{foo:"bar",baz:qux},{named:_withCtx(()=>[_createTextVNode("bazqux")]),default:_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
         )
     }
 

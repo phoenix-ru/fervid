@@ -1,4 +1,4 @@
-use napi::JsObject;
+use napi::{Either, JsObject};
 use napi_derive::napi;
 use swc_core::common::Spanned;
 
@@ -76,10 +76,22 @@ pub struct FervidJsCompilerOptionsStyle {
 pub struct FervidCompileOptions {
     /// Scope ID for prefixing injected CSS variables
     pub id: String,
+
     /// Filename is used for automatic component name inference and self-referential imports
     pub filename: String,
+
+    /// Is the currently compiled file a custom element.
+    /// To give more flexibility, this option only accepts a boolean, allowing to compute the value on the JS side,
+    /// instead of relying on a hacky RegEx/JS function calls from the Fervid side.
+    pub is_custom_element: Option<bool>,
+
     /// Generate a const instead of default export
     pub gen_default_as: Option<String>,
+
+    /// Enable, disable or error on props destructure
+    #[napi(ts_type = "boolean | 'error'")]
+    pub props_destructure: Option<Either<bool, String>>,
+
     /// Whether setup bindings need to be serialized
     pub output_setup_bindings: Option<bool>,
 }

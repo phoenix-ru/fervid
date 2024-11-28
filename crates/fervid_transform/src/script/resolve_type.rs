@@ -4149,6 +4149,8 @@ mod tests {
             &sfc_descriptor,
             &crate::TransformSfcOptions {
                 is_prod: true,
+                is_ce: false,
+                props_destructure: crate::PropsDestructureConfig::default(),
                 scope_id: "test",
                 filename: "./Test.vue",
             },

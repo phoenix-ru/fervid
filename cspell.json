@@ -136,6 +136,8 @@
     ".github/**",
     "**/*.toml",
     "pnpm-lock.yaml",
-    "README.md"
+    "README.md",
+    "**/*.snap",
+    "crates/fervid_napi/__tests__/defineProps.spec.ts"
   ]
 }

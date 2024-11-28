@@ -18,6 +18,7 @@ use crate::{
             define_options::process_define_options,
             define_props::{process_define_props, process_with_defaults},
             define_slots::process_define_slots,
+            utils::unwrap_ts_node_expr,
         },
     },
     structs::SfcExportedObjectHelper,
@@ -42,6 +43,7 @@ pub fn transform_script_setup_macro_expr(
     expr: &Expr,
     sfc_object_helper: &mut SfcExportedObjectHelper,
     is_var_decl: bool,
+    is_const: bool,
     is_ident: bool,
     var_bindings: Option<&mut Vec<SetupBinding>>,
     errors: &mut Vec<TransformError>,
@@ -68,6 +70,9 @@ pub fn transform_script_setup_macro_expr(
         };
     }
 
+    // Strip TS to get to the actual expression
+    let expr = unwrap_ts_node_expr(expr);
+
     // Script setup macros are calls
     let Expr::Call(ref call_expr) = *expr else {
         bail!();
@@ -90,9 +95,27 @@ pub fn transform_script_setup_macro_expr(
     let sym = &callee_ident.sym;
     let span = call_expr.span;
     if DEFINE_PROPS.eq(sym) {
-        process_define_props(ctx, call_expr, is_var_decl, sfc_object_helper)
+        process_define_props(
+            ctx,
+            call_expr,
+            is_var_decl,
+            is_const,
+            is_ident,
+            var_bindings,
+            sfc_object_helper,
+            errors,
+        )
     } else if WITH_DEFAULTS.eq(sym) {
-        process_with_defaults(ctx, call_expr, is_var_decl, sfc_object_helper)
+        process_with_defaults(
+            ctx,
+            call_expr,
+            is_var_decl,
+            is_const,
+            is_ident,
+            var_bindings,
+            sfc_object_helper,
+            errors,
+        )
     } else if DEFINE_EMITS.eq(sym) {
         process_define_emits(
             ctx,

@@ -35,6 +35,8 @@ pub enum ScriptErrorKind {
     DefineOptionsExpose,
     /// "`defineOptions` cannot be used to declare slots. Use defineSlots() instead."
     DefineOptionsSlots,
+    /// `Props destructure is explicitly prohibited via config.`
+    DefinePropsDestructureForbidden,
     /// "`defineSlots` cannot accept arguments"
     DefineSlotsArguments,
     /// Duplicate `defineEmits` call

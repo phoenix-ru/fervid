@@ -1,4 +1,4 @@
-use fervid_core::{fervid_atom, BindingTypes, FervidAtom, IntoIdent, VueImports};
+use fervid_core::{atom_to_propname, fervid_atom, BindingTypes, FervidAtom, IntoIdent, VueImports};
 use flagset::FlagSet;
 use swc_core::{
     common::{Span, Spanned, DUMMY_SP},
@@ -22,7 +22,7 @@ use crate::{
     SetupBinding, SfcExportedObjectHelper,
 };
 
-use super::macros::TransformMacroResult;
+use super::{define_props_destructure::process_props_destructure, macros::TransformMacroResult};
 
 #[derive(Default)]
 struct DefineProps {
@@ -39,18 +39,35 @@ pub fn process_define_props(
     ctx: &mut TypeResolveContext,
     call_expr: &CallExpr,
     is_var_decl: bool,
+    is_const: bool,
+    is_ident: bool,
+    var_bindings: Option<&mut Vec<SetupBinding>>,
     sfc_object_helper: &mut SfcExportedObjectHelper,
+    errors: &mut Vec<TransformError>,
 ) -> TransformMacroResult {
     let mut define_props = DefineProps::default();
     extract_from_define_props(call_expr, &mut define_props);
-    process_define_props_impl(ctx, define_props, is_var_decl, sfc_object_helper)
+    process_define_props_impl(
+        ctx,
+        define_props,
+        is_var_decl,
+        is_const,
+        is_ident,
+        var_bindings,
+        sfc_object_helper,
+        errors,
+    )
 }
 
 pub fn process_with_defaults(
     ctx: &mut TypeResolveContext,
     with_defaults_call: &CallExpr,
     is_var_decl: bool,
+    is_const: bool,
+    is_ident: bool,
+    var_bindings: Option<&mut Vec<SetupBinding>>,
     sfc_object_helper: &mut SfcExportedObjectHelper,
+    errors: &mut Vec<TransformError>,
 ) -> TransformMacroResult {
     macro_rules! bail_no_define_props {
         () => {
@@ -86,7 +103,16 @@ pub fn process_with_defaults(
     define_props.defaults = with_defaults_call.args.get(1).map(|v| v.expr.to_owned());
 
     // Process
-    process_define_props_impl(ctx, define_props, is_var_decl, sfc_object_helper)
+    process_define_props_impl(
+        ctx,
+        define_props,
+        is_var_decl,
+        is_const,
+        is_ident,
+        var_bindings,
+        sfc_object_helper,
+        errors,
+    )
 
     // TODO Implement a more generic `process_define_props_impl` function
     // which will return values to be assembled by `process_define_props` and `process_with_defaults`.
@@ -113,7 +139,11 @@ fn process_define_props_impl(
     ctx: &mut TypeResolveContext,
     define_props: DefineProps,
     is_var_decl: bool,
+    is_const: bool,
+    is_ident: bool,
+    var_bindings: Option<&mut Vec<SetupBinding>>,
     sfc_object_helper: &mut SfcExportedObjectHelper,
+    errors: &mut Vec<TransformError>,
 ) -> TransformMacroResult {
     // Check duplicate
     if sfc_object_helper.props.is_some() {
@@ -180,6 +210,25 @@ fn process_define_props_impl(
     // Return `__props` when in var mode. None otherwise - still a valid macro
     if is_var_decl {
         sfc_object_helper.is_setup_props_referenced = true;
+
+        // TODO Refactor `is_var_decl`, `is_const`, `is_ident`, `var_bindings` into a single helper
+        // TODO Condition here should look at `ObjectPat` instead
+        if define_props.defaults.is_none() && !is_ident {
+            process_props_destructure(ctx, errors);
+        }
+
+        // Binding type of the prop variable itself
+        if let Some(var_bindings) = var_bindings {
+            if is_ident && var_bindings.len() == 1 {
+                let binding = &mut var_bindings[0];
+                binding.1 = BindingTypes::SetupReactiveConst;
+            } else if is_const {
+                // `defineProps` with a destructured const variable is `SetupConst`
+                var_bindings
+                    .iter_mut()
+                    .for_each(|v| v.1 = BindingTypes::SetupConst);
+            }
+        }
 
         TransformMacroResult::ValidMacro(Some(Box::new(Expr::Ident(
             PROPS_HELPER
@@ -291,7 +340,7 @@ fn resolve_runtime_props_from_type(
         // Skip check for result containing unknown types
         let mut skip_check = false;
         if types.contains(Types::Unknown) {
-            if types.contains(Types::Boolean | Types::Function) {
+            if types.contains(Types::Boolean) || types.contains(Types::Function) {
                 types -= Types::Unknown;
                 skip_check = true;
             } else {
@@ -352,7 +401,11 @@ fn get_runtime_prop_from_type(
                         PropName::Ident(ref ident) => &key == &ident.sym,
                         PropName::Str(ref s) => &key == &s.value,
                         PropName::Num(ref n) => &key == &n.value.to_string(),
-                        PropName::Computed(_) => false,
+                        PropName::Computed(ref c) => match c.expr.as_ref() {
+                            Expr::Lit(Lit::Str(s)) => &key == &s.value,
+                            Expr::Lit(Lit::Num(n)) => &key == &n.value.to_string(),
+                            _ => false,
+                        },
                         PropName::BigInt(_) => false,
                     }
                 };
@@ -419,8 +472,6 @@ fn get_runtime_prop_from_type(
         }
     }
 
-    // Difference from official compiler: no key escaping happens, as we rely on SWC
-
     // For return value
     let mut prop_object_fields: Vec<PropOrSpread> = Vec::with_capacity(4);
 
@@ -436,14 +487,13 @@ fn get_runtime_prop_from_type(
         };
     }
 
+    // TODO Better span is probably possible (preserve prop name span)
+    let key = atom_to_propname(key.to_owned(), DUMMY_SP);
+
     macro_rules! return_value {
         ($prop_object_fields: ident) => {
             PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                // TODO Better span is probably possible (preserve prop name span)
-                key: PropName::Ident(IdentName {
-                    span: DUMMY_SP,
-                    sym: key.to_owned(),
-                }),
+                key,
                 value: Box::new(Expr::Object(ObjectLit {
                     // TODO Better span is probably possible (preserve prop defaults span?)
                     span: DUMMY_SP,
@@ -542,7 +592,10 @@ fn has_static_with_defaults(defaults: Option<&Expr>) -> bool {
             Prop::Assign(_) => return true,
         };
 
-        !matches!(key, PropName::Computed(_))
+        match key {
+            PropName::Computed(computed_prop_name) => computed_prop_name.expr.is_lit(),
+            _ => true,
+        }
     })
 }
 

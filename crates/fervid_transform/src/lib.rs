@@ -103,7 +103,8 @@ impl TransformSfcContext {
 
         TransformSfcContext {
             filename: options.filename.to_string(),
-            is_ce: false, // todo
+            is_ce: options.is_ce,
+            props_destructure: options.props_destructure,
             bindings_helper,
             deps: Default::default(),
             scopes: vec![],

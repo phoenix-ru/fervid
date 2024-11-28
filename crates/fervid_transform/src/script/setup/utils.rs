@@ -33,3 +33,14 @@ pub fn to_runtime_type_string(types: TypesSet) -> Box<Expr> {
         elems: array_elems,
     }))
 }
+
+pub fn unwrap_ts_node_expr(expr: &Expr) -> &Expr {
+    match expr {
+        Expr::TsConstAssertion(ts_const_assertion) => unwrap_ts_node_expr(&ts_const_assertion.expr),
+        Expr::TsNonNull(ts_non_null_expr) => unwrap_ts_node_expr(&ts_non_null_expr.expr),
+        Expr::TsAs(ts_as_expr) => unwrap_ts_node_expr(&ts_as_expr.expr),
+        Expr::TsInstantiation(ts_instantiation) => unwrap_ts_node_expr(&ts_instantiation.expr),
+        Expr::TsSatisfies(ts_satisfies_expr) => unwrap_ts_node_expr(&ts_satisfies_expr.expr),
+        _ => expr
+    }
+}
