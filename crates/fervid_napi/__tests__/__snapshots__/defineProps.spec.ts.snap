@@ -399,8 +399,9 @@ export default _defineComponent({
             required: true
         },
         unknownUnionWithFunction: {
-            type: null,
-            required: true
+            type: Function,
+            required: true,
+            skipCheck: true
         },
         set: {
             type: Set,
@@ -418,8 +419,9 @@ export default _defineComponent({
             required: true
         },
         unknownUnionWithBoolean: {
-            type: null,
-            required: true
+            type: Boolean,
+            required: true,
+            skipCheck: true
         },
         recordRef: {
             type: Object,

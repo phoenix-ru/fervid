@@ -295,17 +295,16 @@ const props = defineProps({ foo: String })
             type: Object,
             required: true
         }`)
-        // TODO Fix
-        // expect(content).toMatch(`unknownUnionWithBoolean: {
-        //     type: Boolean,
-        //     required: true,
-        //     skipCheck: true
-        // }`)
-        // expect(content).toMatch(`unknownUnionWithFunction: {
-        //     type: Function,
-        //     required: true,
-        //     skipCheck: true
-        // }`)
+        expect(content).toMatch(`unknownUnionWithBoolean: {
+            type: Boolean,
+            required: true,
+            skipCheck: true
+        }`)
+        expect(content).toMatch(`unknownUnionWithFunction: {
+            type: Function,
+            required: true,
+            skipCheck: true
+        }`)
         expect(bindings).toStrictEqual({
             string: BindingTypes.PROPS,
             number: BindingTypes.PROPS,

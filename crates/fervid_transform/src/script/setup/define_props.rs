@@ -340,7 +340,7 @@ fn resolve_runtime_props_from_type(
         // Skip check for result containing unknown types
         let mut skip_check = false;
         if types.contains(Types::Unknown) {
-            if types.contains(Types::Boolean | Types::Function) {
+            if types.contains(Types::Boolean) || types.contains(Types::Function) {
                 types -= Types::Unknown;
                 skip_check = true;
             } else {
