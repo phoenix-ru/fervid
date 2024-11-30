@@ -1,15 +1,15 @@
 {
   "name": "@fervid/napi-linux-arm-gnueabihf",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "os": [
     "linux"
   ],
   "cpu": [
     "arm"
   ],
-  "main": "napi.linux-arm-gnueabihf.node",
+  "main": "fervid.linux-arm-gnueabihf.node",
   "files": [
-    "napi.linux-arm-gnueabihf.node"
+    "fervid.linux-arm-gnueabihf.node"
   ],
   "description": "All-in-One Vue compiler written in Rust",
   "keywords": [

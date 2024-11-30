@@ -1,15 +1,15 @@
 {
   "name": "@fervid/napi-android-arm-eabi",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "os": [
     "android"
   ],
   "cpu": [
     "arm"
   ],
-  "main": "napi.android-arm-eabi.node",
+  "main": "fervid.android-arm-eabi.node",
   "files": [
-    "napi.android-arm-eabi.node"
+    "fervid.android-arm-eabi.node"
   ],
   "description": "All-in-One Vue compiler written in Rust",
   "keywords": [
