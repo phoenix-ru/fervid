@@ -34,7 +34,10 @@ const unplugin = createUnplugin(({ mode = 'production', hmr = false }, meta) => 
     },
 
     transform(code, id) {
-      const compileResult = compiler.compileSync(code)
+      const compileResult = compiler.compileSync(code, {
+        id: id,
+        filename: id,
+      })
 
       /** @type {string[]} */
       const assetImports = []
