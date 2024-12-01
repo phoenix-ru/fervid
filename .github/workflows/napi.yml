@@ -53,7 +53,7 @@ jobs:
           - host: macos-latest
             target: x86_64-apple-darwin
             build: |
-              yarn build
+              corepack enable && yarn build
               strip -x *.node
 
           - host: macos-latest
