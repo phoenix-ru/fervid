@@ -63,7 +63,7 @@ impl CodegenContext {
 
         // Hints on what was processed and what to do next
         let mut result_hints = GenerateAttributesResultHints::default();
-
+        println!("attributes: {:?}", attributes);
         for attribute in attributes {
             match attribute {
                 // First, we check the special case: `class` and `style` attributes
@@ -77,10 +77,30 @@ impl CodegenContext {
                     style_regular_attr = Some((value, *span));
                 }
 
+                // TODO Url processing based on different tags is performed. Currently, src is processed as a whole first
+                /**
+                * const defaultAssetUrlOptions = {
+                *   base: null,
+                *   includeAbsolute: false,
+                *   tags: {
+                       video: ['src', 'poster'],
+                       source: ['src'],
+                       img: ['src'],
+                       image: ['xlink:href', 'href'],
+                *     use: ['xlink:href', 'href'],
+                *   },
+                * }
+                */
                 // Any regular attribute will be added as an object entry,
                 // where key is attribute name and value is attribute value as string literal
                 AttributeOrBinding::RegularAttribute { name, value, span } => {
                     // let raw = Some(Atom::from(value.as_ref()));
+                    // TODO Temporarily solve the asset url problem of src
+                    let value = if name == "src" {
+                        self.process_asset_url(value, span)
+                    } else {
+                        value.to_owned()
+                    };
 
                     out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                         KeyValueProp {
@@ -524,6 +544,19 @@ impl CodegenContext {
         }
 
         has_js_bindings
+    }
+
+    fn process_asset_url(&self, value: &FervidAtom, span: &Span) -> FervidAtom {
+        println!("process_asset_url: {:?}", value);
+        let path = value.as_ref();
+        
+        if path.starts_with("./") {
+            let new_path = format!("src/{}", &path[2..]);
+            println!("new_path: {:?}", new_path);
+            FervidAtom::from(new_path)
+        } else {
+            value.to_owned()
+        }
     }
 }
 
