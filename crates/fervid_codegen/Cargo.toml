@@ -19,6 +19,7 @@ fxhash = { workspace = true }
 smallvec = { workspace = true }
 regex = "1"
 flagset = "0.4.3"
+url = "2.5.0"
 
 [dev-dependencies]
 panic-message = "0.3.0"

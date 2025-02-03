@@ -5,16 +5,6 @@ use std::collections::HashMap;
 pub type AssetURLTagConfig = HashMap<String, Vec<String>>;
 
 #[derive(Debug, Clone)]
-pub enum TransformAssetUrls {
-    /// Enable/disable asset URL transformation
-    Boolean(bool),
-    /// Detailed configuration for asset URL transformation
-    Config(AssetURLOptions),
-    /// Direct tag configuration
-    TagConfig(AssetURLTagConfig),
-}
-
-#[derive(Debug, Clone)]
 pub struct AssetURLOptions {
     /// Base path for rewriting URLs
     pub base: Option<String>,
@@ -22,6 +12,16 @@ pub struct AssetURLOptions {
     pub include_absolute: bool,
     /// Tag-specific configuration
     pub tags: Option<AssetURLTagConfig>,
+}
+
+#[derive(Debug, Clone)]
+pub enum TransformAssetUrls {
+    // TODO 
+    // export interface AssetURLTagConfig {
+    //     [name: string]: string[]
+    //   }
+    Boolean(bool),
+    Options(AssetURLOptions),
 }
 
 impl Default for TransformAssetUrls {
@@ -42,7 +42,7 @@ impl Default for TransformAssetUrls {
             vec!["xlink:href".to_string(), "href".to_string()],
         );
 
-        TransformAssetUrls::Config(AssetURLOptions {
+        TransformAssetUrls::Options(AssetURLOptions {
             base: None,
             include_absolute: false,
             tags: Some(tags),

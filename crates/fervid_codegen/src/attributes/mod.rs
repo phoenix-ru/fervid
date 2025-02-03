@@ -1,3 +1,4 @@
+use fervid_core::options::TransformAssetUrls;
 use fervid_core::{
     fervid_atom, str_to_propname, AttributeOrBinding, FervidAtom, IntoIdent, StrOrExpr,
     VBindDirective, VOnDirective, VueImports,
@@ -12,6 +13,9 @@ use swc_core::{
     },
 };
 
+use std::path::Path;
+use url::Url;
+
 use crate::context::CodegenContext;
 
 lazy_static! {
@@ -23,6 +27,51 @@ lazy_static! {
 /// Only `v-on` and `v-bind` as well as `v-model` for components generate attribute code.
 /// Other directives have their own specifics of code generation, which are handled separately.
 // pub type DirectivesToProcess<'i> = SmallVec<[&'i VDirective<'i>; 2]>;
+
+#[derive(Debug, Clone)]
+struct ParsedUrl {
+    protocol: Option<String>,
+    host: Option<String>,
+    path: String,
+    hash: Option<String>,
+}
+
+impl ParsedUrl {
+    fn parse(url_str: &str) -> Option<Self> {
+        let url_str = if url_str.starts_with('~') {
+            if url_str.chars().nth(1) == Some('/') {
+                &url_str[2..]
+            } else {
+                &url_str[1..]
+            }
+        } else {
+            url_str
+        };
+
+        if let Ok(parsed) = Url::parse(url_str) {
+            return Some(ParsedUrl {
+                protocol: Some(parsed.scheme().to_string()),
+                host: parsed.host_str().map(|h| h.to_string()),
+                path: parsed.path().to_string(),
+                hash: parsed.fragment().map(|f| format!("#{}", f)),
+            });
+        }
+
+        let path = Path::new(url_str);
+        let (path_str, hash) = if let Some(hash_idx) = url_str.find('#') {
+            (&url_str[..hash_idx], Some(url_str[hash_idx..].to_string()))
+        } else {
+            (url_str, None)
+        };
+
+        Some(ParsedUrl {
+            protocol: None,
+            host: None,
+            path: path_str.to_string(),
+            hash,
+        })
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct GenerateAttributesResultHints<'i> {
@@ -63,7 +112,6 @@ impl CodegenContext {
 
         // Hints on what was processed and what to do next
         let mut result_hints = GenerateAttributesResultHints::default();
-        println!("attributes: {:?}", attributes);
         for attribute in attributes {
             match attribute {
                 // First, we check the special case: `class` and `style` attributes
@@ -547,16 +595,63 @@ impl CodegenContext {
     }
 
     fn process_asset_url(&self, value: &FervidAtom, span: &Span) -> FervidAtom {
-        println!("process_asset_url: {:?}", value);
-        let path = value.as_ref();
-        
-        if path.starts_with("./") {
-            let new_path = format!("src/{}", &path[2..]);
-            println!("new_path: {:?}", new_path);
-            FervidAtom::from(new_path)
-        } else {
-            value.to_owned()
+        let url_str = value.as_ref();
+        let url = match ParsedUrl::parse(url_str) {
+            Some(url) => url,
+            None => return value.clone(),
+        };
+
+        if let TransformAssetUrls::Options(options) = &self.transform_asset_urls {
+            // Check if it's a relative path
+            let is_relative = url_str.starts_with("./") || url_str.starts_with("../");
+
+            if is_relative {
+                if let Some(base) = &options.base {
+                    let base_url = match ParsedUrl::parse(base) {
+                        Some(url) => url,
+                        None => return value.clone(),
+                    };
+
+                    let protocol = base_url.protocol.unwrap_or_default();
+                    let host = if let Some(host) = base_url.host {
+                        format!("{}//{}", protocol, host)
+                    } else {
+                        String::new()
+                    };
+
+                    // Ensure base_path has the correct format
+                    let base_path = if base_url.path.is_empty() {
+                        "/".to_string()
+                    } else if !base_url.path.starts_with('/') {
+                        format!("/{}", base_url.path)
+                    } else {
+                        base_url.path
+                    };
+
+                    // Handle different types of relative paths
+                    let clean_path = if url.path.starts_with("./") {
+                        url.path.trim_start_matches("./")
+                    } else if url.path.starts_with("../") {
+                        // Keep the ../ prefix for Path::join to handle correctly
+                        &url.path
+                    } else {
+                        &url.path
+                    };
+
+                    // Use base_path as the foundation for path joining
+                    let path = Path::new(&base_path)
+                        .join(clean_path)
+                        .to_string_lossy()
+                        .into_owned();
+
+                    let final_url = format!("{}{}{}", host, path, url.hash.unwrap_or_default());
+
+                    return FervidAtom::from(final_url);
+                }
+            }
         }
+
+        value.clone()
     }
 }
 

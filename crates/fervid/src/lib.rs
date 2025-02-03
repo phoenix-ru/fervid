@@ -60,7 +60,8 @@ use fervid_codegen::CodegenContext;
 pub use fervid_core::*;
 use fervid_parser::SfcParser;
 use fervid_transform::{
-    style::should_transform_style_block, transform_sfc, PropsDestructureConfig, SetupBinding, TransformSfcOptions
+    style::should_transform_style_block, transform_sfc, PropsDestructureConfig, SetupBinding,
+    TransformSfcOptions,
 };
 use fxhash::FxHasher32;
 use std::{
@@ -95,7 +96,7 @@ pub struct CompileOptions<'o> {
     // preprocessCustomRequire?: (id: string) => any;
     // Configure what tags/attributes to transform into asset url imports,
     // or disable the transform altogether with `false`.
-    // transformAssetUrls?: AssetURLOptions | AssetURLTagConfig | boolean;
+    pub transform_asset_urls: Option<TransformAssetUrls>,
 
     // script
     pub gen_default_as: Option<Cow<'o, str>>,
@@ -165,7 +166,10 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
     all_errors.extend(transform_errors.into_iter().map(From::from));
 
     // Codegen
-    let mut ctx = CodegenContext::with_bindings_helper(transform_result.bindings_helper);
+    let mut ctx = CodegenContext::with_bindings_helper(
+        transform_result.bindings_helper,
+        options.transform_asset_urls,
+    );
 
     let template_expr: Option<Expr> = transform_result
         .template_block
@@ -261,7 +265,7 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
     let transform_result = transform_sfc(sfc, transform_options, &mut transform_errors);
 
     // Codegen
-    let mut ctx = CodegenContext::with_bindings_helper(transform_result.bindings_helper);
+    let mut ctx = CodegenContext::with_bindings_helper(transform_result.bindings_helper, None);
 
     let template_expr: Option<Expr> = transform_result
         .template_block

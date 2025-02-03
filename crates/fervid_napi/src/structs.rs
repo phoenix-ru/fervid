@@ -1,7 +1,8 @@
+use crate::transform_types::NapiAssetUrlOptions;
+use fervid_core::options::TransformAssetUrls;
 use napi::{Either, JsObject};
 use napi_derive::napi;
 use swc_core::common::Spanned;
-use std::collections::HashMap;
 
 /// Fervid: a compiler for Vue.js written in Rust
 #[napi(js_name = "Compiler")]
@@ -53,25 +54,7 @@ pub struct FervidJsCompilerOptions {
 #[derive(Clone)]
 pub struct FervidJsCompilerOptionsTemplate {
     /// Options for transforming asset URLs in template
-    pub transform_asset_urls: Option<TransformAssetUrls>,
-}
-
-/// Asset URL tag configuration
-/// Example: { "img": ["src"], "link": ["href"] }
-pub type AssetURLTagConfig = HashMap<String, Vec<String>>;
-
-/// Options for transforming asset URLs
-#[derive(Debug, Clone, Default)]
-pub struct TransformAssetUrls {
-    /// If base is provided, instead of transforming relative asset urls into
-    /// imports, they will be directly rewritten to absolute urls.
-    pub base: Option<String>,
-
-    /// If true, also processes absolute urls.
-    pub include_absolute: Option<bool>,
-
-    /// Configuration for which tags and attributes should be transformed
-    pub tags: Option<AssetURLTagConfig>,
+    pub transform_asset_urls: Option<NapiAssetUrlOptions>,
 }
 
 #[napi(object)]
@@ -116,6 +99,10 @@ pub struct FervidCompileOptions {
 
     /// Whether setup bindings need to be serialized
     pub output_setup_bindings: Option<bool>,
+
+    /// Transform asset URLs
+    #[napi(js_name = "transformAssetUrls")]
+    pub transform_asset_urls: Option<NapiAssetUrlOptions>,
 }
 
 #[napi(object)]

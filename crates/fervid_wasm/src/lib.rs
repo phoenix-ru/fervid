@@ -38,6 +38,7 @@ pub fn compile_sync(source: &str, is_prod: Option<bool>) -> Result<WasmCompileRe
             ssr: Some(false),
             gen_default_as: None,
             source_map: None,
+            transform_asset_urls: None,
         },
     );
 
