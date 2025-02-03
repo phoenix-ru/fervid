@@ -30,7 +30,7 @@
 //! let transform_result = fervid_transform::transform_sfc(sfc, transform_options, &mut transform_errors);
 //!
 //! // Create the context and generate the template block
-//! let mut ctx = fervid_codegen::CodegenContext::with_bindings_helper(transform_result.bindings_helper);
+//! let mut ctx = fervid_codegen::CodegenContext::with_bindings_helper(transform_result.bindings_helper, None);
 //!
 //! let template_expr: Option<Expr> = transform_result.template_block.and_then(|template_block| {
 //!     ctx.generate_sfc_template(&template_block)
