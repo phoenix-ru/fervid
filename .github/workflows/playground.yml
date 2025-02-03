@@ -33,7 +33,7 @@ jobs:
       run: wasm-pack build --target web
     - name: Upload GitHub Pages artifact
       if: ${{ github.ref == 'refs/heads/master' }}
-      uses: actions/upload-pages-artifact@v2.0.0
+      uses: actions/upload-pages-artifact@v3
       with:
         # Artifact name
         name: github-pages # optional, default is github-pages
