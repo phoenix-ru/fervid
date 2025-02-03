@@ -207,10 +207,14 @@ fn process_define_props_impl(
     // LHS is guaranteed to be None because of the duplicate check.
     sfc_object_helper.props = props_expr;
 
+    // TODO: This technically depends on the usage inside `<template>`,
+    // however, by the order of operations scripts are processed earlier than `<template>`,
+    // so usage can't be properly inferred yet
+    // https://github.com/phoenix-ru/fervid/issues/65
+    sfc_object_helper.is_setup_props_referenced = true;
+
     // Return `__props` when in var mode. None otherwise - still a valid macro
     if is_var_decl {
-        sfc_object_helper.is_setup_props_referenced = true;
-
         // TODO Refactor `is_var_decl`, `is_const`, `is_ident`, `var_bindings` into a single helper
         // TODO Condition here should look at `ObjectPat` instead
         if define_props.defaults.is_none() && !is_ident {
