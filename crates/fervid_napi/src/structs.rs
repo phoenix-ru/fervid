@@ -1,3 +1,5 @@
+use crate::transform_types::NapiAssetUrlOptions;
+use fervid_core::options::TransformAssetUrls;
 use napi::{Either, JsObject};
 use napi_derive::napi;
 use swc_core::common::Spanned;
@@ -50,7 +52,10 @@ pub struct FervidJsCompilerOptions {
 
 #[napi(object)]
 #[derive(Clone)]
-pub struct FervidJsCompilerOptionsTemplate {}
+pub struct FervidJsCompilerOptionsTemplate {
+    /// Options for transforming asset URLs in template
+    pub transform_asset_urls: Option<NapiAssetUrlOptions>,
+}
 
 #[napi(object)]
 #[derive(Clone)]
@@ -94,6 +99,10 @@ pub struct FervidCompileOptions {
 
     /// Whether setup bindings need to be serialized
     pub output_setup_bindings: Option<bool>,
+
+    /// Transform asset URLs
+    #[napi(js_name = "transformAssetUrls")]
+    pub transform_asset_urls: Option<NapiAssetUrlOptions>,
 }
 
 #[napi(object)]

@@ -837,6 +837,7 @@ dependencies = [
  "swc_core",
  "swc_ecma_codegen",
  "swc_ecma_parser 0.152.2",
+ "url",
 ]
 
 [[package]]
@@ -880,6 +881,7 @@ version = "0.2.0"
 dependencies = [
  "fervid",
  "fervid_codegen",
+ "fervid_core",
  "fervid_transform",
  "mimalloc-rust",
  "napi",

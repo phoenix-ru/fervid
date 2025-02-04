@@ -16,6 +16,7 @@ use structs::{
 };
 
 mod structs;
+mod transform_types;
 
 #[napi]
 impl FervidJsCompiler {
@@ -77,6 +78,7 @@ fn compile_impl(
             .as_ref()
             .map(|v| Cow::Borrowed(v.as_str())),
         source_map: compiler.options.source_map,
+        transform_asset_urls: options.transform_asset_urls.as_ref().map(Into::into),
     };
 
     compile(source, compile_options).map_err(|e| Error::from_reason(e.to_string()))
