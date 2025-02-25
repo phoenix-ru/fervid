@@ -148,7 +148,7 @@ export const enum BindingTypes {
 export interface NapiAssetUrlOptions {
   base?: string
   includeAbsolute?: boolean
-  tags?: Record<string, Array<string>>
+  tags?: FxHashMap
 }
 export type FervidJsCompiler = Compiler
 /** Fervid: a compiler for Vue.js written in Rust */

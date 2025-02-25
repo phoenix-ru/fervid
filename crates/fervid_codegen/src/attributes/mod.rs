@@ -144,11 +144,11 @@ impl CodegenContext {
                 AttributeOrBinding::RegularAttribute { name, value, span } => {
                     // let raw = Some(Atom::from(value.as_ref()));
                     // TODO Temporarily solve the asset url problem of src
-                    let value = if name == "src" {
-                        self.process_asset_url(value, span)
-                    } else {
-                        value.to_owned()
-                    };
+                    // let value = if name == "src" {
+                    //     self.process_asset_url(value, span)
+                    // } else {
+                    //     value.to_owned()
+                    // };
 
                     out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                         KeyValueProp {
@@ -594,65 +594,65 @@ impl CodegenContext {
         has_js_bindings
     }
 
-    fn process_asset_url(&self, value: &FervidAtom, span: &Span) -> FervidAtom {
-        let url_str = value.as_ref();
-        let url = match ParsedUrl::parse(url_str) {
-            Some(url) => url,
-            None => return value.clone(),
-        };
+    // fn process_asset_url(&self, value: &FervidAtom, span: &Span) -> FervidAtom {
+    //     let url_str = value.as_ref();
+    //     let url = match ParsedUrl::parse(url_str) {
+    //         Some(url) => url,
+    //         None => return value.clone(),
+    //     };
 
-        if let TransformAssetUrls::Options(options) = &self.transform_asset_urls {
-            // Check if it's a relative path
-            let is_relative = url_str.starts_with("./") || url_str.starts_with("../");
+    //     if let TransformAssetUrls::Options(options) = &self.transform_asset_urls {
+    //         // Check if it's a relative path
+    //         let is_relative = url_str.starts_with("./") || url_str.starts_with("../");
 
-            if is_relative {
-                if let Some(base) = &options.base {
-                    let base_url = match ParsedUrl::parse(base) {
-                        Some(url) => url,
-                        None => return value.clone(),
-                    };
+    //         if is_relative {
+    //             if let Some(base) = &options.base {
+    //                 let base_url = match ParsedUrl::parse(base) {
+    //                     Some(url) => url,
+    //                     None => return value.clone(),
+    //                 };
 
-                    let protocol = base_url.protocol.unwrap_or_default();
-                    let host = if let Some(host) = base_url.host {
-                        format!("{}//{}", protocol, host)
-                    } else {
-                        String::new()
-                    };
+    //                 let protocol = base_url.protocol.unwrap_or_default();
+    //                 let host = if let Some(host) = base_url.host {
+    //                     format!("{}//{}", protocol, host)
+    //                 } else {
+    //                     String::new()
+    //                 };
 
-                    // Ensure base_path has the correct format
-                    let base_path = if base_url.path.is_empty() {
-                        "/".to_string()
-                    } else if !base_url.path.starts_with('/') {
-                        format!("/{}", base_url.path)
-                    } else {
-                        base_url.path
-                    };
+    //                 // Ensure base_path has the correct format
+    //                 let base_path = if base_url.path.is_empty() {
+    //                     "/".to_string()
+    //                 } else if !base_url.path.starts_with('/') {
+    //                     format!("/{}", base_url.path)
+    //                 } else {
+    //                     base_url.path
+    //                 };
 
-                    // Handle different types of relative paths
-                    let clean_path = if url.path.starts_with("./") {
-                        url.path.trim_start_matches("./")
-                    } else if url.path.starts_with("../") {
-                        // Keep the ../ prefix for Path::join to handle correctly
-                        &url.path
-                    } else {
-                        &url.path
-                    };
+    //                 // Handle different types of relative paths
+    //                 let clean_path = if url.path.starts_with("./") {
+    //                     url.path.trim_start_matches("./")
+    //                 } else if url.path.starts_with("../") {
+    //                     // Keep the ../ prefix for Path::join to handle correctly
+    //                     &url.path
+    //                 } else {
+    //                     &url.path
+    //                 };
 
-                    // Use base_path as the foundation for path joining
-                    let path = Path::new(&base_path)
-                        .join(clean_path)
-                        .to_string_lossy()
-                        .into_owned();
+    //                 // Use base_path as the foundation for path joining
+    //                 let path = Path::new(&base_path)
+    //                     .join(clean_path)
+    //                     .to_string_lossy()
+    //                     .into_owned();
 
-                    let final_url = format!("{}{}{}", host, path, url.hash.unwrap_or_default());
+    //                 let final_url = format!("{}{}{}", host, path, url.hash.unwrap_or_default());
 
-                    return FervidAtom::from(final_url);
-                }
-            }
-        }
+    //                 return FervidAtom::from(final_url);
+    //             }
+    //         }
+    //     }
 
-        value.clone()
-    }
+    //     value.clone()
+    // }
 }
 
 fn generate_regular_style(style: &str, span: Span) -> ObjectLit {

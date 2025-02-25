@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use fxhash::FxHashMap;
 
 /// Asset URL tag configuration
 /// Example: { "img": ["src"], "link": ["href"] }
-pub type AssetURLTagConfig = HashMap<String, Vec<String>>;
+pub type AssetURLTagConfig = FxHashMap<String, Vec<String>>;
 
 #[derive(Debug, Clone)]
 pub struct AssetURLOptions {
@@ -26,7 +26,7 @@ pub enum TransformAssetUrls {
 
 impl Default for TransformAssetUrls {
     fn default() -> Self {
-        let mut tags = HashMap::new();
+        let mut tags = FxHashMap::default();
         tags.insert(
             "video".to_string(),
             vec!["src".to_string(), "poster".to_string()],

@@ -30,7 +30,7 @@
 //! let transform_result = fervid_transform::transform_sfc(sfc, transform_options, &mut transform_errors);
 //!
 //! // Create the context and generate the template block
-//! let mut ctx = fervid_codegen::CodegenContext::with_bindings_helper(transform_result.bindings_helper, None);
+//! let mut ctx = fervid_codegen::CodegenContext::with_bindings_helper(transform_result.bindings_helper);
 //!
 //! let template_expr: Option<Expr> = transform_result.template_block.and_then(|template_block| {
 //!     ctx.generate_sfc_template(&template_block)
@@ -166,10 +166,7 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
     all_errors.extend(transform_errors.into_iter().map(From::from));
 
     // Codegen
-    let mut ctx = CodegenContext::with_bindings_helper(
-        transform_result.bindings_helper,
-        options.transform_asset_urls,
-    );
+    let mut ctx = CodegenContext::with_bindings_helper(transform_result.bindings_helper);
 
     let template_expr: Option<Expr> = transform_result
         .template_block
@@ -265,7 +262,7 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
     let transform_result = transform_sfc(sfc, transform_options, &mut transform_errors);
 
     // Codegen
-    let mut ctx = CodegenContext::with_bindings_helper(transform_result.bindings_helper, None);
+    let mut ctx = CodegenContext::with_bindings_helper(transform_result.bindings_helper);
 
     let template_expr: Option<Expr> = transform_result
         .template_block

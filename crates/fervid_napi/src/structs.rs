@@ -77,7 +77,7 @@ pub struct FervidJsCompilerOptionsStyle {
 }
 
 #[napi(object)]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FervidCompileOptions {
     /// Scope ID for prefixing injected CSS variables
     pub id: String,

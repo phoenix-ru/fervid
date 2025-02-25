@@ -883,6 +883,7 @@ dependencies = [
  "fervid_codegen",
  "fervid_core",
  "fervid_transform",
+ "fxhash",
  "mimalloc-rust",
  "napi",
  "napi-build",

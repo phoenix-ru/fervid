@@ -24,6 +24,7 @@ fervid_core = { path="../fervid_core", version = "0.2" }
 fervid_codegen = { path = "../fervid_codegen", version = "0.2" }
 fervid_transform = { path = "../fervid_transform", version = "0.2" }
 swc_core = { workspace = true }
+fxhash = { workspace = true }
 
 napi = "2"
 napi-derive = "2"

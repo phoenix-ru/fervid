@@ -1,16 +1,16 @@
 use fervid_core::options::{
     AssetURLOptions as CoreAssetURLOptions, TransformAssetUrls as CoreTransformAssetUrls,
 };
+use fxhash::FxHashMap;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use std::collections::HashMap;
 
 #[napi(object)]
 #[derive(Clone, Debug)]
 pub struct NapiAssetUrlOptions {
     pub base: Option<String>,
     pub include_absolute: Option<bool>,
-    pub tags: Option<HashMap<String, Vec<String>>>,
+    pub tags: Option<FxHashMap<String, Vec<String>>>,
 }
 
 impl From<NapiAssetUrlOptions> for CoreTransformAssetUrls {
