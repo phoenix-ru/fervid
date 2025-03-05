@@ -3,8 +3,9 @@
 use std::{cell::RefCell, rc::Rc};
 
 use fervid_core::{
-    BindingTypes, ComponentBinding, CustomDirectiveBinding, FervidAtom, SfcCustomBlock,
-    SfcStyleBlock, SfcTemplateBlock, TemplateGenerationMode, VueImportsSet,
+    AssetURLOptions, BindingTypes, ComponentBinding, CustomDirectiveBinding, FervidAtom,
+    SfcCustomBlock, SfcStyleBlock, SfcTemplateBlock, TemplateGenerationMode, TransformAssetUrls,
+    VueImportsSet,
 };
 use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use smallvec::SmallVec;
@@ -22,6 +23,7 @@ pub struct TransformSfcContext {
     pub is_ce: bool,
     pub bindings_helper: BindingsHelper,
     pub deps: HashSet<String>,
+    pub transform_asset_urls: Option<TransformAssetUrls>,
     pub(crate) scopes: Vec<TypeScopeContainer>,
 }
 
@@ -30,7 +32,7 @@ pub enum PropsDestructureConfig {
     #[default]
     False,
     True,
-    Error
+    Error,
 }
 
 /// A helper which encompasses all the logic related to bindings,
@@ -195,6 +197,7 @@ pub struct TransformSfcOptions<'s> {
     pub props_destructure: PropsDestructureConfig,
     pub scope_id: &'s str,
     pub filename: &'s str,
+    pub transform_asset_urls: Option<TransformAssetUrls>,
 }
 
 pub struct TransformSfcResult {
@@ -225,6 +228,7 @@ impl TransformSfcContext {
             props_destructure: PropsDestructureConfig::default(),
             deps: HashSet::default(),
             scopes: vec![],
+            transform_asset_urls: None,
         }
     }
 }

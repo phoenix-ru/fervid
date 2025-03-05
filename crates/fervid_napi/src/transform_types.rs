@@ -2,7 +2,6 @@ use fervid_core::options::{
     AssetURLOptions as CoreAssetURLOptions, TransformAssetUrls as CoreTransformAssetUrls,
 };
 use fxhash::FxHashMap;
-use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
 #[napi(object)]
@@ -11,16 +10,6 @@ pub struct NapiAssetUrlOptions {
     pub base: Option<String>,
     pub include_absolute: Option<bool>,
     pub tags: Option<FxHashMap<String, Vec<String>>>,
-}
-
-impl From<NapiAssetUrlOptions> for CoreTransformAssetUrls {
-    fn from(value: NapiAssetUrlOptions) -> Self {
-        CoreTransformAssetUrls::Options(CoreAssetURLOptions {
-            base: value.base,
-            include_absolute: value.include_absolute.unwrap_or(false),
-            tags: value.tags,
-        })
-    }
 }
 
 impl From<&NapiAssetUrlOptions> for CoreTransformAssetUrls {

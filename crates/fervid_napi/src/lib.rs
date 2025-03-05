@@ -78,7 +78,18 @@ fn compile_impl(
             .as_ref()
             .map(|v| Cow::Borrowed(v.as_str())),
         source_map: compiler.options.source_map,
-        transform_asset_urls: compiler.options.template.transform_asset_urls.as_ref().map(Into::into),
+        transform_asset_urls: options
+            .transform_asset_urls
+            .as_ref()
+            .map(Into::into)
+            .or_else(|| {
+                compiler
+                    .options
+                    .template
+                    .as_ref()
+                    .and_then(|template| template.transform_asset_urls.as_ref())
+                    .map(Into::into)
+            }),
     };
 
     compile(source, compile_options).map_err(|e| Error::from_reason(e.to_string()))

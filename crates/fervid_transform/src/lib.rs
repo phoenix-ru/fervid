@@ -45,7 +45,7 @@ pub fn transform_sfc<'o>(
     // Transform the template if it is present
     let mut template_block = None;
     if let Some(mut template) = sfc_descriptor.template {
-        transform_and_record_template(&mut template, &mut ctx.bindings_helper);
+        transform_and_record_template(&mut template, &mut ctx);
         if !template.roots.is_empty() {
             template_block = Some(template);
         }
@@ -108,6 +108,7 @@ impl TransformSfcContext {
             bindings_helper,
             deps: Default::default(),
             scopes: vec![],
+            transform_asset_urls: options.transform_asset_urls.clone(),
         }
     }
 

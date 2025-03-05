@@ -21,6 +21,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 swc_core = { workspace = true, features = ["common", "ecma_ast", "ecma_visit"] }
 itertools = "*"
+url = "*"
 
 [dev-dependencies]
 swc_ecma_codegen = { workspace = true }

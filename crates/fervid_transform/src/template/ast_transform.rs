@@ -6,11 +6,11 @@ use fervid_core::{
 };
 use smallvec::SmallVec;
 use swc_core::{
-    common::DUMMY_SP,
+    common::{Span, DUMMY_SP},
     ecma::ast::{Bool, Expr, Lit},
 };
 
-use crate::{BindingsHelper, TemplateScope};
+use crate::{template::asset_url, BindingsHelper, TemplateScope, TransformSfcContext};
 
 use super::{collect_vars::collect_variables, expr_transform::BindingsHelperTransform};
 
@@ -28,7 +28,7 @@ pub struct TemplateVisitor<'s> {
 /// - Transforming Js expressions by resolving variables inside them.
 pub fn transform_and_record_template(
     template: &mut SfcTemplateBlock,
-    bindings_helper: &mut BindingsHelper,
+    ctx: &mut TransformSfcContext,
 ) {
     // Optimize conditional sequences within template root
     optimize_children(&mut template.roots, ElementKind::Element);
@@ -56,9 +56,16 @@ pub fn transform_and_record_template(
         });
         template.roots.push(new_root);
     }
+    if let Some(asset_url_options) = &ctx.transform_asset_urls {
+        // 为每个根节点处理资源 URL
+        println!("asset_url_options: {:#?}", asset_url_options);
+        for root in &mut template.roots {
+            asset_url::transform_asset_urls(root, asset_url_options, &ctx.filename);
+        }
+    }
 
     let mut template_visitor = TemplateVisitor {
-        bindings_helper,
+        bindings_helper: &mut ctx.bindings_helper,
         current_scope: 0,
         v_for_scope: false,
     };
