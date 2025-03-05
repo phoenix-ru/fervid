@@ -96,6 +96,8 @@ pub struct CompileOptions<'o> {
     // preprocessCustomRequire?: (id: string) => any;
     // Configure what tags/attributes to transform into asset url imports,
     // or disable the transform altogether with `false`.
+    // transformAssetUrls?: AssetURLOptions | AssetURLTagConfig | boolean;
+    // TODO add enum options for transform_asset_urls
     pub transform_asset_urls: Option<TransformAssetUrls>,
 
     // script

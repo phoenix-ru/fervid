@@ -16,10 +16,6 @@ pub struct AssetURLOptions {
 
 #[derive(Debug, Clone)]
 pub enum TransformAssetUrls {
-    // TODO 
-    // export interface AssetURLTagConfig {
-    //     [name: string]: string[]
-    //   }
     Boolean(bool),
     Options(AssetURLOptions),
 }

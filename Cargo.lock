@@ -837,7 +837,6 @@ dependencies = [
  "swc_core",
  "swc_ecma_codegen",
  "swc_ecma_parser 0.152.2",
- "url",
 ]
 
 [[package]]

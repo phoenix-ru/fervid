@@ -10,16 +10,19 @@ license = "Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fervid_core = { path="../fervid_core", version = "0.2" }
-fervid_transform = { path="../fervid_transform", version="0.2" }
+fervid_core = { path = "../fervid_core", version = "0.2" }
+fervid_transform = { path = "../fervid_transform", version = "0.2" }
 lazy_static = { workspace = true }
-swc_core = { workspace = true, features = ["ecma_ast", "ecma_visit", "common_sourcemap"] }
+swc_core = { workspace = true, features = [
+  "ecma_ast",
+  "ecma_visit",
+  "common_sourcemap",
+] }
 swc_ecma_codegen = { workspace = true }
 fxhash = { workspace = true }
 smallvec = { workspace = true }
 regex = "1"
 flagset = "0.4.3"
-url = "2.5.0"
 
 [dev-dependencies]
 panic-message = "0.3.0"

@@ -1,4 +1,5 @@
 use fervid_transform::BindingsHelper;
+
 #[derive(Debug, Default)]
 pub struct CodegenContext {
     pub bindings_helper: BindingsHelper,
