@@ -9,7 +9,7 @@ use napi_derive::napi;
 pub struct NapiAssetUrlOptions {
     pub base: Option<String>,
     pub include_absolute: Option<bool>,
-    pub tags: Option<FxHashMap<String, Vec<String>>>,
+    pub tags: FxHashMap<String, Vec<String>>,
 }
 
 impl From<&NapiAssetUrlOptions> for CoreTransformAssetUrls {

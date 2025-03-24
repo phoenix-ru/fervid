@@ -13,21 +13,13 @@ pub fn transform_asset_urls(
 ) {
     // TODO add default options TransformAssetUrls with enum add boolean type
     let options = match transform_option {
-        TransformAssetUrls::Boolean(false) => return, // 如果是 false，直接返回不处理
+        TransformAssetUrls::Boolean(false) => return,
         TransformAssetUrls::Boolean(true) => AssetURLOptions {
             base: None,
             include_absolute: false,
-            tags: Some(get_default_tags()),
+            tags: get_default_tags(),
         },
-        TransformAssetUrls::Options(ref opts) => {
-            if opts.tags.is_none() {
-                let mut new_opts = opts.clone();
-                new_opts.tags = Some(get_default_tags());
-                new_opts
-            } else {
-                opts.clone()
-            }
-        }
+        TransformAssetUrls::Options(ref opts) => opts.clone(),
     };
 
     transform_asset_urls_impl(node, &options, filename);
@@ -59,11 +51,10 @@ fn transform_element_asset_urls(
     options: &AssetURLOptions,
     filename: &str,
 ) {
-    if let Some(tags) = &options.tags {
-        if let Some(attrs) = tags.get(&element.starting_tag.tag_name.to_string()) {
-            for attr_name in attrs {
-                transform_element_attribute(element, attr_name, options, filename);
-            }
+    let tags = &options.tags;
+    if let Some(attrs) = tags.get(&element.starting_tag.tag_name.to_string()) {
+        for attr_name in attrs {
+            transform_element_attribute(element, attr_name, options, filename);
         }
     }
 

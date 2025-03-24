@@ -1,7 +1,7 @@
 use fxhash::FxHashMap;
 
-/// Asset URL tag configuration
-/// Example: { "img": ["src"], "link": ["href"] }
+// Asset URL tag configuration
+// Example: { "img": ["src"], "link": ["href"] }
 pub type AssetURLTagConfig = FxHashMap<String, Vec<String>>;
 
 #[derive(Debug, Clone)]
@@ -11,7 +11,7 @@ pub struct AssetURLOptions {
     /// Whether to process absolute URLs
     pub include_absolute: bool,
     /// Tag-specific configuration
-    pub tags: Option<AssetURLTagConfig>,
+    pub tags: AssetURLTagConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -41,7 +41,7 @@ impl Default for TransformAssetUrls {
         TransformAssetUrls::Options(AssetURLOptions {
             base: None,
             include_absolute: false,
-            tags: Some(tags),
+            tags: tags,
         })
     }
 }
