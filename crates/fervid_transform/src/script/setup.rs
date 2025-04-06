@@ -28,7 +28,7 @@ mod define_emits;
 mod define_model;
 mod define_options;
 mod define_props;
-mod define_props_destructure;
+pub(super) mod define_props_destructure;
 mod define_slots;
 mod macros;
 mod utils;

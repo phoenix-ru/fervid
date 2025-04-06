@@ -37,6 +37,10 @@ pub enum ScriptErrorKind {
     DefineOptionsSlots,
     /// `Props destructure is explicitly prohibited via config.`
     DefinePropsDestructureForbidden,
+    /// `Props destructure cannot use computed key.`
+    DefinePropsDestructureCannotUseComputedKey,
+    /// `Props destructure does not support nested patterns.`
+    DefinePropsDestructureUnsupportedNestedPattern,
     /// "`defineSlots` cannot accept arguments"
     DefineSlotsArguments,
     /// Duplicate `defineEmits` call

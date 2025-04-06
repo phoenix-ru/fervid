@@ -223,6 +223,17 @@ pub fn is_static(expr: &Expr) -> bool {
     }
 }
 
+/// https://github.com/vuejs/core/blob/466b30f4049ec89fb282624ec17d1a93472ab93f/packages/compiler-sfc/src/script/utils.ts#L15-L27
+pub fn resolve_object_key(key: &PropName) -> Option<FervidAtom> {
+    match key {
+        PropName::Ident(ident_name) => Some(ident_name.sym.to_owned()),
+        PropName::Str(s) => Some(s.value.to_owned()),
+        PropName::Num(number) => Some(number.value.to_string().into()),
+        PropName::Computed(_) => None,
+        PropName::BigInt(_) => None,
+    }
+}
+
 /// Unrolls an expression from parenthesis and sequences.
 /// This is usable for arrow functions like `() => ({})`,
 /// where we need to get the `{}` part.

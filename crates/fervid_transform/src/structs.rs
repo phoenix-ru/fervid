@@ -33,6 +33,12 @@ pub enum PropsDestructureConfig {
     Error
 }
 
+#[derive(Debug)]
+pub struct PropsDestructureBinding {
+    pub local: FervidAtom,
+    pub default: Option<Box<Expr>>,
+}
+
 /// A helper which encompasses all the logic related to bindings,
 /// such as their types, which of them were used, what components and directives
 /// were seen in the template, etc.
@@ -48,6 +54,12 @@ pub struct BindingsHelper {
     pub is_ts: bool,
     /// Scopes of the `<template>` for in-template variable resolutions
     pub template_scopes: Vec<TemplateScope>,
+    /// Used for props destructure
+    pub props_aliases: HashMap<FervidAtom, FervidAtom>,
+    /// Bindings collected from the props destructure variable declaration
+    pub props_destructured_bindings: HashMap<FervidAtom, PropsDestructureBinding>,
+    /// Used for props destructure to store `rest` of `const { foo, bar, ...rest } = defineProps()`
+    pub props_destructured_rest_id: Option<FervidAtom>,
     /// Bindings in `<script setup>`
     pub setup_bindings: Vec<SetupBinding>,
     /// Bindings in `<script>`

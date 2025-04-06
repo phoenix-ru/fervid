@@ -2,12 +2,18 @@
 
 use fervid_core::SfcScriptBlock;
 use resolve_type::record_types;
+use setup::define_props_destructure::collect_props_destructure;
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{Function, Module, ObjectLit},
+    ecma::ast::{Callee, Decl, Expr, Function, Module, ModuleItem, ObjectLit, Pat, Stmt},
 };
 
-use crate::{error::TransformError, structs::TransformScriptsResult, TransformSfcContext};
+use crate::{
+    atoms::{DEFINE_EMITS, DEFINE_PROPS},
+    error::TransformError,
+    structs::TransformScriptsResult,
+    TransformSfcContext,
+};
 
 use self::{
     imports::process_imports,
@@ -124,6 +130,11 @@ pub fn transform_and_record_scripts(
 
 /// Records the imports and collects information for macro transforms,
 /// such as types, variables for destructure, etc.
+///
+/// Phases:
+/// 1. Import analysis and de-duplication;
+/// 2. Collecting the information about used macros;
+/// 3. If type-only macros found in phase 2, record the types from both the `<script>`s
 fn pretransform(
     ctx: &mut TransformSfcContext,
     mut script_setup: Option<&mut SfcScriptBlock>,
@@ -156,8 +167,16 @@ fn pretransform(
         // TODO Think of a way to apply multiple different AST transformations
         // Can it be done
 
-        // TODO Remove it and actually find the macros
-        has_type_only_macros = ctx.bindings_helper.is_ts;
+        // TODO
+        // 1. Walk `<script setup>` and find `defineProps` or `defineEmits`
+        let has_define_props_or_emits =
+            find_define_props_or_emits(ctx, &script_setup.content, errors);
+
+        // 2. For `defineProps`, check if it is not an identifier, record bound variables
+        // 3. Walk `<script setup>` and replace ident usages (deep)
+        // 4. Record types if there is a need
+
+        has_type_only_macros = has_define_props_or_emits.has_type_only_define_props_or_emits;
     }
 
     // 1.3. Record types to support type-only `defineProps` and `defineEmits`
@@ -168,6 +187,110 @@ fn pretransform(
 
         record_types(ctx, script_setup, script_options, &mut scope, false);
     }
+}
+
+struct DefinePropsOrEmitsMeta {
+    has_type_only_define_props_or_emits: bool,
+}
+
+fn find_define_props_or_emits(
+    ctx: &mut TransformSfcContext,
+    module: &Module,
+    errors: &mut Vec<TransformError>,
+) -> DefinePropsOrEmitsMeta {
+    let mut result = DefinePropsOrEmitsMeta {
+        has_type_only_define_props_or_emits: false,
+    };
+
+    for module_item in module.body.iter() {
+        let ModuleItem::Stmt(module_stmt) = module_item else {
+            continue;
+        };
+
+        match module_stmt {
+            // E.g. `let foo = defineProps()`
+            Stmt::Decl(Decl::Var(var_decl)) => {
+                if var_decl.declare {
+                    continue;
+                }
+
+                for var_decl_item in var_decl.decls.iter() {
+                    let Some(ref init) = var_decl_item.init else {
+                        continue;
+                    };
+
+                    let Expr::Call(ref call_expr) = init.as_ref() else {
+                        continue;
+                    };
+
+                    let Callee::Expr(ref callee_expr) = call_expr.callee else {
+                        continue;
+                    };
+
+                    let Expr::Ident(ref callee_ident) = callee_expr.as_ref() else {
+                        continue;
+                    };
+
+                    let is_define_props = callee_ident.sym != *DEFINE_PROPS;
+                    let is_define_emits = callee_ident.sym != *DEFINE_EMITS;
+                    if !is_define_props && !is_define_emits {
+                        continue;
+                    }
+
+                    // Type-only marker
+                    if call_expr.type_args.is_some() {
+                        result.has_type_only_define_props_or_emits = true;
+                    }
+
+                    // No other logic for `defineEmits`
+                    if is_define_emits {
+                        continue;
+                    }
+
+                    // Props destructure supports only object patterns
+                    if let Pat::Object(ref obj_pat) = var_decl_item.name {
+                        collect_props_destructure(ctx, obj_pat, errors)
+                    }
+                }
+            }
+
+            Stmt::Expr(expr_stmt) => {
+                let Expr::Call(ref call_expr) = expr_stmt.expr.as_ref() else {
+                    continue;
+                };
+
+                let Callee::Expr(ref callee_expr) = call_expr.callee else {
+                    continue;
+                };
+
+                let Expr::Ident(ref callee_ident) = callee_expr.as_ref() else {
+                    continue;
+                };
+
+                let is_define_props = callee_ident.sym != *DEFINE_PROPS;
+                let is_define_emits = callee_ident.sym != *DEFINE_EMITS;
+                if !is_define_props && !is_define_emits {
+                    continue;
+                }
+
+                // Type-only marker
+                if call_expr.type_args.is_some() {
+                    result.has_type_only_define_props_or_emits = true;
+                }
+            }
+
+            _ => continue,
+        };
+
+        // Break if sufficient information is collected
+        // if result.define_props_destructured_vars.len() > 0
+        //     && result.has_type_only_define_props_or_emits
+        // {
+        //     break;
+        // }
+    }
+
+    result
 }
 
 #[cfg(test)]
