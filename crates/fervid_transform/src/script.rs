@@ -5,11 +5,14 @@ use resolve_type::record_types;
 use setup::define_props_destructure::collect_props_destructure;
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{Callee, Decl, Expr, Function, Module, ModuleItem, ObjectLit, Pat, Stmt},
+    ecma::ast::{
+        CallExpr, Callee, Decl, Expr, ExprOrSpread, Function, Module, ModuleItem, ObjectLit, Pat,
+        Stmt,
+    },
 };
 
 use crate::{
-    atoms::{DEFINE_EMITS, DEFINE_PROPS},
+    atoms::{DEFINE_EMITS, DEFINE_PROPS, WITH_DEFAULTS},
     error::TransformError,
     structs::TransformScriptsResult,
     TransformSfcContext,
@@ -152,7 +155,6 @@ fn pretransform(
     }
 
     let mut has_type_only_macros = false;
-    let has_define_props_destructure = false;
 
     // Imports in `<script setup>`
     if let Some(ref mut script_setup) = script_setup {
@@ -202,6 +204,37 @@ fn find_define_props_or_emits(
         has_type_only_define_props_or_emits: false,
     };
 
+    // Check `defineProps` inside `withDefaults`
+    // TODO Use a better approach
+    fn is_type_only_with_defaults(call_expr: &CallExpr) -> bool {
+        let Some(ExprOrSpread {
+            expr: define_props_expr,
+            spread: None,
+        }) = call_expr.args.first()
+        else {
+            return false;
+        };
+
+        let Expr::Call(CallExpr {
+            callee: Callee::Expr(callee_expr),
+            type_args,
+            ..
+        }) = define_props_expr.as_ref()
+        else {
+            return false;
+        };
+
+        let Expr::Ident(callee_expr_ident) = callee_expr.as_ref() else {
+            return false;
+        };
+
+        if callee_expr_ident.sym == *DEFINE_PROPS {
+            type_args.is_some()
+        } else {
+            false
+        }
+    }
+
     for module_item in module.body.iter() {
         let ModuleItem::Stmt(module_stmt) = module_item else {
             continue;
@@ -231,16 +264,21 @@ fn find_define_props_or_emits(
                         continue;
                     };
 
-                    let is_define_props = callee_ident.sym != *DEFINE_PROPS;
-                    let is_define_emits = callee_ident.sym != *DEFINE_EMITS;
-                    if !is_define_props && !is_define_emits {
+                    let is_define_props = callee_ident.sym == *DEFINE_PROPS;
+                    let is_define_emits = callee_ident.sym == *DEFINE_EMITS;
+                    let is_with_defaults = callee_ident.sym == *WITH_DEFAULTS;
+                    if !is_define_props && !is_define_emits && !is_with_defaults {
                         continue;
                     }
 
                     // Type-only marker
-                    if call_expr.type_args.is_some() {
-                        result.has_type_only_define_props_or_emits = true;
-                    }
+                    let has_type_args = if is_define_props || is_define_emits {
+                        call_expr.type_args.is_some()
+                    } else {
+                        is_type_only_with_defaults(call_expr)
+                    };
+
+                    result.has_type_only_define_props_or_emits |= has_type_args;
 
                     // No other logic for `defineEmits`
                     if is_define_emits {
@@ -267,16 +305,21 @@ fn find_define_props_or_emits(
                     continue;
                 };
 
-                let is_define_props = callee_ident.sym != *DEFINE_PROPS;
-                let is_define_emits = callee_ident.sym != *DEFINE_EMITS;
-                if !is_define_props && !is_define_emits {
+                let is_define_props = callee_ident.sym == *DEFINE_PROPS;
+                let is_define_emits = callee_ident.sym == *DEFINE_EMITS;
+                let is_with_defaults = callee_ident.sym == *WITH_DEFAULTS;
+                if !is_define_props && !is_define_emits && !is_with_defaults {
                     continue;
                 }
 
                 // Type-only marker
-                if call_expr.type_args.is_some() {
-                    result.has_type_only_define_props_or_emits = true;
-                }
+                let has_type_args = if is_define_props || is_define_emits {
+                    call_expr.type_args.is_some()
+                } else {
+                    is_type_only_with_defaults(call_expr)
+                };
+
+                result.has_type_only_define_props_or_emits |= has_type_args;
             }
 
             _ => continue,
