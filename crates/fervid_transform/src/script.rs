@@ -2,21 +2,13 @@
 
 use fervid_core::SfcScriptBlock;
 use resolve_type::record_types;
-use setup::define_props_destructure::collect_props_destructure;
+use setup::macros::collect_macros;
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{
-        CallExpr, Callee, Decl, Expr, ExprOrSpread, Function, Module, ModuleItem, ObjectLit, Pat,
-        Stmt,
-    },
+    ecma::ast::{Function, Module, ObjectLit},
 };
 
-use crate::{
-    atoms::{DEFINE_EMITS, DEFINE_PROPS, WITH_DEFAULTS},
-    error::TransformError,
-    structs::TransformScriptsResult,
-    TransformSfcContext,
-};
+use crate::{error::TransformError, structs::TransformScriptsResult, TransformSfcContext};
 
 use self::{
     imports::process_imports,
@@ -144,7 +136,7 @@ fn pretransform(
     mut script_options: Option<&mut SfcScriptBlock>,
     errors: &mut Vec<TransformError>,
 ) {
-    // Imports in `<script>`
+    // 1.1. Imports in `<script>`
     if let Some(ref mut script_options) = script_options {
         process_imports(
             &mut script_options.content,
@@ -156,8 +148,8 @@ fn pretransform(
 
     let mut has_type_only_macros = false;
 
-    // Imports in `<script setup>`
     if let Some(ref mut script_setup) = script_setup {
+        // 1.2. Imports in `<script setup>`
         process_imports(
             &mut script_setup.content,
             &mut ctx.bindings_helper,
@@ -165,23 +157,19 @@ fn pretransform(
             errors,
         );
 
-        // Walk the `<script setup>` to find macro usages
         // TODO Think of a way to apply multiple different AST transformations
         // Can it be done
 
+        // 2.1. Walk `<script setup>` and gather the information about macro usage (variables, is type-only, etc.)
+        // For `defineProps`, if variable declarator is not an identifier then record bound variables
+        let collect_macros_result = collect_macros(ctx, &script_setup.content, errors);
+        has_type_only_macros = collect_macros_result.has_type_only_macros;
+
         // TODO
-        // 1. Walk `<script setup>` and find `defineProps` or `defineEmits`
-        let has_define_props_or_emits =
-            find_define_props_or_emits(ctx, &script_setup.content, errors);
-
-        // 2. For `defineProps`, check if it is not an identifier, record bound variables
-        // 3. Walk `<script setup>` and replace ident usages (deep)
-        // 4. Record types if there is a need
-
-        has_type_only_macros = has_define_props_or_emits.has_type_only_define_props_or_emits;
+        // 3. Walk `<script setup>` and replace ident usages for define props destructure (deep)
     }
 
-    // 1.3. Record types to support type-only `defineProps` and `defineEmits`
+    // 3. Record types to support type-only `defineProps` and `defineEmits`
     if has_type_only_macros {
         let scope = ctx.root_scope();
         let mut scope = (*scope).borrow_mut();
@@ -189,151 +177,6 @@ fn pretransform(
 
         record_types(ctx, script_setup, script_options, &mut scope, false);
     }
-}
-
-struct DefinePropsOrEmitsMeta {
-    has_type_only_define_props_or_emits: bool,
-}
-
-fn find_define_props_or_emits(
-    ctx: &mut TransformSfcContext,
-    module: &Module,
-    errors: &mut Vec<TransformError>,
-) -> DefinePropsOrEmitsMeta {
-    let mut result = DefinePropsOrEmitsMeta {
-        has_type_only_define_props_or_emits: false,
-    };
-
-    // Check `defineProps` inside `withDefaults`
-    // TODO Use a better approach
-    fn is_type_only_with_defaults(call_expr: &CallExpr) -> bool {
-        let Some(ExprOrSpread {
-            expr: define_props_expr,
-            spread: None,
-        }) = call_expr.args.first()
-        else {
-            return false;
-        };
-
-        let Expr::Call(CallExpr {
-            callee: Callee::Expr(callee_expr),
-            type_args,
-            ..
-        }) = define_props_expr.as_ref()
-        else {
-            return false;
-        };
-
-        let Expr::Ident(callee_expr_ident) = callee_expr.as_ref() else {
-            return false;
-        };
-
-        if callee_expr_ident.sym == *DEFINE_PROPS {
-            type_args.is_some()
-        } else {
-            false
-        }
-    }
-
-    for module_item in module.body.iter() {
-        let ModuleItem::Stmt(module_stmt) = module_item else {
-            continue;
-        };
-
-        match module_stmt {
-            // E.g. `let foo = defineProps()`
-            Stmt::Decl(Decl::Var(var_decl)) => {
-                if var_decl.declare {
-                    continue;
-                }
-
-                for var_decl_item in var_decl.decls.iter() {
-                    let Some(ref init) = var_decl_item.init else {
-                        continue;
-                    };
-
-                    let Expr::Call(ref call_expr) = init.as_ref() else {
-                        continue;
-                    };
-
-                    let Callee::Expr(ref callee_expr) = call_expr.callee else {
-                        continue;
-                    };
-
-                    let Expr::Ident(ref callee_ident) = callee_expr.as_ref() else {
-                        continue;
-                    };
-
-                    let is_define_props = callee_ident.sym == *DEFINE_PROPS;
-                    let is_define_emits = callee_ident.sym == *DEFINE_EMITS;
-                    let is_with_defaults = callee_ident.sym == *WITH_DEFAULTS;
-                    if !is_define_props && !is_define_emits && !is_with_defaults {
-                        continue;
-                    }
-
-                    // Type-only marker
-                    let has_type_args = if is_define_props || is_define_emits {
-                        call_expr.type_args.is_some()
-                    } else {
-                        is_type_only_with_defaults(call_expr)
-                    };
-
-                    result.has_type_only_define_props_or_emits |= has_type_args;
-
-                    // No other logic for `defineEmits`
-                    if is_define_emits {
-                        continue;
-                    }
-
-                    // Props destructure supports only object patterns
-                    if let Pat::Object(ref obj_pat) = var_decl_item.name {
-                        collect_props_destructure(ctx, obj_pat, errors)
-                    }
-                }
-            }
-
-            Stmt::Expr(expr_stmt) => {
-                let Expr::Call(ref call_expr) = expr_stmt.expr.as_ref() else {
-                    continue;
-                };
-
-                let Callee::Expr(ref callee_expr) = call_expr.callee else {
-                    continue;
-                };
-
-                let Expr::Ident(ref callee_ident) = callee_expr.as_ref() else {
-                    continue;
-                };
-
-                let is_define_props = callee_ident.sym == *DEFINE_PROPS;
-                let is_define_emits = callee_ident.sym == *DEFINE_EMITS;
-                let is_with_defaults = callee_ident.sym == *WITH_DEFAULTS;
-                if !is_define_props && !is_define_emits && !is_with_defaults {
-                    continue;
-                }
-
-                // Type-only marker
-                let has_type_args = if is_define_props || is_define_emits {
-                    call_expr.type_args.is_some()
-                } else {
-                    is_type_only_with_defaults(call_expr)
-                };
-
-                result.has_type_only_define_props_or_emits |= has_type_args;
-            }
-
-            _ => continue,
-        };
-
-        // Break if sufficient information is collected
-        // if result.define_props_destructured_vars.len() > 0
-        //     && result.has_type_only_define_props_or_emits
-        // {
-        //     break;
-        // }
-    }
-
-    result
 }
 
 #[cfg(test)]

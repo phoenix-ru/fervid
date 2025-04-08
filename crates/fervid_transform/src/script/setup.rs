@@ -30,7 +30,7 @@ mod define_options;
 mod define_props;
 pub(super) mod define_props_destructure;
 mod define_slots;
-mod macros;
+pub(super) mod macros;
 mod utils;
 
 use self::{
