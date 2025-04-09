@@ -360,7 +360,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                 }
                 return;
             }
-            
+
             // Call expression, type arguments should not be taken into account
             Expr::Call(call_expr) => {
                 call_expr.callee.visit_mut_with(self);
@@ -382,9 +382,6 @@ impl<'s> VisitMut for TransformVisitor<'s> {
         // The rest concerns transforming an ident
         let span = ident.span;
         let strategy = self.determine_ident_transform_strategy(ident);
-
-        // TODO The logic for setup variables actually differs quite significantly
-        // https://play.vuejs.org/#eNp9UU1rwzAM/SvCl25QEkZvIRTa0cN22Mq6oy8hUVJ3iW380QWC//tkh2Y7jN6k956kJ2liO62zq0dWsNLWRmgHFp3XWy7FoJVxMMEOArRGDbDK8v2KywZbIfFolLYPE5cArVIFnJwRsuMyPHJZ5nMv6kKJw0H3lUPKAMrz03aaYgmEQAE1D2VOYKxalGzNnK2VbEWXXaySZC9N4qxWgxY9mnfthJKWswISE7mq79X3a8Kc8bi+4fUZ669/8IsdI8bZ0aBFc0XOFs5VpkM304fTG44UL+SgGt+T+g75gVb1PnqcZXsvG7L9R5fcvqQj0+E+7WF0KO1tqWg0KkPSc0Y/er6z+q/dTbZJdfQJFn4A+DKelw==
 
         match strategy {
             IdentTransformStrategy::LeaveUnchanged => return,
@@ -664,10 +661,14 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     key_value.value.visit_mut_with(self);
 
                     match key_value.key {
-                        // TODO Finish the implementation
-                        PropName::Ident(_) => todo!(),
-                        PropName::Computed(_) => todo!(),
-                        PropName::Str(_) | PropName::Num(_) | PropName::BigInt(_) => {}
+                        PropName::Computed(ref mut computed_prop_name) => {
+                            computed_prop_name.expr.visit_mut_with(self);
+                        }
+
+                        PropName::Ident(_)
+                        | PropName::Str(_)
+                        | PropName::Num(_)
+                        | PropName::BigInt(_) => {}
                     }
                 }
 
