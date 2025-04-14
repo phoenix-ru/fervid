@@ -34,3 +34,10 @@ pub fn to_str(swc_node: &impl Node) -> String {
 
     String::from_utf8(buff).unwrap()
 }
+
+#[macro_export]
+macro_rules! span {
+    ($lo: expr, $hi: expr) => {
+        Span::new(BytePos($lo), BytePos($hi))
+    };
+}

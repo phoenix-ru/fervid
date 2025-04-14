@@ -209,9 +209,10 @@ impl BindingsHelperTransform for BindingsHelper {
                 .map_or_else(|| [].iter(), |v| v.setup.iter()),
         );
         for binding in setup_bindings {
-            if binding.0 == variable_atom {
-                self.used_bindings.insert(variable_atom, binding.1);
-                return binding.1;
+            if binding.sym == variable_atom {
+                self.used_bindings
+                    .insert(variable_atom, binding.binding_type);
+                return binding.binding_type;
             }
         }
 
@@ -236,7 +237,7 @@ impl BindingsHelperTransform for BindingsHelper {
             // Check options API imports.
             // Currently it ignores the SyntaxContext (same as in js implementation)
             for binding in options_api_vars.imports.iter() {
-                if binding.0 == variable_atom {
+                if binding.sym == variable_atom {
                     self.used_bindings
                         .insert(variable_atom, BindingTypes::SetupMaybeRef);
                     return BindingTypes::SetupMaybeRef;
@@ -490,13 +491,15 @@ impl<'s> VisitMut for TransformVisitor<'s> {
             // Add the temporary variables
             if let Stmt::Decl(decl) = stmt {
                 match decl {
-                    Decl::Class(cls) => self.local_vars.push(SetupBinding(
+                    Decl::Class(cls) => self.local_vars.push(SetupBinding::new_spanned(
                         cls.ident.sym.to_owned(),
                         BindingTypes::TemplateLocal,
+                        cls.ident.span,
                     )),
-                    Decl::Fn(fn_decl) => self.local_vars.push(SetupBinding(
+                    Decl::Fn(fn_decl) => self.local_vars.push(SetupBinding::new_spanned(
                         fn_decl.ident.sym.to_owned(),
                         BindingTypes::TemplateLocal,
+                        fn_decl.ident.span,
                     )),
                     Decl::Var(var_decl) => {
                         for var_decl_it in var_decl.decls.iter() {
@@ -681,13 +684,16 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                         None => {
                             let symbol = &assign.key.sym;
 
-                            let is_local =
-                                self.local_vars.iter().rfind(|it| &it.0 == symbol).is_some()
-                                    || matches!(
-                                        self.bindings_helper
-                                            .get_var_binding_type(self.current_scope, symbol),
-                                        BindingTypes::TemplateLocal
-                                    );
+                            let is_local = self
+                                .local_vars
+                                .iter()
+                                .rfind(|it| &it.sym == symbol)
+                                .is_some()
+                                || matches!(
+                                    self.bindings_helper
+                                        .get_var_binding_type(self.current_scope, symbol),
+                                    BindingTypes::TemplateLocal
+                                );
 
                             if !is_local {
                                 let mut value = Box::new(Pat::Ident(assign.key.to_owned()));
@@ -716,7 +722,7 @@ impl TransformVisitor<'_> {
         let symbol = &ident.sym;
 
         // Try to find variable in the local vars (e.g. arrow function params)
-        if let Some(_) = self.local_vars.iter().rfind(|it| &it.0 == symbol) {
+        if let Some(_) = self.local_vars.iter().rfind(|it| &it.sym == symbol) {
             self.has_js_bindings = true;
             return IdentTransformStrategy::LeaveUnchanged;
         }
@@ -1074,23 +1080,23 @@ mod tests {
         // const Const = 123
         // let Let = 123
         // const Reactive = reactive({})
-        helper.setup_bindings.push(SetupBinding(
+        helper.setup_bindings.push(SetupBinding::new(
             FervidAtom::from("Ref"),
             BindingTypes::SetupRef,
         ));
-        helper.setup_bindings.push(SetupBinding(
+        helper.setup_bindings.push(SetupBinding::new(
             FervidAtom::from("MaybeRef"),
             BindingTypes::SetupMaybeRef,
         ));
-        helper.setup_bindings.push(SetupBinding(
+        helper.setup_bindings.push(SetupBinding::new(
             FervidAtom::from("Const"),
             BindingTypes::SetupConst,
         ));
-        helper.setup_bindings.push(SetupBinding(
+        helper.setup_bindings.push(SetupBinding::new(
             FervidAtom::from("Let"),
             BindingTypes::SetupLet,
         ));
-        helper.setup_bindings.push(SetupBinding(
+        helper.setup_bindings.push(SetupBinding::new(
             FervidAtom::from("Reactive"),
             BindingTypes::SetupReactiveConst,
         ));
@@ -1196,7 +1202,7 @@ mod tests {
         let mut helper = BindingsHelper::default();
 
         // const Ref = ref('foo')
-        helper.setup_bindings.push(SetupBinding(
+        helper.setup_bindings.push(SetupBinding::new(
             FervidAtom::from("Ref"),
             BindingTypes::SetupRef,
         ));

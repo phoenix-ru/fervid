@@ -96,13 +96,13 @@ pub fn process_define_model(
     // Binding type of the prop
     bindings_helper
         .setup_bindings
-        .push(SetupBinding(model_name.value, BindingTypes::Props));
+        .push(SetupBinding::new_spanned(model_name.value, BindingTypes::Props, model_name.span));
 
     // Binding type of the model itself
     if let (true, true, Some(var_bindings)) = (is_var_decl, is_ident, var_bindings) {
         if var_bindings.len() == 1 {
             let binding = &mut var_bindings[0];
-            binding.1 = BindingTypes::SetupRef;
+            binding.binding_type = BindingTypes::SetupRef;
         }
     }
 

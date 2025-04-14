@@ -12,7 +12,11 @@ use super::utils::is_static;
 /// will be categorized as `SetupBinding("Foo", BindingTypes::SetupConst)`
 #[inline]
 pub fn categorize_class(class: &ClassDecl) -> SetupBinding {
-    SetupBinding(class.ident.sym.to_owned(), BindingTypes::SetupConst)
+    SetupBinding::new_spanned(
+        class.ident.sym.to_owned(),
+        BindingTypes::SetupConst,
+        class.ident.span,
+    )
 }
 
 /// Javascript function declaration is always constant.
@@ -22,7 +26,11 @@ pub fn categorize_class(class: &ClassDecl) -> SetupBinding {
 /// will be categorized as `SetupBinding("Foo", BindingTypes::SetupConst)`
 #[inline]
 pub fn categorize_fn_decl(fn_decl: &FnDecl) -> SetupBinding {
-    SetupBinding(fn_decl.ident.sym.to_owned(), BindingTypes::SetupConst)
+    SetupBinding::new_spanned(
+        fn_decl.ident.sym.to_owned(),
+        BindingTypes::SetupConst,
+        fn_decl.ident.span,
+    )
 }
 
 /// Categorizes the binding type of an expression (typically RHS).
@@ -130,7 +138,7 @@ pub fn enrich_binding_types(
     }
 
     for binding in collected_bindings.iter_mut() {
-        binding.1 = rhs_type;
+        binding.binding_type = rhs_type;
     }
 }
 
@@ -151,7 +159,11 @@ pub fn extract_variables_from_pat(pat: &Pat, out: &mut Vec<SetupBinding>, is_con
                 BindingTypes::SetupLet
             };
 
-            out.push(SetupBinding(decl_ident.sym.to_owned(), binding_type));
+            out.push(SetupBinding::new_spanned(
+                decl_ident.sym.to_owned(),
+                binding_type,
+                decl_ident.span,
+            ));
         }
 
         // The rest of the function collects the destructures,
@@ -179,13 +191,14 @@ pub fn extract_variables_from_pat(pat: &Pat, out: &mut Vec<SetupBinding>, is_con
                     }
 
                     // `foo` in `const { foo } = {}` and in `const { foo = 'bar' } = {}`
-                    ObjectPatProp::Assign(assign_destr) => out.push(SetupBinding(
+                    ObjectPatProp::Assign(assign_destr) => out.push(SetupBinding::new_spanned(
                         assign_destr.key.sym.to_owned(),
                         if is_const {
                             BindingTypes::SetupMaybeRef
                         } else {
                             BindingTypes::SetupLet
                         },
+                        assign_destr.key.span,
                     )),
 
                     // `bar` in `const { foo, ...bar } = {}`
@@ -208,6 +221,10 @@ fn collect_rest_pat(rest_pat: &RestPat, out: &mut Vec<SetupBinding>) {
     // Current Vue js compiler has a bug, it returns `undefined` for `...[bar]`
     if let Some(ident) = rest_pat.arg.as_ident() {
         // Binding type is always `SetupConst` because of the nature of rest operator
-        out.push(SetupBinding(ident.sym.to_owned(), BindingTypes::SetupConst))
+        out.push(SetupBinding::new_spanned(
+            ident.sym.to_owned(),
+            BindingTypes::SetupConst,
+            ident.span,
+        ))
     };
 }

@@ -167,9 +167,10 @@ fn analyze_top_level_decl(
         Decl::TsEnum(ts_enum) => {
             // Ambient enums are also included, this is intentional
             // I am not sure about `const enum`s though
-            out.push(SetupBinding(
+            out.push(SetupBinding::new_spanned(
                 ts_enum.id.sym.to_owned(),
                 BindingTypes::LiteralConst,
+                ts_enum.span
             ))
         }
 

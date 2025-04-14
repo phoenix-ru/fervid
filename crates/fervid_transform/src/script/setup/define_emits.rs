@@ -73,7 +73,7 @@ pub fn process_define_emits(
         if let Some(var_bindings) = var_bindings {
             if is_ident && var_bindings.len() == 1 {
                 let first_binding = &mut var_bindings[0];
-                first_binding.1 = BindingTypes::SetupConst;
+                first_binding.binding_type = BindingTypes::SetupConst;
             }
         }
 

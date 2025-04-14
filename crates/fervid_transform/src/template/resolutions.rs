@@ -31,12 +31,12 @@ impl TemplateVisitor<'_> {
         };
 
         if let Some(found) = found {
-            let mut resolved_to = Expr::Ident(found.0.to_owned().into_ident());
+            let mut resolved_to = Expr::Ident(found.sym.to_owned().into_ident());
 
             // For `Component` binding types, do not transform.
             // TODO I am not sure about `Imported` though,
             // the official compiler sees them as if `SetupMaybeRef` and transforms.
-            if !matches!(found.1, BindingTypes::Component) {
+            if !matches!(found.binding_type, BindingTypes::Component) {
                 self.bindings_helper
                     .transform_expr(&mut resolved_to, self.current_scope);
             }
@@ -88,18 +88,20 @@ impl TemplateVisitor<'_> {
         let mut normalized = String::with_capacity(directive_name.len());
         to_pascal_case(directive_name, &mut normalized);
 
-        let found = self
-            .bindings_helper
-            .setup_bindings
-            .iter()
-            .find(|SetupBinding(name, _)| {
+        let found = self.bindings_helper.setup_bindings.iter().find(
+            |SetupBinding {
+                 sym: name,
+                 binding_type: _,
+                 span: _,
+             }| {
                 (name.starts_with('v') || name.starts_with('V')) && name[1..] == normalized
-            });
+            },
+        );
 
         // TODO Auto-importing the directives can happen here
 
         if let Some(found) = found {
-            let mut resolved_to = Expr::Ident(found.0.to_owned().into_ident());
+            let mut resolved_to = Expr::Ident(found.sym.to_owned().into_ident());
 
             // Transform the identifier
             self.bindings_helper
@@ -135,7 +137,7 @@ fn find_binding<'a, 'b>(
     bindings_helper
         .setup_bindings
         .iter()
-        .find(|binding| binding.0 == searched_pascal || binding.0 == searched_camel)
+        .find(|binding| binding.sym == searched_pascal || binding.sym == searched_camel)
 
     // TODO Auto-importing the components can happen here
 }
@@ -151,7 +153,7 @@ mod tests {
     #[test]
     fn it_resolves_components_pascal_case() {
         // `TestComponent` binding
-        let mut bindings_helper = with_bindings(vec![SetupBinding(
+        let mut bindings_helper = with_bindings(vec![SetupBinding::new(
             fervid_atom!("TestComponent"),
             BindingTypes::Component,
         )]);
@@ -188,7 +190,7 @@ mod tests {
     #[test]
     fn it_resolves_components_camel_case() {
         // `testComponent` binding
-        let mut bindings_helper = with_bindings(vec![SetupBinding(
+        let mut bindings_helper = with_bindings(vec![SetupBinding::new(
             fervid_atom!("testComponent"),
             BindingTypes::Component,
         )]);
@@ -226,8 +228,8 @@ mod tests {
     fn it_resolves_components_one_word() {
         // `Foo` and `bar` bindings
         let mut bindings_helper = with_bindings(vec![
-            SetupBinding(fervid_atom!("Foo"), BindingTypes::Component),
-            SetupBinding(fervid_atom!("bar"), BindingTypes::SetupMaybeRef),
+            SetupBinding::new(fervid_atom!("Foo"), BindingTypes::Component),
+            SetupBinding::new(fervid_atom!("bar"), BindingTypes::SetupMaybeRef),
         ]);
         let mut template_visitor = from_helper(&mut bindings_helper);
 
@@ -273,9 +275,10 @@ mod tests {
     #[test]
     fn it_resolves_components_namespaced() {
         // `Foo` binding
-        let mut bindings_helper = with_bindings(vec![
-            SetupBinding(fervid_atom!("Foo"), BindingTypes::Imported),
-        ]);
+        let mut bindings_helper = with_bindings(vec![SetupBinding::new(
+            fervid_atom!("Foo"),
+            BindingTypes::Imported,
+        )]);
         let mut template_visitor = from_helper(&mut bindings_helper);
 
         // `<Foo.Bar>`
@@ -302,8 +305,8 @@ mod tests {
     fn it_resolves_directive_one_word() {
         // `vFoo` and `VBar` bindings
         let mut bindings_helper = with_bindings(vec![
-            SetupBinding(fervid_atom!("vFoo"), BindingTypes::SetupLet),
-            SetupBinding(fervid_atom!("VBar"), BindingTypes::SetupConst),
+            SetupBinding::new(fervid_atom!("vFoo"), BindingTypes::SetupLet),
+            SetupBinding::new(fervid_atom!("VBar"), BindingTypes::SetupConst),
         ]);
         let mut template_visitor = from_helper(&mut bindings_helper);
 
@@ -328,8 +331,8 @@ mod tests {
     fn it_resolves_directive_multi_word() {
         // `VFooBar` and `vBazQux` bindings
         let mut bindings_helper = with_bindings(vec![
-            SetupBinding(fervid_atom!("VFooBar"), BindingTypes::Imported),
-            SetupBinding(fervid_atom!("vBazQux"), BindingTypes::SetupMaybeRef),
+            SetupBinding::new(fervid_atom!("VFooBar"), BindingTypes::Imported),
+            SetupBinding::new(fervid_atom!("vBazQux"), BindingTypes::SetupMaybeRef),
         ]);
         let mut template_visitor = from_helper(&mut bindings_helper);
 
@@ -354,10 +357,10 @@ mod tests {
     fn it_does_not_resolve_directive_without_prefix() {
         // `Foo`, `bar`, `bazQux` and `TestNotDirective` bindings
         let mut bindings_helper = with_bindings(vec![
-            SetupBinding(fervid_atom!("Foo"), BindingTypes::Imported),
-            SetupBinding(fervid_atom!("bar"), BindingTypes::SetupLet),
-            SetupBinding(fervid_atom!("bazQux"), BindingTypes::SetupMaybeRef),
-            SetupBinding(fervid_atom!("TestNotDirective"), BindingTypes::SetupConst),
+            SetupBinding::new(fervid_atom!("Foo"), BindingTypes::Imported),
+            SetupBinding::new(fervid_atom!("bar"), BindingTypes::SetupLet),
+            SetupBinding::new(fervid_atom!("bazQux"), BindingTypes::SetupMaybeRef),
+            SetupBinding::new(fervid_atom!("TestNotDirective"), BindingTypes::SetupConst),
         ]);
         let mut template_visitor = from_helper(&mut bindings_helper);
 
@@ -390,9 +393,9 @@ mod tests {
         // import SomeOtherComp from './Other.vue'
         // import vMyDir from './my-dir'
         let mut bindings_helper = with_bindings(vec![
-            SetupBinding(fervid_atom!("ChildComp"), BindingTypes::Component),
-            SetupBinding(fervid_atom!("SomeOtherComp"), BindingTypes::Component),
-            SetupBinding(fervid_atom!("vMyDir"), BindingTypes::Imported),
+            SetupBinding::new(fervid_atom!("ChildComp"), BindingTypes::Component),
+            SetupBinding::new(fervid_atom!("SomeOtherComp"), BindingTypes::Component),
+            SetupBinding::new(fervid_atom!("vMyDir"), BindingTypes::Imported),
         ]);
         let mut template_visitor = from_helper(&mut bindings_helper);
 

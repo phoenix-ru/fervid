@@ -180,11 +180,15 @@ fn unroll_default_export_expr(mut expr: Expr) -> Expr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{script::imports::process_imports, test_utils::parser::*, OptionsApiBindings, SetupBinding};
-    use fervid_core::{BindingTypes, FervidAtom};
+    use crate::{
+        script::imports::process_imports, span, test_utils::parser::*, OptionsApiBindings,
+        SetupBinding,
+    };
+    use fervid_core::{fervid_atom, BindingTypes};
+    use swc_core::common::{BytePos, Span};
 
     struct TestAnalyzeResult {
-        vars: Box<OptionsApiBindings>
+        vars: Box<OptionsApiBindings>,
     }
 
     fn analyze_js(input: &str, opts: AnalyzeOptions) -> TestAnalyzeResult {
@@ -203,10 +207,10 @@ mod tests {
             &mut errors,
         );
 
-        let vars = bindings_helper.options_api_bindings.unwrap_or_else(|| Default::default());
-        TestAnalyzeResult {
-            vars,
-        }
+        let vars = bindings_helper
+            .options_api_bindings
+            .unwrap_or_else(|| Default::default());
+        TestAnalyzeResult { vars }
     }
 
     fn analyze_ts(input: &str, opts: AnalyzeOptions) -> TestAnalyzeResult {
@@ -226,10 +230,10 @@ mod tests {
             &mut errors,
         );
 
-        let vars = bindings_helper.options_api_bindings.unwrap_or_else(|| Default::default());
-        TestAnalyzeResult {
-            vars,
-        }
+        let vars = bindings_helper
+            .options_api_bindings
+            .unwrap_or_else(|| Default::default());
+        TestAnalyzeResult { vars }
     }
 
     macro_rules! test_js_and_ts {
@@ -329,7 +333,7 @@ mod tests {
     #[test]
     fn it_sees_name() {
         let test_name = OptionsApiBindings {
-            name: Some(FervidAtom::from("TestComponent")),
+            name: Some(fervid_atom!("TestComponent")),
             ..Default::default()
         };
 
@@ -357,9 +361,9 @@ mod tests {
             ",
             OptionsApiBindings {
                 components: vec![
-                    FervidAtom::from("Foo"),
-                    FervidAtom::from("FooBar"),
-                    FervidAtom::from("Baz")
+                    fervid_atom!("Foo"),
+                    fervid_atom!("FooBar"),
+                    fervid_atom!("Baz")
                 ],
                 ..Default::default()
             }
@@ -386,10 +390,10 @@ mod tests {
             ",
             OptionsApiBindings {
                 computed: vec![
-                    FervidAtom::from("foo"),
-                    FervidAtom::from("bar"),
-                    FervidAtom::from("lorem"),
-                    FervidAtom::from("getterSetter")
+                    fervid_atom!("foo"),
+                    fervid_atom!("bar"),
+                    fervid_atom!("lorem"),
+                    fervid_atom!("getterSetter")
                 ],
                 ..Default::default()
             }
@@ -400,10 +404,10 @@ mod tests {
     fn it_analyzes_data() {
         let expected = OptionsApiBindings {
             data: vec![
-                FervidAtom::from("foo"),
-                FervidAtom::from("bar"),
-                FervidAtom::from("baz"),
-                FervidAtom::from("qux"),
+                fervid_atom!("foo"),
+                fervid_atom!("bar"),
+                fervid_atom!("baz"),
+                fervid_atom!("qux"),
             ],
             ..Default::default()
         };
@@ -451,7 +455,7 @@ mod tests {
             }
             ",
             OptionsApiBindings {
-                directives: vec![FervidAtom::from("foo"), FervidAtom::from("bar")],
+                directives: vec![fervid_atom!("foo"), fervid_atom!("bar")],
                 ..Default::default()
             }
         );
@@ -467,9 +471,9 @@ mod tests {
             "#,
             OptionsApiBindings {
                 emits: vec![
-                    FervidAtom::from("foo"),
-                    FervidAtom::from("bar"),
-                    FervidAtom::from("baz")
+                    fervid_atom!("foo"),
+                    fervid_atom!("bar"),
+                    fervid_atom!("baz")
                 ],
                 ..Default::default()
             }
@@ -482,7 +486,7 @@ mod tests {
             }
             "#,
             OptionsApiBindings {
-                emits: vec![FervidAtom::from("foo"), FervidAtom::from("bar")],
+                emits: vec![fervid_atom!("foo"), fervid_atom!("bar")],
                 ..Default::default()
             }
         );
@@ -498,9 +502,9 @@ mod tests {
             "#,
             OptionsApiBindings {
                 expose: vec![
-                    FervidAtom::from("foo"),
-                    FervidAtom::from("bar"),
-                    FervidAtom::from("baz")
+                    fervid_atom!("foo"),
+                    fervid_atom!("bar"),
+                    fervid_atom!("baz")
                 ],
                 ..Default::default()
             }
@@ -517,9 +521,9 @@ mod tests {
             "#,
             OptionsApiBindings {
                 inject: vec![
-                    FervidAtom::from("foo"),
-                    FervidAtom::from("bar"),
-                    FervidAtom::from("baz")
+                    fervid_atom!("foo"),
+                    fervid_atom!("bar"),
+                    fervid_atom!("baz")
                 ],
                 ..Default::default()
             }
@@ -532,7 +536,7 @@ mod tests {
             }
             "#,
             OptionsApiBindings {
-                inject: vec![FervidAtom::from("foo"), FervidAtom::from("bar")],
+                inject: vec![fervid_atom!("foo"), fervid_atom!("bar")],
                 ..Default::default()
             }
         );
@@ -552,7 +556,7 @@ mod tests {
             }
             ",
             OptionsApiBindings {
-                methods: vec![FervidAtom::from("foo"), FervidAtom::from("bar")],
+                methods: vec![fervid_atom!("foo"), fervid_atom!("bar")],
                 ..Default::default()
             }
         );
@@ -562,9 +566,9 @@ mod tests {
     fn it_analyzes_props() {
         let expected = OptionsApiBindings {
             props: vec![
-                FervidAtom::from("foo"),
-                FervidAtom::from("bar"),
-                FervidAtom::from("baz"),
+                fervid_atom!("foo"),
+                fervid_atom!("bar"),
+                fervid_atom!("baz"),
             ],
             ..Default::default()
         };
@@ -671,10 +675,26 @@ mod tests {
     fn it_analyzes_setup() {
         let expected = OptionsApiBindings {
             setup: vec![
-                SetupBinding(FervidAtom::from("foo"), BindingTypes::SetupMaybeRef),
-                SetupBinding(FervidAtom::from("bar"), BindingTypes::SetupMaybeRef),
-                SetupBinding(FervidAtom::from("baz"), BindingTypes::SetupMaybeRef),
-                SetupBinding(FervidAtom::from("pi"), BindingTypes::SetupMaybeRef),
+                SetupBinding::new_spanned(
+                    fervid_atom!("foo"),
+                    BindingTypes::SetupMaybeRef,
+                    Span::new(BytePos(0), BytePos(0)),
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("bar"),
+                    BindingTypes::SetupMaybeRef,
+                    Span::new(BytePos(0), BytePos(0)),
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("baz"),
+                    BindingTypes::SetupMaybeRef,
+                    Span::new(BytePos(0), BytePos(0)),
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("pi"),
+                    BindingTypes::SetupMaybeRef,
+                    Span::new(BytePos(0), BytePos(0)),
+                ),
             ],
             ..Default::default()
         };
@@ -808,12 +828,24 @@ mod tests {
         test_js_and_ts!(
             input,
             OptionsApiBindings {
-                props: vec![FervidAtom::from("foo"), FervidAtom::from("bar")],
-                data: vec![FervidAtom::from("hello")],
+                props: vec![fervid_atom!("foo"), fervid_atom!("bar")],
+                data: vec![fervid_atom!("hello")],
                 setup: vec![
-                    SetupBinding(FervidAtom::from("inputModel"), BindingTypes::SetupMaybeRef),
-                    SetupBinding(FervidAtom::from("modelValue"), BindingTypes::SetupMaybeRef),
-                    SetupBinding(FervidAtom::from("list"), BindingTypes::SetupMaybeRef),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("inputModel"),
+                        BindingTypes::SetupMaybeRef,
+                        Span::new(BytePos(0), BytePos(0))
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("modelValue"),
+                        BindingTypes::SetupMaybeRef,
+                        Span::new(BytePos(0), BytePos(0))
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("list"),
+                        BindingTypes::SetupMaybeRef,
+                        Span::new(BytePos(0), BytePos(0))
+                    ),
                 ],
                 ..Default::default()
             }
@@ -838,9 +870,21 @@ mod tests {
             ",
             OptionsApiBindings {
                 setup: vec![
-                    SetupBinding(FervidAtom::from("foo"), BindingTypes::SetupRef),
-                    SetupBinding(FervidAtom::from("bar"), BindingTypes::SetupRef),
-                    SetupBinding(FervidAtom::from("baz"), BindingTypes::SetupReactiveConst),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("foo"),
+                        BindingTypes::SetupRef,
+                        span!(78, 81)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("bar"),
+                        BindingTypes::SetupRef,
+                        span!(110, 113)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("baz"),
+                        BindingTypes::SetupReactiveConst,
+                        span!(165, 168)
+                    ),
                 ],
                 ..Default::default()
             },
@@ -858,9 +902,21 @@ mod tests {
             ",
             OptionsApiBindings {
                 setup: vec![
-                    SetupBinding(FervidAtom::from("foo"), BindingTypes::SetupRef),
-                    SetupBinding(FervidAtom::from("bar"), BindingTypes::SetupRef),
-                    SetupBinding(FervidAtom::from("baz"), BindingTypes::SetupReactiveConst),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("foo"),
+                        BindingTypes::SetupRef,
+                        span!(96, 99)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("bar"),
+                        BindingTypes::SetupRef,
+                        span!(127, 130)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("baz"),
+                        BindingTypes::SetupReactiveConst,
+                        span!(176, 179)
+                    ),
                 ],
                 ..Default::default()
             },
@@ -880,14 +936,38 @@ mod tests {
             ",
             OptionsApiBindings {
                 setup: vec![
-                    SetupBinding(FervidAtom::from("foo"), BindingTypes::SetupMaybeRef),
-                    SetupBinding(FervidAtom::from("bar"), BindingTypes::SetupMaybeRef),
-                    SetupBinding(FervidAtom::from("baz"), BindingTypes::SetupMaybeRef),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("foo"),
+                        BindingTypes::SetupMaybeRef,
+                        span!(176, 179)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("bar"),
+                        BindingTypes::SetupMaybeRef,
+                        span!(208, 211)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("baz"),
+                        BindingTypes::SetupMaybeRef,
+                        span!(263, 266)
+                    ),
                 ],
                 imports: vec![
-                    SetupBinding(FervidAtom::from("ref"), BindingTypes::Imported),
-                    SetupBinding(FervidAtom::from("computed"), BindingTypes::Imported),
-                    SetupBinding(FervidAtom::from("reactive"), BindingTypes::Imported),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("ref"),
+                        BindingTypes::Imported,
+                        span!(22, 25)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("computed"),
+                        BindingTypes::Imported,
+                        span!(75, 83)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("reactive"),
+                        BindingTypes::Imported,
+                        span!(120, 128)
+                    ),
                 ],
                 ..Default::default()
             },
@@ -911,9 +991,21 @@ mod tests {
             ",
             OptionsApiBindings {
                 setup: vec![
-                    SetupBinding(FervidAtom::from("foo"), BindingTypes::SetupMaybeRef),
-                    SetupBinding(FervidAtom::from("baz"), BindingTypes::SetupMaybeRef),
-                    SetupBinding(FervidAtom::from("qux"), BindingTypes::SetupMaybeRef),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("foo"),
+                        BindingTypes::SetupMaybeRef,
+                        span!(25, 28)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("baz"),
+                        BindingTypes::SetupMaybeRef,
+                        span!(152, 155)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("qux"),
+                        BindingTypes::SetupMaybeRef,
+                        span!(157, 160)
+                    ),
                 ],
 
                 ..Default::default()

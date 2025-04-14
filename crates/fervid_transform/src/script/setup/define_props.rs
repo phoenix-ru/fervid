@@ -186,7 +186,7 @@ fn process_define_props_impl(
         ctx.bindings_helper.setup_bindings.extend(
             raw_bindings
                 .into_iter()
-                .map(|raw| SetupBinding(raw, BindingTypes::Props)),
+                .map(|raw| SetupBinding::new(raw, BindingTypes::Props)),
         );
 
         Some(runtime_decl)
@@ -225,12 +225,12 @@ fn process_define_props_impl(
         if let Some(var_bindings) = var_bindings {
             if is_ident && var_bindings.len() == 1 {
                 let binding = &mut var_bindings[0];
-                binding.1 = BindingTypes::SetupReactiveConst;
+                binding.binding_type = BindingTypes::SetupReactiveConst;
             } else if is_const {
                 // `defineProps` with a destructured const variable is `SetupConst`
                 var_bindings
                     .iter_mut()
-                    .for_each(|v| v.1 = BindingTypes::SetupConst);
+                    .for_each(|v| v.binding_type = BindingTypes::SetupConst);
             }
         }
 
@@ -292,11 +292,11 @@ fn extract_runtime_props(
             .bindings_helper
             .setup_bindings
             .iter()
-            .any(|it| it.0 == key)
+            .any(|it| it.sym == key)
         {
             ctx.bindings_helper
                 .setup_bindings
-                .push(SetupBinding(key, BindingTypes::Props));
+                .push(SetupBinding::new(key, BindingTypes::Props));
         }
     }
 

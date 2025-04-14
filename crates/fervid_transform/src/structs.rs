@@ -8,8 +8,11 @@ use fervid_core::{
 };
 use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use smallvec::SmallVec;
-use swc_core::ecma::ast::{
-    Decl, Expr, ExprOrSpread, Function, Id, Module, ObjectLit, PropOrSpread, Str, TsType,
+use swc_core::{
+    common::{Span, DUMMY_SP},
+    ecma::ast::{
+        Decl, Expr, ExprOrSpread, Function, Id, Module, ObjectLit, PropOrSpread, Str, TsType,
+    },
 };
 
 /// Context object. Currently very minimal but may grow over time.
@@ -30,7 +33,7 @@ pub enum PropsDestructureConfig {
     #[default]
     False,
     True,
-    Error
+    Error,
 }
 
 #[derive(Debug)]
@@ -130,7 +133,11 @@ pub struct OptionsApiBindings {
 
 /// Identifier plus a binding type
 #[derive(Debug, PartialEq)]
-pub struct SetupBinding(pub FervidAtom, pub BindingTypes);
+pub struct SetupBinding {
+    pub sym: FervidAtom,
+    pub binding_type: BindingTypes,
+    pub span: Span,
+}
 
 #[derive(Debug, Clone)]
 pub struct ImportBinding {
@@ -224,6 +231,24 @@ pub struct TransformSfcResult {
     pub style_blocks: Vec<SfcStyleBlock>,
     /// Custom blocks
     pub custom_blocks: Vec<SfcCustomBlock>,
+}
+
+impl SetupBinding {
+    pub fn new(sym: FervidAtom, binding_type: BindingTypes) -> SetupBinding {
+        SetupBinding {
+            sym,
+            binding_type,
+            span: DUMMY_SP,
+        }
+    }
+
+    pub fn new_spanned(sym: FervidAtom, binding_type: BindingTypes, span: Span) -> SetupBinding {
+        SetupBinding {
+            sym,
+            binding_type,
+            span,
+        }
+    }
 }
 
 #[cfg(test)]

@@ -45,7 +45,7 @@ pub fn collect_props_destructure(
         if local != key {
             ctx.bindings_helper
                 .setup_bindings
-                .push(SetupBinding(local.to_owned(), BindingTypes::PropsAliased));
+                .push(SetupBinding::new_spanned(local.to_owned(), BindingTypes::PropsAliased, Span::new(BytePos(0), BytePos(0))));
 
             ctx.bindings_helper
                 .props_aliases
@@ -107,7 +107,7 @@ pub fn collect_props_destructure(
 
                 ctx.bindings_helper
                     .setup_bindings
-                    .push(SetupBinding(key, BindingTypes::SetupReactiveConst));
+                    .push(SetupBinding::new_spanned(key, BindingTypes::SetupReactiveConst, Span::new(BytePos(0), BytePos(0))));
             }
         }
     }
