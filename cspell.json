@@ -131,7 +131,9 @@
     "xfoo",
     "xbar",
     "vuejs",
-    "pretransform"
+    "pretransform",
+    "boola",
+    "boolb"
   ],
   "ignorePaths": [
     ".github/**",

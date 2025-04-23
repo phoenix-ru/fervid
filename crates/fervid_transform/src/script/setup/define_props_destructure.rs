@@ -258,7 +258,7 @@ impl Walker {
         self.stmt_visit_mode = old_visit_mode;
     }
 
-    // This function mimics the behaviour of the official compiler
+    // This function mimics the behavior of the official compiler
     // which first collects all the references in the scope and only after transforms them.
     fn collect_then_transform_stmts(&mut self, stmts: &mut Vec<Stmt>) {
         self.collect_stmts(stmts);
