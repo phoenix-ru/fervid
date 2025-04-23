@@ -39,6 +39,10 @@ pub enum ScriptErrorKind {
     DefinePropsDestructureForbidden,
     /// `Props destructure cannot use computed key.`
     DefinePropsDestructureCannotUseComputedKey,
+    /// `Cannot assign to destructured props as they are readonly.`
+    DefinePropsDestructureCannotAssignToReadonly,
+    /// `Default value of prop does not match declared type.`
+    DefinePropsDestructureDeclaredTypeMismatch,
     /// `Props destructure does not support nested patterns.`
     DefinePropsDestructureUnsupportedNestedPattern,
     /// "`defineSlots` cannot accept arguments"

@@ -229,9 +229,43 @@ pub fn resolve_object_key(key: &PropName) -> Option<FervidAtom> {
         PropName::Ident(ident_name) => Some(ident_name.sym.to_owned()),
         PropName::Str(s) => Some(s.value.to_owned()),
         PropName::Num(number) => Some(number.value.to_string().into()),
-        PropName::Computed(_) => None,
+        PropName::Computed(computed_prop_name) => {
+            match computed_prop_name.expr.as_ref() {
+                // This is considered StringLiteral or NumericLiteral in Babel,
+                // meaning that `const { ['foo']: foo }` and `const { 'foo': foo }` are the same in Babel,
+                // but not in SWC
+                Expr::Lit(lit) => match lit {
+                    Lit::Str(s) => Some(s.value.to_owned()),
+                    Lit::Num(number) => number
+                        .raw
+                        .to_owned()
+                        .or_else(|| Some(number.value.to_string().into())),
+
+                    _ => None,
+                },
+
+                _ => None,
+            }
+        }
         PropName::BigInt(_) => None,
     }
+}
+
+/// https://github.com/vuejs/core/blob/32bc647faba56f50a37d18b08fcc0e11b49c791f/packages/compiler-sfc/src/script/utils.ts#L39-L52
+pub fn is_call_of(expr: &Expr, test: &FervidAtom) -> bool {
+    let Expr::Call(ref call_expr) = expr else {
+        return false;
+    };
+
+    let Callee::Expr(ref callee_expr) = call_expr.callee else {
+        return false;
+    };
+
+    let Expr::Ident(ref callee_ident) = callee_expr.as_ref() else {
+        return false;
+    };
+
+    &callee_ident.sym == test
 }
 
 /// Unrolls an expression from parenthesis and sequences.

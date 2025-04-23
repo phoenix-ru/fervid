@@ -1,7 +1,8 @@
 pub mod parser;
 
+use parser::parse_typescript_module;
 use swc_core::common::{sync::Lrc, SourceMap};
-use swc_core::ecma::ast::Expr;
+use swc_core::ecma::ast::{Expr, Module};
 use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
 
 use self::parser::{parse_javascript_expr, parse_typescript_expr};
@@ -12,6 +13,10 @@ pub fn js(raw: &str) -> Box<Expr> {
 
 pub fn ts(raw: &str) -> Box<Expr> {
     parse_typescript_expr(raw, 0, Default::default()).unwrap().0
+}
+
+pub fn ts_module(raw: &str) -> Module {
+    parse_typescript_module(raw, 0, Default::default()).expect("Expected input to be parseable").0
 }
 
 pub fn to_str(swc_node: &impl Node) -> String {

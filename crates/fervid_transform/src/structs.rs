@@ -30,8 +30,8 @@ pub struct TransformSfcContext {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum PropsDestructureConfig {
-    #[default]
     False,
+    #[default]
     True,
     Error,
 }
@@ -62,7 +62,7 @@ pub struct BindingsHelper {
     /// Bindings collected from the props destructure variable declaration
     pub props_destructured_bindings: HashMap<FervidAtom, PropsDestructureBinding>,
     /// Used for props destructure to store `rest` of `const { foo, bar, ...rest } = defineProps()`
-    pub props_destructured_rest_id: Option<FervidAtom>,
+    pub props_destructure_rest_id: Option<FervidAtom>,
     /// Bindings in `<script setup>`
     pub setup_bindings: Vec<SetupBinding>,
     /// Bindings in `<script>`

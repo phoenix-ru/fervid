@@ -17,13 +17,14 @@ use crate::{
     BindingsHelper, SetupBinding, SfcDefineModel, SfcExportedObjectHelper,
 };
 
-use super::{macros::TransformMacroResult, utils::to_runtime_type_string};
+use super::{
+    macros::{TransformMacroResult, VarDeclHelper},
+    utils::to_runtime_type_string,
+};
 
 pub fn process_define_model(
     call_expr: &CallExpr,
-    is_var_decl: bool,
-    is_ident: bool,
-    var_bindings: Option<&mut Vec<SetupBinding>>,
+    var_decl: Option<VarDeclHelper>,
     sfc_object_helper: &mut SfcExportedObjectHelper,
     bindings_helper: &mut BindingsHelper,
 ) -> TransformMacroResult {
@@ -96,12 +97,16 @@ pub fn process_define_model(
     // Binding type of the prop
     bindings_helper
         .setup_bindings
-        .push(SetupBinding::new_spanned(model_name.value, BindingTypes::Props, model_name.span));
+        .push(SetupBinding::new_spanned(
+            model_name.value,
+            BindingTypes::Props,
+            model_name.span,
+        ));
 
     // Binding type of the model itself
-    if let (true, true, Some(var_bindings)) = (is_var_decl, is_ident, var_bindings) {
-        if var_bindings.len() == 1 {
-            let binding = &mut var_bindings[0];
+    if let Some(var_decl) = var_decl {
+        if var_decl.is_const && var_decl.lhs.is_ident() && var_decl.bindings.len() == 1 {
+            let binding = &mut var_decl.bindings[0];
             binding.binding_type = BindingTypes::SetupRef;
         }
     }

@@ -1,7 +1,7 @@
 use fervid_core::{IntoIdent, VueImports};
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{ArrayLit, CallExpr, Callee, Decl, Expr, ExprOrSpread, Ident, Module, ModuleItem, ObjectLit, Pat, PropOrSpread, Stmt},
+    ecma::ast::{ArrayLit, CallExpr, Callee, Decl, Expr, ExprOrSpread, Ident, Module, ModuleItem, ObjectLit, Pat, PropOrSpread, Stmt, VarDeclarator},
 };
 
 use crate::{
@@ -163,7 +163,14 @@ pub fn collect_macros(
 pub enum TransformMacroResult {
     NotAMacro,
     ValidMacro(Option<Box<Expr>>),
+    ValidMacroRewriteDeclarator(Option<Box<VarDeclarator>>),
     Error(TransformError),
+}
+
+pub struct VarDeclHelper<'a> {
+    pub is_const: bool,
+    pub lhs: &'a Pat,
+    pub bindings: &'a mut Vec<SetupBinding>
 }
 
 /// Tries to transform a Vue compiler macro.\
@@ -175,10 +182,7 @@ pub fn transform_script_setup_macro_expr(
     ctx: &mut TypeResolveContext,
     expr: &Expr,
     sfc_object_helper: &mut SfcExportedObjectHelper,
-    is_var_decl: bool,
-    is_const: bool,
-    is_ident: bool,
-    var_bindings: Option<&mut Vec<SetupBinding>>,
+    var_decl: Option<VarDeclHelper>,
     errors: &mut Vec<TransformError>,
 ) -> TransformMacroResult {
     // `defineExpose` and `defineModel` actually generate something
@@ -231,10 +235,7 @@ pub fn transform_script_setup_macro_expr(
         process_define_props(
             ctx,
             call_expr,
-            is_var_decl,
-            is_const,
-            is_ident,
-            var_bindings,
+            var_decl,
             sfc_object_helper,
             errors,
         )
@@ -242,10 +243,7 @@ pub fn transform_script_setup_macro_expr(
         process_with_defaults(
             ctx,
             call_expr,
-            is_var_decl,
-            is_const,
-            is_ident,
-            var_bindings,
+            var_decl,
             sfc_object_helper,
             errors,
         )
@@ -253,9 +251,7 @@ pub fn transform_script_setup_macro_expr(
         process_define_emits(
             ctx,
             call_expr,
-            is_var_decl,
-            is_ident,
-            var_bindings,
+            var_decl,
             sfc_object_helper,
             errors,
         )
@@ -281,16 +277,14 @@ pub fn transform_script_setup_macro_expr(
     } else if DEFINE_MODEL.eq(sym) {
         process_define_model(
             call_expr,
-            is_var_decl,
-            is_ident,
-            var_bindings,
+            var_decl,
             sfc_object_helper,
             bindings_helper,
         )
     } else if DEFINE_SLOTS.eq(sym) {
-        process_define_slots(call_expr, is_var_decl, sfc_object_helper, bindings_helper)
+        process_define_slots(call_expr, var_decl.is_some(), sfc_object_helper, bindings_helper)
     } else if DEFINE_OPTIONS.eq(sym) {
-        process_define_options(call_expr, is_var_decl, sfc_object_helper, errors)
+        process_define_options(call_expr, var_decl.is_some(), sfc_object_helper, errors)
     } else {
         TransformMacroResult::NotAMacro
     }

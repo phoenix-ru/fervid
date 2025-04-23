@@ -1,16 +1,16 @@
 use fervid_core::{
-    fervid_atom, BindingTypes, FervidAtom, IntoIdent, PatchFlags, PatchHints, StrOrExpr,
-    TemplateGenerationMode, VModelDirective, VueImports,
+    fervid_atom, is_valid_propname, BindingTypes, FervidAtom, IntoIdent, PatchFlags, PatchHints,
+    StrOrExpr, TemplateGenerationMode, VModelDirective, VueImports,
 };
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
         ast::{
             ArrayLit, ArrayPat, AssignExpr, AssignOp, AssignTarget, AssignTargetPat, BindingIdent,
-            BlockStmt, CallExpr, Callee, CondExpr, Decl, Expr, ExprOrSpread, Ident, IdentName,
-            KeyValuePatProp, KeyValueProp, Lit, MemberExpr, MemberProp, Null, ObjectLit, ObjectPat,
-            ObjectPatProp, Pat, Prop, PropName, PropOrSpread, SimpleAssignTarget, Stmt, UpdateExpr,
-            UpdateOp,
+            BlockStmt, CallExpr, Callee, ComputedPropName, CondExpr, Decl, Expr, ExprOrSpread,
+            Ident, IdentName, KeyValuePatProp, KeyValueProp, Lit, MemberExpr, MemberProp, Null,
+            ObjectLit, ObjectPat, ObjectPatProp, Pat, Prop, PropName, PropOrSpread,
+            SimpleAssignTarget, Stmt, Str, UpdateExpr, UpdateOp,
         },
         visit::{VisitMut, VisitMutWith},
     },
@@ -61,6 +61,8 @@ pub enum IdentTransformStrategy {
     Prefix(FervidAtom),
     /// Generate `isRef(e) ? e.value++ : e++`
     IsRefCheckUpdate,
+    // Replace the identifier with a member expression (used for PropsAliased)
+    RewriteWithMemberExpr(MemberExpr),
 }
 
 pub trait BindingsHelperTransform {
@@ -439,6 +441,11 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                 );
                 return;
             }
+
+            IdentTransformStrategy::RewriteWithMemberExpr(member_expr) => {
+                *expr = Expr::Member(member_expr);
+                return;
+            }
         }
     }
 
@@ -556,6 +563,11 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                             return;
                         }
 
+                        IdentTransformStrategy::RewriteWithMemberExpr(member_expr) => {
+                            *n = AssignTarget::Simple(SimpleAssignTarget::Member(member_expr));
+                            return;
+                        }
+
                         IdentTransformStrategy::Unref
                         | IdentTransformStrategy::IsRefCheckUpdate => {
                             // TODO Error: this is not a valid transform strategy
@@ -627,6 +639,11 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                             obj: Box::new(Expr::Ident(prefix.into_ident())),
                             prop: MemberProp::Ident(ident.id.to_owned().into()),
                         })));
+                        return;
+                    }
+
+                    IdentTransformStrategy::RewriteWithMemberExpr(member_expr) => {
+                        *n = Pat::Expr(Box::new(Expr::Member(member_expr)));
                         return;
                     }
 
@@ -735,6 +752,51 @@ impl TransformVisitor<'_> {
         if let BindingTypes::TemplateLocal = binding_type {
             self.has_js_bindings = true;
             return IdentTransformStrategy::LeaveUnchanged;
+        }
+
+        // Props aliased have their own logic
+        if let BindingTypes::PropsAliased = binding_type {
+            self.has_js_bindings = true;
+
+            let member_obj_atom = if self.is_inline {
+                fervid_atom!("__props")
+            } else {
+                fervid_atom!("$props")
+            };
+
+            let Some(original_prop_name) = self.bindings_helper.props_aliases.get(symbol) else {
+                // TODO this is technically an error - alias for a `PropsAliased` binding was not found
+                return IdentTransformStrategy::LeaveUnchanged;
+            };
+
+            let member_prop = if is_valid_propname(&original_prop_name) {
+                MemberProp::Ident(IdentName {
+                    span: ident.span,
+                    sym: original_prop_name.to_owned(),
+                })
+            } else {
+                MemberProp::Computed(ComputedPropName {
+                    span: DUMMY_SP,
+                    expr: Box::new(Expr::Lit(Lit::Str(Str {
+                        span: DUMMY_SP,
+                        value: original_prop_name.to_owned(),
+                        raw: None,
+                    }))),
+                })
+            };
+
+            dbg!(&member_prop);
+
+            return IdentTransformStrategy::RewriteWithMemberExpr(MemberExpr {
+                span: DUMMY_SP,
+                obj: Box::new(Expr::Ident(Ident {
+                    span: DUMMY_SP,
+                    ctxt: Default::default(),
+                    sym: member_obj_atom,
+                    optional: false,
+                })),
+                prop: member_prop,
+            });
         }
 
         // Get the prefix which fits the scope (e.g. `_ctx.` for unknown scopes, `$setup.` for setup scope)

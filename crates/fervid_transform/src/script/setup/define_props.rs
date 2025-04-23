@@ -1,10 +1,13 @@
-use fervid_core::{atom_to_propname, fervid_atom, BindingTypes, FervidAtom, IntoIdent, VueImports};
+use fervid_core::{
+    atom_to_propname, fervid_atom, str_to_propname, BindingTypes, FervidAtom, IntoIdent, VueImports,
+};
 use flagset::FlagSet;
 use swc_core::{
     common::{Span, Spanned, DUMMY_SP},
     ecma::ast::{
-        Bool, CallExpr, Callee, Expr, ExprOrSpread, GetterProp, IdentName, KeyValueProp, Lit,
-        MethodProp, ObjectLit, Prop, PropName, PropOrSpread, SetterProp, TsType,
+        ArrayLit, ArrowExpr, BindingIdent, BlockStmtOrExpr, Bool, CallExpr, Callee, Expr,
+        ExprOrSpread, GetterProp, IdentName, KeyValueProp, Lit, MethodProp, ObjectLit, ParenExpr,
+        Pat, Prop, PropName, PropOrSpread, SetterProp, Str, TsType, VarDeclarator,
     },
 };
 
@@ -19,10 +22,13 @@ use crate::{
         setup::utils::to_runtime_type_string,
         utils::{collect_obj_fields, collect_string_arr},
     },
-    SetupBinding, SfcExportedObjectHelper,
+    PropsDestructureBinding, PropsDestructureConfig, SetupBinding, SfcExportedObjectHelper,
 };
 
-use super::{define_props_destructure::process_props_destructure, macros::TransformMacroResult};
+use super::{
+    macros::{TransformMacroResult, VarDeclHelper},
+    utils::unwrap_ts_node_expr,
+};
 
 #[derive(Default)]
 struct DefineProps {
@@ -38,34 +44,19 @@ struct DefineProps {
 pub fn process_define_props(
     ctx: &mut TypeResolveContext,
     call_expr: &CallExpr,
-    is_var_decl: bool,
-    is_const: bool,
-    is_ident: bool,
-    var_bindings: Option<&mut Vec<SetupBinding>>,
+    var_decl: Option<VarDeclHelper>,
     sfc_object_helper: &mut SfcExportedObjectHelper,
     errors: &mut Vec<TransformError>,
 ) -> TransformMacroResult {
     let mut define_props = DefineProps::default();
     extract_from_define_props(call_expr, &mut define_props);
-    process_define_props_impl(
-        ctx,
-        define_props,
-        is_var_decl,
-        is_const,
-        is_ident,
-        var_bindings,
-        sfc_object_helper,
-        errors,
-    )
+    process_define_props_impl(ctx, define_props, var_decl, sfc_object_helper, errors)
 }
 
 pub fn process_with_defaults(
     ctx: &mut TypeResolveContext,
     with_defaults_call: &CallExpr,
-    is_var_decl: bool,
-    is_const: bool,
-    is_ident: bool,
-    var_bindings: Option<&mut Vec<SetupBinding>>,
+    var_decl: Option<VarDeclHelper>,
     sfc_object_helper: &mut SfcExportedObjectHelper,
     errors: &mut Vec<TransformError>,
 ) -> TransformMacroResult {
@@ -103,16 +94,7 @@ pub fn process_with_defaults(
     define_props.defaults = with_defaults_call.args.get(1).map(|v| v.expr.to_owned());
 
     // Process
-    process_define_props_impl(
-        ctx,
-        define_props,
-        is_var_decl,
-        is_const,
-        is_ident,
-        var_bindings,
-        sfc_object_helper,
-        errors,
-    )
+    process_define_props_impl(ctx, define_props, var_decl, sfc_object_helper, errors)
 
     // TODO Implement a more generic `process_define_props_impl` function
     // which will return values to be assembled by `process_define_props` and `process_with_defaults`.
@@ -138,10 +120,7 @@ fn extract_from_define_props(define_props_call: &CallExpr, out: &mut DefineProps
 fn process_define_props_impl(
     ctx: &mut TypeResolveContext,
     define_props: DefineProps,
-    is_var_decl: bool,
-    is_const: bool,
-    is_ident: bool,
-    var_bindings: Option<&mut Vec<SetupBinding>>,
+    var_decl: Option<VarDeclHelper>,
     sfc_object_helper: &mut SfcExportedObjectHelper,
     errors: &mut Vec<TransformError>,
 ) -> TransformMacroResult {
@@ -169,8 +148,135 @@ fn process_define_props_impl(
         }));
     }
 
+    // Extract some variables while `define_props` is still owned
+    let define_props_span = define_props.span;
+    let has_defaults = define_props.defaults.is_some();
+
     // Calculate result
-    let props_expr = if let Some(runtime_decl) = define_props.runtime_decl {
+    let props_expr = match gen_runtime_props(ctx, define_props, errors) {
+        Ok(v) => v,
+        Err(e) => return TransformMacroResult::Error(e),
+    };
+
+    // Assign result.
+    // LHS is guaranteed to be None because of the duplicate check.
+    sfc_object_helper.props = props_expr;
+
+    // TODO: This technically depends on the usage inside `<template>`,
+    // however, by the order of operations scripts are processed earlier than `<template>`,
+    // so usage can't be properly inferred yet
+    // https://github.com/phoenix-ru/fervid/issues/65
+    sfc_object_helper.is_setup_props_referenced = true;
+
+    // When not in var mode - remove the `defineProps` statement
+    let Some(var_decl) = var_decl else {
+        return TransformMacroResult::ValidMacro(None);
+    };
+
+    // Binding type of the prop variable itself
+    if var_decl.lhs.is_ident() && var_decl.bindings.len() == 1 {
+        let binding = &mut var_decl.bindings[0];
+        binding.binding_type = BindingTypes::SetupReactiveConst;
+    } else if var_decl.is_const {
+        let binding_type = if matches!(ctx.props_destructure, PropsDestructureConfig::True) {
+            BindingTypes::Props
+        } else {
+            BindingTypes::SetupConst
+        };
+
+        // `defineProps` with a destructured const variable is `SetupConst`
+        var_decl
+            .bindings
+            .iter_mut()
+            .for_each(|v| v.binding_type = binding_type);
+    }
+
+    // When define props destructure is used, remove the `defineProps` variable declaration completely
+    if !has_defaults
+        && var_decl.lhs.is_object()
+        && !ctx.bindings_helper.props_destructured_bindings.is_empty()
+    {
+        // Clear the collected bindings to not accidentally overwrite them
+        var_decl.bindings.clear();
+
+        // When `...rest` spread parameter is present, rewrite the whole statement with `createPropsRestProxy`
+        if let Some(ref destructure_rest_id) = ctx.bindings_helper.props_destructure_rest_id {
+            ctx.bindings_helper.vue_imports |= VueImports::CreatePropsRestProxy;
+
+            let mut create_props_rest_proxy_args = Vec::<ExprOrSpread>::with_capacity(2);
+
+            // __props
+            create_props_rest_proxy_args.push(ExprOrSpread {
+                spread: None,
+                expr: Box::new(Expr::Ident(PROPS_HELPER.to_owned().into_ident())),
+            });
+
+            // Other (non-spread) destructured props, e.g. `['foo', 'bar']` in `const { foo, bar, ...rest } = defineProps()`
+            let mut props_destructured_bindings_arr = Vec::<Option<ExprOrSpread>>::with_capacity(
+                ctx.bindings_helper.props_destructured_bindings.len(),
+            );
+            for key in ctx.bindings_helper.props_destructured_bindings.keys() {
+                props_destructured_bindings_arr.push(Some(ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(Expr::Lit(Lit::Str(Str {
+                        span: DUMMY_SP,
+                        value: key.to_owned(),
+                        raw: None,
+                    }))),
+                }));
+            }
+            create_props_rest_proxy_args.push(ExprOrSpread {
+                spread: None,
+                expr: Box::new(Expr::Array(ArrayLit {
+                    span: DUMMY_SP,
+                    elems: props_destructured_bindings_arr,
+                })),
+            });
+
+            // e.g. `createPropsRestProxy(__props, ['foo', 'bar'])`
+            let create_props_rest_proxy = Expr::Call(CallExpr {
+                span: DUMMY_SP,
+                ctxt: Default::default(),
+                callee: Callee::Expr(Box::new(Expr::Ident(
+                    VueImports::CreatePropsRestProxy.as_atom().into_ident(),
+                ))),
+                args: create_props_rest_proxy_args,
+                type_args: None,
+            });
+
+            return TransformMacroResult::ValidMacroRewriteDeclarator(Some(Box::new(
+                VarDeclarator {
+                    span: DUMMY_SP,
+                    name: Pat::Ident(BindingIdent {
+                        id: destructure_rest_id.to_owned().into_ident(),
+                        type_ann: None,
+                    }),
+                    init: Some(Box::new(create_props_rest_proxy)),
+                    definite: Default::default(),
+                },
+            )));
+        }
+
+        // When no rest spread, simply remove the statement
+        return TransformMacroResult::ValidMacroRewriteDeclarator(None);
+    }
+
+    // Return `__props` when in var mode
+    TransformMacroResult::ValidMacro(Some(Box::new(Expr::Ident(
+        PROPS_HELPER
+            .to_owned()
+            .into_ident_spanned(define_props_span),
+    ))))
+}
+
+// Adapted from https://github.com/vuejs/core/blob/3bda3e83fd9e2fbe451a1c79dae82ff6a7467683/packages/compiler-sfc/src/script/defineProps.ts
+
+fn gen_runtime_props(
+    ctx: &mut TypeResolveContext,
+    define_props: DefineProps,
+    errors: &mut Vec<TransformError>,
+) -> Result<Option<Box<Expr>>, TransformError> {
+    if let Some(runtime_decl) = define_props.runtime_decl {
         // Add props as bindings
         let mut raw_bindings = Vec::new();
         match runtime_decl.as_ref() {
@@ -189,62 +295,66 @@ fn process_define_props_impl(
                 .map(|raw| SetupBinding::new(raw, BindingTypes::Props)),
         );
 
-        Some(runtime_decl)
-    } else if let Some(type_decl) = define_props.type_decl {
-        let extracted_props_result =
-            extract_runtime_props(ctx, &type_decl, define_props.defaults.as_deref());
-
-        match extracted_props_result {
-            Ok(v) => v,
-            Err(e) => return TransformMacroResult::Error(TransformError::ScriptError(e)),
-        }
-    } else {
-        // When both runtime and types are absent (i.e. for `defineProps()`), we allow it
-        None
-    };
-
-    // Assign result.
-    // LHS is guaranteed to be None because of the duplicate check.
-    sfc_object_helper.props = props_expr;
-
-    // TODO: This technically depends on the usage inside `<template>`,
-    // however, by the order of operations scripts are processed earlier than `<template>`,
-    // so usage can't be properly inferred yet
-    // https://github.com/phoenix-ru/fervid/issues/65
-    sfc_object_helper.is_setup_props_referenced = true;
-
-    // Return `__props` when in var mode. None otherwise - still a valid macro
-    if is_var_decl {
-        // TODO Refactor `is_var_decl`, `is_const`, `is_ident`, `var_bindings` into a single helper
-        // TODO Condition here should look at `ObjectPat` instead
-        if define_props.defaults.is_none() && !is_ident {
-            process_props_destructure(ctx, errors);
+        if ctx.bindings_helper.props_destructured_bindings.is_empty() {
+            // In contrast to official compiler, models are merged in a separate place
+            // TODO Maybe reconsider?
+            return Ok(Some(runtime_decl));
         }
 
-        // Binding type of the prop variable itself
-        if let Some(var_bindings) = var_bindings {
-            if is_ident && var_bindings.len() == 1 {
-                let binding = &mut var_bindings[0];
-                binding.binding_type = BindingTypes::SetupReactiveConst;
-            } else if is_const {
-                // `defineProps` with a destructured const variable is `SetupConst`
-                var_bindings
-                    .iter_mut()
-                    .for_each(|v| v.binding_type = BindingTypes::SetupConst);
+        let mut defaults = Vec::<PropOrSpread>::with_capacity(
+            ctx.bindings_helper.props_destructured_bindings.len() * 2,
+        );
+
+        for (key, binding) in ctx.bindings_helper.props_destructured_bindings.iter() {
+            let Some(d) = gen_destructured_default_value(binding, FlagSet::default(), errors)
+            else {
+                continue;
+            };
+
+            // Push the default value
+            defaults.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                key: str_to_propname(&key, DUMMY_SP),
+                value: d.value,
+            }))));
+
+            // Push `__skip_PROPNAME: true`
+            if d.need_skip_factory {
+                let mut new_key = String::with_capacity(/* "__skip_".len() */ 7 + key.len());
+                new_key.push_str("__skip_");
+                new_key.push_str(&key);
+
+                defaults.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                    key: str_to_propname(&new_key, DUMMY_SP),
+                    value: Box::new(Expr::Lit(Lit::Bool(Bool {
+                        span: DUMMY_SP,
+                        value: true,
+                    }))),
+                }))));
             }
         }
 
-        TransformMacroResult::ValidMacro(Some(Box::new(Expr::Ident(
-            PROPS_HELPER
-                .to_owned()
-                .into_ident_spanned(define_props.span),
-        ))))
+        if defaults.is_empty() {
+            return Ok(Some(runtime_decl));
+        }
+
+        Ok(Some(wrap_in_merge_defaults(
+            ctx,
+            runtime_decl,
+            Box::new(Expr::Object(ObjectLit {
+                props: defaults,
+                span: DUMMY_SP,
+            })),
+        )))
+    } else if let Some(type_decl) = define_props.type_decl {
+        let extracted_props_result =
+            extract_runtime_props(ctx, &type_decl, define_props.defaults.as_deref(), errors);
+
+        extracted_props_result.map_err(|e| TransformError::ScriptError(e))
     } else {
-        TransformMacroResult::ValidMacro(None)
+        // Allow both runtime and types to be absent (i.e. for `defineProps()`)
+        Ok(None)
     }
 }
-
-// Adapted from https://github.com/vuejs/core/blob/3bda3e83fd9e2fbe451a1c79dae82ff6a7467683/packages/compiler-sfc/src/script/defineProps.ts
 
 struct PropTypeData {
     key: FervidAtom,
@@ -258,6 +368,7 @@ fn extract_runtime_props(
     ctx: &mut TypeResolveContext,
     type_decl: &TsType,
     defaults: Option<&Expr>,
+    errors: &mut Vec<TransformError>,
 ) -> ResolutionResult<Option<Box<Expr>>> {
     let props = resolve_runtime_props_from_type(ctx, type_decl)?;
     if props.is_empty() {
@@ -273,21 +384,15 @@ fn extract_runtime_props(
     for prop in props {
         let key = prop.key.clone();
 
-        props_obj.props.push(get_runtime_prop_from_type(
+        props_obj.props.push(gen_runtime_prop_from_type(
             ctx,
             prop,
             defaults,
             has_static_defaults,
+            errors,
         ));
 
         // Register binding if not registered already
-        // TODO Need to check the case with
-        // ```
-        // defineProps<{
-        //   foo: number
-        // }>()
-        // const foo = ref() // <- this should prevail
-        // ```
         if !ctx
             .bindings_helper
             .setup_bindings
@@ -307,25 +412,7 @@ fn extract_runtime_props(
         let merge_defaults_helper = VueImports::MergeDefaults;
         ctx.bindings_helper.vue_imports |= merge_defaults_helper;
 
-        // TODO /*#__PURE__*/ comment
-        props_decl = Box::new(Expr::Call(CallExpr {
-            span: DUMMY_SP,
-            ctxt: Default::default(),
-            callee: Callee::Expr(Box::new(Expr::Ident(
-                merge_defaults_helper.as_atom().into_ident(),
-            ))),
-            args: vec![
-                ExprOrSpread {
-                    spread: None,
-                    expr: props_decl,
-                },
-                ExprOrSpread {
-                    spread: None,
-                    expr: Box::new(defaults.to_owned()),
-                },
-            ],
-            type_args: None,
-        }));
+        props_decl = wrap_in_merge_defaults(ctx, props_decl, Box::new(defaults.to_owned()));
     }
 
     Ok(Some(props_decl))
@@ -368,11 +455,12 @@ fn resolve_runtime_props_from_type(
     return Ok(props);
 }
 
-fn get_runtime_prop_from_type(
+fn gen_runtime_prop_from_type(
     ctx: &mut TypeResolveContext,
     prop: PropTypeData,
     defaults: Option<&Expr>,
     has_static_defaults: bool,
+    errors: &mut Vec<TransformError>,
 ) -> PropOrSpread {
     let mut default: Option<Box<Prop>> = None;
     let default_prop_name = PropName::Ident(IdentName {
@@ -382,7 +470,12 @@ fn get_runtime_prop_from_type(
 
     let PropTypeData { key, .. } = prop;
 
-    let destructured = gen_destructured_default_value(ctx, &key);
+    let destructured = ctx
+        .bindings_helper
+        .props_destructured_bindings
+        .get(&key)
+        .and_then(|v| gen_destructured_default_value(v, prop.types, errors));
+
     if let Some(destructured) = destructured {
         default = Some(Box::new(Prop::KeyValue(KeyValueProp {
             key: default_prop_name,
@@ -603,14 +696,109 @@ fn has_static_with_defaults(defaults: Option<&Expr>) -> bool {
     })
 }
 
+// https://github.com/vuejs/core/blob/4f792535e25af6941d1eb267fe16e4121623a006/packages/compiler-sfc/src/script/defineProps.ts#L326
 struct GenDestructuredDefaultValueReturn {
     value: Box<Expr>,
-    _need_skip_factory: bool,
+    need_skip_factory: bool,
 }
 fn gen_destructured_default_value(
-    _ctx: &mut TypeResolveContext,
-    _key: &str,
+    destructured_binding: &PropsDestructureBinding,
+    inferred_type: FlagSet<Types>,
+    errors: &mut Vec<TransformError>,
 ) -> Option<GenDestructuredDefaultValueReturn> {
-    // TODO
-    None
+    let Some(ref default_val) = destructured_binding.default else {
+        return None;
+    };
+
+    let unwrapped = unwrap_ts_node_expr(&default_val);
+
+    // Check previously inferred type against the naively inferred type of the default value
+    if !inferred_type.is_empty() && !inferred_type.contains(Types::Null) {
+        let value_type = infer_value_type(unwrapped);
+        if let Some(value_type) = value_type {
+            if !inferred_type.contains(value_type) {
+                errors.push(TransformError::ScriptError(ScriptError {
+                    span: unwrapped.span(),
+                    kind: ScriptErrorKind::DefinePropsDestructureDeclaredTypeMismatch,
+                }));
+                return None;
+            }
+        }
+    }
+
+    let need_skip_factory = inferred_type.is_empty()
+        && matches!(unwrapped, Expr::Fn(_) | Expr::Arrow(_) | Expr::Ident(_));
+
+    let need_factory_wrap = !need_skip_factory
+        && !matches!(unwrapped, Expr::Lit(_))
+        && !inferred_type.contains(Types::Function);
+
+    let value = if need_factory_wrap {
+        // Fix the SWC stringifier which does not automatically wrap `Expr::Object` in `()`
+        // when used as a return value of ArrowExpr.
+        // This leads to `() => {}` (empty body) after stringification,
+        // which is not the same as `() => ({})` (empty object)
+        let arrow_val = if default_val.is_object() {
+            Box::new(Expr::Paren(ParenExpr {
+                expr: default_val.to_owned(),
+                span: DUMMY_SP,
+            }))
+        } else {
+            default_val.to_owned()
+        };
+
+        Box::new(Expr::Arrow(ArrowExpr {
+            body: Box::new(BlockStmtOrExpr::Expr(arrow_val)),
+            ..Default::default()
+        }))
+    } else {
+        default_val.to_owned()
+    };
+
+    Some(GenDestructuredDefaultValueReturn {
+        value,
+        need_skip_factory,
+    })
+}
+
+fn infer_value_type(expr: &Expr) -> Option<Types> {
+    match expr {
+        Expr::Lit(Lit::Str(_)) => Some(Types::String),
+        Expr::Lit(Lit::Num(_)) => Some(Types::Number),
+        Expr::Lit(Lit::Bool(_)) => Some(Types::Boolean),
+        Expr::Object(_) => Some(Types::Object),
+        Expr::Array(_) => Some(Types::Array),
+        Expr::Fn(_) | Expr::Arrow(_) => Some(Types::Function),
+
+        _ => None,
+    }
+}
+
+fn wrap_in_merge_defaults(
+    ctx: &mut TypeResolveContext,
+    props_decl: Box<Expr>,
+    defaults: Box<Expr>,
+) -> Box<Expr> {
+    let merge_defaults_helper = VueImports::MergeDefaults;
+    ctx.bindings_helper.vue_imports |= merge_defaults_helper;
+
+    // TODO /*#__PURE__*/ comment
+    Box::new(Expr::Call(CallExpr {
+        span: DUMMY_SP,
+        ctxt: Default::default(),
+        callee: Callee::Expr(Box::new(Expr::Ident(
+            merge_defaults_helper.as_atom().into_ident(),
+        ))),
+        args: vec![
+            ExprOrSpread {
+                spread: None,
+                expr: props_decl,
+            },
+            ExprOrSpread {
+                spread: None,
+                expr: defaults,
+            },
+        ],
+        type_args: None,
+    }))
 }
