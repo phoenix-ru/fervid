@@ -86,6 +86,19 @@ pub fn process_with_defaults(
         bail_no_define_props!()
     };
 
+    // Check co-usage of props destructure together with `withDefaults`
+    if let Some(VarDeclHelper {
+        lhs: Pat::Object(obj_pat),
+        ..
+    }) = var_decl
+    {
+        // TODO This is technically a warning
+        errors.push(TransformError::ScriptError(ScriptError {
+            span: obj_pat.span,
+            kind: ScriptErrorKind::DefinePropsDestructureUnnecessaryWithDefaults,
+        }));
+    }
+
     // Extract from `defineProps`
     let mut define_props = DefineProps::default();
     extract_from_define_props(define_props_call, &mut define_props);

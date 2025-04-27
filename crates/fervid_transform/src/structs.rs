@@ -79,7 +79,7 @@ pub struct BindingsHelper {
     /// Internal Vue imports used by built-in components, directives and others
     pub vue_imports: VueImportsSet,
     /// User imports from `vue` package
-    pub vue_resolved_imports: Box<VueResolvedImports>,
+    pub vue_import_aliases: Box<VueImportAliases>,
 }
 
 #[derive(Debug, Clone)]
@@ -161,10 +161,12 @@ pub struct TemplateScope {
 
 /// Imports from "vue" package
 #[derive(Debug, Default, PartialEq)]
-pub struct VueResolvedImports {
+pub struct VueImportAliases {
     pub ref_import: Option<Id>,
     pub computed: Option<Id>,
     pub reactive: Option<Id>,
+    pub to_ref: Option<Id>,
+    pub watch: Option<Id>,
 }
 
 /// https://github.com/vuejs/rfcs/discussions/503

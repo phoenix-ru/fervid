@@ -1,7 +1,7 @@
 use fervid_core::BindingTypes;
 use swc_core::ecma::ast::{Callee, ClassDecl, Expr, FnDecl, ObjectPatProp, Pat, RestPat};
 
-use crate::{script::utils::unroll_paren_seq, structs::VueResolvedImports, SetupBinding};
+use crate::{script::utils::unroll_paren_seq, structs::VueImportAliases, SetupBinding};
 
 use super::utils::is_static;
 
@@ -50,7 +50,7 @@ pub fn categorize_fn_decl(fn_decl: &FnDecl) -> SetupBinding {
 ///     baz = computed(() => 3),        // BindingTypes::SetupRef
 ///     qux = reactive({ x: 4 }),       // BindingTypes::SetupReactiveConst
 /// ```
-pub fn categorize_expr(expr: &Expr, vue_user_imports: &VueResolvedImports) -> BindingTypes {
+pub fn categorize_expr(expr: &Expr, vue_user_imports: &VueImportAliases) -> BindingTypes {
     // Unroll an expression from all possible parenthesis and commas,
     // e.g. `(foo, bar)` -> `bar`
     let expr = unroll_paren_seq(expr);

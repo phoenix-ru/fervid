@@ -63,7 +63,7 @@ pub fn transform_and_record_script_options_api(
         analyzer::analyze_top_level_items(
             module,
             &mut options_api_bindings,
-            &mut bindings_helper.vue_resolved_imports,
+            &mut bindings_helper.vue_import_aliases,
         )
     }
 

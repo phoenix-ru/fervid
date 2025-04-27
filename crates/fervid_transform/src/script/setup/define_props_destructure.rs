@@ -4,25 +4,26 @@ use swc_core::{
     common::{BytePos, Span, Spanned, DUMMY_SP},
     ecma::{
         ast::{
-            ArrayPat, AssignTarget, AssignTargetPat, BlockStmt, BlockStmtOrExpr, CatchClause,
-            ClassDecl, ComputedPropName, Decl, Expr, FnDecl, ForHead, ForInStmt, ForOfStmt,
-            Function, Ident, IdentName, KeyValuePatProp, KeyValueProp, Lit, MemberExpr, MemberProp,
-            ModuleDecl, ModuleItem, ObjectLit, ObjectPat, ObjectPatProp, Pat, Prop, PropName,
-            PropOrSpread, SimpleAssignTarget, Stmt, Str, VarDecl, VarDeclOrExpr,
+            ArrayPat, AssignTarget, AssignTargetPat, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
+            CatchClause, ClassDecl, ComputedPropName, Decl, Expr, ExprOrSpread, FnDecl, ForHead,
+            ForInStmt, ForOfStmt, Function, Ident, IdentName, KeyValuePatProp, KeyValueProp, Lit,
+            MemberExpr, MemberProp, ModuleDecl, ModuleItem, ObjectLit, ObjectPat, ObjectPatProp,
+            Pat, Prop, PropName, PropOrSpread, SimpleAssignTarget, Stmt, Str, VarDecl,
+            VarDeclOrExpr,
         },
         visit::{VisitMut, VisitMutWith},
     },
 };
 
 use crate::{
-    atoms::{DEFINE_PROPS, PROPS_HELPER},
+    atoms::{DEFINE_PROPS, PROPS_HELPER, TO_REF, WATCH},
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::{
         common::extract_variables_from_pat,
         resolve_type::TypeResolveContext,
         utils::{is_call_of, resolve_object_key},
     },
-    PropsDestructureBinding, PropsDestructureConfig, SetupBinding,
+    PropsDestructureBinding, PropsDestructureConfig, SetupBinding, VueImportAliases,
 };
 
 use super::utils::unwrap_ts_node_expr;
@@ -159,25 +160,13 @@ pub fn transform_destructured_props(
     ctx: &mut TypeResolveContext,
     setup_stmts: &mut Vec<Stmt>,
     module_items: &mut Vec<ModuleItem>,
-    _errors: &mut Vec<TransformError>,
+    errors: &mut Vec<TransformError>,
 ) {
     if matches!(ctx.props_destructure, PropsDestructureConfig::False) {
         return;
     }
 
-    let mut walker = Walker::new();
-
-    // Fill the root scope
-    {
-        let root_scope = &mut walker.all_scopes[0];
-
-        for (key, binding) in ctx.bindings_helper.props_destructured_bindings.iter() {
-            root_scope.variables.insert(binding.local.to_owned(), true);
-            walker
-                .props_local_to_public_map
-                .insert(binding.local.to_owned(), key.to_owned());
-        }
-    }
+    let mut walker = Walker::new(ctx, errors);
 
     // Visit the root first - only collect
     walker.is_root = true;
@@ -193,15 +182,17 @@ pub fn transform_destructured_props(
     dbg!(&walker.all_scopes);
 }
 
-struct Walker {
+struct Walker<'a> {
     all_scopes: Vec<Scope>,
     current_scope: usize,
+    errors: &'a mut Vec<TransformError>,
     excluded_ids: FxHashSet<Identifier>,
     props_local_to_public_map: FxHashMap<FervidAtom, FervidAtom>,
     stmt_visit_mode: StmtVisitMode,
     is_root: bool,
     is_in_assign_target: bool,
     is_in_destructure_assign: bool,
+    vue_import_aliases: &'a VueImportAliases,
 }
 
 #[derive(Clone, Copy)]
@@ -222,18 +213,32 @@ struct Scope {
 #[derive(Hash, PartialEq, Eq, Clone)]
 struct Identifier(FervidAtom, Span);
 
-impl Walker {
-    fn new() -> Self {
-        Self {
+impl<'a> Walker<'a> {
+    fn new(ctx: &'a mut TypeResolveContext, errors: &'a mut Vec<TransformError>) -> Self {
+        let mut walker = Self {
             all_scopes: vec![Scope::default()],
             current_scope: 0,
+            errors,
             excluded_ids: FxHashSet::default(),
             props_local_to_public_map: FxHashMap::default(),
             stmt_visit_mode: StmtVisitMode::Collect,
             is_root: false,
             is_in_assign_target: false,
             is_in_destructure_assign: false,
+            vue_import_aliases: ctx.bindings_helper.vue_import_aliases.as_ref(),
+        };
+
+        // Fill the root scope
+        let root_scope = &mut walker.all_scopes[0];
+
+        for (key, binding) in ctx.bindings_helper.props_destructured_bindings.iter() {
+            root_scope.variables.insert(binding.local.to_owned(), true);
+            walker
+                .props_local_to_public_map
+                .insert(binding.local.to_owned(), key.to_owned());
         }
+
+        walker
     }
 
     fn collect_stmts(&mut self, stmts: &mut Vec<Stmt>) {
@@ -370,6 +375,64 @@ impl Walker {
         &mut self.all_scopes[0]
     }
 
+    fn check_usage(&mut self, call_expr: &CallExpr) {
+        let Callee::Expr(ref callee_expr) = call_expr.callee else {
+            return;
+        };
+
+        let Expr::Ident(ref callee_ident) = callee_expr.as_ref() else {
+            return;
+        };
+
+        // First argument of CallExpr needs to exist and be an expression (not a spread)
+        let Some(ExprOrSpread {
+            spread: None,
+            expr: ref first_arg,
+        }) = call_expr.args.first()
+        else {
+            return;
+        };
+
+        let to_ref = self
+            .vue_import_aliases
+            .to_ref
+            .as_ref()
+            .map(|v| &v.0)
+            .unwrap_or(&TO_REF);
+
+        let watch = self
+            .vue_import_aliases
+            .watch
+            .as_ref()
+            .map(|v| &v.0)
+            .unwrap_or(&WATCH);
+
+        let is_to_ref = &callee_ident.sym == to_ref;
+        let is_watch = &callee_ident.sym == watch;
+
+        if !is_to_ref && !is_watch {
+            return;
+        }
+
+        // First argument needs to be an identifier
+        let Expr::Ident(first_arg_ident) = unwrap_ts_node_expr(&first_arg) else {
+            return;
+        };
+
+        // When the first argument of `watch` or `toRef` is an identifier
+        // which points to a destructured prop, emit an error (since it needs to be a getter instead)
+        if self.should_rewrite(&first_arg_ident.sym) {
+            self.errors.push(TransformError::ScriptError(ScriptError {
+                span: first_arg_ident.span,
+                kind: if is_to_ref {
+                    ScriptErrorKind::DefinePropsDestructureShouldNotPassToToRef
+                } else {
+                    ScriptErrorKind::DefinePropsDestructureShouldNotPassToWatch
+                },
+            }));
+        }
+    }
+
     fn should_rewrite(&self, sym: &FervidAtom) -> bool {
         let mut current_scope = self.current_scope;
 
@@ -425,7 +488,7 @@ impl Walker {
 }
 
 // Adapted from template::expr_transform
-impl VisitMut for Walker {
+impl<'a> VisitMut for Walker<'a> {
     fn visit_mut_stmt(&mut self, stmt: &mut Stmt) {
         // TODO When in statement:
         // if root - only visit the LHS, delay till all statements are processed, then only visit the RHS
@@ -534,7 +597,7 @@ impl VisitMut for Walker {
 
             // Call expression, type arguments should not be taken into account
             Expr::Call(call_expr) => {
-                // TODO Check usage of `watch` and `toRef` with the destructured props
+                self.check_usage(call_expr);
 
                 call_expr.callee.visit_mut_with(self);
                 for arg in call_expr.args.iter_mut() {
@@ -669,13 +732,11 @@ impl VisitMut for Walker {
         match assign_target {
             AssignTarget::Simple(simple) => match simple {
                 SimpleAssignTarget::Ident(ident) => {
-                    if let Some(should_rewrite_with) = self.should_rewrite_with(&ident) {
-                        *assign_target =
-                            AssignTarget::Simple(SimpleAssignTarget::Member(MemberExpr {
-                                span: ident.span,
-                                obj: Box::new(Expr::Ident(PROPS_HELPER.to_owned().into_ident())),
-                                prop: should_rewrite_with,
-                            }));
+                    if self.should_rewrite(&ident.sym) {
+                        self.errors.push(TransformError::ScriptError(ScriptError {
+                            span: ident.span,
+                            kind: ScriptErrorKind::DefinePropsDestructureCannotAssignToReadonly,
+                        }));
                     }
                     return;
                 }

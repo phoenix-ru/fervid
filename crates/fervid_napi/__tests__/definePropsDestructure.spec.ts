@@ -455,7 +455,7 @@ describe('sfc reactive props destructure', () => {
     })
 
     // TODO not skip
-    describe.skip('errors', () => {
+    describe('errors', () => {
         test('should error on deep destructure', () => {
             {
                 const { errors } = compile(
@@ -489,14 +489,11 @@ describe('sfc reactive props destructure', () => {
         </script>`,
             )
 
-            // expect(
-            //     `withDefaults() is unnecessary when using destructure`,
-            // ).toHaveBeenWarned()
             expect(errors.length).toBe(1)
-            expect(errors[0].message).toMatch('DefinePropsDestructureForbidden')
+            expect(errors[0].message).toMatch('DefinePropsDestructureUnnecessaryWithDefaults')
         })
 
-        test('should error if destructure reference local vars', () => {
+        test.skip('should error if destructure reference local vars', () => {
             const { errors } = compile(
                     `<script setup>
           let x = 1
@@ -545,7 +542,7 @@ describe('sfc reactive props destructure', () => {
                     </script>`,
                 )
                 expect(errors.length).toBe(1)
-                expect(errors[0].message).toMatch('todo')
+                expect(errors[0].message).toMatch('DefinePropsDestructureShouldNotPassToWatch')
             }
 
             {
@@ -557,7 +554,7 @@ describe('sfc reactive props destructure', () => {
                     </script>`,
                 )
                 expect(errors.length).toBe(1)
-                expect(errors[0].message).toMatch('todo')
+                expect(errors[0].message).toMatch('DefinePropsDestructureShouldNotPassToWatch')
             }
 
             {
@@ -569,7 +566,7 @@ describe('sfc reactive props destructure', () => {
                     </script>`,
                 )
                 expect(errors.length).toBe(1)
-                expect(errors[0].message).toMatch('todo')
+                expect(errors[0].message).toMatch('DefinePropsDestructureShouldNotPassToToRef')
             }
 
             {
@@ -581,7 +578,7 @@ describe('sfc reactive props destructure', () => {
                     </script>`,
                 )
                 expect(errors.length).toBe(1)
-                expect(errors[0].message).toMatch('todo')
+                expect(errors[0].message).toMatch('DefinePropsDestructureShouldNotPassToToRef')
             }
         })
 
@@ -593,9 +590,8 @@ describe('sfc reactive props destructure', () => {
         </script>`,
             )
 
-            // .toThrow(`Default value of prop "foo" does not match declared type.`)
             expect(errors.length).toBe(1)
-            expect(errors[0].message).toMatch('todo')
+            expect(errors[0].message).toMatch('DefinePropsDestructureDeclaredTypeMismatch')
         })
 
         // #8017

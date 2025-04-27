@@ -293,7 +293,7 @@ fn transform_decl_stmt(
                             // For destructures correct bindings are already assigned.
                             let rhs_type = categorize_expr(
                                 init_expr,
-                                &ctx.bindings_helper.vue_resolved_imports,
+                                &ctx.bindings_helper.vue_import_aliases,
                             );
 
                             enrich_binding_types(
