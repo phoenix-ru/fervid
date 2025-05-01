@@ -1,7 +1,7 @@
 use fervid_core::{IntoIdent, VueImports};
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Ident, ObjectLit, PropOrSpread},
+    ecma::ast::{ArrayLit, CallExpr, Callee, Decl, Expr, ExprOrSpread, Ident, Module, ModuleItem, ObjectLit, Pat, PropOrSpread, Stmt, VarDeclarator},
 };
 
 use crate::{
@@ -13,24 +13,164 @@ use crate::{
     script::{
         resolve_type::TypeResolveContext,
         setup::{
-            define_emits::process_define_emits,
-            define_model::process_define_model,
-            define_options::process_define_options,
-            define_props::{process_define_props, process_with_defaults},
-            define_slots::process_define_slots,
-            utils::unwrap_ts_node_expr,
+            define_emits::process_define_emits, define_model::process_define_model, define_options::process_define_options, define_props::{process_define_props, process_with_defaults}, define_props_destructure::collect_props_destructure, define_slots::process_define_slots, utils::unwrap_ts_node_expr
         },
     },
     structs::SfcExportedObjectHelper,
-    SetupBinding,
+    SetupBinding, TransformSfcContext,
 };
 
 use super::define_model::postprocess_models;
 
+pub struct CollectMacrosResult {
+    pub has_type_only_macros: bool,
+}
+
+pub fn collect_macros(
+    ctx: &mut TransformSfcContext,
+    module: &Module,
+    errors: &mut Vec<TransformError>,
+) -> CollectMacrosResult {
+    let mut result = CollectMacrosResult {
+        has_type_only_macros: false,
+    };
+
+    // Check `defineProps` inside `withDefaults`
+    // TODO Use a better approach
+    fn is_type_only_with_defaults(call_expr: &CallExpr) -> bool {
+        let Some(ExprOrSpread {
+            expr: define_props_expr,
+            spread: None,
+        }) = call_expr.args.first()
+        else {
+            return false;
+        };
+
+        let Expr::Call(CallExpr {
+            callee: Callee::Expr(callee_expr),
+            type_args,
+            ..
+        }) = define_props_expr.as_ref()
+        else {
+            return false;
+        };
+
+        let Expr::Ident(callee_expr_ident) = callee_expr.as_ref() else {
+            return false;
+        };
+
+        if callee_expr_ident.sym == *DEFINE_PROPS {
+            type_args.is_some()
+        } else {
+            false
+        }
+    }
+
+    for module_item in module.body.iter() {
+        let ModuleItem::Stmt(module_stmt) = module_item else {
+            continue;
+        };
+
+        match module_stmt {
+            // E.g. `let foo = defineProps()`
+            Stmt::Decl(Decl::Var(var_decl)) => {
+                if var_decl.declare {
+                    continue;
+                }
+
+                for var_decl_item in var_decl.decls.iter() {
+                    let Some(ref init) = var_decl_item.init else {
+                        continue;
+                    };
+
+                    let Expr::Call(ref call_expr) = init.as_ref() else {
+                        continue;
+                    };
+
+                    let Callee::Expr(ref callee_expr) = call_expr.callee else {
+                        continue;
+                    };
+
+                    let Expr::Ident(ref callee_ident) = callee_expr.as_ref() else {
+                        continue;
+                    };
+
+                    let is_define_props = callee_ident.sym == *DEFINE_PROPS;
+                    let is_define_emits = callee_ident.sym == *DEFINE_EMITS;
+                    let is_with_defaults = callee_ident.sym == *WITH_DEFAULTS;
+                    if !is_define_props && !is_define_emits && !is_with_defaults {
+                        continue;
+                    }
+
+                    // Type-only marker
+                    let has_type_args = if is_define_props || is_define_emits {
+                        call_expr.type_args.is_some()
+                    } else {
+                        is_type_only_with_defaults(call_expr)
+                    };
+
+                    result.has_type_only_macros |= has_type_args;
+
+                    // No other logic for `defineEmits`
+                    if is_define_emits {
+                        continue;
+                    }
+
+                    // Props destructure supports only object patterns
+                    if let Pat::Object(ref obj_pat) = var_decl_item.name {
+                        collect_props_destructure(ctx, obj_pat, errors)
+                    }
+                }
+            }
+
+            Stmt::Expr(expr_stmt) => {
+                let Expr::Call(ref call_expr) = expr_stmt.expr.as_ref() else {
+                    continue;
+                };
+
+                let Callee::Expr(ref callee_expr) = call_expr.callee else {
+                    continue;
+                };
+
+                let Expr::Ident(ref callee_ident) = callee_expr.as_ref() else {
+                    continue;
+                };
+
+                let is_define_props = callee_ident.sym == *DEFINE_PROPS;
+                let is_define_emits = callee_ident.sym == *DEFINE_EMITS;
+                let is_with_defaults = callee_ident.sym == *WITH_DEFAULTS;
+                if !is_define_props && !is_define_emits && !is_with_defaults {
+                    continue;
+                }
+
+                // Type-only marker
+                let has_type_args = if is_define_props || is_define_emits {
+                    call_expr.type_args.is_some()
+                } else {
+                    is_type_only_with_defaults(call_expr)
+                };
+
+                result.has_type_only_macros |= has_type_args;
+            }
+
+            _ => continue,
+        };
+    }
+
+    result
+}
+
 pub enum TransformMacroResult {
     NotAMacro,
     ValidMacro(Option<Box<Expr>>),
+    ValidMacroRewriteDeclarator(Option<Box<VarDeclarator>>),
     Error(TransformError),
+}
+
+pub struct VarDeclHelper<'a> {
+    pub is_const: bool,
+    pub lhs: &'a Pat,
+    pub bindings: &'a mut Vec<SetupBinding>
 }
 
 /// Tries to transform a Vue compiler macro.\
@@ -42,10 +182,7 @@ pub fn transform_script_setup_macro_expr(
     ctx: &mut TypeResolveContext,
     expr: &Expr,
     sfc_object_helper: &mut SfcExportedObjectHelper,
-    is_var_decl: bool,
-    is_const: bool,
-    is_ident: bool,
-    var_bindings: Option<&mut Vec<SetupBinding>>,
+    var_decl: Option<VarDeclHelper>,
     errors: &mut Vec<TransformError>,
 ) -> TransformMacroResult {
     // `defineExpose` and `defineModel` actually generate something
@@ -98,10 +235,7 @@ pub fn transform_script_setup_macro_expr(
         process_define_props(
             ctx,
             call_expr,
-            is_var_decl,
-            is_const,
-            is_ident,
-            var_bindings,
+            var_decl,
             sfc_object_helper,
             errors,
         )
@@ -109,10 +243,7 @@ pub fn transform_script_setup_macro_expr(
         process_with_defaults(
             ctx,
             call_expr,
-            is_var_decl,
-            is_const,
-            is_ident,
-            var_bindings,
+            var_decl,
             sfc_object_helper,
             errors,
         )
@@ -120,9 +251,7 @@ pub fn transform_script_setup_macro_expr(
         process_define_emits(
             ctx,
             call_expr,
-            is_var_decl,
-            is_ident,
-            var_bindings,
+            var_decl,
             sfc_object_helper,
             errors,
         )
@@ -148,16 +277,14 @@ pub fn transform_script_setup_macro_expr(
     } else if DEFINE_MODEL.eq(sym) {
         process_define_model(
             call_expr,
-            is_var_decl,
-            is_ident,
-            var_bindings,
+            var_decl,
             sfc_object_helper,
             bindings_helper,
         )
     } else if DEFINE_SLOTS.eq(sym) {
-        process_define_slots(call_expr, is_var_decl, sfc_object_helper, bindings_helper)
+        process_define_slots(call_expr, var_decl.is_some(), sfc_object_helper, bindings_helper)
     } else if DEFINE_OPTIONS.eq(sym) {
-        process_define_options(call_expr, is_var_decl, sfc_object_helper, errors)
+        process_define_options(call_expr, var_decl.is_some(), sfc_object_helper, errors)
     } else {
         TransformMacroResult::NotAMacro
     }

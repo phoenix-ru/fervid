@@ -13,6 +13,8 @@ flags! {
         CreateElementBlock,
         #[strum(serialize = "_createElementVNode")]
         CreateElementVNode,
+        #[strum(serialize = "_createPropsRestProxy")]
+        CreatePropsRestProxy,
         #[strum(serialize = "_createTextVNode")]
         CreateTextVNode,
         #[strum(serialize = "_createVNode")]

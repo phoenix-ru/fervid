@@ -2,14 +2,13 @@
 
 use fervid_core::SfcScriptBlock;
 use resolve_type::record_types;
+use setup::macros::collect_macros;
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{Function, Module, ObjectLit},
 };
 
-use crate::{
-    error::TransformError, structs::TransformScriptsResult, TransformSfcContext,
-};
+use crate::{error::TransformError, structs::TransformScriptsResult, TransformSfcContext};
 
 use self::{
     imports::process_imports,
@@ -51,44 +50,10 @@ pub fn transform_and_record_scripts(
     // Official compiler does lazy type recording using the source AST,
     // but we are modifying the source AST and thus cannot use it at a later stage.
     // Therefore, types are eagerly recorded.
-
-    // 1.1. Imports in `<script>`
-    if let Some(ref mut script_options) = script_options {
-        process_imports(
-            &mut script_options.content,
-            &mut ctx.bindings_helper,
-            false,
-            errors,
-        );
-    }
-
-    // 1.2. Imports in `<script setup>`
-    if let Some(ref mut script_setup) = script_setup {
-        process_imports(
-            &mut script_setup.content,
-            &mut ctx.bindings_helper,
-            true,
-            errors,
-        );
-    }
-
-    // 1.3. Record types to support type-only `defineProps` and `defineEmits`
-    if ctx.bindings_helper.is_ts {
-        let scope = ctx.root_scope();
-        let mut scope = (*scope).borrow_mut();
-        scope.imports = ctx.bindings_helper.user_imports.clone();
-
-        record_types(
-            ctx,
-            script_setup.as_mut(),
-            script_options.as_mut(),
-            &mut scope,
-            false,
-        );
-    }
+    pretransform(ctx, script_setup.as_mut(), script_options.as_mut(), errors);
 
     //
-    // STEP 1: Transform Options API `<script>`.
+    // STEP 2: Transform Options API `<script>`.
     //
     let mut script_module: Option<Box<Module>> = None;
     let mut script_default_export: Option<ObjectLit> = None;
@@ -155,6 +120,62 @@ pub fn transform_and_record_scripts(
         module,
         export_obj,
         setup_fn,
+    }
+}
+
+/// Records the imports and collects information for macro transforms,
+/// such as types, variables for destructure, etc.
+///
+/// Phases:
+/// 1. Import analysis and de-duplication;
+/// 2. Collecting the information about used macros;
+/// 3. If type-only macros found in phase 2, record the types from both the `<script>`s
+fn pretransform(
+    ctx: &mut TransformSfcContext,
+    mut script_setup: Option<&mut SfcScriptBlock>,
+    mut script_options: Option<&mut SfcScriptBlock>,
+    errors: &mut Vec<TransformError>,
+) {
+    // 1.1. Imports in `<script>`
+    if let Some(ref mut script_options) = script_options {
+        process_imports(
+            &mut script_options.content,
+            &mut ctx.bindings_helper,
+            false,
+            errors,
+        );
+    }
+
+    let mut has_type_only_macros = false;
+
+    if let Some(ref mut script_setup) = script_setup {
+        // 1.2. Imports in `<script setup>`
+        process_imports(
+            &mut script_setup.content,
+            &mut ctx.bindings_helper,
+            true,
+            errors,
+        );
+
+        // TODO Think of a way to apply multiple different AST transformations
+        // Can it be done
+
+        // 2.1. Walk `<script setup>` and gather the information about macro usage (variables, is type-only, etc.)
+        // For `defineProps`, if variable declarator is not an identifier then record bound variables
+        let collect_macros_result = collect_macros(ctx, &script_setup.content, errors);
+        has_type_only_macros = collect_macros_result.has_type_only_macros;
+
+        // TODO
+        // 3. Walk `<script setup>` and replace ident usages for define props destructure (deep)
+    }
+
+    // 3. Record types to support type-only `defineProps` and `defineEmits`
+    if has_type_only_macros {
+        let scope = ctx.root_scope();
+        let mut scope = (*scope).borrow_mut();
+        scope.imports = ctx.bindings_helper.user_imports.clone();
+
+        record_types(ctx, script_setup, script_options, &mut scope, false);
     }
 }
 

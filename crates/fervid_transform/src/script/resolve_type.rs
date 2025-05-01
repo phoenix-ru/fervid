@@ -1711,12 +1711,6 @@ pub fn record_types(
     for declare in declares.values_mut() {
         declare.owner_scope = scope.id;
     }
-
-
-    // TODO Support declares `_ownerScope`
-    // for (const key of Object.keys(declares)) {
-    //     declares[key]._ownerScope = scope
-    // }
 }
 
 fn record_type_module_item(

@@ -22,7 +22,7 @@ pub fn collect_setup_bindings_block_stmt(
 
     options_api_bindings.setup.extend(
         tmp.into_iter()
-            .map(|word| SetupBinding(word, BindingTypes::SetupMaybeRef)),
+            .map(|word| SetupBinding::new(word, BindingTypes::SetupMaybeRef)),
     );
 }
 
@@ -45,6 +45,6 @@ pub fn collect_setup_bindings_expr(expr: &Expr, options_api_bindings: &mut Optio
 
     options_api_bindings.setup.extend(
         tmp.into_iter()
-            .map(|word| SetupBinding(word, BindingTypes::SetupMaybeRef)),
+            .map(|word| SetupBinding::new(word, BindingTypes::SetupMaybeRef)),
     );
 }

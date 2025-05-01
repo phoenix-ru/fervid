@@ -16,7 +16,7 @@ use crate::{
         },
         utils::get_string_tpl,
     },
-    structs::VueResolvedImports,
+    structs::VueImportAliases,
     OptionsApiBindings, SetupBinding,
 };
 
@@ -91,7 +91,7 @@ pub fn analyze_default_export(default_export: &ObjectLit, out: &mut OptionsApiBi
 pub fn analyze_top_level_items(
     module: &Module,
     out: &mut OptionsApiBindings,
-    vue_imports: &mut VueResolvedImports,
+    vue_imports: &mut VueImportAliases,
 ) {
     for module_item in module.body.iter() {
         match *module_item {
@@ -130,7 +130,7 @@ pub fn analyze_top_level_items(
 fn analyze_top_level_decl(
     decl: &Decl,
     out: &mut Vec<SetupBinding>,
-    vue_user_imports: &mut VueResolvedImports,
+    vue_user_imports: &mut VueImportAliases,
 ) {
     match decl {
         Decl::Class(class) => out.push(categorize_class(class)),
@@ -167,9 +167,10 @@ fn analyze_top_level_decl(
         Decl::TsEnum(ts_enum) => {
             // Ambient enums are also included, this is intentional
             // I am not sure about `const enum`s though
-            out.push(SetupBinding(
+            out.push(SetupBinding::new_spanned(
                 ts_enum.id.sym.to_owned(),
                 BindingTypes::LiteralConst,
+                ts_enum.span
             ))
         }
 

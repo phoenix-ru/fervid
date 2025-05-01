@@ -1,4 +1,6 @@
+use define_props_destructure::transform_destructured_props;
 use fervid_core::{BindingTypes, IntoIdent, SfcScriptBlock, TemplateGenerationMode};
+use macros::VarDeclHelper;
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::ast::{
@@ -28,9 +30,9 @@ mod define_emits;
 mod define_model;
 mod define_options;
 mod define_props;
-mod define_props_destructure;
+pub(super) mod define_props_destructure;
 mod define_slots;
-mod macros;
+pub(super) mod macros;
 mod utils;
 
 use self::{
@@ -100,9 +102,6 @@ pub fn transform_and_record_script_setup(
                     ctx,
                     &expr_stmt.expr,
                     &mut sfc_object_helper,
-                    false,
-                    false,
-                    false,
                     None,
                     errors,
                 );
@@ -111,6 +110,11 @@ pub fn transform_and_record_script_setup(
                     TransformMacroResult::ValidMacro(transformed_expr) => {
                         // A macro may overwrite the statement
                         transformed_expr.map(|expr| Stmt::Expr(ExprStmt { span, expr }))
+                    }
+
+                    TransformMacroResult::ValidMacroRewriteDeclarator(_) => {
+                        // This should not ever be possible
+                        unreachable!("Not possible to rewrite variable declarator of an ExprStmt");
                     }
 
                     TransformMacroResult::NotAMacro => {
@@ -137,6 +141,17 @@ pub fn transform_and_record_script_setup(
             setup_body_stmts.push(transformed_stmt);
         }
     }
+
+    // Transform props destructure
+    if !ctx.bindings_helper.props_destructured_bindings.is_empty() {
+        transform_destructured_props(ctx, &mut setup_body_stmts, &mut module_items, errors);
+    }
+
+    // TODO remove
+    // dbg!(&ctx.bindings_helper.props_aliases);
+    // dbg!(&ctx.bindings_helper.props_destructured_bindings);
+    // dbg!(&ctx.bindings_helper.setup_bindings);
+    // println!("");
 
     // Post-process macros, e.g. merge models to `props` and `emits`
     postprocess_macros(ctx, &mut sfc_object_helper);
@@ -229,40 +244,56 @@ fn transform_decl_stmt(
             // Collected bindings cache
             let mut collected_bindings = Vec::<SetupBinding>::with_capacity(2);
 
-            for var_declarator in var_decl.as_mut().decls.iter_mut() {
-                // LHS is just an identifier, e.g. in `const foo = 'bar'`
-                let is_ident = var_declarator.name.is_ident();
+            var_decl.as_mut().decls.retain_mut(|var_declarator| {
+                let mut should_retain = true;
 
                 // Extract all the variables from the LHS (these are mostly suggestions)
                 extract_variables_from_pat(&var_declarator.name, &mut collected_bindings, is_const);
 
                 // Process RHS
                 if let Some(ref init_expr) = var_declarator.init {
+                    let var_decl_helper = VarDeclHelper {
+                        is_const,
+                        lhs: &var_declarator.name,
+                        bindings: &mut collected_bindings,
+                    };
+
                     let transform_macro_result = transform_script_setup_macro_expr(
                         ctx,
                         init_expr,
                         sfc_object_helper,
-                        true,
-                        is_const,
-                        is_ident,
-                        Some(&mut collected_bindings),
+                        Some(var_decl_helper),
                         errors,
                     );
+
+                    // LHS is just an identifier, e.g. in `const foo = 'bar'`
+                    let is_ident = var_declarator.name.is_ident();
 
                     match transform_macro_result {
                         TransformMacroResult::ValidMacro(transformed_expr) => {
                             // Macros always overwrite the RHS
                             var_declarator.init = transformed_expr;
                         }
+
+                        // Used for `defineProps` destructure which might remove the whole variable declarator and might fully rewrite it
+                        TransformMacroResult::ValidMacroRewriteDeclarator(new_declarator) => {
+                            if let Some(new_declarator) = new_declarator {
+                                *var_declarator = *new_declarator;
+                            } else {
+                                should_retain = false;
+                            }
+                        }
+
                         TransformMacroResult::Error(transform_error) => {
                             errors.push(transform_error);
                         }
+
                         TransformMacroResult::NotAMacro if is_const && is_ident => {
                             // Resolve only when this is a constant identifier.
                             // For destructures correct bindings are already assigned.
                             let rhs_type = categorize_expr(
                                 init_expr,
-                                &ctx.bindings_helper.vue_resolved_imports,
+                                &ctx.bindings_helper.vue_import_aliases,
                             );
 
                             enrich_binding_types(
@@ -279,9 +310,15 @@ fn transform_decl_stmt(
                 ctx.bindings_helper
                     .setup_bindings
                     .extend(collected_bindings.drain(..));
-            }
 
-            Some(Decl::Var(var_decl))
+                should_retain
+            });
+
+            if var_decl.decls.is_empty() {
+                None
+            } else {
+                Some(Decl::Var(var_decl))
+            }
         }
 
         Decl::TsEnum(ref ts_enum) => {
@@ -292,13 +329,14 @@ fn transform_decl_stmt(
 
             // Ambient enums are also included, this is intentional
             // I am not sure about `const enum`s though
-            push_return!(SetupBinding(
+            push_return!(SetupBinding::new_spanned(
                 ts_enum.id.sym.to_owned(),
                 if is_all_literal {
                     BindingTypes::LiteralConst
                 } else {
                     BindingTypes::SetupConst
-                }
+                },
+                ts_enum.id.span
             ));
         }
 
@@ -421,11 +459,12 @@ mod tests {
     use crate::{
         error::{ScriptError, ScriptErrorKind, TransformError},
         script::imports::process_imports,
+        span,
         test_utils::parser::*,
         SetupBinding, TransformSfcContext,
     };
     use fervid_core::{fervid_atom, BindingTypes, SfcScriptBlock};
-    use swc_core::common::DUMMY_SP;
+    use swc_core::common::{BytePos, Span, DUMMY_SP};
 
     use super::transform_and_record_script_setup;
 
@@ -488,10 +527,26 @@ mod tests {
             const qux = computed(() => 42)
             ",
             vec![
-                SetupBinding(fervid_atom!("foo"), BindingTypes::SetupRef),
-                SetupBinding(fervid_atom!("bar"), BindingTypes::SetupRef),
-                SetupBinding(fervid_atom!("baz"), BindingTypes::SetupRef),
-                SetupBinding(fervid_atom!("qux"), BindingTypes::SetupRef),
+                SetupBinding::new_spanned(
+                    fervid_atom!("foo"),
+                    BindingTypes::SetupRef,
+                    span!(68, 71)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("bar"),
+                    BindingTypes::SetupRef,
+                    span!(98, 101)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("baz"),
+                    BindingTypes::SetupRef,
+                    span!(130, 133)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("qux"),
+                    BindingTypes::SetupRef,
+                    span!(165, 168)
+                ),
             ] // vue_imports: VueResolvedImports {
               //     ref_import: Some((FervidAtom::from("ref"), SyntaxContext::default())),
               //     computed: Some((FervidAtom::from("computed"), SyntaxContext::default())),
@@ -516,15 +571,51 @@ mod tests {
             const reb = reactive({})
             ",
             vec![
-                SetupBinding(fervid_atom!("ref"), BindingTypes::Imported),
-                SetupBinding(fervid_atom!("computed"), BindingTypes::Imported),
-                SetupBinding(fervid_atom!("reactive"), BindingTypes::Imported),
-                SetupBinding(fervid_atom!("foo"), BindingTypes::SetupMaybeRef),
-                SetupBinding(fervid_atom!("bar"), BindingTypes::SetupMaybeRef),
-                SetupBinding(fervid_atom!("baz"), BindingTypes::SetupMaybeRef),
-                SetupBinding(fervid_atom!("qux"), BindingTypes::SetupMaybeRef),
-                SetupBinding(fervid_atom!("rea"), BindingTypes::SetupMaybeRef),
-                SetupBinding(fervid_atom!("reb"), BindingTypes::SetupMaybeRef),
+                SetupBinding::new_spanned(
+                    fervid_atom!("ref"),
+                    BindingTypes::Imported,
+                    span!(22, 25)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("computed"),
+                    BindingTypes::Imported,
+                    span!(62, 70)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("reactive"),
+                    BindingTypes::Imported,
+                    span!(114, 122)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("foo"),
+                    BindingTypes::SetupMaybeRef,
+                    span!(165, 168)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("bar"),
+                    BindingTypes::SetupMaybeRef,
+                    span!(195, 198)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("baz"),
+                    BindingTypes::SetupMaybeRef,
+                    span!(227, 230)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("qux"),
+                    BindingTypes::SetupMaybeRef,
+                    span!(262, 265)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("rea"),
+                    BindingTypes::SetupMaybeRef,
+                    span!(305, 308)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("reb"),
+                    BindingTypes::SetupMaybeRef,
+                    span!(340, 343)
+                ),
             ]
         );
     }
@@ -551,10 +642,26 @@ mod tests {
             "
             ),
             vec![
-                SetupBinding(fervid_atom!("Foo"), BindingTypes::LiteralConst),
-                SetupBinding(fervid_atom!("Bar"), BindingTypes::LiteralConst),
-                SetupBinding(fervid_atom!("Baz"), BindingTypes::LiteralConst),
-                SetupBinding(fervid_atom!("Qux"), BindingTypes::LiteralConst),
+                SetupBinding::new_spanned(
+                    fervid_atom!("Foo"),
+                    BindingTypes::LiteralConst,
+                    span!(18, 21)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("Bar"),
+                    BindingTypes::LiteralConst,
+                    span!(48, 51)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("Baz"),
+                    BindingTypes::LiteralConst,
+                    span!(275, 278)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("Qux"),
+                    BindingTypes::LiteralConst,
+                    span!(313, 316)
+                ),
             ]
         )
     }
@@ -586,15 +693,51 @@ mod tests {
             //     reactive: Some((FervidAtom::from("reactive"), SyntaxContext::default()))
             // },
             vec![
-                SetupBinding(fervid_atom!("cstFoo"), BindingTypes::SetupRef),
-                SetupBinding(fervid_atom!("cstBar"), BindingTypes::SetupRef),
-                SetupBinding(fervid_atom!("cstBaz"), BindingTypes::SetupReactiveConst),
-                SetupBinding(fervid_atom!("letFoo"), BindingTypes::SetupLet),
-                SetupBinding(fervid_atom!("letBar"), BindingTypes::SetupLet),
-                SetupBinding(fervid_atom!("letBaz"), BindingTypes::SetupLet),
-                SetupBinding(fervid_atom!("varFoo"), BindingTypes::SetupLet),
-                SetupBinding(fervid_atom!("varBar"), BindingTypes::SetupLet),
-                SetupBinding(fervid_atom!("varBaz"), BindingTypes::SetupLet),
+                SetupBinding::new_spanned(
+                    fervid_atom!("cstFoo"),
+                    BindingTypes::SetupRef,
+                    span!(94, 100)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("cstBar"),
+                    BindingTypes::SetupRef,
+                    span!(131, 137)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("cstBaz"),
+                    BindingTypes::SetupReactiveConst,
+                    span!(176, 182)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("letFoo"),
+                    BindingTypes::SetupLet,
+                    span!(242, 248)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("letBar"),
+                    BindingTypes::SetupLet,
+                    span!(279, 285)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("letBaz"),
+                    BindingTypes::SetupLet,
+                    span!(324, 330)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("varFoo"),
+                    BindingTypes::SetupLet,
+                    span!(390, 396)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("varBar"),
+                    BindingTypes::SetupLet,
+                    span!(427, 433)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("varBaz"),
+                    BindingTypes::SetupLet,
+                    span!(472, 478)
+                ),
             ]
         );
     }
@@ -612,10 +755,26 @@ mod tests {
             const bar = reactive(1)
             ",
             vec![
-                SetupBinding(fervid_atom!("ref"), BindingTypes::Imported),
-                SetupBinding(fervid_atom!("reactive"), BindingTypes::Imported),
-                SetupBinding(fervid_atom!("foo"), BindingTypes::SetupMaybeRef),
-                SetupBinding(fervid_atom!("bar"), BindingTypes::SetupMaybeRef),
+                SetupBinding::new_spanned(
+                    fervid_atom!("ref"),
+                    BindingTypes::Imported,
+                    span!(22, 25)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("reactive"),
+                    BindingTypes::Imported,
+                    span!(27, 35)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("foo"),
+                    BindingTypes::SetupMaybeRef,
+                    span!(70, 73)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("bar"),
+                    BindingTypes::SetupMaybeRef,
+                    span!(101, 104)
+                ),
             ]
         );
     }
@@ -630,10 +789,26 @@ mod tests {
             const bar = reactive(1)
             ",
             vec![
-                SetupBinding(fervid_atom!("_ref"), BindingTypes::Imported),
-                SetupBinding(fervid_atom!("_reactive"), BindingTypes::Imported),
-                SetupBinding(fervid_atom!("foo"), BindingTypes::SetupMaybeRef),
-                SetupBinding(fervid_atom!("bar"), BindingTypes::SetupMaybeRef),
+                SetupBinding::new_spanned(
+                    fervid_atom!("_ref"),
+                    BindingTypes::Imported,
+                    span!(29, 33)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("_reactive"),
+                    BindingTypes::Imported,
+                    span!(47, 56)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("foo"),
+                    BindingTypes::SetupMaybeRef,
+                    span!(91, 94)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("bar"),
+                    BindingTypes::SetupMaybeRef,
+                    span!(122, 125)
+                ),
             ]
         );
     }
@@ -645,9 +820,10 @@ mod tests {
             const bar = x(1)
             import { reactive as x } from 'vue'
             ",
-            vec![SetupBinding(
+            vec![SetupBinding::new_spanned(
                 fervid_atom!("bar"),
-                BindingTypes::SetupReactiveConst
+                BindingTypes::SetupReactiveConst,
+                span!(19, 22)
             ),]
         );
     }
@@ -660,7 +836,11 @@ mod tests {
             r#"
             import { "😏" as foo } from './foo'
             "#,
-            vec![SetupBinding(fervid_atom!("foo"), BindingTypes::Imported),]
+            vec![SetupBinding::new_spanned(
+                fervid_atom!("foo"),
+                BindingTypes::Imported,
+                span!(32, 35)
+            ),]
         );
     }
 
@@ -685,9 +865,10 @@ mod tests {
                 enum Foo { A = 123 }
                 "
             ),
-            vec![SetupBinding(
+            vec![SetupBinding::new_spanned(
                 fervid_atom!("Foo"),
-                BindingTypes::LiteralConst
+                BindingTypes::LiteralConst,
+                span!(22, 25)
             )]
         );
     }
@@ -706,9 +887,10 @@ mod tests {
                 const enum Foo { A = 123 }
                 "
             ),
-            vec![SetupBinding(
+            vec![SetupBinding::new_spanned(
                 fervid_atom!("Foo"),
-                BindingTypes::LiteralConst
+                BindingTypes::LiteralConst,
+                span!(28, 31)
             )]
         );
     }
@@ -722,7 +904,11 @@ mod tests {
                 import { type Bar, Baz } from './main.ts'
                 "
             ),
-            vec![SetupBinding(fervid_atom!("Baz"), BindingTypes::Imported)]
+            vec![SetupBinding::new_spanned(
+                fervid_atom!("Baz"),
+                BindingTypes::Imported,
+                span!(89, 92)
+            )]
         );
     }
 
@@ -748,12 +934,36 @@ mod tests {
             let { e } = someBar()
             ",
             vec![
-                SetupBinding(fervid_atom!("foo"), BindingTypes::Props),
-                SetupBinding(fervid_atom!("a"), BindingTypes::SetupRef),
-                SetupBinding(fervid_atom!("b"), BindingTypes::SetupLet),
-                SetupBinding(fervid_atom!("c"), BindingTypes::LiteralConst),
-                SetupBinding(fervid_atom!("d"), BindingTypes::SetupMaybeRef),
-                SetupBinding(fervid_atom!("e"), BindingTypes::SetupLet),
+                SetupBinding::new_spanned(
+                    fervid_atom!("foo"),
+                    BindingTypes::Props,
+                    DUMMY_SP // Span not collected here yet
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("a"),
+                    BindingTypes::SetupRef,
+                    span!(132, 133)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("b"),
+                    BindingTypes::SetupLet,
+                    span!(157, 158)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("c"),
+                    BindingTypes::LiteralConst,
+                    span!(181, 182)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("d"),
+                    BindingTypes::SetupMaybeRef,
+                    span!(207, 208)
+                ),
+                SetupBinding::new_spanned(
+                    fervid_atom!("e"),
+                    BindingTypes::SetupLet,
+                    span!(241, 242)
+                ),
             ]
         );
     }

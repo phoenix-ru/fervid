@@ -130,7 +130,10 @@
     "keyof",
     "xfoo",
     "xbar",
-    "vuejs"
+    "vuejs",
+    "pretransform",
+    "boola",
+    "boolb"
   ],
   "ignorePaths": [
     ".github/**",

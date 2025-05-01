@@ -59,7 +59,7 @@ use errors::CompileError;
 use fervid_codegen::CodegenContext;
 pub use fervid_core::*;
 use fervid_parser::SfcParser;
-use fervid_transform::{
+pub use fervid_transform::{
     style::should_transform_style_block, transform_sfc, PropsDestructureConfig, SetupBinding, TransformSfcOptions
 };
 use fxhash::FxHasher32;

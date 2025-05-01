@@ -21,9 +21,10 @@ pub fn collect_exports_named(named: &NamedExport, out: &mut Vec<SetupBinding>) {
 
             // export foo from 'mod'
             // is this supposed to work?..
-            ExportSpecifier::Default(export_default) => out.push(SetupBinding(
+            ExportSpecifier::Default(export_default) => out.push(SetupBinding::new_spanned(
                 export_default.exported.sym.to_owned(),
                 binding_type,
+                export_default.exported.span,
             )),
 
             // export { foo } from 'mod'
@@ -49,12 +50,16 @@ fn collect_module_export_name(
     binding_type: BindingTypes,
 ) {
     match module_export_name {
-        ModuleExportName::Ident(ref ns_export_ident) => {
-            out.push(SetupBinding(ns_export_ident.sym.to_owned(), binding_type))
-        }
+        ModuleExportName::Ident(ref ns_export_ident) => out.push(SetupBinding::new_spanned(
+            ns_export_ident.sym.to_owned(),
+            binding_type,
+            ns_export_ident.span,
+        )),
 
-        ModuleExportName::Str(ref ns_export_str) => {
-            out.push(SetupBinding(ns_export_str.value.to_owned(), binding_type))
-        }
+        ModuleExportName::Str(ref ns_export_str) => out.push(SetupBinding::new_spanned(
+            ns_export_str.value.to_owned(),
+            binding_type,
+            ns_export_str.span,
+        )),
     }
 }

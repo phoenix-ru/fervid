@@ -319,8 +319,8 @@ mod tests {
         // `const foo = ref()`
         // `function func() {}`
         let mut bindings_helper = helper(vec![
-            SetupBinding(fervid_atom!("foo"), BindingTypes::SetupRef),
-            SetupBinding(fervid_atom!("func"), BindingTypes::SetupConst),
+            SetupBinding::new(fervid_atom!("foo"), BindingTypes::SetupRef),
+            SetupBinding::new(fervid_atom!("func"), BindingTypes::SetupConst),
         ]);
 
         let mut template_visitor = TemplateVisitor {
@@ -461,10 +461,10 @@ mod tests {
         // let v = ref(1)
         // ```
         let mut bindings_helper = helper(vec![
-            SetupBinding(fervid_atom!("count"), BindingTypes::SetupRef),
-            SetupBinding(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
-            SetupBinding(fervid_atom!("lett"), BindingTypes::SetupLet),
-            SetupBinding(fervid_atom!("v"), BindingTypes::SetupLet),
+            SetupBinding::new(fervid_atom!("count"), BindingTypes::SetupRef),
+            SetupBinding::new(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
+            SetupBinding::new(fervid_atom!("lett"), BindingTypes::SetupLet),
+            SetupBinding::new(fervid_atom!("v"), BindingTypes::SetupLet),
         ]);
 
         let mut template_visitor = TemplateVisitor {
@@ -551,9 +551,9 @@ mod tests {
         // let lett = 1
         // ```
         let mut bindings_helper = helper(vec![
-            SetupBinding(fervid_atom!("count"), BindingTypes::SetupRef),
-            SetupBinding(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
-            SetupBinding(fervid_atom!("lett"), BindingTypes::SetupLet),
+            SetupBinding::new(fervid_atom!("count"), BindingTypes::SetupRef),
+            SetupBinding::new(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
+            SetupBinding::new(fervid_atom!("lett"), BindingTypes::SetupLet),
         ]);
 
         let mut template_visitor = TemplateVisitor {
@@ -597,11 +597,11 @@ mod tests {
         // let lett = 1
         // ```
         let mut bindings_helper = helper(vec![
-            SetupBinding(fervid_atom!("val"), BindingTypes::SetupConst),
-            SetupBinding(fervid_atom!("count"), BindingTypes::SetupRef),
-            SetupBinding(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
-            SetupBinding(fervid_atom!("lett"), BindingTypes::SetupLet),
-            SetupBinding(fervid_atom!("item"), BindingTypes::TemplateLocal),
+            SetupBinding::new(fervid_atom!("val"), BindingTypes::SetupConst),
+            SetupBinding::new(fervid_atom!("count"), BindingTypes::SetupRef),
+            SetupBinding::new(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
+            SetupBinding::new(fervid_atom!("lett"), BindingTypes::SetupLet),
+            SetupBinding::new(fervid_atom!("item"), BindingTypes::TemplateLocal),
         ]);
 
         let mut template_visitor = TemplateVisitor {

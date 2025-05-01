@@ -8,8 +8,11 @@ use fervid_core::{
 };
 use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use smallvec::SmallVec;
-use swc_core::ecma::ast::{
-    Decl, Expr, ExprOrSpread, Function, Id, Module, ObjectLit, PropOrSpread, Str, TsType,
+use swc_core::{
+    common::{Span, DUMMY_SP},
+    ecma::ast::{
+        Decl, Expr, ExprOrSpread, Function, Id, Module, ObjectLit, PropOrSpread, Str, TsType,
+    },
 };
 
 /// Context object. Currently very minimal but may grow over time.
@@ -27,10 +30,16 @@ pub struct TransformSfcContext {
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum PropsDestructureConfig {
-    #[default]
     False,
+    #[default]
     True,
-    Error
+    Error,
+}
+
+#[derive(Debug)]
+pub struct PropsDestructureBinding {
+    pub local: FervidAtom,
+    pub default: Option<Box<Expr>>,
 }
 
 /// A helper which encompasses all the logic related to bindings,
@@ -48,6 +57,12 @@ pub struct BindingsHelper {
     pub is_ts: bool,
     /// Scopes of the `<template>` for in-template variable resolutions
     pub template_scopes: Vec<TemplateScope>,
+    /// Used for props destructure
+    pub props_aliases: HashMap<FervidAtom, FervidAtom>,
+    /// Bindings collected from the props destructure variable declaration
+    pub props_destructured_bindings: HashMap<FervidAtom, PropsDestructureBinding>,
+    /// Used for props destructure to store `rest` of `const { foo, bar, ...rest } = defineProps()`
+    pub props_destructure_rest_id: Option<FervidAtom>,
     /// Bindings in `<script setup>`
     pub setup_bindings: Vec<SetupBinding>,
     /// Bindings in `<script>`
@@ -64,7 +79,7 @@ pub struct BindingsHelper {
     /// Internal Vue imports used by built-in components, directives and others
     pub vue_imports: VueImportsSet,
     /// User imports from `vue` package
-    pub vue_resolved_imports: Box<VueResolvedImports>,
+    pub vue_import_aliases: Box<VueImportAliases>,
 }
 
 #[derive(Debug, Clone)]
@@ -118,7 +133,11 @@ pub struct OptionsApiBindings {
 
 /// Identifier plus a binding type
 #[derive(Debug, PartialEq)]
-pub struct SetupBinding(pub FervidAtom, pub BindingTypes);
+pub struct SetupBinding {
+    pub sym: FervidAtom,
+    pub binding_type: BindingTypes,
+    pub span: Span,
+}
 
 #[derive(Debug, Clone)]
 pub struct ImportBinding {
@@ -142,10 +161,12 @@ pub struct TemplateScope {
 
 /// Imports from "vue" package
 #[derive(Debug, Default, PartialEq)]
-pub struct VueResolvedImports {
+pub struct VueImportAliases {
     pub ref_import: Option<Id>,
     pub computed: Option<Id>,
     pub reactive: Option<Id>,
+    pub to_ref: Option<Id>,
+    pub watch: Option<Id>,
 }
 
 /// https://github.com/vuejs/rfcs/discussions/503
@@ -212,6 +233,24 @@ pub struct TransformSfcResult {
     pub style_blocks: Vec<SfcStyleBlock>,
     /// Custom blocks
     pub custom_blocks: Vec<SfcCustomBlock>,
+}
+
+impl SetupBinding {
+    pub fn new(sym: FervidAtom, binding_type: BindingTypes) -> SetupBinding {
+        SetupBinding {
+            sym,
+            binding_type,
+            span: DUMMY_SP,
+        }
+    }
+
+    pub fn new_spanned(sym: FervidAtom, binding_type: BindingTypes, span: Span) -> SetupBinding {
+        SetupBinding {
+            sym,
+            binding_type,
+            span,
+        }
+    }
 }
 
 #[cfg(test)]
