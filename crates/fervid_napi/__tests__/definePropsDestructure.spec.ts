@@ -493,6 +493,7 @@ describe('sfc reactive props destructure', () => {
             expect(errors[0].message).toMatch('DefinePropsDestructureUnnecessaryWithDefaults')
         })
 
+        // TODO
         test.skip('should error if destructure reference local vars', () => {
             const { errors } = compile(
                     `<script setup>
