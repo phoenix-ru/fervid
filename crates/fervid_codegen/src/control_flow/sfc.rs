@@ -396,18 +396,18 @@ impl CodegenContext {
 
         // https://github.com/vuejs/core/blob/530d9ec5f69a39246314183d942d37986c01dc46/packages/compiler-sfc/src/compileScript.ts#L826-L844
         for binding in all_bindings {
-            match binding.1 {
+            match binding.binding_type {
                 // `get smth() { return smth }`
                 BindingTypes::Imported => {
                     // Skip if TS and binding is unused
-                    if is_ts && !self.bindings_helper.used_bindings.contains_key(&binding.0) {
+                    if is_ts && !self.bindings_helper.used_bindings.contains_key(&binding.sym) {
                         continue;
                     }
 
                     let ident = Ident {
                         span: DUMMY_SP,
                         ctxt: Default::default(),
-                        sym: binding.0.to_owned(),
+                        sym: binding.sym.to_owned(),
                         optional: false,
                     };
                     props.push(PropOrSpread::Prop(Box::new(Prop::Getter(GetterProp {
@@ -431,7 +431,7 @@ impl CodegenContext {
                     let ident = Ident {
                         span: DUMMY_SP,
                         ctxt: Default::default(),
-                        sym: binding.0.to_owned(),
+                        sym: binding.sym.to_owned(),
                         optional: false,
                     };
 
@@ -451,7 +451,7 @@ impl CodegenContext {
                     }))));
 
                     // `set smth(v) { smth = v }`
-                    let set_arg = if binding.0 == "v" {
+                    let set_arg = if binding.sym == "v" {
                         fervid_atom!("_v")
                     } else {
                         fervid_atom!("v")
@@ -501,7 +501,7 @@ impl CodegenContext {
                     props.push(PropOrSpread::Prop(Box::new(Prop::Shorthand(Ident {
                         span: DUMMY_SP,
                         ctxt: Default::default(),
-                        sym: binding.0.to_owned(),
+                        sym: binding.sym.to_owned(),
                         optional: false,
                     }))));
                 }

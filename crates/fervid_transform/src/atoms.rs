@@ -28,6 +28,8 @@ lazy_static! {
     pub static ref DEFINE_SLOTS: FervidAtom = fervid_atom!("defineSlots");
     pub static ref REACTIVE: FervidAtom = fervid_atom!("reactive");
     pub static ref REF: FervidAtom = fervid_atom!("ref");
+    pub static ref TO_REF: FervidAtom = fervid_atom!("toRef");
+    pub static ref WATCH: FervidAtom = fervid_atom!("watch");
     pub static ref WITH_DEFAULTS: FervidAtom = fervid_atom!("withDefaults");
 
     // Helper atoms

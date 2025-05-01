@@ -13,51 +13,71 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: 'read'
-      pages: 'write'
-      id-token: 'write'
-
     steps:
-    - uses: actions/checkout@v3
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
-    - uses: jetli/wasm-pack-action@v0.4.0
-      with:
-        # Optional version of wasm-pack to install(eg. 'v0.9.1', 'latest')
-        version: 'latest'
-    - name: Pack WASM
-      working-directory: ./crates/fervid_wasm
-      run: wasm-pack build --target web
-    - name: Upload GitHub Pages artifact
-      if: ${{ github.ref == 'refs/heads/master' }}
-      uses: actions/upload-pages-artifact@v3
-      with:
-        # Artifact name
-        name: github-pages # optional, default is github-pages
-        # Path of the directory containing the static assets.
-        path: ./crates/fervid_wasm # default is _site/
-        # Duration after which artifact will expire in days.
-        retention-days: 31 # optional, default is 1
-    - name: Deploy GitHub Pages site
-      if: ${{ github.ref == 'refs/heads/master' }}
-      uses: actions/deploy-pages@v1.2.9
-      #with:
-        # Should this action only emit build telemetry instead of deploying the build artifact?
-        #emit_telemetry: # optional, default is false
-        # The status of the previous build.
-        #conclusion: # optional
-        # GitHub token
-        #token: # default is ${{ github.token }}
-        # Time in milliseconds after which to timeout and cancel the deployment (default: 10 minutes)
-        #timeout: # optional, default is 600000
-        # Maximum number of status report errors before cancelling a deployment (default: 10)
-        #error_count: # optional, default is 10
-        # Time in milliseconds between two deployment status report (default: 5 seconds)
-        #reporting_interval: # optional, default is 5000
-        # Name of the artifact to deploy
-        #artifact_name: # optional, default is github-pages
-        # Is this attempting to deploy a pull request as a GitHub Pages preview site? (NOTE: This feature is only in alpha currently and is not available to the public!)
-        #preview: # optional, default is false
+      - uses: actions/checkout@v3
+
+      - name: Build
+        run: cargo build --verbose
+
+      - name: Run tests
+        run: cargo test --verbose
+
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          # Optional version of wasm-pack to install(eg. 'v0.9.1', 'latest')
+          version: 'latest'
+
+      - name: Pack WASM
+        working-directory: ./crates/fervid_wasm
+        run: wasm-pack build --target web
+
+      - name: Upload GitHub Pages artifact
+        if: ${{ github.ref == 'refs/heads/master' }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Artifact name
+          name: github-pages # optional, default is github-pages
+          # Path of the directory containing the static assets.
+          path: ./crates/fervid_wasm # default is _site/
+          # Duration after which artifact will expire in days.
+          retention-days: 31 # optional, default is 1
+
+  deploy:
+    if: ${{ github.ref == 'refs/heads/master' }}
+
+    # Add a dependency to the build job
+    needs: build
+
+    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
+    permissions:
+      contents: read
+      pages: write      # to deploy to Pages
+      id-token: write   # to verify the deployment originates from an appropriate source
+
+    # Deploy to the github-pages environment
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    # Specify runner + deployment step
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy GitHub Pages site
+        uses: actions/deploy-pages@v4
+        #with:
+          # Should this action only emit build telemetry instead of deploying the build artifact?
+          #emit_telemetry: # optional, default is false
+          # The status of the previous build.
+          #conclusion: # optional
+          # GitHub token
+          #token: # default is ${{ github.token }}
+          # Time in milliseconds after which to timeout and cancel the deployment (default: 10 minutes)
+          #timeout: # optional, default is 600000
+          # Maximum number of status report errors before cancelling a deployment (default: 10)
+          #error_count: # optional, default is 10
+          # Time in milliseconds between two deployment status report (default: 5 seconds)
+          #reporting_interval: # optional, default is 5000
+          # Name of the artifact to deploy
+          #artifact_name: # optional, default is github-pages
+          # Is this attempting to deploy a pull request as a GitHub Pages preview site? (NOTE: This feature is only in alpha currently and is not available to the public!)
+          #preview: # optional, default is false

@@ -5,9 +5,11 @@ use swc_core::ecma::{
 };
 
 use crate::{
-    atoms::{COMPUTED, DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_PROPS, REACTIVE, REF, VUE},
-    error::{ScriptError, ScriptErrorKind, TransformError },
-    structs::VueResolvedImports,
+    atoms::{
+        COMPUTED, DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_PROPS, REACTIVE, REF, TO_REF, VUE, WATCH,
+    },
+    error::{ScriptError, ScriptErrorKind, TransformError},
+    structs::VueImportAliases,
     BindingsHelper, ImportBinding, SetupBinding,
 };
 
@@ -70,12 +72,13 @@ pub fn register_import(
     let mut binding_type = BindingTypes::Imported;
     let mut should_include_binding = true;
 
-    let (local, imported, span) = match import_specifier {
+    let (local, imported, ident_span, import_span) = match import_specifier {
         // e.g. `import * as foo from 'mod.js'`
         // not a default export, thus never suitable to be a `Component`
         ImportSpecifier::Namespace(ns_spec) => (
             ns_spec.local.sym.to_owned(),
             fervid_atom!("*"),
+            ns_spec.local.span,
             ns_spec.span,
         ),
 
@@ -87,6 +90,7 @@ pub fn register_import(
             (
                 default_spec.local.sym.to_owned(),
                 fervid_atom!("default"),
+                default_spec.local.span,
                 default_spec.span,
             )
         }
@@ -125,7 +129,7 @@ pub fn register_import(
                 collect_vue_import(
                     imported_word,
                     imported_as.to_id(),
-                    &mut bindings_helper.vue_resolved_imports,
+                    &mut bindings_helper.vue_import_aliases,
                 );
 
                 // Do not include as a binding (is it a correct decision though?)
@@ -139,6 +143,7 @@ pub fn register_import(
             (
                 imported_as.sym.to_owned(),
                 imported_word.to_owned(),
+                imported_as.span,
                 named_spec.span,
             )
         }
@@ -149,7 +154,7 @@ pub fn register_import(
         // Not exact duplicate means some local name has been used twice
         if existing.source != *source || existing.imported != imported {
             errors.push(TransformError::ScriptError(ScriptError {
-                span,
+                span: import_span,
                 kind: ScriptErrorKind::DuplicateImport,
             }));
         }
@@ -160,14 +165,20 @@ pub fn register_import(
     if is_from_setup && should_include_binding {
         bindings_helper
             .setup_bindings
-            .push(SetupBinding(local.to_owned(), BindingTypes::Imported))
+            .push(SetupBinding::new_spanned(
+                local.to_owned(),
+                BindingTypes::Imported,
+                ident_span,
+            ))
     } else if should_include_binding {
         let bindings = bindings_helper
             .options_api_bindings
             .get_or_insert_with(|| Default::default());
-        bindings
-            .imports
-            .push(SetupBinding(local.to_owned(), binding_type));
+        bindings.imports.push(SetupBinding::new_spanned(
+            local.to_owned(),
+            binding_type,
+            ident_span,
+        ));
     }
 
     bindings_helper.user_imports.insert(
@@ -184,45 +195,54 @@ pub fn register_import(
 }
 
 #[inline]
-fn collect_vue_import(imported_word: &JsWord, used_as: Id, vue_imports: &mut VueResolvedImports) {
+fn collect_vue_import(
+    imported_word: &JsWord,
+    used_as: Id,
+    vue_import_aliases: &mut VueImportAliases,
+) {
     if *imported_word == *REF {
-        vue_imports.ref_import = Some(used_as)
+        vue_import_aliases.ref_import = Some(used_as)
     } else if *imported_word == *COMPUTED {
-        vue_imports.computed = Some(used_as)
+        vue_import_aliases.computed = Some(used_as)
     } else if *imported_word == *REACTIVE {
-        vue_imports.reactive = Some(used_as)
+        vue_import_aliases.reactive = Some(used_as)
+    } else if *imported_word == *TO_REF {
+        vue_import_aliases.to_ref = Some(used_as)
+    } else if *imported_word == *WATCH {
+        vue_import_aliases.watch = Some(used_as)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use fervid_core::fervid_atom;
-    use swc_core::{common::SyntaxContext, ecma::ast::Module};
+    use swc_core::{
+        common::{BytePos, Span, SyntaxContext},
+        ecma::ast::Module,
+    };
 
-    use crate::test_utils::parser::{parse_javascript_module, parse_typescript_module};
+    use crate::{
+        span,
+        test_utils::parser::{parse_javascript_module, parse_typescript_module},
+    };
 
     use super::*;
 
     #[derive(Debug, Default, PartialEq)]
     struct MockAnalysisResult {
         imports: Vec<SetupBinding>,
-        vue_user_imports: VueResolvedImports,
+        vue_import_aliases: VueImportAliases,
     }
 
     fn analyze_mock(mut module: Module) -> MockAnalysisResult {
         let mut bindings_helper = Default::default();
         let mut errors = Vec::new();
 
-        process_imports(
-            &mut module,
-            &mut bindings_helper,
-            true,
-            &mut errors,
-        );
+        process_imports(&mut module, &mut bindings_helper, true, &mut errors);
 
         MockAnalysisResult {
             imports: bindings_helper.setup_bindings,
-            vue_user_imports: *bindings_helper.vue_resolved_imports,
+            vue_import_aliases: *bindings_helper.vue_import_aliases,
         }
     }
 
@@ -253,13 +273,15 @@ mod tests {
     fn it_collects_vue_imports() {
         test_js_and_ts!(
             r"
-            import { ref, computed, reactive } from 'vue'
+            import { ref, computed, reactive, toRef, watch } from 'vue'
             ",
             MockAnalysisResult {
-                vue_user_imports: VueResolvedImports {
+                vue_import_aliases: VueImportAliases {
                     ref_import: Some((fervid_atom!("ref"), SyntaxContext::default())),
                     computed: Some((fervid_atom!("computed"), SyntaxContext::default())),
-                    reactive: Some((fervid_atom!("reactive"), SyntaxContext::default()))
+                    reactive: Some((fervid_atom!("reactive"), SyntaxContext::default())),
+                    to_ref: Some((fervid_atom!("toRef"), SyntaxContext::default())),
+                    watch: Some((fervid_atom!("watch"), SyntaxContext::default())),
                 },
                 ..Default::default()
             }
@@ -268,13 +290,15 @@ mod tests {
         // Aliased
         test_js_and_ts!(
             r"
-            import { ref as foo, computed as bar, reactive as baz } from 'vue'
+            import { ref as foo, computed as bar, reactive as baz, toRef as qux, watch as buzz } from 'vue'
             ",
             MockAnalysisResult {
-                vue_user_imports: VueResolvedImports {
+                vue_import_aliases: VueImportAliases {
                     ref_import: Some((fervid_atom!("foo"), SyntaxContext::default())),
                     computed: Some((fervid_atom!("bar"), SyntaxContext::default())),
-                    reactive: Some((fervid_atom!("baz"), SyntaxContext::default()))
+                    reactive: Some((fervid_atom!("baz"), SyntaxContext::default())),
+                    to_ref: Some((fervid_atom!("qux"), SyntaxContext::default())),
+                    watch: Some((fervid_atom!("buzz"), SyntaxContext::default())),
                 },
                 ..Default::default()
             }
@@ -295,13 +319,41 @@ mod tests {
             ",
             MockAnalysisResult {
                 imports: vec![
-                    SetupBinding(fervid_atom!("ref"), BindingTypes::Imported),
-                    SetupBinding(fervid_atom!("computed"), BindingTypes::Imported),
-                    SetupBinding(fervid_atom!("reactive"), BindingTypes::Imported),
-                    SetupBinding(fervid_atom!("foo"), BindingTypes::Imported),
-                    SetupBinding(fervid_atom!("Bar"), BindingTypes::Imported),
-                    SetupBinding(fervid_atom!("baz"), BindingTypes::Imported),
-                    SetupBinding(fervid_atom!("qux"), BindingTypes::Imported),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("ref"),
+                        BindingTypes::Imported,
+                        span!(22, 25)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("computed"),
+                        BindingTypes::Imported,
+                        span!(62, 70)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("reactive"),
+                        BindingTypes::Imported,
+                        span!(114, 122)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("foo"),
+                        BindingTypes::Imported,
+                        span!(171, 174)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("Bar"),
+                        BindingTypes::Imported,
+                        span!(207, 210)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("baz"),
+                        BindingTypes::Imported,
+                        span!(246, 249)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("qux"),
+                        BindingTypes::Imported,
+                        span!(251, 254)
+                    ),
                 ],
                 ..Default::default()
             }
@@ -320,15 +372,32 @@ mod tests {
             ",
             MockAnalysisResult {
                 imports: vec![
-                    SetupBinding(fervid_atom!("foo"), BindingTypes::Imported),
-                    SetupBinding(fervid_atom!("Bar"), BindingTypes::Imported),
-                    SetupBinding(fervid_atom!("baz"), BindingTypes::Imported),
-                    SetupBinding(fervid_atom!("qux"), BindingTypes::Imported),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("foo"),
+                        BindingTypes::Imported,
+                        span!(84, 87)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("Bar"),
+                        BindingTypes::Imported,
+                        span!(120, 123)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("baz"),
+                        BindingTypes::Imported,
+                        span!(159, 162)
+                    ),
+                    SetupBinding::new_spanned(
+                        fervid_atom!("qux"),
+                        BindingTypes::Imported,
+                        span!(164, 167)
+                    ),
                 ],
-                vue_user_imports: VueResolvedImports {
+                vue_import_aliases: VueImportAliases {
                     ref_import: Some((fervid_atom!("ref"), SyntaxContext::default())),
                     computed: Some((fervid_atom!("computed"), SyntaxContext::default())),
-                    reactive: Some((fervid_atom!("reactive"), SyntaxContext::default()))
+                    reactive: Some((fervid_atom!("reactive"), SyntaxContext::default())),
+                    ..Default::default()
                 },
                 ..Default::default()
             }
@@ -352,6 +421,6 @@ mod tests {
 
     #[test]
     fn it_deduplicates_imports() {
-        
+        // todo
     }
 }

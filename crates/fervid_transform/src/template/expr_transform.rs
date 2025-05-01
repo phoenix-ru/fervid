@@ -1,16 +1,16 @@
 use fervid_core::{
-    fervid_atom, BindingTypes, FervidAtom, IntoIdent, PatchFlags, PatchHints, StrOrExpr,
-    TemplateGenerationMode, VModelDirective, VueImports,
+    fervid_atom, is_valid_propname, BindingTypes, FervidAtom, IntoIdent, PatchFlags, PatchHints,
+    StrOrExpr, TemplateGenerationMode, VModelDirective, VueImports,
 };
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
         ast::{
             ArrayLit, ArrayPat, AssignExpr, AssignOp, AssignTarget, AssignTargetPat, BindingIdent,
-            BlockStmt, CallExpr, Callee, CondExpr, Decl, Expr, ExprOrSpread, Ident, IdentName,
-            KeyValuePatProp, KeyValueProp, Lit, MemberExpr, MemberProp, Null, ObjectLit, ObjectPat,
-            ObjectPatProp, Pat, Prop, PropName, PropOrSpread, SimpleAssignTarget, Stmt, UpdateExpr,
-            UpdateOp,
+            BlockStmt, CallExpr, Callee, ComputedPropName, CondExpr, Decl, Expr, ExprOrSpread,
+            Ident, IdentName, KeyValuePatProp, KeyValueProp, Lit, MemberExpr, MemberProp, Null,
+            ObjectLit, ObjectPat, ObjectPatProp, Pat, Prop, PropName, PropOrSpread,
+            SimpleAssignTarget, Stmt, Str, UpdateExpr, UpdateOp,
         },
         visit::{VisitMut, VisitMutWith},
     },
@@ -61,6 +61,8 @@ pub enum IdentTransformStrategy {
     Prefix(FervidAtom),
     /// Generate `isRef(e) ? e.value++ : e++`
     IsRefCheckUpdate,
+    // Replace the identifier with a member expression (used for PropsAliased)
+    RewriteWithMemberExpr(MemberExpr),
 }
 
 pub trait BindingsHelperTransform {
@@ -209,9 +211,10 @@ impl BindingsHelperTransform for BindingsHelper {
                 .map_or_else(|| [].iter(), |v| v.setup.iter()),
         );
         for binding in setup_bindings {
-            if binding.0 == variable_atom {
-                self.used_bindings.insert(variable_atom, binding.1);
-                return binding.1;
+            if binding.sym == variable_atom {
+                self.used_bindings
+                    .insert(variable_atom, binding.binding_type);
+                return binding.binding_type;
             }
         }
 
@@ -236,7 +239,7 @@ impl BindingsHelperTransform for BindingsHelper {
             // Check options API imports.
             // Currently it ignores the SyntaxContext (same as in js implementation)
             for binding in options_api_vars.imports.iter() {
-                if binding.0 == variable_atom {
+                if binding.sym == variable_atom {
                     self.used_bindings
                         .insert(variable_atom, BindingTypes::SetupMaybeRef);
                     return BindingTypes::SetupMaybeRef;
@@ -360,7 +363,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                 }
                 return;
             }
-            
+
             // Call expression, type arguments should not be taken into account
             Expr::Call(call_expr) => {
                 call_expr.callee.visit_mut_with(self);
@@ -382,9 +385,6 @@ impl<'s> VisitMut for TransformVisitor<'s> {
         // The rest concerns transforming an ident
         let span = ident.span;
         let strategy = self.determine_ident_transform_strategy(ident);
-
-        // TODO The logic for setup variables actually differs quite significantly
-        // https://play.vuejs.org/#eNp9UU1rwzAM/SvCl25QEkZvIRTa0cN22Mq6oy8hUVJ3iW380QWC//tkh2Y7jN6k956kJ2liO62zq0dWsNLWRmgHFp3XWy7FoJVxMMEOArRGDbDK8v2KywZbIfFolLYPE5cArVIFnJwRsuMyPHJZ5nMv6kKJw0H3lUPKAMrz03aaYgmEQAE1D2VOYKxalGzNnK2VbEWXXaySZC9N4qxWgxY9mnfthJKWswISE7mq79X3a8Kc8bi+4fUZ669/8IsdI8bZ0aBFc0XOFs5VpkM304fTG44UL+SgGt+T+g75gVb1PnqcZXsvG7L9R5fcvqQj0+E+7WF0KO1tqWg0KkPSc0Y/er6z+q/dTbZJdfQJFn4A+DKelw==
 
         match strategy {
             IdentTransformStrategy::LeaveUnchanged => return,
@@ -441,6 +441,11 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                 );
                 return;
             }
+
+            IdentTransformStrategy::RewriteWithMemberExpr(member_expr) => {
+                *expr = Expr::Member(member_expr);
+                return;
+            }
         }
     }
 
@@ -493,13 +498,15 @@ impl<'s> VisitMut for TransformVisitor<'s> {
             // Add the temporary variables
             if let Stmt::Decl(decl) = stmt {
                 match decl {
-                    Decl::Class(cls) => self.local_vars.push(SetupBinding(
+                    Decl::Class(cls) => self.local_vars.push(SetupBinding::new_spanned(
                         cls.ident.sym.to_owned(),
                         BindingTypes::TemplateLocal,
+                        cls.ident.span,
                     )),
-                    Decl::Fn(fn_decl) => self.local_vars.push(SetupBinding(
+                    Decl::Fn(fn_decl) => self.local_vars.push(SetupBinding::new_spanned(
                         fn_decl.ident.sym.to_owned(),
                         BindingTypes::TemplateLocal,
+                        fn_decl.ident.span,
                     )),
                     Decl::Var(var_decl) => {
                         for var_decl_it in var_decl.decls.iter() {
@@ -553,6 +560,11 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                                 obj: Box::new(Expr::Ident(prefix.into_ident())),
                                 prop: MemberProp::Ident(ident.id.to_owned().into()),
                             }));
+                            return;
+                        }
+
+                        IdentTransformStrategy::RewriteWithMemberExpr(member_expr) => {
+                            *n = AssignTarget::Simple(SimpleAssignTarget::Member(member_expr));
                             return;
                         }
 
@@ -630,6 +642,11 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                         return;
                     }
 
+                    IdentTransformStrategy::RewriteWithMemberExpr(member_expr) => {
+                        *n = Pat::Expr(Box::new(Expr::Member(member_expr)));
+                        return;
+                    }
+
                     IdentTransformStrategy::Unref | IdentTransformStrategy::IsRefCheckUpdate => {
                         // TODO Error: this is not a valid transform strategy
                         // (technically this is a syntax error, so should be impossible)
@@ -664,10 +681,14 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     key_value.value.visit_mut_with(self);
 
                     match key_value.key {
-                        // TODO Finish the implementation
-                        PropName::Ident(_) => todo!(),
-                        PropName::Computed(_) => todo!(),
-                        PropName::Str(_) | PropName::Num(_) | PropName::BigInt(_) => {}
+                        PropName::Computed(ref mut computed_prop_name) => {
+                            computed_prop_name.expr.visit_mut_with(self);
+                        }
+
+                        PropName::Ident(_)
+                        | PropName::Str(_)
+                        | PropName::Num(_)
+                        | PropName::BigInt(_) => {}
                     }
                 }
 
@@ -680,13 +701,16 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                         None => {
                             let symbol = &assign.key.sym;
 
-                            let is_local =
-                                self.local_vars.iter().rfind(|it| &it.0 == symbol).is_some()
-                                    || matches!(
-                                        self.bindings_helper
-                                            .get_var_binding_type(self.current_scope, symbol),
-                                        BindingTypes::TemplateLocal
-                                    );
+                            let is_local = self
+                                .local_vars
+                                .iter()
+                                .rfind(|it| &it.sym == symbol)
+                                .is_some()
+                                || matches!(
+                                    self.bindings_helper
+                                        .get_var_binding_type(self.current_scope, symbol),
+                                    BindingTypes::TemplateLocal
+                                );
 
                             if !is_local {
                                 let mut value = Box::new(Pat::Ident(assign.key.to_owned()));
@@ -715,7 +739,7 @@ impl TransformVisitor<'_> {
         let symbol = &ident.sym;
 
         // Try to find variable in the local vars (e.g. arrow function params)
-        if let Some(_) = self.local_vars.iter().rfind(|it| &it.0 == symbol) {
+        if let Some(_) = self.local_vars.iter().rfind(|it| &it.sym == symbol) {
             self.has_js_bindings = true;
             return IdentTransformStrategy::LeaveUnchanged;
         }
@@ -728,6 +752,49 @@ impl TransformVisitor<'_> {
         if let BindingTypes::TemplateLocal = binding_type {
             self.has_js_bindings = true;
             return IdentTransformStrategy::LeaveUnchanged;
+        }
+
+        // Props aliased have their own logic
+        if let BindingTypes::PropsAliased = binding_type {
+            self.has_js_bindings = true;
+
+            let member_obj_atom = if self.is_inline {
+                fervid_atom!("__props")
+            } else {
+                fervid_atom!("$props")
+            };
+
+            let Some(original_prop_name) = self.bindings_helper.props_aliases.get(symbol) else {
+                // TODO this is technically an error - alias for a `PropsAliased` binding was not found
+                return IdentTransformStrategy::LeaveUnchanged;
+            };
+
+            let member_prop = if is_valid_propname(&original_prop_name) {
+                MemberProp::Ident(IdentName {
+                    span: ident.span,
+                    sym: original_prop_name.to_owned(),
+                })
+            } else {
+                MemberProp::Computed(ComputedPropName {
+                    span: DUMMY_SP,
+                    expr: Box::new(Expr::Lit(Lit::Str(Str {
+                        span: DUMMY_SP,
+                        value: original_prop_name.to_owned(),
+                        raw: None,
+                    }))),
+                })
+            };
+
+            return IdentTransformStrategy::RewriteWithMemberExpr(MemberExpr {
+                span: DUMMY_SP,
+                obj: Box::new(Expr::Ident(Ident {
+                    span: DUMMY_SP,
+                    ctxt: Default::default(),
+                    sym: member_obj_atom,
+                    optional: false,
+                })),
+                prop: member_prop,
+            });
         }
 
         // Get the prefix which fits the scope (e.g. `_ctx.` for unknown scopes, `$setup.` for setup scope)
@@ -1073,23 +1140,23 @@ mod tests {
         // const Const = 123
         // let Let = 123
         // const Reactive = reactive({})
-        helper.setup_bindings.push(SetupBinding(
+        helper.setup_bindings.push(SetupBinding::new(
             FervidAtom::from("Ref"),
             BindingTypes::SetupRef,
         ));
-        helper.setup_bindings.push(SetupBinding(
+        helper.setup_bindings.push(SetupBinding::new(
             FervidAtom::from("MaybeRef"),
             BindingTypes::SetupMaybeRef,
         ));
-        helper.setup_bindings.push(SetupBinding(
+        helper.setup_bindings.push(SetupBinding::new(
             FervidAtom::from("Const"),
             BindingTypes::SetupConst,
         ));
-        helper.setup_bindings.push(SetupBinding(
+        helper.setup_bindings.push(SetupBinding::new(
             FervidAtom::from("Let"),
             BindingTypes::SetupLet,
         ));
-        helper.setup_bindings.push(SetupBinding(
+        helper.setup_bindings.push(SetupBinding::new(
             FervidAtom::from("Reactive"),
             BindingTypes::SetupReactiveConst,
         ));
@@ -1195,7 +1262,7 @@ mod tests {
         let mut helper = BindingsHelper::default();
 
         // const Ref = ref('foo')
-        helper.setup_bindings.push(SetupBinding(
+        helper.setup_bindings.push(SetupBinding::new(
             FervidAtom::from("Ref"),
             BindingTypes::SetupRef,
         ));

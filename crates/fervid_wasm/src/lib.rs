@@ -4,7 +4,7 @@ extern crate wee_alloc;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-use fervid::{compile, CompileOptions, CompileResult};
+use fervid::{compile, CompileOptions, CompileResult, PropsDestructureConfig};
 use swc_core::common::{sync::Lrc, SourceMap, Spanned};
 use wasm_bindgen::prelude::*;
 
@@ -34,7 +34,7 @@ pub fn compile_sync(source: &str, is_prod: Option<bool>) -> Result<WasmCompileRe
             id: "".into(),
             is_prod,
             is_custom_element: Some(false),
-            props_destructure: None,
+            props_destructure: Some(PropsDestructureConfig::True),
             ssr: Some(false),
             gen_default_as: None,
             source_map: None,

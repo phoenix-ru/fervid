@@ -37,6 +37,20 @@ pub enum ScriptErrorKind {
     DefineOptionsSlots,
     /// `Props destructure is explicitly prohibited via config.`
     DefinePropsDestructureForbidden,
+    /// `Props destructure cannot use computed key.`
+    DefinePropsDestructureCannotUseComputedKey,
+    /// `Cannot assign to destructured props as they are readonly.`
+    DefinePropsDestructureCannotAssignToReadonly,
+    /// `Destructured prop should not be passed directly to toRef(). Pass a getter instead`
+    DefinePropsDestructureShouldNotPassToToRef,
+    /// `Destructured prop should not be passed directly to watch(). Pass a getter instead`
+    DefinePropsDestructureShouldNotPassToWatch,
+    /// `Default value of prop does not match declared type.`
+    DefinePropsDestructureDeclaredTypeMismatch,
+    /// `withDefaults() is unnecessary when using destructure with defineProps().\nReactive destructure will be disabled when using withDefaults().\nPrefer using destructure default values, e.g. const { foo = 1 } = defineProps(...).`
+    DefinePropsDestructureUnnecessaryWithDefaults,
+    /// `Props destructure does not support nested patterns.`
+    DefinePropsDestructureUnsupportedNestedPattern,
     /// "`defineSlots` cannot accept arguments"
     DefineSlotsArguments,
     /// Duplicate `defineEmits` call

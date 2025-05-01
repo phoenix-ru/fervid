@@ -105,7 +105,7 @@ fn convert(
         env.create_object()
             .map(|mut obj| {
                 for binding in result.setup_bindings.drain(..) {
-                    let _ = obj.set(binding.0.as_str(), BindingTypes::from(binding.1));
+                    let _ = obj.set(binding.sym.as_str(), BindingTypes::from(binding.binding_type));
                 }
                 obj
             })

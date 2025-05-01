@@ -1,18 +1,29 @@
 use fervid_core::{BindingTypes, FervidAtom};
 use fxhash::FxHashSet;
 use itertools::{Either, Itertools};
-use swc_core::{common::{Spanned, DUMMY_SP}, ecma::ast::{ArrayLit, CallExpr, Expr, ExprOrSpread, Ident, Lit, Str, TsFnOrConstructorType, TsFnParam, TsLit, TsType}};
+use swc_core::{
+    common::{Spanned, DUMMY_SP},
+    ecma::ast::{
+        ArrayLit, CallExpr, Expr, ExprOrSpread, Ident, Lit, Str, TsFnOrConstructorType, TsFnParam,
+        TsLit, TsType,
+    },
+};
 
-use crate::{atoms::EMIT_HELPER, error::{ScriptError, ScriptErrorKind, TransformError}, script::resolve_type::{resolve_type_elements, resolve_union_type, ResolvedElements, TypeResolveContext}, SetupBinding, SfcExportedObjectHelper, TypeOrDecl};
+use crate::{
+    atoms::EMIT_HELPER,
+    error::{ScriptError, ScriptErrorKind, TransformError},
+    script::resolve_type::{
+        resolve_type_elements, resolve_union_type, ResolvedElements, TypeResolveContext,
+    },
+    SfcExportedObjectHelper, TypeOrDecl,
+};
 
-use super::macros::TransformMacroResult;
+use super::macros::{TransformMacroResult, VarDeclHelper};
 
 pub fn process_define_emits(
     ctx: &mut TypeResolveContext,
     call_expr: &CallExpr,
-    is_var_decl: bool,
-    is_ident: bool,
-    var_bindings: Option<&mut Vec<SetupBinding>>,
+    var_decl: Option<VarDeclHelper>,
     sfc_object_helper: &mut SfcExportedObjectHelper,
     _errors: &mut Vec<TransformError>,
 ) -> TransformMacroResult {
@@ -67,14 +78,12 @@ pub fn process_define_emits(
 
     // Return `__emits` when in var mode
     // Change binding to be `SetupConst`
-    if is_var_decl {
+    if let Some(var_decl) = var_decl {
         sfc_object_helper.is_setup_emit_referenced = true;
-        
-        if let Some(var_bindings) = var_bindings {
-            if is_ident && var_bindings.len() == 1 {
-                let first_binding = &mut var_bindings[0];
-                first_binding.1 = BindingTypes::SetupConst;
-            }
+
+        if var_decl.lhs.is_ident() && var_decl.bindings.len() == 1 {
+            let first_binding = &mut var_decl.bindings[0];
+            first_binding.binding_type = BindingTypes::SetupConst;
         }
 
         TransformMacroResult::ValidMacro(Some(Box::new(Expr::Ident(Ident {
