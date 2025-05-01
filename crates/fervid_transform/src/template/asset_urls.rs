@@ -1,32 +1,26 @@
-use fervid_core::{
-    AssetURLOptions, AttributeOrBinding, ElementNode, FervidAtom, Node, StrOrExpr,
-    TransformAssetUrls,
-};
-use fxhash::FxHashMap;
+use fervid_core::{AttributeOrBinding, ElementNode, FervidAtom, Node, StrOrExpr};
 use std::path::{Path, PathBuf};
-use swc_core::common::Span;
 
-pub fn transform_asset_urls(
-    node: &mut Node,
-    transform_option: &TransformAssetUrls,
-    filename: &str,
-) {
-    // TODO add default options TransformAssetUrls with enum add boolean type
-    let options = match transform_option {
-        TransformAssetUrls::Boolean(false) => return,
-        TransformAssetUrls::Boolean(true) => AssetURLOptions {
-            base: None,
-            include_absolute: false,
-            tags: get_default_tags(),
-        },
-        TransformAssetUrls::Options(ref opts) => opts.clone(),
-    };
+use crate::{TransformAssetUrlsConfig, TransformAssetUrlsConfigOptions};
 
-    transform_asset_urls_impl(node, &options, filename);
+lazy_static! {
+    pub static ref DEFAULT_OPTIONS: TransformAssetUrlsConfigOptions =
+        TransformAssetUrlsConfigOptions::default();
 }
 
-/// 内部实现函数，使用 AssetURLOptions
-fn transform_asset_urls_impl(node: &mut Node, options: &AssetURLOptions, filename: &str) {
+pub fn transform_asset_urls(node: &mut Node, config: &TransformAssetUrlsConfig, filename: &str) {
+    match config {
+        &TransformAssetUrlsConfig::Disabled => return,
+        &TransformAssetUrlsConfig::EnabledDefault => {
+            transform_asset_urls_impl(node, &DEFAULT_OPTIONS, filename);
+        }
+        &TransformAssetUrlsConfig::EnabledOptions(ref opts) => {
+            transform_asset_urls_impl(node, opts, filename);
+        }
+    }
+}
+
+fn transform_asset_urls_impl(node: &mut Node, options: &TransformAssetUrlsConfigOptions, filename: &str) {
     match node {
         Node::Element(element) => transform_element_asset_urls(element, options, filename),
         _ => {
@@ -48,11 +42,11 @@ fn get_children_from_node(node: &mut Node) -> Option<Vec<&mut Node>> {
 
 fn transform_element_asset_urls(
     element: &mut ElementNode,
-    options: &AssetURLOptions,
+    options: &TransformAssetUrlsConfigOptions,
     filename: &str,
 ) {
     let tags = &options.tags;
-    if let Some(attrs) = tags.get(&element.starting_tag.tag_name.to_string()) {
+    if let Some(attrs) = tags.get(&element.starting_tag.tag_name) {
         for attr_name in attrs {
             transform_element_attribute(element, attr_name, options, filename);
         }
@@ -66,7 +60,7 @@ fn transform_element_asset_urls(
 fn transform_element_attribute(
     element: &mut ElementNode,
     attr_name: &str,
-    options: &AssetURLOptions,
+    options: &TransformAssetUrlsConfigOptions,
     filename: &str,
 ) {
     let attr_atom = FervidAtom::from(attr_name);
@@ -91,7 +85,11 @@ fn transform_element_attribute(
     }
 }
 
-fn transform_url(url_str: &str, options: &AssetURLOptions, _filename: &str) -> String {
+fn transform_url(
+    url_str: &str,
+    options: &TransformAssetUrlsConfigOptions,
+    _filename: &str,
+) -> String {
     if url_str.trim().is_empty() {
         return url_str.to_string();
     }
@@ -165,23 +163,4 @@ fn transform_url(url_str: &str, options: &AssetURLOptions, _filename: &str) -> S
     }
 
     url_str.to_string()
-}
-
-fn get_default_tags() -> FxHashMap<String, Vec<String>> {
-    let mut tags = FxHashMap::default();
-    tags.insert(
-        "video".to_string(),
-        vec!["src".to_string(), "poster".to_string()],
-    );
-    tags.insert("source".to_string(), vec!["src".to_string()]);
-    tags.insert("img".to_string(), vec!["src".to_string()]);
-    tags.insert(
-        "image".to_string(),
-        vec!["xlink:href".to_string(), "href".to_string()],
-    );
-    tags.insert(
-        "use".to_string(),
-        vec!["xlink:href".to_string(), "href".to_string()],
-    );
-    tags
 }

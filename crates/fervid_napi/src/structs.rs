@@ -1,5 +1,7 @@
-use crate::transform_types::NapiAssetUrlOptions;
-use fervid_core::options::TransformAssetUrls;
+use std::collections::HashMap;
+
+use fervid_transform::TransformAssetUrlsConfigOptions;
+use fxhash::FxHashMap;
 use napi::{Either, JsObject};
 use napi_derive::napi;
 use swc_core::common::Spanned;
@@ -54,7 +56,8 @@ pub struct FervidJsCompilerOptions {
 #[derive(Clone)]
 pub struct FervidJsCompilerOptionsTemplate {
     /// Options for transforming asset URLs in template
-    pub transform_asset_urls: Option<NapiAssetUrlOptions>,
+    #[napi(js_name = "transformAssetUrls")]
+    pub transform_asset_urls: Option<Either<bool, FervidTransformAssetUrlsOptions>>,
 }
 
 #[napi(object)]
@@ -99,10 +102,14 @@ pub struct FervidCompileOptions {
 
     /// Whether setup bindings need to be serialized
     pub output_setup_bindings: Option<bool>,
+}
 
-    /// Transform asset URLs
-    #[napi(js_name = "transformAssetUrls")]
-    pub transform_asset_urls: Option<NapiAssetUrlOptions>,
+#[napi(object)]
+#[derive(Clone, Debug)]
+pub struct FervidTransformAssetUrlsOptions {
+    pub base: Option<String>,
+    pub include_absolute: Option<bool>,
+    pub tags: HashMap<String, Vec<String>>,
 }
 
 #[napi(object)]
@@ -185,6 +192,10 @@ pub enum BindingTypes {
     UNRESOLVED,
 }
 
+//
+// OUTPUT Serialization
+//
+
 impl From<fervid::BindingTypes> for BindingTypes {
     fn from(value: fervid::BindingTypes) -> Self {
         match value {
@@ -236,6 +247,26 @@ impl From<fervid::CompileEmittedAsset> for CustomBlock {
             lo: value.lo,
             hi: value.hi,
             tag_name: value.tag_name,
+        }
+    }
+}
+
+//
+// Input De-Serialization
+//
+
+impl From<FervidTransformAssetUrlsOptions> for TransformAssetUrlsConfigOptions {
+    fn from(value: FervidTransformAssetUrlsOptions) -> TransformAssetUrlsConfigOptions {
+        let mut tags = FxHashMap::default();
+        
+        for tag in value.tags {
+            tags.insert(tag.0.into(), tag.1);
+        }
+
+        TransformAssetUrlsConfigOptions {
+            base: value.base,
+            include_absolute: value.include_absolute.unwrap_or_default(),
+            tags,
         }
     }
 }

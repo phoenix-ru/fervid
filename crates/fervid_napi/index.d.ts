@@ -36,7 +36,7 @@ export interface FervidJsCompilerOptions {
 }
 export interface FervidJsCompilerOptionsTemplate {
   /** Options for transforming asset URLs in template */
-  transformAssetUrls?: NapiAssetUrlOptions
+  transformAssetUrls?: boolean | FervidTransformAssetUrlsOptions
 }
 export interface FervidJsCompilerOptionsScript {
   /**
@@ -70,8 +70,11 @@ export interface FervidCompileOptions {
   propsDestructure?: boolean | 'error'
   /** Whether setup bindings need to be serialized */
   outputSetupBindings?: boolean
-  /** Transform asset URLs */
-  transformAssetUrls?: NapiAssetUrlOptions
+}
+export interface FervidTransformAssetUrlsOptions {
+  base?: string
+  includeAbsolute?: boolean
+  tags: Record<string, Array<string>>
 }
 export interface CompileResult {
   code: string
@@ -144,11 +147,6 @@ export const enum BindingTypes {
   JS_GLOBAL = 13,
   /** a non-resolved variable, presumably from the global Vue context */
   UNRESOLVED = 14,
-}
-export interface NapiAssetUrlOptions {
-  base?: string
-  includeAbsolute?: boolean
-  tags: FxHashMap
 }
 export type FervidJsCompiler = Compiler
 /** Fervid: a compiler for Vue.js written in Rust */

@@ -1,4 +1,4 @@
-pub mod asset_url;
+pub mod asset_urls;
 pub mod ast_transform;
 pub mod collect_vars;
 pub mod expr_transform;

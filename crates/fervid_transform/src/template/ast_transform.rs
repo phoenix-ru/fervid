@@ -6,11 +6,14 @@ use fervid_core::{
 };
 use smallvec::SmallVec;
 use swc_core::{
-    common::{Span, DUMMY_SP},
+    common::DUMMY_SP,
     ecma::ast::{Bool, Expr, Lit},
 };
 
-use crate::{template::asset_url, BindingsHelper, TemplateScope, TransformSfcContext};
+use crate::{
+    template::asset_urls, BindingsHelper, TemplateScope, TransformAssetUrlsConfig,
+    TransformSfcContext,
+};
 
 use super::{collect_vars::collect_variables, expr_transform::BindingsHelperTransform};
 
@@ -56,11 +59,14 @@ pub fn transform_and_record_template(
         });
         template.roots.push(new_root);
     }
-    if let Some(asset_url_options) = &ctx.transform_asset_urls {
-        // 为每个根节点处理资源 URL
-        println!("asset_url_options: {:#?}", asset_url_options);
+
+    if matches!(
+        ctx.transform_asset_urls,
+        TransformAssetUrlsConfig::EnabledDefault | TransformAssetUrlsConfig::EnabledOptions(_)
+    ) {
+        // Process resource URLs for each root node
         for root in &mut template.roots {
-            asset_url::transform_asset_urls(root, asset_url_options, &ctx.filename);
+            asset_urls::transform_asset_urls(root, &ctx.transform_asset_urls, &ctx.filename);
         }
     }
 
@@ -812,7 +818,7 @@ mod tests {
             span: DUMMY_SP,
         };
 
-        transform_and_record_template(&mut sfc_template, &mut Default::default());
+        transform_and_record_template(&mut sfc_template, &mut TransformSfcContext::anonymous());
 
         // Template roots: one div
         assert_eq!(1, sfc_template.roots.len());
@@ -851,7 +857,7 @@ mod tests {
             span: DUMMY_SP,
         };
 
-        transform_and_record_template(&mut sfc_template, &mut Default::default());
+        transform_and_record_template(&mut sfc_template, &mut TransformSfcContext::anonymous());
 
         // Template roots: one conditional sequence
         assert_eq!(1, sfc_template.roots.len());
@@ -882,7 +888,7 @@ mod tests {
             span: DUMMY_SP,
         };
 
-        transform_and_record_template(&mut sfc_template, &mut Default::default());
+        transform_and_record_template(&mut sfc_template, &mut TransformSfcContext::anonymous());
 
         // Template roots: two conditional sequences inside one root
         assert_eq!(1, sfc_template.roots.len());
@@ -916,7 +922,7 @@ mod tests {
             span: DUMMY_SP,
         };
 
-        transform_and_record_template(&mut sfc_template, &mut Default::default());
+        transform_and_record_template(&mut sfc_template, &mut TransformSfcContext::anonymous());
 
         // Template roots: two conditional sequences inside one root
         assert_eq!(1, sfc_template.roots.len());
@@ -948,7 +954,7 @@ mod tests {
             span: DUMMY_SP,
         };
 
-        transform_and_record_template(&mut sfc_template, &mut Default::default());
+        transform_and_record_template(&mut sfc_template, &mut TransformSfcContext::anonymous());
 
         // Template root children: still two
         assert_eq!(1, sfc_template.roots.len());
@@ -978,7 +984,7 @@ mod tests {
             ],
             span: DUMMY_SP,
         };
-        transform_and_record_template(&mut sfc_template, &mut Default::default());
+        transform_and_record_template(&mut sfc_template, &mut TransformSfcContext::anonymous());
         assert_eq!(2, sfc_template.roots.len());
 
         // Should get merged
@@ -1011,7 +1017,7 @@ mod tests {
             ],
             span: DUMMY_SP,
         };
-        transform_and_record_template(&mut sfc_template, &mut Default::default());
+        transform_and_record_template(&mut sfc_template, &mut TransformSfcContext::anonymous());
         assert_eq!(1, sfc_template.roots.len());
     }
 
@@ -1053,7 +1059,7 @@ mod tests {
             span: DUMMY_SP,
         };
 
-        transform_and_record_template(&mut sfc_template, &mut Default::default());
+        transform_and_record_template(&mut sfc_template, &mut TransformSfcContext::anonymous());
 
         // Template roots: one div
         assert_eq!(1, sfc_template.roots.len());
@@ -1109,7 +1115,7 @@ mod tests {
             span: DUMMY_SP,
         };
 
-        transform_and_record_template(&mut sfc_template, &mut Default::default());
+        transform_and_record_template(&mut sfc_template, &mut TransformSfcContext::anonymous());
 
         // Template root: both children nodes are still present
         assert_eq!(1, sfc_template.roots.len());
@@ -1186,7 +1192,7 @@ mod tests {
                 sfc_template.roots.push(Node::Element(div.clone()));
             }
             sfc_template.roots.push(Node::Element(template));
-            transform_and_record_template(&mut sfc_template, &mut Default::default());
+            transform_and_record_template(&mut sfc_template, &mut TransformSfcContext::anonymous());
 
             let Some(Node::ConditionalSeq(cond)) = sfc_template.roots.pop() else {
                 panic!("root is not a conditional seq")

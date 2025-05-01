@@ -3,9 +3,8 @@
 use std::{cell::RefCell, rc::Rc};
 
 use fervid_core::{
-    AssetURLOptions, BindingTypes, ComponentBinding, CustomDirectiveBinding, FervidAtom,
-    SfcCustomBlock, SfcStyleBlock, SfcTemplateBlock, TemplateGenerationMode, TransformAssetUrls,
-    VueImportsSet,
+    fervid_atom, BindingTypes, ComponentBinding, CustomDirectiveBinding, FervidAtom,
+    SfcCustomBlock, SfcStyleBlock, SfcTemplateBlock, TemplateGenerationMode, VueImportsSet,
 };
 use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use smallvec::SmallVec;
@@ -26,7 +25,7 @@ pub struct TransformSfcContext {
     pub is_ce: bool,
     pub bindings_helper: BindingsHelper,
     pub deps: HashSet<String>,
-    pub transform_asset_urls: Option<TransformAssetUrls>,
+    pub transform_asset_urls: TransformAssetUrlsConfig,
     pub(crate) scopes: Vec<TypeScopeContainer>,
 }
 
@@ -36,6 +35,34 @@ pub enum PropsDestructureConfig {
     #[default]
     True,
     Error,
+}
+
+#[derive(Debug, Clone, Default)]
+pub enum TransformAssetUrlsConfig {
+    #[default]
+    EnabledDefault,
+    EnabledOptions(TransformAssetUrlsConfigOptions),
+    Disabled,
+}
+
+#[derive(Debug, Clone)]
+pub struct TransformAssetUrlsConfigOptions {
+    /// Base path for rewriting URLs.
+    /// Default: None
+    pub base: Option<String>,
+    /// Whether to process absolute URLs.
+    /// Default: false
+    pub include_absolute: bool,
+    /// Asset URL tag configuration.
+    /// Example: { img: ["src"], link: ["href"] }
+    /// Default: {
+    ///   video: ["src", "poster"],
+    ///   source: ["src"],
+    ///   img: ["src"],
+    ///   image: ["xlink:href", "href"],
+    ///   use: ["xlink:href", "href"],
+    /// }
+    pub tags: HashMap<FervidAtom, Vec<String>>,
 }
 
 #[derive(Debug)]
@@ -218,7 +245,7 @@ pub struct TransformSfcOptions<'s> {
     pub props_destructure: PropsDestructureConfig,
     pub scope_id: &'s str,
     pub filename: &'s str,
-    pub transform_asset_urls: Option<TransformAssetUrls>,
+    pub transform_asset_urls: TransformAssetUrlsConfig,
 }
 
 pub struct TransformSfcResult {
@@ -267,7 +294,7 @@ impl TransformSfcContext {
             props_destructure: PropsDestructureConfig::default(),
             deps: HashSet::default(),
             scopes: vec![],
-            transform_asset_urls: None,
+            transform_asset_urls: TransformAssetUrlsConfig::default(),
         }
     }
 }
@@ -302,5 +329,31 @@ impl ScopeTypeNode {
 
     pub fn from_type(ts_type: TsType) -> ScopeTypeNode {
         ScopeTypeNode::new(TypeOrDecl::Type(Rc::new(ts_type)))
+    }
+}
+
+impl Default for TransformAssetUrlsConfigOptions {
+    fn default() -> Self {
+        let mut tags = HashMap::default();
+        tags.insert(
+            fervid_atom!("video"),
+            vec!["src".to_string(), "poster".to_string()],
+        );
+        tags.insert(fervid_atom!("source"), vec!["src".to_string()]);
+        tags.insert(fervid_atom!("img"), vec!["src".to_string()]);
+        tags.insert(
+            fervid_atom!("image"),
+            vec!["xlink:href".to_string(), "href".to_string()],
+        );
+        tags.insert(
+            fervid_atom!("use"),
+            vec!["xlink:href".to_string(), "href".to_string()],
+        );
+
+        TransformAssetUrlsConfigOptions {
+            base: None,
+            include_absolute: false,
+            tags,
+        }
     }
 }

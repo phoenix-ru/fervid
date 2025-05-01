@@ -15,7 +15,15 @@ use strum_macros::{AsRefStr, EnumString, IntoStaticStr};
 use swc_core::{
     common::{pass::Either, Span, Spanned, DUMMY_SP},
     ecma::ast::{
-        BinExpr, BinaryOp, Class, ClassDecl, Decl, DefaultDecl, ExportDecl, ExportSpecifier, Expr, FnDecl, FnExpr, Function, Ident, Lit, Module, ModuleDecl, ModuleExportName, ModuleItem, Pat, Stmt, Tpl, TsCallSignatureDecl, TsEntityName, TsEnumDecl, TsExprWithTypeArgs, TsFnOrConstructorType, TsFnParam, TsFnType, TsIndexedAccessType, TsInterfaceDecl, TsIntersectionType, TsKeywordType, TsKeywordTypeKind, TsLit, TsLitType, TsMappedType, TsMethodSignature, TsModuleDecl, TsModuleName, TsNamespaceBody, TsNamespaceDecl, TsPropertySignature, TsQualifiedName, TsTplLitType, TsType, TsTypeAnn, TsTypeElement, TsTypeLit, TsTypeOperatorOp, TsTypeQueryExpr, TsTypeRef, TsUnionOrIntersectionType, TsUnionType
+        BinExpr, BinaryOp, Class, ClassDecl, Decl, DefaultDecl, ExportDecl, ExportSpecifier, Expr,
+        FnDecl, FnExpr, Function, Ident, Lit, Module, ModuleDecl, ModuleExportName, ModuleItem,
+        Pat, Stmt, Tpl, TsCallSignatureDecl, TsEntityName, TsEnumDecl, TsExprWithTypeArgs,
+        TsFnOrConstructorType, TsFnParam, TsFnType, TsIndexedAccessType, TsInterfaceDecl,
+        TsIntersectionType, TsKeywordType, TsKeywordTypeKind, TsLit, TsLitType, TsMappedType,
+        TsMethodSignature, TsModuleDecl, TsModuleName, TsNamespaceBody, TsNamespaceDecl,
+        TsPropertySignature, TsQualifiedName, TsTplLitType, TsType, TsTypeAnn, TsTypeElement,
+        TsTypeLit, TsTypeOperatorOp, TsTypeQueryExpr, TsTypeRef, TsUnionOrIntersectionType,
+        TsUnionType,
     },
 };
 
@@ -1418,11 +1426,7 @@ fn inner_resolve_type_reference<'t>(
             let child_scope = &*child_scope.borrow();
 
             // `name.slice(1)`
-            let name_slice = if name.len() > 1 {
-                &name[1..]
-            } else {
-                &[]
-            };
+            let name_slice = if name.len() > 1 { &name[1..] } else { &[] };
 
             return inner_resolve_type_reference(
                 ctx,
@@ -4147,6 +4151,7 @@ mod tests {
                 props_destructure: crate::PropsDestructureConfig::default(),
                 scope_id: "test",
                 filename: "./Test.vue",
+                transform_asset_urls: crate::TransformAssetUrlsConfig::default(),
             },
         );
 
