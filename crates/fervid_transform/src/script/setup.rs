@@ -147,12 +147,6 @@ pub fn transform_and_record_script_setup(
         transform_destructured_props(ctx, &mut setup_body_stmts, &mut module_items, errors);
     }
 
-    // TODO remove
-    // dbg!(&ctx.bindings_helper.props_aliases);
-    // dbg!(&ctx.bindings_helper.props_destructured_bindings);
-    // dbg!(&ctx.bindings_helper.setup_bindings);
-    // println!("");
-
     // Post-process macros, e.g. merge models to `props` and `emits`
     postprocess_macros(ctx, &mut sfc_object_helper);
 

@@ -59,7 +59,6 @@ pub fn collect_props_destructure(
         local: &FervidAtom,
         default_value: Option<Box<Expr>>,
     ) {
-        dbg!(&local, &key);
         if local != key {
             ctx.bindings_helper.setup_bindings.push(SetupBinding::new(
                 local.to_owned(),

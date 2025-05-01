@@ -785,8 +785,6 @@ impl TransformVisitor<'_> {
                 })
             };
 
-            dbg!(&member_prop);
-
             return IdentTransformStrategy::RewriteWithMemberExpr(MemberExpr {
                 span: DUMMY_SP,
                 obj: Box::new(Expr::Ident(Ident {
