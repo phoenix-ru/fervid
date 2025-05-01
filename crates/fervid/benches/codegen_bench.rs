@@ -1,4 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use fervid::PropsDestructureConfig;
+use fervid_transform::{BindingsHelper, TransformAssetUrlsConfig, TransformSfcContext};
 use swc_core::common::DUMMY_SP;
 
 mod fixtures;
@@ -16,8 +18,19 @@ fn codegen_benchmark(c: &mut Criterion) {
                 panic!("Test component has no template block");
             };
 
-            let mut bindings_helper = fervid_transform::BindingsHelper::default();
-            fervid_transform::template::transform_and_record_template(template_block, &mut bindings_helper);
+            // Copy of `TransformSfcContext::anonymous` because it is a test-only function
+            let filename = "anonymous.vue".to_string();
+            let mut ctx = TransformSfcContext {
+                filename: filename.to_owned(),
+                bindings_helper: BindingsHelper::default(),
+                is_ce: false,
+                props_destructure: PropsDestructureConfig::default(),
+                deps: Default::default(),
+                scopes: vec![],
+                transform_asset_urls: TransformAssetUrlsConfig::default(),
+            };
+
+            fervid_transform::template::transform_and_record_template(template_block, &mut ctx);
 
             b.iter_batched(
                 || template_block.clone(),

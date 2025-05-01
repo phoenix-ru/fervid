@@ -26,7 +26,7 @@ pub struct TransformSfcContext {
     pub bindings_helper: BindingsHelper,
     pub deps: HashSet<String>,
     pub transform_asset_urls: TransformAssetUrlsConfig,
-    pub(crate) scopes: Vec<TypeScopeContainer>,
+    pub scopes: Vec<TypeScopeContainer>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
