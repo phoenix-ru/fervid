@@ -74,7 +74,7 @@ export interface FervidCompileOptions {
 export interface FervidTransformAssetUrlsOptions {
   base?: string
   includeAbsolute?: boolean
-  tags: Record<string, Array<string>>
+  tags?: Record<string, Array<string>>
 }
 export interface CompileResult {
   code: string

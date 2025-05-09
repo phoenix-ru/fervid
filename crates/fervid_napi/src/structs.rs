@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use fervid::FervidAtom;
 use fervid_transform::TransformAssetUrlsConfigOptions;
 use fxhash::FxHashMap;
 use napi::{Either, JsObject};
@@ -109,7 +110,7 @@ pub struct FervidCompileOptions {
 pub struct FervidTransformAssetUrlsOptions {
     pub base: Option<String>,
     pub include_absolute: Option<bool>,
-    pub tags: HashMap<String, Vec<String>>,
+    pub tags: Option<HashMap<String, Vec<String>>>,
 }
 
 #[napi(object)]
@@ -257,11 +258,17 @@ impl From<fervid::CompileEmittedAsset> for CustomBlock {
 
 impl From<FervidTransformAssetUrlsOptions> for TransformAssetUrlsConfigOptions {
     fn from(value: FervidTransformAssetUrlsOptions) -> TransformAssetUrlsConfigOptions {
-        let mut tags = FxHashMap::default();
-        
-        for tag in value.tags {
-            tags.insert(tag.0.into(), tag.1);
-        }
+        let tags = if let Some(napi_tags) = value.tags {
+            let mut tags = FxHashMap::default();
+
+            for mut tag in napi_tags {
+                tags.insert(tag.0.into(), tag.1.drain(..).map(FervidAtom::from).collect());
+            }
+
+            tags
+        } else {
+            TransformAssetUrlsConfigOptions::default().tags
+        };
 
         TransformAssetUrlsConfigOptions {
             base: value.base,

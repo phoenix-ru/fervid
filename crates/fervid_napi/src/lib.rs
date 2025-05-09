@@ -4,7 +4,7 @@
 #[global_allocator]
 static ALLOC: mimalloc_rust::GlobalMiMalloc = mimalloc_rust::GlobalMiMalloc;
 
-use std::borrow::Cow;
+use std::{borrow::Cow, rc::Rc};
 
 use fervid_transform::{PropsDestructureConfig, TransformAssetUrlsConfig};
 use napi::bindgen_prelude::*;
@@ -73,7 +73,7 @@ fn compile_impl(
                 Some(Either::A(true)) => Some(TransformAssetUrlsConfig::EnabledDefault),
                 Some(Either::A(false)) => Some(TransformAssetUrlsConfig::Disabled),
                 Some(Either::B(options)) => {
-                    Some(TransformAssetUrlsConfig::EnabledOptions(options.to_owned().into()))
+                    Some(TransformAssetUrlsConfig::EnabledOptions(Rc::new(options.to_owned().into())))
                 }
                 None => None,
             });

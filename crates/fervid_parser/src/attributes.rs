@@ -46,7 +46,10 @@ impl SfcParser<'_, '_, '_> {
             // Use raw names for attributes, otherwise SWC transforms them to lowercase
             // `-1` is needed because SWC spans start from 1
             let raw_idx_start = raw_attribute.span.lo.0 as usize - 1;
-            let raw_idx_end = raw_idx_start + raw_attribute.name.len();
+            let raw_idx_end = raw_idx_start
+                + raw_attribute.name.len()
+                + raw_attribute.prefix.as_ref().map_or(0, |v| v.len() + 1); // 1 for `:` in e.g. `xmlns:xlink`
+
             raw_attribute.name = FervidAtom::from(&self.input[raw_idx_start..raw_idx_end]);
 
             match self.try_parse_directive(raw_attribute, attrs_or_bindings, vue_directives) {

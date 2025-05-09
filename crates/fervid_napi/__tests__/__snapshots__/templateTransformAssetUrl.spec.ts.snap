@@ -1,0 +1,175 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`compiler sfc: transform asset url > should allow for full base URLs, with paths 1`] = `
+"import { createElementBlock as _createElementBlock, openBlock as _openBlock } from "vue";
+export default {
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock("img", {
+            src: "http://localhost:3000/src/logo.png"
+        }));
+    }
+};
+"
+`;
+
+exports[`compiler sfc: transform asset url > should allow for full base URLs, without paths 1`] = `
+"import { createElementBlock as _createElementBlock, openBlock as _openBlock } from "vue";
+export default {
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock("img", {
+            src: "http://localhost:3000/logo.png"
+        }));
+    }
+};
+"
+`;
+
+exports[`compiler sfc: transform asset url > should allow for full base URLs, without port 1`] = `
+"import { createElementBlock as _createElementBlock, openBlock as _openBlock } from "vue";
+export default {
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock("img", {
+            src: "http://localhost/logo.png"
+        }));
+    }
+};
+"
+`;
+
+exports[`compiler sfc: transform asset url > should allow for full base URLs, without protocol 1`] = `
+"import { createElementBlock as _createElementBlock, openBlock as _openBlock } from "vue";
+export default {
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock("img", {
+            src: "http://localhost/logo.png"
+        }));
+    }
+};
+"
+`;
+
+exports[`compiler sfc: transform asset url > support uri fragment 1`] = `
+"import _imports_0 from "@svg/file.svg";
+import { createElementBlock as _createElementBlock, createVNode as _createVNode, Fragment as _Fragment, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
+export default {
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        const _component_use = _resolveComponent("use");
+        return (_openBlock(), _createElementBlock(_Fragment, null, [
+            _createVNode(_component_use, {
+                href: _imports_0 + "#fragment"
+            }),
+            _createVNode(_component_use, {
+                href: _imports_0 + "#fragment"
+            })
+        ]));
+    }
+};
+"
+`;
+
+exports[`compiler sfc: transform asset url > support uri is empty 1`] = `
+"import { createBlock as _createBlock, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
+export default {
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        const _component_use = _resolveComponent("use");
+        return (_openBlock(), _createBlock(_component_use, {
+            href: ""
+        }));
+    }
+};
+"
+`;
+
+exports[`compiler sfc: transform asset url > transform assetUrls 1`] = `
+"import _imports_0 from "./logo.png";
+import _imports_1 from "fixtures/logo.png";
+import { createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, Fragment as _Fragment, openBlock as _openBlock } from "vue";
+export default {
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock(_Fragment, null, [
+            _createElementVNode("img", {
+                src: _imports_0
+            }),
+            _createElementVNode("img", {
+                src: _imports_1
+            }),
+            _createElementVNode("img", {
+                src: _imports_1
+            }),
+            _createElementVNode("img", {
+                src: "http://example.com/fixtures/logo.png"
+            }),
+            _createElementVNode("img", {
+                src: "//example.com/fixtures/logo.png"
+            }),
+            _createElementVNode("img", {
+                src: "/fixtures/logo.png"
+            }),
+            _createElementVNode("img", {
+                src: "data:image/png;base64,i"
+            })
+        ]));
+    }
+};
+"
+`;
+
+exports[`compiler sfc: transform asset url > with explicit base 1`] = `
+"import _imports_0 from "bar.png";
+import _imports_1 from "@theme/bar.png";
+import { createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, Fragment as _Fragment, openBlock as _openBlock } from "vue";
+export default {
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock(_Fragment, null, [
+            _createElementVNode("img", {
+                src: "/foo/bar.png"
+            }),
+            _createElementVNode("img", {
+                src: "bar.png"
+            }),
+            _createElementVNode("img", {
+                src: _imports_0
+            }),
+            _createElementVNode("img", {
+                src: _imports_1
+            })
+        ]));
+    }
+};
+"
+`;
+
+exports[`compiler sfc: transform asset url > with includeAbsolute: true 1`] = `
+"import _imports_0 from "./bar.png";
+import _imports_1 from "/bar.png";
+import _imports_2 from "//foo.bar/baz.png";
+import { createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, Fragment as _Fragment, openBlock as _openBlock } from "vue";
+export default {
+    __name: "anonymous",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock(_Fragment, null, [
+            _createElementVNode("img", {
+                src: _imports_0
+            }),
+            _createElementVNode("img", {
+                src: _imports_1
+            }),
+            _createElementVNode("img", {
+                src: "https://foo.bar/baz.png"
+            }),
+            _createElementVNode("img", {
+                src: _imports_2
+            })
+        ]));
+    }
+};
+"
+`;

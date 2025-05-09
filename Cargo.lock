@@ -911,6 +911,7 @@ dependencies = [
  "fxhash",
  "itertools 0.13.0",
  "lazy_static",
+ "percent-encoding",
  "phf",
  "smallvec",
  "strum",

@@ -11,9 +11,12 @@ use smallvec::SmallVec;
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::ast::{
-        Decl, Expr, ExprOrSpread, Function, Id, Module, ObjectLit, PropOrSpread, Str, TsType,
+        Decl, Expr, ExprOrSpread, Function, Id, ImportDecl, Module, ObjectLit, PropOrSpread, Str,
+        TsType,
     },
 };
+
+use crate::error::TransformError;
 
 /// Context object. Currently very minimal but may grow over time.
 pub struct TransformSfcContext {
@@ -27,6 +30,8 @@ pub struct TransformSfcContext {
     pub deps: HashSet<String>,
     pub transform_asset_urls: TransformAssetUrlsConfig,
     pub scopes: Vec<TypeScopeContainer>,
+    pub errors: Vec<TransformError>,
+    pub warnings: Vec<TransformError>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -41,7 +46,7 @@ pub enum PropsDestructureConfig {
 pub enum TransformAssetUrlsConfig {
     #[default]
     EnabledDefault,
-    EnabledOptions(TransformAssetUrlsConfigOptions),
+    EnabledOptions(Rc<TransformAssetUrlsConfigOptions>),
     Disabled,
 }
 
@@ -62,7 +67,7 @@ pub struct TransformAssetUrlsConfigOptions {
     ///   image: ["xlink:href", "href"],
     ///   use: ["xlink:href", "href"],
     /// }
-    pub tags: HashMap<FervidAtom, Vec<String>>,
+    pub tags: HashMap<FervidAtom, Vec<FervidAtom>>,
 }
 
 #[derive(Debug)]
@@ -80,6 +85,8 @@ pub struct BindingsHelper {
     pub components: HashMap<FervidAtom, ComponentBinding>,
     /// All custom directives present in the `<template>`
     pub custom_directives: HashMap<FervidAtom, CustomDirectiveBinding>,
+    /// All imports that need to be added to the top of the generated module (e.g. synthesized asset URL imports)
+    pub imports: Vec<ImportDecl>,
     /// Are we compiling for DEV or PROD
     pub is_prod: bool,
     /// Is Typescript or Javascript used
@@ -295,6 +302,8 @@ impl TransformSfcContext {
             deps: HashSet::default(),
             scopes: vec![],
             transform_asset_urls: TransformAssetUrlsConfig::default(),
+            errors: vec![],
+            warnings: vec![],
         }
     }
 }
@@ -337,17 +346,17 @@ impl Default for TransformAssetUrlsConfigOptions {
         let mut tags = HashMap::default();
         tags.insert(
             fervid_atom!("video"),
-            vec!["src".to_string(), "poster".to_string()],
+            vec![fervid_atom!("src"), fervid_atom!("poster")],
         );
-        tags.insert(fervid_atom!("source"), vec!["src".to_string()]);
-        tags.insert(fervid_atom!("img"), vec!["src".to_string()]);
+        tags.insert(fervid_atom!("source"), vec![fervid_atom!("src")]);
+        tags.insert(fervid_atom!("img"), vec![fervid_atom!("src")]);
         tags.insert(
             fervid_atom!("image"),
-            vec!["xlink:href".to_string(), "href".to_string()],
+            vec![fervid_atom!("xlink:href"), fervid_atom!("href")],
         );
         tags.insert(
             fervid_atom!("use"),
-            vec!["xlink:href".to_string(), "href".to_string()],
+            vec![fervid_atom!("xlink:href"), fervid_atom!("href")],
         );
 
         TransformAssetUrlsConfigOptions {
