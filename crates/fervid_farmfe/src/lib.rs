@@ -94,6 +94,7 @@ impl Plugin for FarmPluginVueFervid {
                 ssr: None,
                 gen_default_as: None,
                 source_map: None,
+                transform_asset_urls: None,
             },
         );
 

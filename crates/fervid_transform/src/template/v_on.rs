@@ -21,7 +21,8 @@ impl TemplateVisitor<'_> {
             }
 
             Some(StrOrExpr::Expr(dynamic_event)) => {
-                self.bindings_helper
+                self.ctx
+                    .bindings_helper
                     .transform_expr(dynamic_event, scope_to_use);
             }
 
@@ -42,7 +43,8 @@ impl TemplateVisitor<'_> {
                 // This is either as-is (if const) or `(...args) => _ctx.smth && _ctx.smth(...args)`
                 Expr::Ident(ident) => {
                     is_non_const_ident = !matches!(
-                        self.bindings_helper
+                        self.ctx
+                            .bindings_helper
                             .get_var_binding_type(scope_to_use, &ident.sym),
                         BindingTypes::SetupConst
                             | BindingTypes::LiteralConst
@@ -105,7 +107,8 @@ impl TemplateVisitor<'_> {
             }
 
             // 3. Transform the handler
-            self.bindings_helper
+            self.ctx
+                .bindings_helper
                 .transform_expr(&mut handler, scope_to_use);
 
             // 4. Wrap in `(...args)` arrow if needed
@@ -256,7 +259,7 @@ mod tests {
 
     use crate::{
         test_utils::{to_str, ts},
-        BindingsHelper, SetupBinding,
+        SetupBinding, TransformSfcContext,
     };
 
     use super::*;
@@ -318,16 +321,11 @@ mod tests {
     fn it_transforms_handler() {
         // `const foo = ref()`
         // `function func() {}`
-        let mut bindings_helper = helper(vec![
+        let mut ctx = with_bindings(vec![
             SetupBinding::new(fervid_atom!("foo"), BindingTypes::SetupRef),
             SetupBinding::new(fervid_atom!("func"), BindingTypes::SetupConst),
         ]);
-
-        let mut template_visitor = TemplateVisitor {
-            bindings_helper: &mut bindings_helper,
-            current_scope: 0,
-            v_for_scope: false,
-        };
+        let mut template_visitor = TemplateVisitor::new(&mut ctx);
 
         macro_rules! test {
             ($in: literal, $expected: literal) => {
@@ -460,18 +458,13 @@ mod tests {
         // let lett = 1
         // let v = ref(1)
         // ```
-        let mut bindings_helper = helper(vec![
+        let mut ctx = with_bindings(vec![
             SetupBinding::new(fervid_atom!("count"), BindingTypes::SetupRef),
             SetupBinding::new(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
             SetupBinding::new(fervid_atom!("lett"), BindingTypes::SetupLet),
             SetupBinding::new(fervid_atom!("v"), BindingTypes::SetupLet),
         ]);
-
-        let mut template_visitor = TemplateVisitor {
-            bindings_helper: &mut bindings_helper,
-            current_scope: 0,
-            v_for_scope: false,
-        };
+        let mut template_visitor = TemplateVisitor::new(&mut ctx);
 
         macro_rules! test {
             ($in: literal, $expected: literal) => {
@@ -550,17 +543,12 @@ mod tests {
         // const maybe = foo()
         // let lett = 1
         // ```
-        let mut bindings_helper = helper(vec![
+        let mut ctx = with_bindings(vec![
             SetupBinding::new(fervid_atom!("count"), BindingTypes::SetupRef),
             SetupBinding::new(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
             SetupBinding::new(fervid_atom!("lett"), BindingTypes::SetupLet),
         ]);
-
-        let mut template_visitor = TemplateVisitor {
-            bindings_helper: &mut bindings_helper,
-            current_scope: 0,
-            v_for_scope: false,
-        };
+        let mut template_visitor = TemplateVisitor::new(&mut ctx);
 
         macro_rules! test {
             ($in: literal, $expected: literal) => {
@@ -596,19 +584,14 @@ mod tests {
         // const maybe = foo()
         // let lett = 1
         // ```
-        let mut bindings_helper = helper(vec![
+        let mut ctx = with_bindings(vec![
             SetupBinding::new(fervid_atom!("val"), BindingTypes::SetupConst),
             SetupBinding::new(fervid_atom!("count"), BindingTypes::SetupRef),
             SetupBinding::new(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
             SetupBinding::new(fervid_atom!("lett"), BindingTypes::SetupLet),
             SetupBinding::new(fervid_atom!("item"), BindingTypes::TemplateLocal),
         ]);
-
-        let mut template_visitor = TemplateVisitor {
-            bindings_helper: &mut bindings_helper,
-            current_scope: 0,
-            v_for_scope: false,
-        };
+        let mut template_visitor = TemplateVisitor::new(&mut ctx);
 
         macro_rules! test {
             ($in: literal, $expected: literal) => {
@@ -633,10 +616,10 @@ mod tests {
         test!("({ lett } = val)", "$event=>({lett:lett}=val)");
     }
 
-    fn helper(bindings: Vec<SetupBinding>) -> BindingsHelper {
-        let mut bindings_helper = BindingsHelper::default();
-        bindings_helper.setup_bindings.extend(bindings);
-        bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
-        bindings_helper
+    fn with_bindings(bindings: Vec<SetupBinding>) -> TransformSfcContext {
+        let mut ctx = TransformSfcContext::anonymous();
+        ctx.bindings_helper.setup_bindings.extend(bindings);
+        ctx.bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
+        ctx
     }
 }

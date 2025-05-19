@@ -34,7 +34,10 @@ export interface FervidJsCompilerOptions {
    */
   customElement?: undefined
 }
-export interface FervidJsCompilerOptionsTemplate {}
+export interface FervidJsCompilerOptionsTemplate {
+  /** Options for transforming asset URLs in template */
+  transformAssetUrls?: boolean | FervidTransformAssetUrlsOptions
+}
 export interface FervidJsCompilerOptionsScript {
   /**
    * Ignored
@@ -67,6 +70,11 @@ export interface FervidCompileOptions {
   propsDestructure?: boolean | 'error'
   /** Whether setup bindings need to be serialized */
   outputSetupBindings?: boolean
+}
+export interface FervidTransformAssetUrlsOptions {
+  base?: string
+  includeAbsolute?: boolean
+  tags?: Record<string, Array<string>>
 }
 export interface CompileResult {
   code: string

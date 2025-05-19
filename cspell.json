@@ -129,11 +129,14 @@
     "bitflags",
     "keyof",
     "xfoo",
+    "xlink",
     "xbar",
     "vuejs",
     "pretransform",
     "boola",
-    "boolb"
+    "boolb",
+    "hostnames",
+    "signifiers"
   ],
   "ignorePaths": [
     ".github/**",

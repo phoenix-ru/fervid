@@ -4,13 +4,20 @@ use swc_core::common::{Span, Spanned};
 #[derive(Debug)]
 pub enum TransformError {
     CssError(CssError),
-    ScriptError(ScriptError)
+    ScriptError(ScriptError),
+    TemplateError(TemplateError),
 }
 
 #[derive(Debug)]
 pub struct ScriptError {
     pub span: Span,
-    pub kind: ScriptErrorKind
+    pub kind: ScriptErrorKind,
+}
+
+#[derive(Debug)]
+pub struct TemplateError {
+    pub span: Span,
+    pub kind: TemplateErrorKind,
 }
 
 #[derive(Debug)]
@@ -94,6 +101,14 @@ pub enum ScriptErrorKind {
     WithDefaultsWithoutDefineProps,
 }
 
+#[derive(Debug)]
+pub enum TemplateErrorKind {
+    /// Failed parsing the URL when doing asset URL transform
+    TransformAssetUrlsBaseUrlParseFailed,
+    /// Failed parsing the configured base URL when doing asset URL transform
+    TransformAssetUrlsUrlParseFailed,
+}
+
 impl From<CssError> for TransformError {
     fn from(value: CssError) -> Self {
         TransformError::CssError(value)
@@ -111,6 +126,7 @@ impl Spanned for TransformError {
         match self {
             TransformError::CssError(e) => e.span,
             TransformError::ScriptError(e) => e.span,
+            TransformError::TemplateError(e) => e.span,
         }
     }
 }

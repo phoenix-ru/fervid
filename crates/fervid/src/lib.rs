@@ -25,7 +25,8 @@
 //!   is_ce: false,
 //!   props_destructure: fervid_transform::PropsDestructureConfig::default(),
 //!   scope_id: "filehash",
-//!   filename: "input.vue"
+//!   filename: "input.vue",
+//!   transform_asset_urls: fervid_transform::TransformAssetUrlsConfig::default(),
 //! };
 //! let transform_result = fervid_transform::transform_sfc(sfc, transform_options, &mut transform_errors);
 //!
@@ -59,8 +60,10 @@ use errors::CompileError;
 use fervid_codegen::CodegenContext;
 pub use fervid_core::*;
 use fervid_parser::SfcParser;
+use fervid_transform::TransformAssetUrlsConfig;
 pub use fervid_transform::{
-    style::should_transform_style_block, transform_sfc, PropsDestructureConfig, SetupBinding, TransformSfcOptions
+    style::should_transform_style_block, transform_sfc, PropsDestructureConfig, SetupBinding,
+    TransformSfcOptions,
 };
 use fxhash::FxHasher32;
 use std::{
@@ -93,9 +96,10 @@ pub struct CompileOptions<'o> {
     // linked or globally installed). In such cases a custom `require` can be
     // passed to correctly resolve the preprocessors.
     // preprocessCustomRequire?: (id: string) => any;
+
     // Configure what tags/attributes to transform into asset url imports,
     // or disable the transform altogether with `false`.
-    // transformAssetUrls?: AssetURLOptions | AssetURLTagConfig | boolean;
+    pub transform_asset_urls: Option<TransformAssetUrlsConfig>,
 
     // script
     pub gen_default_as: Option<Cow<'o, str>>,
@@ -160,6 +164,7 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
         props_destructure: options.props_destructure.unwrap_or_default(),
         scope_id: &file_hash,
         filename: &options.filename,
+        transform_asset_urls: options.transform_asset_urls.unwrap_or_default(),
     };
     let transform_result = transform_sfc(sfc, transform_options, &mut transform_errors);
     all_errors.extend(transform_errors.into_iter().map(From::from));
@@ -257,6 +262,7 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
         props_destructure: PropsDestructureConfig::default(),
         scope_id: &file_hash,
         filename: "anonymous.vue".into(),
+        transform_asset_urls: TransformAssetUrlsConfig::default(),
     };
     let transform_result = transform_sfc(sfc, transform_options, &mut transform_errors);
 

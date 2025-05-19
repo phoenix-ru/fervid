@@ -5,6 +5,7 @@ use fervid_core::{SfcDescriptor, SfcScriptBlock, SfcScriptLang, TemplateGenerati
 use misc::infer_name;
 use script::transform_and_record_scripts;
 use style::{attach_scope_id, create_style_scope, transform_style_blocks};
+use swc_core::ecma::ast::{ModuleDecl, ModuleItem};
 use template::transform_and_record_template;
 
 #[macro_use]
@@ -45,10 +46,19 @@ pub fn transform_sfc<'o>(
     // Transform the template if it is present
     let mut template_block = None;
     if let Some(mut template) = sfc_descriptor.template {
-        transform_and_record_template(&mut template, &mut ctx.bindings_helper);
+        transform_and_record_template(&mut template, &mut ctx);
         if !template.roots.is_empty() {
             template_block = Some(template);
         }
+
+        // Add transformed asset URL imports
+        // TODO Move this to codegen?
+        transform_result.module.body.extend(
+            ctx.bindings_helper
+                .imports
+                .drain(..)
+                .map(|v| ModuleItem::ModuleDecl(ModuleDecl::Import(v))),
+        );
     }
 
     // Transform scoped CSS
@@ -62,6 +72,9 @@ pub fn transform_sfc<'o>(
     // Augment with some metadata
     let mut exported_obj = transform_result.export_obj;
     infer_name(&mut exported_obj, &options.filename);
+
+    // Temp: extend errors
+    errors.extend(ctx.errors);
 
     TransformSfcResult {
         bindings_helper: ctx.bindings_helper,
@@ -108,6 +121,9 @@ impl TransformSfcContext {
             bindings_helper,
             deps: Default::default(),
             scopes: vec![],
+            transform_asset_urls: options.transform_asset_urls.clone(),
+            errors: vec![],
+            warnings: vec![],
         }
     }
 

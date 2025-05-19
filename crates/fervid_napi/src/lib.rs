@@ -4,9 +4,9 @@
 #[global_allocator]
 static ALLOC: mimalloc_rust::GlobalMiMalloc = mimalloc_rust::GlobalMiMalloc;
 
-use std::borrow::Cow;
+use std::{borrow::Cow, rc::Rc};
 
-use fervid_transform::PropsDestructureConfig;
+use fervid_transform::{PropsDestructureConfig, TransformAssetUrlsConfig};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
@@ -64,6 +64,20 @@ fn compile_impl(
         _ => None,
     };
 
+    let transform_asset_urls =
+        compiler
+            .options
+            .template
+            .as_ref()
+            .and_then(|v| match v.transform_asset_urls.as_ref() {
+                Some(Either::A(true)) => Some(TransformAssetUrlsConfig::EnabledDefault),
+                Some(Either::A(false)) => Some(TransformAssetUrlsConfig::Disabled),
+                Some(Either::B(options)) => {
+                    Some(TransformAssetUrlsConfig::EnabledOptions(Rc::new(options.to_owned().into())))
+                }
+                None => None,
+            });
+
     // Normalize options to the ones defined in fervid
     let compile_options = CompileOptions {
         filename: Cow::Borrowed(&options.filename),
@@ -77,6 +91,7 @@ fn compile_impl(
             .as_ref()
             .map(|v| Cow::Borrowed(v.as_str())),
         source_map: compiler.options.source_map,
+        transform_asset_urls,
     };
 
     compile(source, compile_options).map_err(|e| Error::from_reason(e.to_string()))
@@ -92,7 +107,10 @@ fn convert(
         env.create_object()
             .map(|mut obj| {
                 for binding in result.setup_bindings.drain(..) {
-                    let _ = obj.set(binding.sym.as_str(), BindingTypes::from(binding.binding_type));
+                    let _ = obj.set(
+                        binding.sym.as_str(),
+                        BindingTypes::from(binding.binding_type),
+                    );
                 }
                 obj
             })

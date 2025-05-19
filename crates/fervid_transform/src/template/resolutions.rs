@@ -18,7 +18,7 @@ impl TemplateVisitor<'_> {
         // Check the existing resolutions.
         // Do nothing if found, regardless if it was previously resolved or not,
         // because codegen will handle the runtime resolution.
-        if self.bindings_helper.components.contains_key(tag_name) {
+        if self.ctx.bindings_helper.components.contains_key(tag_name) {
             return;
         }
 
@@ -26,8 +26,8 @@ impl TemplateVisitor<'_> {
         // Example: `<Foo.Bar>`
         let namespace_dot_idx = tag_name.find('.');
         let found = match namespace_dot_idx {
-            Some(dot_idx) => find_binding(self.bindings_helper, &tag_name[..dot_idx]),
-            None => find_binding(self.bindings_helper, tag_name),
+            Some(dot_idx) => find_binding(&mut self.ctx.bindings_helper, &tag_name[..dot_idx]),
+            None => find_binding(&mut self.ctx.bindings_helper, tag_name),
         };
 
         if let Some(found) = found {
@@ -37,7 +37,8 @@ impl TemplateVisitor<'_> {
             // TODO I am not sure about `Imported` though,
             // the official compiler sees them as if `SetupMaybeRef` and transforms.
             if !matches!(found.binding_type, BindingTypes::Component) {
-                self.bindings_helper
+                self.ctx
+                    .bindings_helper
                     .transform_expr(&mut resolved_to, self.current_scope);
             }
 
@@ -54,13 +55,14 @@ impl TemplateVisitor<'_> {
             }
 
             // Was resolved
-            self.bindings_helper.components.insert(
+            self.ctx.bindings_helper.components.insert(
                 tag_name.to_owned(),
                 ComponentBinding::Resolved(Box::new(resolved_to)),
             );
         } else {
             // Was not resolved
-            self.bindings_helper
+            self.ctx
+                .bindings_helper
                 .components
                 .insert(tag_name.to_owned(), ComponentBinding::Unresolved);
         }
@@ -72,6 +74,7 @@ impl TemplateVisitor<'_> {
         // Do nothing if found, regardless if it was previously resolved or not,
         // because codegen will handle the runtime resolution.
         if self
+            .ctx
             .bindings_helper
             .custom_directives
             .contains_key(directive_name)
@@ -88,7 +91,7 @@ impl TemplateVisitor<'_> {
         let mut normalized = String::with_capacity(directive_name.len());
         to_pascal_case(directive_name, &mut normalized);
 
-        let found = self.bindings_helper.setup_bindings.iter().find(
+        let found = self.ctx.bindings_helper.setup_bindings.iter().find(
             |SetupBinding {
                  sym: name,
                  binding_type: _,
@@ -104,17 +107,18 @@ impl TemplateVisitor<'_> {
             let mut resolved_to = Expr::Ident(found.sym.to_owned().into_ident());
 
             // Transform the identifier
-            self.bindings_helper
+            self.ctx
+                .bindings_helper
                 .transform_expr(&mut resolved_to, self.current_scope);
 
             // Was resolved
-            self.bindings_helper.custom_directives.insert(
+            self.ctx.bindings_helper.custom_directives.insert(
                 directive_name.to_owned(),
                 CustomDirectiveBinding::Resolved(Box::new(resolved_to)),
             );
         } else {
             // Was not resolved
-            self.bindings_helper.custom_directives.insert(
+            self.ctx.bindings_helper.custom_directives.insert(
                 directive_name.to_owned(),
                 CustomDirectiveBinding::Unresolved,
             );
@@ -146,24 +150,28 @@ fn find_binding<'a, 'b>(
 mod tests {
     use fervid_core::fervid_atom;
 
-    use crate::BindingsHelper;
+    use crate::TransformSfcContext;
 
     use super::*;
 
     #[test]
     fn it_resolves_components_pascal_case() {
         // `TestComponent` binding
-        let mut bindings_helper = with_bindings(vec![SetupBinding::new(
+        let mut ctx = with_bindings(vec![SetupBinding::new(
             fervid_atom!("TestComponent"),
             BindingTypes::Component,
         )]);
-        let mut template_visitor = from_helper(&mut bindings_helper);
+        let mut template_visitor = TemplateVisitor::new(&mut ctx);
 
         // `<test-component>`
         let kebab_case = fervid_atom!("test-component");
         template_visitor.maybe_resolve_component(&kebab_case);
         assert!(matches!(
-            template_visitor.bindings_helper.components.get(&kebab_case),
+            template_visitor
+                .ctx
+                .bindings_helper
+                .components
+                .get(&kebab_case),
             Some(ComponentBinding::Resolved(_))
         ));
 
@@ -172,6 +180,7 @@ mod tests {
         template_visitor.maybe_resolve_component(&pascal_case);
         assert!(matches!(
             template_visitor
+                .ctx
                 .bindings_helper
                 .components
                 .get(&pascal_case),
@@ -182,7 +191,11 @@ mod tests {
         let unresolved = fervid_atom!("UnresolvedComponent");
         template_visitor.maybe_resolve_component(&unresolved);
         assert!(matches!(
-            template_visitor.bindings_helper.components.get(&unresolved),
+            template_visitor
+                .ctx
+                .bindings_helper
+                .components
+                .get(&unresolved),
             Some(ComponentBinding::Unresolved)
         ));
     }
@@ -190,17 +203,21 @@ mod tests {
     #[test]
     fn it_resolves_components_camel_case() {
         // `testComponent` binding
-        let mut bindings_helper = with_bindings(vec![SetupBinding::new(
+        let mut ctx = with_bindings(vec![SetupBinding::new(
             fervid_atom!("testComponent"),
             BindingTypes::Component,
         )]);
-        let mut template_visitor = from_helper(&mut bindings_helper);
+        let mut template_visitor = TemplateVisitor::new(&mut ctx);
 
         // `<test-component>`
         let kebab_case = fervid_atom!("test-component");
         template_visitor.maybe_resolve_component(&kebab_case);
         assert!(matches!(
-            template_visitor.bindings_helper.components.get(&kebab_case),
+            template_visitor
+                .ctx
+                .bindings_helper
+                .components
+                .get(&kebab_case),
             Some(ComponentBinding::Resolved(_))
         ));
 
@@ -209,6 +226,7 @@ mod tests {
         template_visitor.maybe_resolve_component(&pascal_case);
         assert!(matches!(
             template_visitor
+                .ctx
                 .bindings_helper
                 .components
                 .get(&pascal_case),
@@ -219,7 +237,11 @@ mod tests {
         let unresolved = fervid_atom!("UnresolvedComponent");
         template_visitor.maybe_resolve_component(&unresolved);
         assert!(matches!(
-            template_visitor.bindings_helper.components.get(&unresolved),
+            template_visitor
+                .ctx
+                .bindings_helper
+                .components
+                .get(&unresolved),
             Some(ComponentBinding::Unresolved)
         ));
     }
@@ -227,17 +249,18 @@ mod tests {
     #[test]
     fn it_resolves_components_one_word() {
         // `Foo` and `bar` bindings
-        let mut bindings_helper = with_bindings(vec![
+        let mut ctx = with_bindings(vec![
             SetupBinding::new(fervid_atom!("Foo"), BindingTypes::Component),
             SetupBinding::new(fervid_atom!("bar"), BindingTypes::SetupMaybeRef),
         ]);
-        let mut template_visitor = from_helper(&mut bindings_helper);
+        let mut template_visitor = TemplateVisitor::new(&mut ctx);
 
         // `<Foo>`
         let foo_capital = fervid_atom!("Foo");
         template_visitor.maybe_resolve_component(&foo_capital);
         assert!(matches!(
             template_visitor
+                .ctx
                 .bindings_helper
                 .components
                 .get(&foo_capital),
@@ -248,7 +271,11 @@ mod tests {
         let foo_lower = fervid_atom!("foo");
         template_visitor.maybe_resolve_component(&foo_lower);
         assert!(matches!(
-            template_visitor.bindings_helper.components.get(&foo_lower),
+            template_visitor
+                .ctx
+                .bindings_helper
+                .components
+                .get(&foo_lower),
             Some(ComponentBinding::Resolved(_))
         ));
 
@@ -257,6 +284,7 @@ mod tests {
         template_visitor.maybe_resolve_component(&bar_capital);
         assert!(matches!(
             template_visitor
+                .ctx
                 .bindings_helper
                 .components
                 .get(&bar_capital),
@@ -267,7 +295,11 @@ mod tests {
         let bar_lower = fervid_atom!("bar");
         template_visitor.maybe_resolve_component(&bar_lower);
         assert!(matches!(
-            template_visitor.bindings_helper.components.get(&bar_lower),
+            template_visitor
+                .ctx
+                .bindings_helper
+                .components
+                .get(&bar_lower),
             Some(ComponentBinding::Resolved(_))
         ));
     }
@@ -275,17 +307,18 @@ mod tests {
     #[test]
     fn it_resolves_components_namespaced() {
         // `Foo` binding
-        let mut bindings_helper = with_bindings(vec![SetupBinding::new(
+        let mut ctx = with_bindings(vec![SetupBinding::new(
             fervid_atom!("Foo"),
             BindingTypes::Imported,
         )]);
-        let mut template_visitor = from_helper(&mut bindings_helper);
+        let mut template_visitor = TemplateVisitor::new(&mut ctx);
 
         // `<Foo.Bar>`
         let namespaced = fervid_atom!("Foo.Bar");
         template_visitor.maybe_resolve_component(&namespaced);
         assert!(matches!(
             template_visitor
+                .ctx
                 .bindings_helper
                 .components
                 .get(&namespaced),
@@ -296,7 +329,7 @@ mod tests {
         let namespaced_lower = fervid_atom!("foo.bar");
         template_visitor.maybe_resolve_component(&namespaced_lower);
         assert!(matches!(
-            template_visitor.bindings_helper.components.get(&namespaced_lower),
+            template_visitor.ctx.bindings_helper.components.get(&namespaced_lower),
             Some(ComponentBinding::Resolved(e)) if e.is_member()
         ));
     }
@@ -304,18 +337,22 @@ mod tests {
     #[test]
     fn it_resolves_directive_one_word() {
         // `vFoo` and `VBar` bindings
-        let mut bindings_helper = with_bindings(vec![
+        let mut ctx = with_bindings(vec![
             SetupBinding::new(fervid_atom!("vFoo"), BindingTypes::SetupLet),
             SetupBinding::new(fervid_atom!("VBar"), BindingTypes::SetupConst),
         ]);
-        let mut template_visitor = from_helper(&mut bindings_helper);
+        let mut template_visitor = TemplateVisitor::new(&mut ctx);
 
         macro_rules! assert_resolved {
             ($atom: literal) => {{
                 let v = fervid_atom!($atom);
                 template_visitor.maybe_resolve_directive(&v);
                 assert!(matches!(
-                    template_visitor.bindings_helper.custom_directives.get(&v),
+                    template_visitor
+                        .ctx
+                        .bindings_helper
+                        .custom_directives
+                        .get(&v),
                     Some(CustomDirectiveBinding::Resolved(_))
                 ));
             }};
@@ -330,18 +367,22 @@ mod tests {
     #[test]
     fn it_resolves_directive_multi_word() {
         // `VFooBar` and `vBazQux` bindings
-        let mut bindings_helper = with_bindings(vec![
+        let mut ctx = with_bindings(vec![
             SetupBinding::new(fervid_atom!("VFooBar"), BindingTypes::Imported),
             SetupBinding::new(fervid_atom!("vBazQux"), BindingTypes::SetupMaybeRef),
         ]);
-        let mut template_visitor = from_helper(&mut bindings_helper);
+        let mut template_visitor = TemplateVisitor::new(&mut ctx);
 
         macro_rules! assert_resolved {
             ($atom: literal) => {{
                 let v = fervid_atom!($atom);
                 template_visitor.maybe_resolve_directive(&v);
                 assert!(matches!(
-                    template_visitor.bindings_helper.custom_directives.get(&v),
+                    template_visitor
+                        .ctx
+                        .bindings_helper
+                        .custom_directives
+                        .get(&v),
                     Some(CustomDirectiveBinding::Resolved(_))
                 ));
             }};
@@ -356,20 +397,24 @@ mod tests {
     #[test]
     fn it_does_not_resolve_directive_without_prefix() {
         // `Foo`, `bar`, `bazQux` and `TestNotDirective` bindings
-        let mut bindings_helper = with_bindings(vec![
+        let mut ctx = with_bindings(vec![
             SetupBinding::new(fervid_atom!("Foo"), BindingTypes::Imported),
             SetupBinding::new(fervid_atom!("bar"), BindingTypes::SetupLet),
             SetupBinding::new(fervid_atom!("bazQux"), BindingTypes::SetupMaybeRef),
             SetupBinding::new(fervid_atom!("TestNotDirective"), BindingTypes::SetupConst),
         ]);
-        let mut template_visitor = from_helper(&mut bindings_helper);
+        let mut template_visitor = TemplateVisitor::new(&mut ctx);
 
         macro_rules! assert_unresolved {
             ($atom: literal) => {{
                 let v = fervid_atom!($atom);
                 template_visitor.maybe_resolve_directive(&v);
                 assert!(matches!(
-                    template_visitor.bindings_helper.custom_directives.get(&v),
+                    template_visitor
+                        .ctx
+                        .bindings_helper
+                        .custom_directives
+                        .get(&v),
                     Some(CustomDirectiveBinding::Unresolved)
                 ));
             }};
@@ -392,18 +437,19 @@ mod tests {
         // import ChildComp from './Child.vue'
         // import SomeOtherComp from './Other.vue'
         // import vMyDir from './my-dir'
-        let mut bindings_helper = with_bindings(vec![
+        let mut ctx = with_bindings(vec![
             SetupBinding::new(fervid_atom!("ChildComp"), BindingTypes::Component),
             SetupBinding::new(fervid_atom!("SomeOtherComp"), BindingTypes::Component),
             SetupBinding::new(fervid_atom!("vMyDir"), BindingTypes::Imported),
         ]);
-        let mut template_visitor = from_helper(&mut bindings_helper);
+        let mut template_visitor = TemplateVisitor::new(&mut ctx);
 
         // <div v-my-dir></div>
         let v_my_dir = fervid_atom!("my-dir");
         template_visitor.maybe_resolve_directive(&v_my_dir);
         assert!(matches!(
             template_visitor
+                .ctx
                 .bindings_helper
                 .custom_directives
                 .get(&v_my_dir),
@@ -414,7 +460,11 @@ mod tests {
         let child_comp = fervid_atom!("ChildComp");
         template_visitor.maybe_resolve_component(&child_comp);
         assert!(matches!(
-            template_visitor.bindings_helper.components.get(&child_comp),
+            template_visitor
+                .ctx
+                .bindings_helper
+                .components
+                .get(&child_comp),
             Some(ComponentBinding::Resolved(_))
         ));
 
@@ -423,6 +473,7 @@ mod tests {
         template_visitor.maybe_resolve_component(&some_other_comp);
         assert!(matches!(
             template_visitor
+                .ctx
                 .bindings_helper
                 .components
                 .get(&some_other_comp),
@@ -430,17 +481,9 @@ mod tests {
         ));
     }
 
-    fn with_bindings(mut bindings: Vec<SetupBinding>) -> BindingsHelper {
-        let mut bindings_helper = BindingsHelper::default();
-        bindings_helper.setup_bindings.append(&mut bindings);
-        bindings_helper
-    }
-
-    fn from_helper<'h>(bindings_helper: &'h mut BindingsHelper) -> TemplateVisitor<'h> {
-        TemplateVisitor {
-            bindings_helper,
-            current_scope: 0,
-            v_for_scope: false,
-        }
+    fn with_bindings(mut bindings: Vec<SetupBinding>) -> TransformSfcContext {
+        let mut ctx = TransformSfcContext::anonymous();
+        ctx.bindings_helper.setup_bindings.append(&mut bindings);
+        ctx
     }
 }
