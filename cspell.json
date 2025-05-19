@@ -134,7 +134,9 @@
     "vuejs",
     "pretransform",
     "boola",
-    "boolb"
+    "boolb",
+    "hostnames",
+    "signifiers"
   ],
   "ignorePaths": [
     ".github/**",

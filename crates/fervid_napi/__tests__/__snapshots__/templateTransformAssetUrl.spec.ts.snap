@@ -45,7 +45,7 @@ export default {
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
         return (_openBlock(), _createElementBlock("img", {
-            src: "http://localhost/logo.png"
+            src: "//localhost/logo.png"
         }));
     }
 };
@@ -150,7 +150,6 @@ export default {
 exports[`compiler sfc: transform asset url > with includeAbsolute: true 1`] = `
 "import _imports_0 from "./bar.png";
 import _imports_1 from "/bar.png";
-import _imports_2 from "//foo.bar/baz.png";
 import { createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, Fragment as _Fragment, openBlock as _openBlock } from "vue";
 export default {
     __name: "anonymous",
@@ -166,7 +165,7 @@ export default {
                 src: "https://foo.bar/baz.png"
             }),
             _createElementVNode("img", {
-                src: _imports_2
+                src: "//foo.bar/baz.png"
             })
         ]));
     }

@@ -97,14 +97,14 @@ fn transform_element_asset_urls(
                 bail!(TransformAssetUrlsBaseUrlParseFailed)
             };
 
-            // TODO Try to match the behaviour of the official compiler by doing path manipulation
-
+            // Match the behavior of the official compiler as close as possible
             let mut final_result = String::new();
 
             // Because `url::Url` parses with a dummy base of `http://_`, we need to check if the result is user-provided or a dummy
+            let base_starts_with_double_slash = base_str.starts_with("//");
             let is_dummy = base.scheme() == "http"
                 && !base_str.starts_with("http")
-                && !base_str.starts_with("//");
+                && !base_starts_with_double_slash;
 
             // Add protocol and host
             if !is_dummy {
@@ -112,16 +112,19 @@ fn transform_element_asset_urls(
 
                 let protocol = base.scheme();
                 if let Some(host_str) = base.host_str() {
-                    final_result.push_str(protocol);
-                    final_result.push_str("://");
+                    if base_starts_with_double_slash {
+                        // Special handling of `//` user strings, e.g. `//example.com`
+                        final_result.push_str("//");
+                    } else {
+                        final_result.push_str(protocol);
+                        final_result.push_str("://");
+                    }
                     final_result.push_str(host_str);
                     if let Some(port) = base.port() {
                         let _ = write!(final_result, ":{}", port);
                     }
                 }
             }
-
-            dbg!(base.path(), strip_prefix(value));
 
             // Join the path using `PathBuf` instead of `Url` to mimic the official compiler
             let path_buf: PathBuf = [base.path(), strip_prefix(&value)].iter().collect();
@@ -291,7 +294,7 @@ fn is_relative_url(url: &FervidAtom) -> bool {
 
 /// https://github.com/vuejs/core/blob/3f27c58ffbd4309df369bc89493fdc284dc540bb/packages/compiler-sfc/src/template/templateUtils.ts#L9-L12
 fn is_external_url(url: &FervidAtom) -> bool {
-    url.starts_with("http://") || url.starts_with("https://")
+    url.starts_with("http://") || url.starts_with("https://") || url.starts_with("//")
 }
 
 /// https://github.com/vuejs/core/blob/3f27c58ffbd4309df369bc89493fdc284dc540bb/packages/compiler-sfc/src/template/templateUtils.ts#L14-L17
