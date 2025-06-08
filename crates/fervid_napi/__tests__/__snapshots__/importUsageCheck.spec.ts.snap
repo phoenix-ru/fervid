@@ -19,7 +19,7 @@ export default _defineComponent({
             (_openBlock(), _createElementBlock(_Fragment, null, _renderList(_ctx.list as Fred, ({
                 z=x as Qux
             })=>_createElementVNode("div")), 256))
-        ]));
+        ], 64));
     },
     setup (__props, { expose: __expose }) {
         __expose();
@@ -79,7 +79,7 @@ export default _defineComponent({
             _createVNode(FooQux),
             _createVNode(foo),
             _createTextVNode(" FooBar ")
-        ]));
+        ], 64));
     },
     setup (__props, { expose: __expose }) {
         __expose();
@@ -144,7 +144,7 @@ export default _defineComponent({
             _createVNode(FooBar, {
                 msg: msg
             })
-        ]));
+        ], 64));
     },
     setup (__props, { expose: __expose }) {
         __expose();
@@ -202,7 +202,7 @@ export default _defineComponent({
         return (_openBlock(), _createElementBlock(_Fragment, null, [
             _createVNode(FooBaz),
             _createVNode(Last)
-        ]));
+        ], 64));
     },
     setup (__props, { expose: __expose }) {
         __expose();
@@ -335,7 +335,7 @@ export default _defineComponent({
             _createVNode(Baz, {
                 ref: "bar"
             }, null, 512)
-        ]));
+        ], 64));
     },
     setup (__props, { expose: __expose }) {
         __expose();
