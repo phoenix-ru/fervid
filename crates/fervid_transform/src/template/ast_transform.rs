@@ -1,8 +1,8 @@
 use fervid_core::{
     check_attribute_name, fervid_atom, is_from_default_slot, is_html_tag, AttributeOrBinding,
     BindingTypes, BuiltinType, Conditional, ConditionalNodeSequence, ElementKind, ElementNode,
-    FervidAtom, Interpolation, IntoIdent, Node, PatchFlags, SfcTemplateBlock, StartingTag,
-    StrOrExpr, TemplateGenerationMode, VBindDirective, VSlotDirective, VUE_BUILTINS,
+    FervidAtom, Interpolation, IntoIdent, Node, PatchFlags, PatchHints, SfcTemplateBlock,
+    StartingTag, StrOrExpr, TemplateGenerationMode, VBindDirective, VSlotDirective, VUE_BUILTINS,
 };
 use smallvec::SmallVec;
 use swc_core::{
@@ -37,7 +37,7 @@ pub fn transform_and_record_template(
     optimize_children(&mut template.roots, ElementKind::Element);
 
     // Merge more than 1 child into a separate `<template>` element so that Fragment gets generated.
-    // #11: Do this only when all children are `TextNode`s.
+    // #11: Do this only when not all children are `TextNode`s.
     if template.roots.len() > 1
         && !template
             .roots
@@ -45,6 +45,21 @@ pub fn transform_and_record_template(
             .all(|r| matches!(r, Node::Text(_, _) | Node::Interpolation(_)))
     {
         let all_roots = std::mem::replace(&mut template.roots, Vec::with_capacity(1));
+
+        let mut patch_hints = PatchHints::default();
+        patch_hints.flags |= PatchFlags::StableFragment;
+
+        let dev = !ctx.bindings_helper.is_prod;
+        if dev
+            && all_roots
+                .iter()
+                .filter(|root| !matches!(root, Node::Comment(_, _)))
+                .count()
+                == 1
+        {
+            patch_hints.flags |= PatchFlags::DevRootFragment;
+        }
+
         let new_root = Node::Element(ElementNode {
             kind: ElementKind::Element,
             starting_tag: StartingTag {
@@ -54,7 +69,7 @@ pub fn transform_and_record_template(
             },
             children: all_roots,
             template_scope: 0,
-            patch_hints: Default::default(),
+            patch_hints,
             span: template.span,
         });
         template.roots.push(new_root);
