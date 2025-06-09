@@ -136,7 +136,9 @@
     "boola",
     "boolb",
     "hostnames",
-    "signifiers"
+    "signifiers",
+    "justfile",
+    "clippy"
   ],
   "ignorePaths": [
     ".github/**",
