@@ -242,7 +242,7 @@ fn parse_root_block<'a>(
         content: content.into(),
         is_scoped,
         is_module,
-        span: DUMMY_SP
+        span: DUMMY_SP,
     });
 
     Ok(input)
@@ -297,7 +297,7 @@ fn parse_interpolation_node(input: &str) -> IResult<&str, Node> {
             value: parsed,
             template_scope: 0,
             patch_flag: false,
-            span: DUMMY_SP
+            span: DUMMY_SP,
         }),
     ))
 }

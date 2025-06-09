@@ -1,4 +1,6 @@
-use fervid_core::{str_to_propname, CustomDirectiveBinding, FervidAtom, StrOrExpr, VueDirectives, VueImports};
+use fervid_core::{
+    str_to_propname, CustomDirectiveBinding, FervidAtom, StrOrExpr, VueDirectives, VueImports,
+};
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::ast::{

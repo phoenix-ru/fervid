@@ -1,8 +1,11 @@
-use swc_core::ecma::{ast::Ident, visit::{Visit, VisitWith}};
+use swc_core::ecma::{
+    ast::Ident,
+    visit::{Visit, VisitWith},
+};
 
 use crate::TemplateScope;
 
-/// Polyfill for variable collection before the 
+/// Polyfill for variable collection before the
 pub fn collect_variables(root: &impl VisitWith<IdentifierVisitor>, scope: &mut TemplateScope) {
     let mut visitor = IdentifierVisitor { collected: vec![] };
 
@@ -39,10 +42,14 @@ impl Visit for IdentifierVisitor {
             }
 
             // This is key-value `a: b` in `{ a: b }`
-            let Some(keyvalue) = prop.as_key_value() else { continue };
+            let Some(keyvalue) = prop.as_key_value() else {
+                continue;
+            };
 
             // We only support renaming things (therefore value must be an identifier)
-            let Some(value) = keyvalue.value.as_ident() else { continue };
+            let Some(value) = keyvalue.value.as_ident() else {
+                continue;
+            };
             self.collected.push(value.to_owned());
         }
     }

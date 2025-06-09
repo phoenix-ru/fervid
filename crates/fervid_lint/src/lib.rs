@@ -29,7 +29,10 @@ pub fn lint(input: &str) {
     };
 
     let cm = Lrc::new(SourceMap::new(FilePathMapping::empty()));
-    cm.new_source_file(Lrc::new(swc_core::common::FileName::Real(PathBuf::from("input.vue"))), input.to_owned());
+    cm.new_source_file(
+        Lrc::new(swc_core::common::FileName::Real(PathBuf::from("input.vue"))),
+        input.to_owned(),
+    );
     let handler_opts = HandlerOpts::default();
     let result = GLOBALS.set(&Globals::new(), || {
         try_with_handler(cm.clone(), handler_opts, |handler| {

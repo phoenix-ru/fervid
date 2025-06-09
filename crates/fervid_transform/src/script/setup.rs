@@ -285,10 +285,8 @@ fn transform_decl_stmt(
                         TransformMacroResult::NotAMacro if is_const && is_ident => {
                             // Resolve only when this is a constant identifier.
                             // For destructures correct bindings are already assigned.
-                            let rhs_type = categorize_expr(
-                                init_expr,
-                                &ctx.bindings_helper.vue_import_aliases,
-                            );
+                            let rhs_type =
+                                categorize_expr(init_expr, &ctx.bindings_helper.vue_import_aliases);
 
                             enrich_binding_types(
                                 &mut collected_bindings,

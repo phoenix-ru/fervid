@@ -87,7 +87,7 @@ fn parse_vanilla_attr<'i>(
             out.push(AttributeOrBinding::RegularAttribute {
                 name: attr_name.into(),
                 value: attr_name.into(),
-                span: DUMMY_SP
+                span: DUMMY_SP,
             });
             Ok((input, ()))
         }
@@ -101,7 +101,7 @@ fn parse_vanilla_attr<'i>(
             out.push(AttributeOrBinding::RegularAttribute {
                 name: attr_name.into(),
                 value: attr_value.into(),
-                span: DUMMY_SP
+                span: DUMMY_SP,
             });
 
             Ok((input, ()))
@@ -287,7 +287,7 @@ fn parse_directive<'i>(
                 is_camel,
                 is_prop,
                 is_attr,
-                span: DUMMY_SP
+                span: DUMMY_SP,
             }));
         }
         "on" => {
@@ -304,7 +304,7 @@ fn parse_directive<'i>(
                     }
                 }),
                 modifiers,
-                span: DUMMY_SP
+                span: DUMMY_SP,
             }));
         }
         "if" => {

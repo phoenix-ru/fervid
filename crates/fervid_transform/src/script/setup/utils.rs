@@ -41,6 +41,6 @@ pub fn unwrap_ts_node_expr(expr: &Expr) -> &Expr {
         Expr::TsAs(ts_as_expr) => unwrap_ts_node_expr(&ts_as_expr.expr),
         Expr::TsInstantiation(ts_instantiation) => unwrap_ts_node_expr(&ts_instantiation.expr),
         Expr::TsSatisfies(ts_satisfies_expr) => unwrap_ts_node_expr(&ts_satisfies_expr.expr),
-        _ => expr
+        _ => expr,
     }
 }

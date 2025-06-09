@@ -13,7 +13,7 @@ impl Default for StringifyOptions {
     fn default() -> Self {
         Self {
             minify: true,
-            basic_css_writer: Default::default()
+            basic_css_writer: Default::default(),
         }
     }
 }

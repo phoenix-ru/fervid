@@ -13,9 +13,9 @@ mod components;
 mod context;
 mod control_flow;
 mod directives;
-mod interpolation;
 mod elements;
 mod imports;
+mod interpolation;
 mod text;
 mod utils;
 

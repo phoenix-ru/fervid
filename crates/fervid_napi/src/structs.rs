@@ -262,7 +262,10 @@ impl From<FervidTransformAssetUrlsOptions> for TransformAssetUrlsConfigOptions {
             let mut tags = FxHashMap::default();
 
             for mut tag in napi_tags {
-                tags.insert(tag.0.into(), tag.1.drain(..).map(FervidAtom::from).collect());
+                tags.insert(
+                    tag.0.into(),
+                    tag.1.drain(..).map(FervidAtom::from).collect(),
+                );
             }
 
             tags

@@ -2,8 +2,7 @@ use fervid_core::{
     check_attribute_name, fervid_atom, AttributeOrBinding, ElementNode, IntoIdent, VueImports,
 };
 use swc_core::ecma::ast::{
-    ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Lit, MemberExpr, MemberProp, ObjectLit,
-    Str,
+    ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Lit, MemberExpr, MemberProp, ObjectLit, Str,
 };
 
 use crate::CodegenContext;

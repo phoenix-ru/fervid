@@ -1,14 +1,20 @@
 use fervid_core::{
-    fervid_atom, BindingTypes, FervidAtom, IntoIdent, SfcTemplateBlock, TemplateGenerationMode, VueImports
+    fervid_atom, BindingTypes, FervidAtom, IntoIdent, SfcTemplateBlock, TemplateGenerationMode,
+    VueImports,
 };
 use swc_core::{
     atoms::Atom,
     common::{
-        collections::AHashMap, source_map::SourceMapGenConfig, sync::Lrc, BytePos, FileName, SourceMap, DUMMY_SP
+        collections::AHashMap, source_map::SourceMapGenConfig, sync::Lrc, BytePos, FileName,
+        SourceMap, DUMMY_SP,
     },
     ecma::{
         ast::{
-            ArrowExpr, AssignExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, CallExpr, Callee, Decl, ExportDefaultExpr, Expr, ExprOrSpread, ExprStmt, Function, GetterProp, Ident, IdentName, ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit, Param, Pat, Prop, PropName, PropOrSpread, ReturnStmt, SetterProp, Stmt, Str, VarDecl, VarDeclKind, VarDeclarator
+            ArrowExpr, AssignExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
+            Decl, ExportDefaultExpr, Expr, ExprOrSpread, ExprStmt, Function, GetterProp, Ident,
+            IdentName, ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit, Param,
+            Pat, Prop, PropName, PropOrSpread, ReturnStmt, SetterProp, Stmt, Str, VarDecl,
+            VarDeclKind, VarDeclarator,
         },
         visit::{noop_visit_type, Visit, VisitWith},
     },
@@ -400,7 +406,12 @@ impl CodegenContext {
                 // `get smth() { return smth }`
                 BindingTypes::Imported => {
                     // Skip if TS and binding is unused
-                    if is_ts && !self.bindings_helper.used_bindings.contains_key(&binding.sym) {
+                    if is_ts
+                        && !self
+                            .bindings_helper
+                            .used_bindings
+                            .contains_key(&binding.sym)
+                    {
                         continue;
                     }
 

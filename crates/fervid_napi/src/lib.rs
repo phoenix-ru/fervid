@@ -72,9 +72,9 @@ fn compile_impl(
             .and_then(|v| match v.transform_asset_urls.as_ref() {
                 Some(Either::A(true)) => Some(TransformAssetUrlsConfig::EnabledDefault),
                 Some(Either::A(false)) => Some(TransformAssetUrlsConfig::Disabled),
-                Some(Either::B(options)) => {
-                    Some(TransformAssetUrlsConfig::EnabledOptions(Rc::new(options.to_owned().into())))
-                }
+                Some(Either::B(options)) => Some(TransformAssetUrlsConfig::EnabledOptions(
+                    Rc::new(options.to_owned().into()),
+                )),
                 None => None,
             });
 

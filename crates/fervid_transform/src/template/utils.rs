@@ -1,5 +1,8 @@
 use fervid_core::FervidAtom;
-use swc_core::{common::DUMMY_SP, ecma::ast::{ArrowExpr, BindingIdent, BlockStmtOrExpr, Expr, Ident, Pat}};
+use swc_core::{
+    common::DUMMY_SP,
+    ecma::ast::{ArrowExpr, BindingIdent, BlockStmtOrExpr, Expr, Ident, Pat},
+};
 
 /// `foo-bar-baz` -> `FooBarBaz`
 #[inline]

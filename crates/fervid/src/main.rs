@@ -16,7 +16,7 @@ fn test_real_compilation() {
 
     let compiled_code = match compile_sync_naive(test, true) {
         Ok(result) => result,
-        Err(e) => std::panic::panic_any(e)
+        Err(e) => std::panic::panic_any(e),
     };
 
     #[cfg(feature = "dbg_print")]

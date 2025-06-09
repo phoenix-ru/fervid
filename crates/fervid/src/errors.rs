@@ -18,7 +18,7 @@ pub enum CompileError {
     SfcParse(SfcParseError),
 
     /// An error during the transformation of an SFC.
-    TransformError(TransformError)
+    TransformError(TransformError),
 }
 
 impl std::fmt::Display for CompileError {
@@ -43,7 +43,7 @@ impl Spanned for CompileError {
     fn span(&self) -> swc_core::common::Span {
         match self {
             CompileError::SfcParse(e) => e.span,
-            CompileError::TransformError(e) => e.span()
+            CompileError::TransformError(e) => e.span(),
         }
     }
 }

@@ -4,7 +4,9 @@ use swc_core::{
 };
 
 use crate::{
-    error::{ScriptError, ScriptErrorKind, TransformError}, script::setup::utils::unwrap_ts_node_expr, SfcExportedObjectHelper
+    error::{ScriptError, ScriptErrorKind, TransformError},
+    script::setup::utils::unwrap_ts_node_expr,
+    SfcExportedObjectHelper,
 };
 
 use super::macros::TransformMacroResult;
