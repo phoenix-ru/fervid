@@ -12,7 +12,7 @@ fn parser_benchmark(c: &mut Criterion) {
                 let mut errors = Vec::new();
                 b.iter(|| {
                     let mut parser =
-                        fervid_parser::SfcParser::new(black_box(&component), &mut errors);
+                        fervid_parser::SfcParser::new(black_box(component), &mut errors);
                     let _ = parser.parse_sfc();
                     errors.clear();
                 })

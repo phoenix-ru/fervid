@@ -36,7 +36,7 @@ impl CodegenContext {
 
         // Push either `else` or a comment node
         let else_expr = if let Some(ref else_node) = conditional_seq.else_node {
-            self.generate_element_or_component(else_node, should_wrap_in_block(&else_node))
+            self.generate_element_or_component(else_node, should_wrap_in_block(else_node))
         } else {
             self.generate_comment_vnode("v-if", DUMMY_SP)
         };

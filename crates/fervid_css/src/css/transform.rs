@@ -19,7 +19,7 @@ pub struct ScopedTransformer<'s> {
     errors: Vec<CssError>,
 }
 
-impl<'i, 's> ScopedTransformer<'s> {
+impl<'s> ScopedTransformer<'s> {
     pub fn new(scope: &'s str) -> Self {
         Self {
             scope,
@@ -179,9 +179,7 @@ impl<'i, 's> ScopedTransformer<'s> {
             previous_compound_selector
                 .subclass_selectors
                 .push(subclass_selector);
-        } else if deep_children.is_some()
-            && (is_deep_alone && is_deep_really_alone || !is_deep_alone)
-        {
+        } else if deep_children.is_some() && (is_deep_really_alone || !is_deep_alone) {
             // Add descendant Combinator (` `) when deep is:
             // - part of other `CompoundSelector`, or
             // - a single selector inside `ComplexSelector` and has children.
@@ -292,12 +290,8 @@ fn process_pseudo_class_children(
     errors: &mut Vec<CssError>,
 ) -> Option<ComplexSelector> {
     // Figure out the span
-    let Some(first_child) = children.first() else {
-        return None;
-    };
-    let Some(last_child) = children.last() else {
-        return None;
-    };
+    let first_child = children.first()?;
+    let last_child = children.last()?;
     let span = Span {
         lo: first_child.span_lo(),
         hi: last_child.span_hi(),
@@ -331,12 +325,8 @@ fn process_pseudo_element_children(
     errors: &mut Vec<CssError>,
 ) -> Option<ComplexSelector> {
     // Figure out the span
-    let Some(first_child) = children.first() else {
-        return None;
-    };
-    let Some(last_child) = children.last() else {
-        return None;
-    };
+    let first_child = children.first()?;
+    let last_child = children.last()?;
     let span = Span {
         lo: first_child.span_lo(),
         hi: last_child.span_hi(),

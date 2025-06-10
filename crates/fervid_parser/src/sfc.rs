@@ -93,10 +93,8 @@ impl SfcParser<'_, '_, '_> {
                 if let Some(style_block) = self.parse_sfc_style_element(root_element) {
                     sfc_descriptor.styles.push(style_block);
                 }
-            } else {
-                if let Some(custom_block) = self.parse_sfc_custom_block_element(root_element) {
-                    sfc_descriptor.custom_blocks.push(custom_block);
-                }
+            } else if let Some(custom_block) = self.parse_sfc_custom_block_element(root_element) {
+                sfc_descriptor.custom_blocks.push(custom_block);
             }
         }
 
@@ -166,7 +164,7 @@ impl SfcParser<'_, '_, '_> {
         // For DocumentFragment, use its children.
         // Otherwise, because DocumentFragment is content of <template>,
         // it has the exact same span.
-        let children = if let Some(ref content) = element_content {
+        let children = if let Some(content) = element_content {
             &content.children
         } else {
             element_children
@@ -202,7 +200,7 @@ impl SfcParser<'_, '_, '_> {
         // Dummy is returned when `ignore_empty = false` and content is empty
         // It would be better to return span between `<></>` with lo=hi,
         // but SWC only provides spans including tags and I don't want to guess.
-        Some((raw, content_span.unwrap_or_else(|| DUMMY_SP)))
+        Some((raw, content_span.unwrap_or(DUMMY_SP)))
     }
 
     #[inline]

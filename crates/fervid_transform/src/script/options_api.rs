@@ -23,9 +23,6 @@ mod setup;
 
 #[derive(Default, Clone)]
 pub struct AnalyzeOptions {
-    /// Setting this to `true` will cause `analyze_script_legacy`
-    /// to return Err if no default export was found
-    pub require_default_export: bool,
     /// When `true`, all the top-level statements will be
     /// analyzed as if they are directly available to template via setup (same as in `<script setup>`)
     ///
@@ -43,7 +40,7 @@ pub fn transform_and_record_script_options_api(
     module: &mut Module,
     opts: AnalyzeOptions,
     bindings_helper: &mut BindingsHelper,
-    _errors: &mut Vec<TransformError>,
+    #[allow(clippy::ptr_arg)] _errors: &mut Vec<TransformError>,
 ) -> ScriptOptionsTransformResult {
     // Default export should be either an object or `defineComponent({ /* ... */ })`
     // let maybe_default_export = super::utils::find_default_export(module);
@@ -59,10 +56,10 @@ pub fn transform_and_record_script_options_api(
 
     // Analyze the imports and top level items
     if opts.collect_top_level_stmts {
-        let mut options_api_bindings = get_bindings!();
+        let options_api_bindings = get_bindings!();
         analyzer::analyze_top_level_items(
             module,
-            &mut options_api_bindings,
+            options_api_bindings,
             &mut bindings_helper.vue_import_aliases,
         )
     }
@@ -70,8 +67,8 @@ pub fn transform_and_record_script_options_api(
     // TODO The actual transformation?
     // Analyze the default export
     if let Some(ref default_export) = maybe_default_export {
-        let mut options_api_bindings = get_bindings!();
-        analyzer::analyze_default_export(default_export, &mut options_api_bindings);
+        let options_api_bindings = get_bindings!();
+        analyzer::analyze_default_export(default_export, options_api_bindings);
     }
 
     ScriptOptionsTransformResult {
@@ -81,17 +78,14 @@ pub fn transform_and_record_script_options_api(
 
 /// Finds and takes ownership of the `export default` expression
 fn find_default_export_obj(module: &mut Module) -> Option<ObjectLit> {
-    let default_export_index = module
-        .body
-        .iter()
-        .position(|module_item| match module_item {
-            ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(_)) => true,
-            _ => false,
-        });
+    let default_export_index = module.body.iter().position(|module_item| {
+        matches!(
+            module_item,
+            ModuleItem::ModuleDecl(ModuleDecl::ExportDefaultExpr(_))
+        )
+    });
 
-    let Some(idx) = default_export_index else {
-        return None;
-    };
+    let idx = default_export_index?;
 
     let item = module.body.remove(idx);
     // TODO What to do with weird default exports?
@@ -209,7 +203,7 @@ mod tests {
 
         let vars = bindings_helper
             .options_api_bindings
-            .unwrap_or_else(|| Default::default());
+            .unwrap_or_else(Default::default);
         TestAnalyzeResult { vars }
     }
 
@@ -232,7 +226,7 @@ mod tests {
 
         let vars = bindings_helper
             .options_api_bindings
-            .unwrap_or_else(|| Default::default());
+            .unwrap_or_else(Default::default);
         TestAnalyzeResult { vars }
     }
 
@@ -282,10 +276,7 @@ mod tests {
                 assert_eq!(
                     transform_and_record_script_options_api(
                         &mut parsed,
-                        AnalyzeOptions {
-                            require_default_export: true,
-                            ..Default::default()
-                        },
+                        Default::default(),
                         &mut Default::default(),
                         &mut Default::default()
                     )
@@ -299,10 +290,7 @@ mod tests {
                 assert_eq!(
                     transform_and_record_script_options_api(
                         &mut parsed,
-                        AnalyzeOptions {
-                            require_default_export: true,
-                            ..Default::default()
-                        },
+                        Default::default(),
                         &mut Default::default(),
                         &mut Default::default()
                     )
@@ -855,7 +843,6 @@ mod tests {
     #[test]
     fn it_analyzes_top_level() {
         let opts = AnalyzeOptions {
-            require_default_export: false,
             collect_top_level_stmts: true,
         };
 
@@ -978,7 +965,6 @@ mod tests {
     #[test]
     fn it_analyzes_top_level_exports() {
         let opts = AnalyzeOptions {
-            require_default_export: false,
             collect_top_level_stmts: true,
         };
 

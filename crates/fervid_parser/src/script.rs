@@ -55,7 +55,7 @@ impl SfcParser<'_, '_, '_> {
         }
 
         // `<script>` should always have a single `Text` child
-        let script_content = match element.children.get(0) {
+        let script_content = match element.children.first() {
             Some(Child::Text(t)) => t,
             Some(_) => {
                 return Err(ParseError {

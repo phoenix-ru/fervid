@@ -9,6 +9,7 @@ pub struct CssError {
 }
 
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum CssErrorKind {
     ParseRecoverable(ParseErrorKind),
     ParseUnrecoverable(ParseErrorKind),

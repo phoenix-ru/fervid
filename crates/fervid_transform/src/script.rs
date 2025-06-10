@@ -65,7 +65,6 @@ pub fn transform_and_record_scripts(
             &mut module,
             AnalyzeOptions {
                 collect_top_level_stmts: script_setup.is_some(),
-                ..Default::default()
             },
             &mut ctx.bindings_helper,
             errors,
@@ -173,7 +172,7 @@ fn pretransform(
     if has_type_only_macros {
         let scope = ctx.root_scope();
         let mut scope = (*scope).borrow_mut();
-        scope.imports = ctx.bindings_helper.user_imports.clone();
+        scope.imports.clone_from(&ctx.bindings_helper.user_imports);
 
         record_types(ctx, script_setup, script_options, &mut scope, false);
     }

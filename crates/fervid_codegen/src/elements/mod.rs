@@ -25,7 +25,7 @@ impl CodegenContext {
 
         // Generate attributes
         let attributes = self.generate_element_attributes(element_node);
-        let attributes_expr = if attributes.len() != 0 {
+        let attributes_expr = if !attributes.is_empty() {
             Some(Expr::Object(ObjectLit {
                 span,
                 props: attributes,
@@ -54,9 +54,9 @@ impl CodegenContext {
             5
         } else if !element_node.patch_hints.flags.is_empty() {
             4
-        } else if children.len() != 0 {
+        } else if !children.is_empty() {
             3
-        } else if let Some(_) = attributes_expr {
+        } else if attributes_expr.is_some() {
             2
         } else {
             1
@@ -113,7 +113,7 @@ impl CodegenContext {
                 };
 
                 Box::new(child)
-            } else if children.len() != 0 {
+            } else if !children.is_empty() {
                 // [child1, child2, child3]
                 let children: Vec<Option<ExprOrSpread>> = children
                     .into_iter()
@@ -212,10 +212,7 @@ impl CodegenContext {
         create_element_expr
     }
 
-    fn generate_element_attributes<'e>(
-        &mut self,
-        element_node: &'e ElementNode,
-    ) -> Vec<PropOrSpread> {
+    fn generate_element_attributes(&mut self, element_node: &ElementNode) -> Vec<PropOrSpread> {
         let mut result_props = Vec::new();
 
         self.generate_attributes(&element_node.starting_tag.attributes, &mut result_props);
@@ -227,11 +224,11 @@ impl CodegenContext {
             }
 
             if let Some(ref v_text) = directives.v_text {
-                result_props.push(self.generate_v_text(&v_text));
+                result_props.push(self.generate_v_text(v_text));
             }
 
             if let Some(ref v_html) = directives.v_html {
-                result_props.push(self.generate_v_html(&v_html));
+                result_props.push(self.generate_v_html(v_html));
             }
         }
 
@@ -291,7 +288,7 @@ impl CodegenContext {
         let mut out: Vec<Option<ExprOrSpread>> = Vec::new();
 
         // Element `v-model` needs a special processing compared to a component one
-        if directives.v_model.len() != 0 {
+        if !directives.v_model.is_empty() {
             let span = DUMMY_SP; // TODO Span
             let v_model_identifier = Expr::Ident(
                 self.get_element_vmodel_directive_name(&element_node.starting_tag)

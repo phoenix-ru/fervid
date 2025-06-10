@@ -157,8 +157,8 @@ pub fn collect_props_destructure(
 
 pub fn transform_destructured_props(
     ctx: &mut TypeResolveContext,
-    setup_stmts: &mut Vec<Stmt>,
-    module_items: &mut Vec<ModuleItem>,
+    setup_stmts: &mut [Stmt],
+    module_items: &mut [ModuleItem],
     errors: &mut Vec<TransformError>,
 ) {
     if matches!(ctx.props_destructure, PropsDestructureConfig::False) {
@@ -240,7 +240,7 @@ impl<'a> Walker<'a> {
         walker
     }
 
-    fn collect_stmts(&mut self, stmts: &mut Vec<Stmt>) {
+    fn collect_stmts(&mut self, stmts: &mut [Stmt]) {
         let old_visit_mode = self.stmt_visit_mode;
 
         self.stmt_visit_mode = StmtVisitMode::Collect;
@@ -251,7 +251,7 @@ impl<'a> Walker<'a> {
         self.stmt_visit_mode = old_visit_mode;
     }
 
-    fn transform_stmts(&mut self, stmts: &mut Vec<Stmt>) {
+    fn transform_stmts(&mut self, stmts: &mut [Stmt]) {
         let old_visit_mode = self.stmt_visit_mode;
 
         self.stmt_visit_mode = StmtVisitMode::Transform;
@@ -264,12 +264,12 @@ impl<'a> Walker<'a> {
 
     // This function mimics the behavior of the official compiler
     // which first collects all the references in the scope and only after transforms them.
-    fn collect_then_transform_stmts(&mut self, stmts: &mut Vec<Stmt>) {
+    fn collect_then_transform_stmts(&mut self, stmts: &mut [Stmt]) {
         self.collect_stmts(stmts);
         self.transform_stmts(stmts);
     }
 
-    fn collect_module_items(&mut self, module_items: &mut Vec<ModuleItem>) {
+    fn collect_module_items(&mut self, module_items: &mut [ModuleItem]) {
         let old_visit_mode = self.stmt_visit_mode;
 
         self.stmt_visit_mode = StmtVisitMode::Collect;
@@ -277,15 +277,10 @@ impl<'a> Walker<'a> {
         for module_item in module_items.iter_mut() {
             match module_item {
                 ModuleItem::ModuleDecl(module_decl) => {
-                    match module_decl {
-                        // Same as `ExportNamedDeclaration` in Babel
-                        ModuleDecl::ExportDecl(export_decl) => {
-                            if let Decl::Var(ref var_decl) = export_decl.decl {
-                                self.collect_variable_declaration(var_decl);
-                            }
+                    if let ModuleDecl::ExportDecl(export_decl) = module_decl {
+                        if let Decl::Var(ref var_decl) = export_decl.decl {
+                            self.collect_variable_declaration(var_decl);
                         }
-
-                        _ => {}
                     }
                 }
                 ModuleItem::Stmt(stmt) => {
@@ -297,7 +292,7 @@ impl<'a> Walker<'a> {
         self.stmt_visit_mode = old_visit_mode;
     }
 
-    fn transform_module_items(&mut self, module_items: &mut Vec<ModuleItem>) {
+    fn transform_module_items(&mut self, module_items: &mut [ModuleItem]) {
         let old_visit_mode = self.stmt_visit_mode;
 
         self.stmt_visit_mode = StmtVisitMode::Transform;
@@ -325,7 +320,7 @@ impl<'a> Walker<'a> {
         for decl in var_decl.decls.iter() {
             let is_define_props = is_root && {
                 if let Some(ref decl_init) = decl.init {
-                    is_call_of(unwrap_ts_node_expr(&decl_init), &DEFINE_PROPS)
+                    is_call_of(unwrap_ts_node_expr(decl_init), &DEFINE_PROPS)
                 } else {
                     false
                 }
@@ -366,7 +361,7 @@ impl<'a> Walker<'a> {
     }
 
     fn get_current_scope(&mut self) -> &mut Scope {
-        if let Some(_) = self.all_scopes.get(self.current_scope) {
+        if self.all_scopes.get(self.current_scope).is_some() {
             return &mut self.all_scopes[self.current_scope];
         }
 
@@ -414,7 +409,7 @@ impl<'a> Walker<'a> {
         }
 
         // First argument needs to be an identifier
-        let Expr::Ident(first_arg_ident) = unwrap_ts_node_expr(&first_arg) else {
+        let Expr::Ident(first_arg_ident) = unwrap_ts_node_expr(first_arg) else {
             return;
         };
 
@@ -450,7 +445,7 @@ impl<'a> Walker<'a> {
             current_scope = scope.parent_scope;
         }
 
-        return false;
+        false
     }
 
     fn should_rewrite_with(&self, ident: &Ident) -> Option<MemberProp> {
@@ -465,7 +460,7 @@ impl<'a> Walker<'a> {
         };
 
         // `__props.foo` or `__props['foo']` depending on ident validity
-        if is_valid_propname(&found) {
+        if is_valid_propname(found) {
             // Preserve original span if rewrite with == rewrite to
             let span = if found == sym { ident.span } else { DUMMY_SP };
 
@@ -507,7 +502,7 @@ impl<'a> VisitMut for Walker<'a> {
             match stmt {
                 Stmt::Decl(decl) => match decl {
                     Decl::Var(var_decl) => {
-                        self.collect_variable_declaration(&var_decl);
+                        self.collect_variable_declaration(var_decl);
                     }
 
                     Decl::Class(ClassDecl { declare, ident, .. })
@@ -525,13 +520,13 @@ impl<'a> VisitMut for Walker<'a> {
                 // This is not covered by the official compiler
                 Stmt::For(for_stmt) => {
                     if let Some(VarDeclOrExpr::VarDecl(ref var_decl)) = for_stmt.init {
-                        self.collect_variable_declaration(&var_decl);
+                        self.collect_variable_declaration(var_decl);
                     }
                 }
                 // This is covered
                 Stmt::ForIn(ForInStmt { left, .. }) | Stmt::ForOf(ForOfStmt { left, .. }) => {
                     if let ForHead::VarDecl(var_decl) = left {
-                        self.collect_variable_declaration(&var_decl);
+                        self.collect_variable_declaration(var_decl);
                     }
                 }
 
@@ -625,7 +620,7 @@ impl<'a> VisitMut for Walker<'a> {
             return;
         }
 
-        if let Some(should_rewrite_with) = self.should_rewrite_with(&ident) {
+        if let Some(should_rewrite_with) = self.should_rewrite_with(ident) {
             *expr = Expr::Member(MemberExpr {
                 span,
                 obj: Box::new(Expr::Ident(
@@ -779,14 +774,13 @@ impl<'a> VisitMut for Walker<'a> {
 
         match n {
             Pat::Ident(ident) => {
-                if let Some(should_rewrite_with) = self.should_rewrite_with(&ident) {
+                if let Some(should_rewrite_with) = self.should_rewrite_with(ident) {
                     *n = Pat::Expr(Box::new(Expr::Member(MemberExpr {
                         span: DUMMY_SP,
                         obj: Box::new(Expr::Ident(PROPS_HELPER.to_owned().into_ident())),
                         prop: should_rewrite_with,
                     })));
                 }
-                return;
             }
 
             Pat::Array(arr_pat) => arr_pat.visit_mut_with(self),
@@ -878,7 +872,7 @@ mod tests {
 
         collect_macros(&mut ctx, &module, &mut errors);
 
-        transform_destructured_props(&mut ctx, &mut vec![], &mut module.body, &mut errors);
+        transform_destructured_props(&mut ctx, &mut [], &mut module.body, &mut errors);
 
         let compiled = to_str(&module);
         assert!(!compiled.contains("const {"));
@@ -888,6 +882,6 @@ mod tests {
     fn new_ctx() -> TypeResolveContext {
         let mut ctx = TypeResolveContext::anonymous();
         ctx.props_destructure = PropsDestructureConfig::True;
-        return ctx;
+        ctx
     }
 }

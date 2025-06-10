@@ -310,7 +310,7 @@ impl SfcParser<'_, '_, '_> {
                     hi: BytePos(span_hi),
                 };
 
-                let parsed = match self.parse_expr(&dynamic_name, ts!(), span) {
+                let parsed = match self.parse_expr(dynamic_name, ts!(), span) {
                     Ok(parsed) => parsed,
                     Err(expr_err) => {
                         bail!(js, expr_err);
@@ -381,7 +381,7 @@ impl SfcParser<'_, '_, '_> {
                         // This only works for static arguments
                         if let Some(StrOrExpr::Str(ref s)) = argument {
                             let mut out = String::with_capacity(raw_name.len());
-                            to_camel_case(&s, &mut out);
+                            to_camel_case(s, &mut out);
                             Cow::Owned(out)
                         } else {
                             bail!(ParseErrorKind::DirectiveSyntax);
@@ -408,7 +408,7 @@ impl SfcParser<'_, '_, '_> {
 
             "on" => {
                 let handler = match raw_attribute.value {
-                    Some(ref value) => match self.parse_expr(&value, ts!(), span) {
+                    Some(ref value) => match self.parse_expr(value, ts!(), span) {
                         Ok(parsed) => Some(parsed),
                         Err(expr_err) => {
                             bail!(js, expr_err);
@@ -443,7 +443,7 @@ impl SfcParser<'_, '_, '_> {
                 let value = expect_value!();
 
                 let Some(((itervar, itervar_span), (iterable, iterable_span))) =
-                    split_itervar_and_iterable(&value, span)
+                    split_itervar_and_iterable(value, span)
                 else {
                     bail!(ParseErrorKind::DirectiveSyntax);
                 };
@@ -470,24 +470,21 @@ impl SfcParser<'_, '_, '_> {
             "model" => {
                 let value = expect_value!();
 
-                match self.parse_expr(&value, ts!(), span) {
-                    Ok(model_binding) => {
-                        // v-model value must be a valid JavaScript member expression
-                        if !matches!(*model_binding, Expr::Member(_) | Expr::Ident(_)) {
-                            // TODO Report an error
-                            bail!();
-                        }
-
-                        let directives = get_directives!();
-                        directives.v_model.push(VModelDirective {
-                            argument,
-                            value: model_binding,
-                            update_handler: None,
-                            modifiers,
-                            span,
-                        });
+                if let Ok(model_binding) = self.parse_expr(value, ts!(), span) {
+                    // v-model value must be a valid JavaScript member expression
+                    if !matches!(*model_binding, Expr::Member(_) | Expr::Ident(_)) {
+                        // TODO Report an error
+                        bail!();
                     }
-                    Result::Err(_) => {}
+
+                    let directives = get_directives!();
+                    directives.v_model.push(VModelDirective {
+                        argument,
+                        value: model_binding,
+                        update_handler: None,
+                        modifiers,
+                        span,
+                    });
                 }
             }
 
@@ -584,14 +581,14 @@ pub fn create_regular_attribute(raw_attribute: Attribute) -> AttributeOrBinding 
     }
 }
 
-fn split_itervar_and_iterable<'a>(
-    raw: &'a str,
+type ItervarOrIterable<'a> = (&'a str, Span);
+
+fn split_itervar_and_iterable(
+    raw: &str,
     original_span: Span,
-) -> Option<((&'a str, Span), (&'a str, Span))> {
+) -> Option<(ItervarOrIterable, ItervarOrIterable)> {
     // `item in iterable` or `item of iterable`
-    let Some(split_idx) = raw.find(" in ").or_else(|| raw.find(" of ")) else {
-        return None;
-    };
+    let split_idx = raw.find(" in ").or_else(|| raw.find(" of "))?;
     const SPLIT_LEN: usize = " in ".len();
 
     // Get the trimmed itervar and its span

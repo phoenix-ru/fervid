@@ -41,7 +41,7 @@ pub fn stringify_pseudo_class_selector_children(nodes: Vec<PseudoClassSelectorCh
     // Taken from SWC `emit_list_pseudo_class_selector_children`
     // let len = nodes.len();
 
-    for (_idx, node) in nodes.iter().enumerate() {
+    for node in nodes.iter() {
         let _ = codegen.emit(node);
 
         // This is irrelevant, because `:deep` always contains `PreservedToken`s
@@ -79,7 +79,7 @@ pub fn stringify_pseudo_element_selector_children(
     // Taken from SWC `emit_list_pseudo_element_selector_children`
     // let len = nodes.len();
 
-    for (_idx, node) in nodes.iter().enumerate() {
+    for node in nodes.iter() {
         let _ = codegen.emit(node);
 
         // This is irrelevant, because `::v-deep` always contains `PreservedToken`s

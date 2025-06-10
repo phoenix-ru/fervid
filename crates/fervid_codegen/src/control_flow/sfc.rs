@@ -30,22 +30,24 @@ impl CodegenContext {
         // #11: Optimization: multiple template roots
         // and all are text nodes (must be ensured by Transformer),
         // generate node sequence
-        if sfc_template.roots.len() > 1 {
-            let mut out = Vec::new();
-            self.generate_node_sequence(
-                &mut sfc_template.roots.iter(),
-                &mut out,
-                sfc_template.roots.len(),
-                true,
-            );
+        match sfc_template.roots.len() {
+            0 => None,
+            1 => {
+                // Generate the only child
+                let first_child = &sfc_template.roots[0];
+                Some(self.generate_node(first_child, true))
+            }
+            _ => {
+                let mut out = Vec::new();
+                self.generate_node_sequence(
+                    &mut sfc_template.roots.iter(),
+                    &mut out,
+                    sfc_template.roots.len(),
+                    true,
+                );
 
-            out.pop()
-        } else if sfc_template.roots.len() == 1 {
-            // Generate the only child
-            let first_child = &sfc_template.roots[0];
-            Some(self.generate_node(&first_child, true))
-        } else {
-            None
+                out.pop()
+            }
         }
     }
 

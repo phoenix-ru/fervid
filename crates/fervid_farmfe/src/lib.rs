@@ -135,11 +135,11 @@ impl Plugin for FarmPluginVueFervid {
             content.insert_str(0, &prepend);
         }
 
-        return Ok(Some(PluginTransformHookResult {
+        Ok(Some(PluginTransformHookResult {
             content,
             module_type: Some(ModuleType::Ts),
             source_map: None,
             ignore_previous_source_map: false,
-        }));
+        }))
     }
 }

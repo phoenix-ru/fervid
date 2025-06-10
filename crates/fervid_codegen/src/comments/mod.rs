@@ -55,7 +55,7 @@ mod tests {
 
     fn test_out(input: &str, expected: &str) {
         let mut ctx = CodegenContext::default();
-        let out = ctx.generate_comment_vnode(&input, DUMMY_SP);
+        let out = ctx.generate_comment_vnode(input, DUMMY_SP);
         assert_eq!(crate::test_utils::to_str(out), expected)
     }
 }

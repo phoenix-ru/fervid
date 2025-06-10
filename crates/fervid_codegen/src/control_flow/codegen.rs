@@ -134,7 +134,7 @@ impl CodegenContext {
             };
         }
 
-        while let Some(node) = iter.next() {
+        for node in iter.by_ref() {
             let generated = self.generate_node(node, false);
             let is_text_node = matches!(node, Node::Text(_, _) | Node::Interpolation { .. });
 

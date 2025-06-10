@@ -21,7 +21,7 @@ mod structs;
 impl FervidJsCompiler {
     #[napi(constructor)]
     pub fn new(options: Option<FervidJsCompilerOptions>) -> Self {
-        let options = options.unwrap_or_else(Default::default);
+        let options = options.unwrap_or_default();
         FervidJsCompiler { options }
     }
 

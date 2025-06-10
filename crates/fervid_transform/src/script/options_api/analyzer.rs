@@ -160,7 +160,7 @@ fn analyze_top_level_decl(
                     }
                 }
 
-                out.extend(collected_bindings.drain(..));
+                out.append(&mut collected_bindings);
             }
         }
 

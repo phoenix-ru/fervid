@@ -184,10 +184,7 @@ mod tests {
             .expect("Should be parseable")
             .0;
 
-        let found = code
-            .body
-            .iter()
-            .any(|module_item| detect_await_module_item(module_item));
+        let found = code.body.iter().any(detect_await_module_item);
         assert_eq!(should_async, found);
     }
 }

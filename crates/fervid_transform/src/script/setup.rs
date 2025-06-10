@@ -301,7 +301,7 @@ fn transform_decl_stmt(
 
                 ctx.bindings_helper
                     .setup_bindings
-                    .extend(collected_bindings.drain(..));
+                    .append(&mut collected_bindings);
 
                 should_retain
             });
@@ -317,7 +317,7 @@ fn transform_decl_stmt(
             let is_all_literal = ts_enum
                 .members
                 .iter()
-                .all(|m| m.init.as_ref().map_or(true, |e| is_static(&e)));
+                .all(|m| m.init.as_ref().map_or(true, |e| is_static(e)));
 
             // Ambient enums are also included, this is intentional
             // I am not sure about `const enum`s though

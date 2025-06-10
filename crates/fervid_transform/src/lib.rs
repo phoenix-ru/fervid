@@ -27,9 +27,9 @@ pub use structs::*;
 /// Applies all the necessary transformations to the SFC.
 ///
 /// The transformations can be fine-tuned by using individual `transform_` functions.
-pub fn transform_sfc<'o>(
+pub fn transform_sfc(
     sfc_descriptor: SfcDescriptor,
-    options: TransformSfcOptions<'o>,
+    options: TransformSfcOptions<'_>,
     errors: &mut Vec<TransformError>,
 ) -> TransformSfcResult {
     // Create the context
@@ -63,7 +63,7 @@ pub fn transform_sfc<'o>(
 
     // Transform scoped CSS
     let mut style_blocks = sfc_descriptor.styles;
-    let scope = create_style_scope(&options.scope_id);
+    let scope = create_style_scope(options.scope_id);
     let had_scoped_blocks = transform_style_blocks(&mut style_blocks, &scope, errors);
     if had_scoped_blocks {
         attach_scope_id(&mut transform_result, &scope);
@@ -71,7 +71,7 @@ pub fn transform_sfc<'o>(
 
     // Augment with some metadata
     let mut exported_obj = transform_result.export_obj;
-    infer_name(&mut exported_obj, &options.filename);
+    infer_name(&mut exported_obj, options.filename);
 
     // Temp: extend errors
     errors.extend(ctx.errors);
@@ -93,8 +93,10 @@ impl TransformSfcContext {
         options: &TransformSfcOptions,
     ) -> TransformSfcContext {
         // Create the bindings helper
-        let mut bindings_helper = BindingsHelper::default();
-        bindings_helper.is_prod = options.is_prod;
+        let mut bindings_helper = BindingsHelper {
+            is_prod: options.is_prod,
+            ..Default::default()
+        };
 
         // TS if any of scripts is TS.
         // Unlike the official compiler, we don't care if languages are mixed, because nothing changes.

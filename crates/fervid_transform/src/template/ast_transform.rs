@@ -125,7 +125,7 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
     });
 
     // For components, reorder children so that named slots come first
-    if matches!(element_kind, ElementKind::Component) && children.len() > 0 {
+    if matches!(element_kind, ElementKind::Component) && !children.is_empty() {
         children.sort_by(|a, b| {
             let a_is_from_default = is_from_default_slot(a);
             let b_is_from_default = is_from_default_slot(b);
@@ -211,7 +211,7 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
             }
 
             // Check for `v-else`
-            if let Some(_) = directives.v_else {
+            if directives.v_else.is_some() {
                 let Some(ref mut cond_seq) = seq else {
                     // This must be a warning, v-else without v-if
                     finish_seq!(child);
@@ -294,7 +294,7 @@ trait VisitMut {
     fn visit_mut_with(&mut self, visitor: &mut impl Visitor);
 }
 
-impl<'a> Visitor for TemplateVisitor<'_> {
+impl Visitor for TemplateVisitor<'_> {
     fn visit_element_node(&mut self, element_node: &mut ElementNode) {
         let parent_scope = self.current_scope;
         let mut scope_to_use = parent_scope;
@@ -347,9 +347,8 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                 self.v_for_scope = true;
 
                 // Get the iterator variable and collect its variables
-                let mut scope =
-                    &mut self.ctx.bindings_helper.template_scopes[scope_to_use as usize];
-                collect_variables(&v_for.itervar, &mut scope);
+                let scope = &mut self.ctx.bindings_helper.template_scopes[scope_to_use as usize];
+                collect_variables(&v_for.itervar, scope);
 
                 // Transform the iterable
                 let is_dynamic = self
@@ -384,9 +383,9 @@ impl<'a> Visitor for TemplateVisitor<'_> {
             }) = v_slot
             {
                 if let Some(v_slot_value) = value {
-                    let mut scope =
+                    let scope =
                         &mut self.ctx.bindings_helper.template_scopes[scope_to_use as usize];
-                    collect_variables(v_slot_value, &mut scope);
+                    collect_variables(v_slot_value, scope);
                 }
 
                 // Transform `v-slot` argument if it is dynamic
@@ -530,7 +529,7 @@ impl<'a> Visitor for TemplateVisitor<'_> {
                     } else {
                         self.ctx
                             .bindings_helper
-                            .get_var_binding_type(scope_to_use, &value)
+                            .get_var_binding_type(scope_to_use, value)
                     };
 
                     // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L506
@@ -753,7 +752,7 @@ impl TemplateVisitor<'_> {
         let tag_name = &starting_tag.tag_name;
 
         // First, check for a built-in
-        if let Some(builtin_type) = VUE_BUILTINS.get(&tag_name) {
+        if let Some(builtin_type) = VUE_BUILTINS.get(tag_name) {
             // Special case for `<component>`. If it does not have `is`, this is not a built-in
             if tag_name.eq("component") {
                 let has_is = starting_tag
@@ -863,7 +862,7 @@ mod tests {
         check_else_if_node(&seq.else_if_nodes[0]);
 
         // <h3 v-else>else</h3>
-        check_else_node(seq.else_node.as_ref());
+        check_else_node(seq.else_node.as_deref());
     }
 
     #[test]
@@ -895,7 +894,7 @@ mod tests {
         check_else_if_node(&seq.else_if_nodes[0]);
 
         // <h3 v-else>else</h3>
-        check_else_node(seq.else_node.as_ref());
+        check_else_node(seq.else_node.as_deref());
     }
 
     #[test]
@@ -1469,10 +1468,10 @@ mod tests {
         })
     }
 
-    fn check_else_node(else_node: Option<&Box<ElementNode>>) {
+    fn check_else_node(else_node: Option<&ElementNode>) {
         let else_node = else_node.expect("Must have else node");
         assert!(matches!(
-            &**else_node,
+            else_node,
             ElementNode {
                 starting_tag: StartingTag {
                     tag_name,

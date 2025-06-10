@@ -423,9 +423,8 @@ h1 { color: red }
     fn parse(source: &str) -> SfcDescriptor {
         let mut errors = Vec::new();
         let mut parser = SfcParser::new(source, &mut errors);
-        let result = parser.parse_sfc().unwrap();
         // dbg!(parser.errors);
-        result
+        parser.parse_sfc().unwrap()
     }
 
     fn parse_with_errors(source: &str) -> (SfcDescriptor, Vec<ParseError>) {

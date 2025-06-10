@@ -174,7 +174,7 @@ fn parse_directive<'i>(
     // Read argument part if we spotted `:` earlier
     let (input, argument) = if has_argument {
         // Support v-slot:[slotname], v-bind:[attr], etc.
-        let (input, arg) = if input.starts_with("[") {
+        let (input, arg) = if input.starts_with('[') {
             is_dynamic = true;
 
             delimited(char('['), html_name, char(']'))(input)?
@@ -251,8 +251,8 @@ fn parse_directive<'i>(
         };
     }
 
-    let argument = argument.map(|v| FervidAtom::from(v));
-    let modifiers: Vec<FervidAtom> = modifiers.into_iter().map(|v| FervidAtom::from(v)).collect();
+    let argument = argument.map(FervidAtom::from);
+    let modifiers: Vec<FervidAtom> = modifiers.into_iter().map(FervidAtom::from).collect();
 
     // Type the directive
     match directive_name {
@@ -311,22 +311,16 @@ fn parse_directive<'i>(
             let value = expect_value!();
 
             // TODO Span
-            match parse_js(value, 0, 0) {
-                Ok(condition) => {
-                    push_directive!(v_if, condition);
-                }
-                Result::Err(_) => {}
+            if let Ok(condition) = parse_js(value, 0, 0) {
+                push_directive!(v_if, condition);
             }
         }
         "else-if" => {
             let value = expect_value!();
 
             // TODO Span
-            match parse_js(value, 0, 0) {
-                Ok(condition) => {
-                    push_directive!(v_else_if, condition);
-                }
-                Result::Err(_) => {}
+            if let Ok(condition) = parse_js(value, 0, 0) {
+                push_directive!(v_else_if, condition);
             }
         }
         "else" => {
@@ -340,22 +334,18 @@ fn parse_directive<'i>(
             };
 
             // TODO Span
-            match parse_js(itervar, 0, 0) {
-                Ok(itervar) => match parse_js(iterable, 0, 0) {
-                    Ok(iterable) => {
-                        push_directive!(
-                            v_for,
-                            VForDirective {
-                                iterable,
-                                itervar,
-                                patch_flags: Default::default(),
-                                span: DUMMY_SP
-                            }
-                        );
-                    }
-                    Result::Err(_) => {}
-                },
-                Result::Err(_) => {}
+            if let Ok(itervar) = parse_js(itervar, 0, 0) {
+                if let Ok(iterable) = parse_js(iterable, 0, 0) {
+                    push_directive!(
+                        v_for,
+                        VForDirective {
+                            iterable,
+                            itervar,
+                            patch_flags: Default::default(),
+                            span: DUMMY_SP
+                        }
+                    );
+                }
             };
         }
         "model" => {
@@ -363,18 +353,15 @@ fn parse_directive<'i>(
             let argument = convert_argument(argument, is_dynamic, input)?;
 
             // TODO Span
-            match parse_js(value, 0, 0) {
-                Ok(model_binding) => {
-                    let directives = get_directives!();
-                    directives.v_model.push(VModelDirective {
-                        argument,
-                        value: model_binding,
-                        update_handler: None,
-                        modifiers,
-                        span: DUMMY_SP, // TODO
-                    });
-                }
-                Result::Err(_) => {}
+            if let Ok(model_binding) = parse_js(value, 0, 0) {
+                let directives = get_directives!();
+                directives.v_model.push(VModelDirective {
+                    argument,
+                    value: model_binding,
+                    update_handler: None,
+                    modifiers,
+                    span: DUMMY_SP, // TODO
+                });
             }
         }
         "slot" => {
@@ -438,17 +425,14 @@ fn parse_directive<'i>(
             };
 
             // If there is a value, try parsing it and only include the successfully parsed values
-            match parse_js(value, 0, 0) {
-                Ok(parsed) => {
-                    let directives = get_directives!();
-                    directives.custom.push(VCustomDirective {
-                        name: directive_name.into(),
-                        argument,
-                        modifiers,
-                        value: Some(parsed),
-                    });
-                }
-                Result::Err(_) => {}
+            if let Ok(parsed) = parse_js(value, 0, 0) {
+                let directives = get_directives!();
+                directives.custom.push(VCustomDirective {
+                    name: directive_name.into(),
+                    argument,
+                    modifiers,
+                    value: Some(parsed),
+                });
             }
         }
     };
@@ -459,11 +443,11 @@ fn parse_directive<'i>(
 /// Converts a raw Option<&str> argument to an argument
 /// which value is either a string or a js expression.
 /// If parsing Js fails, returns Err.
-fn convert_argument<'s>(
+fn convert_argument(
     argument: Option<FervidAtom>,
     is_dynamic: bool,
-    input: &'s str,
-) -> Result<Option<StrOrExpr>, nom::Err<nom::error::Error<&'s str>>> {
+    input: &str,
+) -> Result<Option<StrOrExpr>, nom::Err<nom::error::Error<&str>>> {
     match argument {
         Some(raw_arg) => {
             if is_dynamic {
@@ -517,7 +501,7 @@ fn convert_argument<'s>(
 //     }
 // }
 
-fn split_itervar_and_iterable<'a>(raw: &'a str) -> Option<(&'a str, &'a str)> {
+fn split_itervar_and_iterable(raw: &str) -> Option<(&str, &str)> {
     // Try guessing: `item in iterable`
     let mut split = raw.splitn(2, " in ");
     if let (Some(itervar), Some(iterable)) = (split.next(), split.next()) {

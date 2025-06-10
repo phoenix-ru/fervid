@@ -127,7 +127,7 @@ fn read_define_model(
     type_args: Option<&TsTypeParamInstantiation>,
 ) -> SfcDefineModel {
     // 1st arg - model name (string) or model options (object)
-    let first_arg = macro_args.get(0);
+    let first_arg = macro_args.first();
 
     // 2nd arg - model options (object)
     let second_arg = macro_args.get(1);
@@ -339,7 +339,7 @@ pub fn postprocess_models(
 
         if !codegen_options.is_empty() {
             if let Expr::Object(ref mut options_obj) = &mut *model_value {
-                options_obj.props.extend(codegen_options.drain(..))
+                options_obj.props.append(&mut codegen_options)
             } else {
                 // Surround the existing with spread
                 // We end up in `{ type: [Foo], ...userOptions }`

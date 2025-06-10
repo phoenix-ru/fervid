@@ -63,9 +63,9 @@ fn parse_root_block<'a>(
     let (input, (starting_tag, is_self_closing)) = parse_element_starting_tag(input)?;
 
     // Mutually exclusive flags
-    let is_script = starting_tag.tag_name == fervid_atom!("script");
-    let is_template = !is_script && starting_tag.tag_name == fervid_atom!("template");
-    let is_style = !is_template && starting_tag.tag_name == fervid_atom!("style");
+    let is_script = starting_tag.tag_name == "script";
+    let is_template = !is_script && starting_tag.tag_name == "template";
+    let is_style = !is_template && starting_tag.tag_name == "style";
 
     // Helper fn
     let read_raw_text = |input: &'a str| {
@@ -75,7 +75,7 @@ fn parse_root_block<'a>(
                 let Node::Text(content, _) = v.1 else {
                     unreachable!("parse_text_node always returns a Node::TextNode")
                 };
-                (v.0, content.into())
+                (v.0, content)
             },
         )
     };
@@ -238,8 +238,8 @@ fn parse_root_block<'a>(
     let (input, _end_tag) = parse_element_end_tag(input)?;
 
     out.styles.push(SfcStyleBlock {
-        lang: lang.into(),
-        content: content.into(),
+        lang,
+        content,
         is_scoped,
         is_module,
         span: DUMMY_SP,

@@ -69,9 +69,9 @@ pub fn categorize_expr(expr: &Expr, vue_user_imports: &VueImportAliases) -> Bind
                     // Use PartialEq on Option<Id> for convenience
                     let callee_ident_option = Some(callee_ident.to_id());
 
-                    if callee_ident_option == vue_user_imports.ref_import {
-                        BindingTypes::SetupRef
-                    } else if callee_ident_option == vue_user_imports.computed {
+                    if callee_ident_option == vue_user_imports.ref_import
+                        || callee_ident_option == vue_user_imports.computed
+                    {
                         BindingTypes::SetupRef
                     } else if callee_ident_option == vue_user_imports.reactive {
                         BindingTypes::SetupReactiveConst
@@ -125,7 +125,7 @@ pub fn categorize_expr(expr: &Expr, vue_user_imports: &VueImportAliases) -> Bind
 /// Enriches binding types with additional information obtained from analyzing RHS
 #[inline]
 pub fn enrich_binding_types(
-    collected_bindings: &mut Vec<SetupBinding>,
+    collected_bindings: &mut [SetupBinding],
     rhs_type: BindingTypes,
     is_const: bool,
     is_ident: bool,
@@ -171,10 +171,8 @@ pub fn extract_variables_from_pat(pat: &Pat, out: &mut Vec<SetupBinding>, is_con
 
         // `[foo, bar]` in `const [foo, bar] = []
         Pat::Array(arr_destr) => {
-            for arr_destr_elem in arr_destr.elems.iter() {
-                if let Some(pat) = arr_destr_elem {
-                    extract_variables_from_pat(pat, out, is_const);
-                }
+            for pat in arr_destr.elems.iter().flatten() {
+                extract_variables_from_pat(pat, out, is_const);
             }
         }
 

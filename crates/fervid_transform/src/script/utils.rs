@@ -2,8 +2,8 @@
 
 use fervid_core::{fervid_atom, FervidAtom};
 use swc_core::ecma::ast::{
-    ArrayLit, BlockStmt, Callee, Expr, ExprOrSpread, Function, Lit, Module, ModuleDecl, ModuleItem,
-    ObjectLit, Prop, PropName, PropOrSpread, ReturnStmt, Stmt, Tpl,
+    ArrayLit, BlockStmt, Callee, Expr, ExprOrSpread, Function, Lit, Module, ObjectLit, Prop,
+    PropName, PropOrSpread, ReturnStmt, Stmt, Tpl,
 };
 
 #[deprecated]
@@ -11,47 +11,28 @@ pub fn find_default_export(module: &Module) -> Option<&ObjectLit> {
     let define_component = fervid_atom!("defineComponent");
 
     module.body.iter().rev().find_map(|module_item| {
-        let ModuleItem::ModuleDecl(module_decl) = module_item else {
-            return None;
-        };
+        let module_decl = module_item.as_module_decl()?;
+        let export_default_expr = module_decl.as_export_default_expr()?;
 
-        match module_decl {
-            ModuleDecl::ExportDefaultExpr(export_default_expr) => {
-                match *export_default_expr.expr {
-                    // Plain export
-                    // `export default { /* ... */ }`
-                    Expr::Object(ref object_lit) => {
-                        return Some(object_lit);
-                    }
+        match *export_default_expr.expr {
+            // Plain export
+            // `export default { /* ... */ }`
+            Expr::Object(ref object_lit) => Some(object_lit),
 
-                    // When doing `defineComponent`
-                    Expr::Call(ref call_expr) => {
-                        let Callee::Expr(ref callee_expr) = call_expr.callee else {
-                            return None;
-                        };
+            // When doing `defineComponent`
+            Expr::Call(ref call_expr) => {
+                let callee_expr = call_expr.callee.as_expr()?;
 
-                        // Only support unwrapping `defineComponent`
-                        if let Expr::Ident(ref ident) = **callee_expr {
-                            if ident.sym != define_component {
-                                return None;
-                            }
-                        } else {
-                            return None;
-                        };
-
-                        let Some(first_arg) = call_expr.args.get(0) else {
-                            return None;
-                        };
-
-                        match *first_arg.expr {
-                            Expr::Object(ref object_lit) => Some(object_lit),
-                            _ => None,
-                        }
-                    }
-
-                    _ => None,
+                // Only support unwrapping `defineComponent`
+                let ident = callee_expr.as_ident()?;
+                if ident.sym != define_component {
+                    return None;
                 }
+
+                let first_arg = call_expr.args.first()?;
+                first_arg.expr.as_object()
             }
+
             _ => None,
         }
     })
@@ -96,7 +77,7 @@ pub fn collect_block_stmt_return_fields(block_stmt: &BlockStmt, out: &mut Vec<Fe
         return;
     };
 
-    let return_arg = unroll_paren_seq(&return_arg);
+    let return_arg = unroll_paren_seq(return_arg);
 
     let Expr::Object(ref return_obj) = *return_arg else {
         return;
@@ -186,19 +167,15 @@ pub fn get_string_expr(expr: &Expr) -> Option<FervidAtom> {
 /// - <code>\`something ${notSoSimple}\`</code> is not trivial and will return `None`.
 pub fn get_string_tpl(tpl: &Tpl) -> Option<FervidAtom> {
     // This is not a js runtime, only simple template strings are supported
-    if tpl.exprs.len() > 0 || tpl.quasis.len() != 1 {
+    if !tpl.exprs.is_empty() || tpl.quasis.len() != 1 {
         return None;
     };
 
-    let Some(template_elem) = tpl.quasis.get(0) else {
-        return None;
-    };
+    let template_elem = tpl.quasis.first()?;
 
-    let Some(ref template_string) = template_elem.cooked else {
-        return None;
-    };
+    let template_string = template_elem.cooked.as_ref()?;
 
-    Some(template_string.as_ref().into())
+    Some(template_string.to_owned())
 }
 
 /// Checks if the expression only contains literals
@@ -328,7 +305,7 @@ pub fn unroll_paren_seq(expr: &Expr) -> &Expr {
         // Afaik, `SeqExpr` always has elements in it.
         // If that was not the case, this arm won't be matched and `expr` will be returned instead.
         // The consumer will have to handle this weird `SeqExpr` himself.
-        Expr::Seq(seq_expr) if seq_expr.exprs.len() > 0 => {
+        Expr::Seq(seq_expr) if !seq_expr.exprs.is_empty() => {
             unroll_paren_seq(&seq_expr.exprs[seq_expr.exprs.len() - 1])
         }
 

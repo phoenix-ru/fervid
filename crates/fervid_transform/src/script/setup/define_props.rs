@@ -120,7 +120,7 @@ pub fn process_with_defaults(
 /// Extracts runtime and types from `defineProps` call
 fn extract_from_define_props(define_props_call: &CallExpr, out: &mut DefineProps) {
     // Runtime
-    if let Some(first_argument) = &define_props_call.args.get(0) {
+    if let Some(first_argument) = &define_props_call.args.first() {
         out.runtime_decl = Some(first_argument.expr.to_owned());
     }
 
@@ -326,7 +326,7 @@ fn gen_runtime_props(
 
             // Push the default value
             defaults.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                key: str_to_propname(&key, DUMMY_SP),
+                key: str_to_propname(key, DUMMY_SP),
                 value: d.value,
             }))));
 
@@ -334,7 +334,7 @@ fn gen_runtime_props(
             if d.need_skip_factory {
                 let mut new_key = String::with_capacity(/* "__skip_".len() */ 7 + key.len());
                 new_key.push_str("__skip_");
-                new_key.push_str(&key);
+                new_key.push_str(key);
 
                 defaults.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
                     key: str_to_propname(&new_key, DUMMY_SP),
@@ -362,7 +362,7 @@ fn gen_runtime_props(
         let extracted_props_result =
             extract_runtime_props(ctx, &type_decl, define_props.defaults.as_deref(), errors);
 
-        extracted_props_result.map_err(|e| TransformError::ScriptError(e))
+        extracted_props_result.map_err(TransformError::ScriptError)
     } else {
         // Allow both runtime and types to be absent (i.e. for `defineProps()`)
         Ok(None)
@@ -465,7 +465,7 @@ fn resolve_runtime_props_from_type(
         });
     }
 
-    return Ok(props);
+    Ok(props)
 }
 
 fn gen_runtime_prop_from_type(
@@ -533,7 +533,7 @@ fn gen_runtime_prop_from_type(
                     }
                 }
                 Prop::Shorthand(shorthand) => {
-                    if &key == &shorthand.sym {
+                    if key == shorthand.sym {
                         default = Some(Box::new(Prop::KeyValue(KeyValueProp {
                             key: default_prop_name,
                             value: Box::new(Expr::Ident(shorthand.to_owned())),
@@ -675,7 +675,7 @@ fn gen_runtime_prop_from_type(
         vec![]
     };
 
-    return return_value!(prop_object_fields);
+    return_value!(prop_object_fields)
 }
 
 /// Check defaults. If the default object is an object literal with only
@@ -719,11 +719,9 @@ fn gen_destructured_default_value(
     inferred_type: FlagSet<Types>,
     errors: &mut Vec<TransformError>,
 ) -> Option<GenDestructuredDefaultValueReturn> {
-    let Some(ref default_val) = destructured_binding.default else {
-        return None;
-    };
+    let default_val = destructured_binding.default.as_ref()?;
 
-    let unwrapped = unwrap_ts_node_expr(&default_val);
+    let unwrapped = unwrap_ts_node_expr(default_val);
 
     // Check previously inferred type against the naively inferred type of the default value
     if !inferred_type.is_empty() && !inferred_type.contains(Types::Null) {

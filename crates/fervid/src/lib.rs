@@ -186,7 +186,7 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
 
     // Convert AST to string
     let (code, source_map) = CodegenContext::stringify(
-        &source,
+        source,
         &sfc_module,
         FileName::Custom(options.filename.to_string()),
         options.source_map.unwrap_or(false),
@@ -242,9 +242,7 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
     // Parse
     let mut errors = Vec::new();
     let mut parser = SfcParser::new(source, &mut errors);
-    let sfc = parser.parse_sfc().map_err(|err| {
-        return err.to_string();
-    })?;
+    let sfc = parser.parse_sfc().map_err(|err| err.to_string())?;
 
     // For scopes
     let file_hash = {
@@ -261,7 +259,7 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
         is_ce: false,
         props_destructure: PropsDestructureConfig::default(),
         scope_id: &file_hash,
-        filename: "anonymous.vue".into(),
+        filename: "anonymous.vue",
         transform_asset_urls: TransformAssetUrlsConfig::default(),
     };
     let transform_result = transform_sfc(sfc, transform_options, &mut transform_errors);
@@ -282,7 +280,7 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
     );
 
     let (compiled_code, _map) =
-        CodegenContext::stringify(&source, &sfc_module, FileName::Anon, false, false);
+        CodegenContext::stringify(source, &sfc_module, FileName::Anon, false, false);
 
     Ok(compiled_code)
 }
