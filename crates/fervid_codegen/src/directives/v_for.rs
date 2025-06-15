@@ -32,15 +32,16 @@ impl CodegenContext {
         // 1. List itself, which is `v_for.iterable`;
         // 2. Arrow function for each item, where argument is `v_for.iterator`
         //    and return is the passes `expr`;
-        let mut render_list_args = Vec::with_capacity(2);
-        render_list_args.push(ExprOrSpread {
-            spread: None,
-            expr: v_for.iterable.to_owned(),
-        });
-        render_list_args.push(ExprOrSpread {
-            spread: None,
-            expr: Box::new(render_list_arrow),
-        });
+        let render_list_args = vec![
+            ExprOrSpread {
+                spread: None,
+                expr: v_for.iterable.to_owned(),
+            },
+            ExprOrSpread {
+                spread: None,
+                expr: Box::new(render_list_arrow),
+            },
+        ];
 
         // `_renderList(iterable, render_list_arrow)`
         let render_list_call_expr = Expr::Call(CallExpr {
@@ -61,32 +62,33 @@ impl CodegenContext {
         // 2. `null` (or `{ key: <number> }` in some rare cases);
         // 3. `renderList(<...>)`;
         // 4. Patch flag.
-        let mut create_element_block_args = Vec::with_capacity(4);
-        create_element_block_args.push(ExprOrSpread {
-            spread: None,
-            expr: Box::new(Expr::Ident(Ident {
-                span,
-                ctxt: Default::default(),
-                sym: self.get_and_add_import_ident(VueImports::Fragment),
-                optional: false,
-            })),
-        });
-        create_element_block_args.push(ExprOrSpread {
-            spread: None,
-            expr: Box::new(Expr::Lit(Lit::Null(Null { span }))),
-        });
-        create_element_block_args.push(ExprOrSpread {
-            spread: None,
-            expr: Box::new(render_list_call_expr),
-        });
-        create_element_block_args.push(ExprOrSpread {
-            spread: None,
-            expr: Box::new(Expr::Lit(Lit::Num(Number {
-                span,
-                value: v_for.patch_flags.bits().into(),
-                raw: None,
-            }))),
-        });
+        let create_element_block_args = vec![
+            ExprOrSpread {
+                spread: None,
+                expr: Box::new(Expr::Ident(Ident {
+                    span,
+                    ctxt: Default::default(),
+                    sym: self.get_and_add_import_ident(VueImports::Fragment),
+                    optional: false,
+                })),
+            },
+            ExprOrSpread {
+                spread: None,
+                expr: Box::new(Expr::Lit(Lit::Null(Null { span }))),
+            },
+            ExprOrSpread {
+                spread: None,
+                expr: Box::new(render_list_call_expr),
+            },
+            ExprOrSpread {
+                spread: None,
+                expr: Box::new(Expr::Lit(Lit::Num(Number {
+                    span,
+                    value: v_for.patch_flags.bits().into(),
+                    raw: None,
+                }))),
+            },
+        ];
 
         let create_element_block = Expr::Call(CallExpr {
             span,

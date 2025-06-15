@@ -25,7 +25,7 @@ pub fn process_define_emits(
     call_expr: &CallExpr,
     var_decl: Option<VarDeclHelper>,
     sfc_object_helper: &mut SfcExportedObjectHelper,
-    _errors: &mut Vec<TransformError>,
+    #[allow(clippy::ptr_arg)] _errors: &mut Vec<TransformError>,
 ) -> TransformMacroResult {
     // Validation: duplicate call
     if sfc_object_helper.emits.is_some() {
@@ -43,7 +43,7 @@ pub fn process_define_emits(
         }));
     }
 
-    if let Some(arg0) = &call_expr.args.get(0) {
+    if let Some(arg0) = &call_expr.args.first() {
         sfc_object_helper.emits = Some(arg0.expr.to_owned())
     } else if let Some(ref type_args) = call_expr.type_args {
         let Some(ts_type) = type_args.params.first() else {
@@ -53,7 +53,7 @@ pub fn process_define_emits(
             }));
         };
 
-        let runtime_emits = match extract_runtime_emits(ctx, &ts_type) {
+        let runtime_emits = match extract_runtime_emits(ctx, ts_type) {
             Ok(v) => v,
             Err(e) => return TransformMacroResult::Error(TransformError::ScriptError(e)),
         };
@@ -153,7 +153,7 @@ fn extract_runtime_emits(
         }
     }
 
-    return Ok(emits);
+    Ok(emits)
 }
 
 /// Adapted from https://github.com/vuejs/core/blob/0ac0f2e338f6f8f0bea7237db539c68bfafb88ae/packages/compiler-sfc/src/script/defineEmits.ts#L105-L128

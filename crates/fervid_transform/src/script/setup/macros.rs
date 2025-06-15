@@ -1,7 +1,10 @@
 use fervid_core::{IntoIdent, VueImports};
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{ArrayLit, CallExpr, Callee, Decl, Expr, ExprOrSpread, Ident, Module, ModuleItem, ObjectLit, Pat, PropOrSpread, Stmt, VarDeclarator},
+    ecma::ast::{
+        ArrayLit, CallExpr, Callee, Decl, Expr, ExprOrSpread, Ident, Module, ModuleItem, ObjectLit,
+        Pat, PropOrSpread, Stmt, VarDeclarator,
+    },
 };
 
 use crate::{
@@ -13,7 +16,13 @@ use crate::{
     script::{
         resolve_type::TypeResolveContext,
         setup::{
-            define_emits::process_define_emits, define_model::process_define_model, define_options::process_define_options, define_props::{process_define_props, process_with_defaults}, define_props_destructure::collect_props_destructure, define_slots::process_define_slots, utils::unwrap_ts_node_expr
+            define_emits::process_define_emits,
+            define_model::process_define_model,
+            define_options::process_define_options,
+            define_props::{process_define_props, process_with_defaults},
+            define_props_destructure::collect_props_destructure,
+            define_slots::process_define_slots,
+            utils::unwrap_ts_node_expr,
         },
     },
     structs::SfcExportedObjectHelper,
@@ -170,7 +179,7 @@ pub enum TransformMacroResult {
 pub struct VarDeclHelper<'a> {
     pub is_const: bool,
     pub lhs: &'a Pat,
-    pub bindings: &'a mut Vec<SetupBinding>
+    pub bindings: &'a mut Vec<SetupBinding>,
 }
 
 /// Tries to transform a Vue compiler macro.\
@@ -232,29 +241,11 @@ pub fn transform_script_setup_macro_expr(
     let sym = &callee_ident.sym;
     let span = call_expr.span;
     if DEFINE_PROPS.eq(sym) {
-        process_define_props(
-            ctx,
-            call_expr,
-            var_decl,
-            sfc_object_helper,
-            errors,
-        )
+        process_define_props(ctx, call_expr, var_decl, sfc_object_helper, errors)
     } else if WITH_DEFAULTS.eq(sym) {
-        process_with_defaults(
-            ctx,
-            call_expr,
-            var_decl,
-            sfc_object_helper,
-            errors,
-        )
+        process_with_defaults(ctx, call_expr, var_decl, sfc_object_helper, errors)
     } else if DEFINE_EMITS.eq(sym) {
-        process_define_emits(
-            ctx,
-            call_expr,
-            var_decl,
-            sfc_object_helper,
-            errors,
-        )
+        process_define_emits(ctx, call_expr, var_decl, sfc_object_helper, errors)
     } else if DEFINE_EXPOSE.eq(sym) {
         sfc_object_helper.is_setup_expose_referenced = true;
 
@@ -275,14 +266,14 @@ pub fn transform_script_setup_macro_expr(
             type_args: None,
         }))))
     } else if DEFINE_MODEL.eq(sym) {
-        process_define_model(
+        process_define_model(call_expr, var_decl, sfc_object_helper, bindings_helper)
+    } else if DEFINE_SLOTS.eq(sym) {
+        process_define_slots(
             call_expr,
-            var_decl,
+            var_decl.is_some(),
             sfc_object_helper,
             bindings_helper,
         )
-    } else if DEFINE_SLOTS.eq(sym) {
-        process_define_slots(call_expr, var_decl.is_some(), sfc_object_helper, bindings_helper)
     } else if DEFINE_OPTIONS.eq(sym) {
         process_define_options(call_expr, var_decl.is_some(), sfc_object_helper, errors)
     } else {

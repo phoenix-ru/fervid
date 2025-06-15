@@ -126,9 +126,9 @@ impl TemplateVisitor<'_> {
     }
 }
 
-fn find_binding<'a, 'b>(
+fn find_binding<'a>(
     bindings_helper: &'a mut BindingsHelper,
-    tag_name: &'b str,
+    tag_name: &str,
 ) -> Option<&'a SetupBinding> {
     // `component-name`s like that should be transformed to `ComponentName`s
     let mut searched_pascal = String::with_capacity(tag_name.len());

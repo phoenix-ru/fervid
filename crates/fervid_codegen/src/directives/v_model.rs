@@ -53,7 +53,7 @@ impl CodegenContext {
         }
 
         // 5. Optionally generate modifiers
-        if v_model.modifiers.len() == 0 {
+        if v_model.modifiers.is_empty() {
             return;
         }
 
@@ -155,8 +155,8 @@ fn generate_v_model_handler_propname(
         StrOrExpr::Str(ref s) => {
             buf.reserve(9 + s.len());
             buf.push_str("onUpdate:");
-            let _ = to_camelcase(&s, buf); // ignore fault
-            str_to_propname(&buf, span)
+            let _ = to_camelcase(s, buf); // ignore fault
+            str_to_propname(buf, span)
         }
 
         StrOrExpr::Expr(ref expr) => {
@@ -185,7 +185,7 @@ fn generate_v_model_modifiers(modifiers: &[FervidAtom], span: Span) -> ObjectLit
         .map(|modifier| {
             // `.lazy` -> `lazy: true`
             PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                key: str_to_propname(&modifier, span),
+                key: str_to_propname(modifier, span),
                 value: Box::new(Expr::Lit(Lit::Bool(Bool { span, value: true }))),
             })))
         })

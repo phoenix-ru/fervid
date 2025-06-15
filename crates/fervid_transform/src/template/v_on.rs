@@ -133,7 +133,7 @@ fn transform_v_on_static_event(static_event: &mut FervidAtom) {
         to_pascal_case(&replaced, &mut out);
         out
     } else {
-        camelcase_with_word_groups(&static_event)
+        camelcase_with_word_groups(static_event)
     };
 
     *static_event = FervidAtom::from(transformed_event);
@@ -250,7 +250,7 @@ fn unwrap_parens(expr: &Expr) -> &Expr {
         return expr;
     };
 
-    return &p.expr;
+    &p.expr
 }
 
 #[cfg(test)]

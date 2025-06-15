@@ -4,7 +4,9 @@ use swc_core::{
 };
 
 use crate::{
-    error::{ScriptError, ScriptErrorKind, TransformError}, script::setup::utils::unwrap_ts_node_expr, SfcExportedObjectHelper
+    error::{ScriptError, ScriptErrorKind, TransformError},
+    script::setup::utils::unwrap_ts_node_expr,
+    SfcExportedObjectHelper,
 };
 
 use super::macros::TransformMacroResult;
@@ -39,7 +41,7 @@ pub fn process_define_options(
         }));
     }
 
-    if let Some(ref type_args) = call_expr.type_args.as_ref() {
+    if let Some(type_args) = call_expr.type_args.as_ref() {
         return error!(TransformError::ScriptError(ScriptError {
             span: type_args.span,
             kind: ScriptErrorKind::DefineOptionsTypeArguments
@@ -47,7 +49,7 @@ pub fn process_define_options(
     }
 
     // `defineOptions()` without arguments
-    let Some(ExprOrSpread { spread: None, expr }) = call_expr.args.get(0) else {
+    let Some(ExprOrSpread { spread: None, expr }) = call_expr.args.first() else {
         return valid_macro!(None);
     };
 

@@ -15,11 +15,8 @@ impl SfcParser<'_, '_, '_> {
             })
             .collect();
 
-        let Some((raw_content, _)) =
-            self.use_rawtext_content(element.content.as_ref(), &element.children)
-        else {
-            return None;
-        };
+        let (raw_content, _) =
+            self.use_rawtext_content(element.content.as_ref(), &element.children)?;
 
         Some(SfcCustomBlock {
             starting_tag: StartingTag {

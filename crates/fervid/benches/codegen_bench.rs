@@ -13,7 +13,7 @@ fn codegen_benchmark(c: &mut Criterion) {
             &component,
             |b, component| {
                 let mut errors = Vec::new();
-                let mut parser = fervid_parser::SfcParser::new(&component, &mut errors);
+                let mut parser = fervid_parser::SfcParser::new(component, &mut errors);
                 let res = parser.parse_sfc();
                 let sfc_blocks = res.unwrap();
                 let mut template_block = sfc_blocks.template;

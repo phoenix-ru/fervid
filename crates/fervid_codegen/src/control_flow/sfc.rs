@@ -1,14 +1,20 @@
 use fervid_core::{
-    fervid_atom, BindingTypes, FervidAtom, IntoIdent, SfcTemplateBlock, TemplateGenerationMode, VueImports
+    fervid_atom, BindingTypes, FervidAtom, IntoIdent, SfcTemplateBlock, TemplateGenerationMode,
+    VueImports,
 };
 use swc_core::{
     atoms::Atom,
     common::{
-        collections::AHashMap, source_map::SourceMapGenConfig, sync::Lrc, BytePos, FileName, SourceMap, DUMMY_SP
+        collections::AHashMap, source_map::SourceMapGenConfig, sync::Lrc, BytePos, FileName,
+        SourceMap, DUMMY_SP,
     },
     ecma::{
         ast::{
-            ArrowExpr, AssignExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, CallExpr, Callee, Decl, ExportDefaultExpr, Expr, ExprOrSpread, ExprStmt, Function, GetterProp, Ident, IdentName, ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit, Param, Pat, Prop, PropName, PropOrSpread, ReturnStmt, SetterProp, Stmt, Str, VarDecl, VarDeclKind, VarDeclarator
+            ArrowExpr, AssignExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
+            Decl, ExportDefaultExpr, Expr, ExprOrSpread, ExprStmt, Function, GetterProp, Ident,
+            IdentName, ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit, Param,
+            Pat, Prop, PropName, PropOrSpread, ReturnStmt, SetterProp, Stmt, Str, VarDecl,
+            VarDeclKind, VarDeclarator,
         },
         visit::{noop_visit_type, Visit, VisitWith},
     },
@@ -24,22 +30,24 @@ impl CodegenContext {
         // #11: Optimization: multiple template roots
         // and all are text nodes (must be ensured by Transformer),
         // generate node sequence
-        if sfc_template.roots.len() > 1 {
-            let mut out = Vec::new();
-            self.generate_node_sequence(
-                &mut sfc_template.roots.iter(),
-                &mut out,
-                sfc_template.roots.len(),
-                true,
-            );
+        match sfc_template.roots.len() {
+            0 => None,
+            1 => {
+                // Generate the only child
+                let first_child = &sfc_template.roots[0];
+                Some(self.generate_node(first_child, true))
+            }
+            _ => {
+                let mut out = Vec::new();
+                self.generate_node_sequence(
+                    &mut sfc_template.roots.iter(),
+                    &mut out,
+                    sfc_template.roots.len(),
+                    true,
+                );
 
-            out.pop()
-        } else if sfc_template.roots.len() == 1 {
-            // Generate the only child
-            let first_child = &sfc_template.roots[0];
-            Some(self.generate_node(&first_child, true))
-        } else {
-            None
+                out.pop()
+            }
         }
     }
 
@@ -400,7 +408,12 @@ impl CodegenContext {
                 // `get smth() { return smth }`
                 BindingTypes::Imported => {
                     // Skip if TS and binding is unused
-                    if is_ts && !self.bindings_helper.used_bindings.contains_key(&binding.sym) {
+                    if is_ts
+                        && !self
+                            .bindings_helper
+                            .used_bindings
+                            .contains_key(&binding.sym)
+                    {
                         continue;
                     }
 

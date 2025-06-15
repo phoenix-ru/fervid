@@ -7,7 +7,7 @@ use swc_core::{
 
 use crate::{error::TransformError, structs::TransformScriptsResult};
 
-const CSS_PREFIX: &'static str = "data-v-";
+const CSS_PREFIX: &str = "data-v-";
 
 /// Adds `__scopeId: scope`, e.g. `__scopeId: "data-v-7ba5bd90"`
 pub fn attach_scope_id(transform_result: &mut TransformScriptsResult, scope: &str) {
@@ -36,7 +36,7 @@ pub fn create_style_scope(file_hash: &str) -> String {
 }
 
 pub fn transform_style_blocks(
-    style_blocks: &mut Vec<SfcStyleBlock>,
+    style_blocks: &mut [SfcStyleBlock],
     scope: &str,
     errors: &mut Vec<TransformError>,
 ) -> bool {
@@ -56,7 +56,7 @@ pub fn transform_style_blocks(
             let result = transform_css(
                 &style_block.content,
                 style_block.span,
-                Some(&scope),
+                Some(scope),
                 &mut css_errors,
                 TransformCssConfig::default(),
             );

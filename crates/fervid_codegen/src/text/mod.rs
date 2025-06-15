@@ -23,7 +23,7 @@ impl CodegenContext {
                 shortened.push(' ');
             }
             shortened.push_str(trimmed);
-            if has_end_whitespace && trimmed.len() > 0 {
+            if has_end_whitespace && !trimmed.is_empty() {
                 shortened.push(' ');
             }
 

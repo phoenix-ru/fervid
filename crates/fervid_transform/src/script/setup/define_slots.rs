@@ -25,7 +25,7 @@ pub fn process_define_slots(
     }
     sfc_object_helper.has_define_slots = true;
 
-    if call_expr.args.len() > 0 {
+    if !call_expr.args.is_empty() {
         return TransformMacroResult::Error(TransformError::ScriptError(ScriptError {
             span: call_expr.span,
             kind: ScriptErrorKind::DefineSlotsArguments,

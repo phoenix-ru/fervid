@@ -160,7 +160,7 @@ fn analyze_top_level_decl(
                     }
                 }
 
-                out.extend(collected_bindings.drain(..));
+                out.append(&mut collected_bindings);
             }
         }
 
@@ -170,7 +170,7 @@ fn analyze_top_level_decl(
             out.push(SetupBinding::new_spanned(
                 ts_enum.id.sym.to_owned(),
                 BindingTypes::LiteralConst,
-                ts_enum.span
+                ts_enum.span,
             ))
         }
 

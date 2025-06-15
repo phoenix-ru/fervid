@@ -2,8 +2,7 @@ use fervid_core::{
     check_attribute_name, fervid_atom, AttributeOrBinding, ElementNode, IntoIdent, VueImports,
 };
 use swc_core::ecma::ast::{
-    ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Lit, MemberExpr, MemberProp, ObjectLit,
-    Str,
+    ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Lit, MemberExpr, MemberProp, ObjectLit, Str,
 };
 
 use crate::CodegenContext;
@@ -30,7 +29,7 @@ impl CodegenContext {
             .position(|attr| check_attribute_name(attr, "name"));
 
         // Determine the args length (remember, we exclude `name` from attrs length)
-        let has_children = element_node.children.len() > 0;
+        let has_children = !element_node.children.is_empty();
         let has_attributes =
             element_node.starting_tag.attributes.len() > idx_of_name.map_or(0, |_| 1);
 

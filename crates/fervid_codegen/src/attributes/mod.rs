@@ -84,7 +84,7 @@ impl CodegenContext {
 
                     out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                         KeyValueProp {
-                            key: str_to_propname(&name, *span),
+                            key: str_to_propname(name, *span),
                             value: Box::from(Expr::Lit(Lit::Str(Str {
                                 span: span.to_owned(),
                                 value: value.to_owned(),
@@ -216,7 +216,7 @@ impl CodegenContext {
                         })
                         .collect();
 
-                    let handler_expr = if modifiers.len() != 0 {
+                    let handler_expr = if !modifiers.is_empty() {
                         let with_modifiers_import =
                             self.get_and_add_import_ident(VueImports::WithModifiers);
 
@@ -270,7 +270,7 @@ impl CodegenContext {
                             // e.g. `onClick: _ctx.handleClick` or `onClick: _withModifiers(() => {}, ["stop"])
                             out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                                 KeyValueProp {
-                                    key: str_to_propname(&event_name_str, span),
+                                    key: str_to_propname(event_name_str, span),
                                     value: handler_expr,
                                 },
                             ))));
@@ -541,7 +541,7 @@ fn generate_regular_style(style: &str, span: Span) -> ObjectLit {
             continue;
         };
 
-        if style_name.len() == 0 || style_value.len() == 0 {
+        if style_name.is_empty() || style_value.is_empty() {
             continue;
         }
 

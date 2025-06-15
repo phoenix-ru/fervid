@@ -157,7 +157,7 @@ fn resolve_type_elements_impl_type(
             let mut resolved_elements = Vec::with_capacity(types.len());
             for t in types.iter() {
                 // TODO No _ownerScope is supported
-                let resolved = resolve_type_elements_impl_type(ctx, &t, scope, None)?;
+                let resolved = resolve_type_elements_impl_type(ctx, t, scope, None)?;
                 resolved_elements.push(resolved);
             }
 
@@ -184,9 +184,9 @@ fn resolve_type_elements_impl_type(
                     };
 
                     let resolved_elements =
-                        resolve_type_elements_impl_type(ctx, &first_type_param, scope, None)?;
+                        resolve_type_elements_impl_type(ctx, first_type_param, scope, None)?;
 
-                    return resolve_extract_prop_types(ctx, resolved_elements, scope.id);
+                    return resolve_extract_prop_types(resolved_elements, scope.id);
                 }
             }
 
@@ -217,7 +217,7 @@ fn resolve_type_elements_impl_type(
 
                 match &resolved.value {
                     TypeOrDecl::Type(ts_type) => {
-                        resolve_type_elements_impl_type(ctx, &ts_type, scope, None)
+                        resolve_type_elements_impl_type(ctx, ts_type, scope, None)
                     }
                     TypeOrDecl::Decl(decl) => {
                         resolve_type_elements_impl_decl(ctx, &decl.borrow(), scope, None)
@@ -298,7 +298,7 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
 
     let type_name = get_reference_name(reference_type);
     let type_name_single = if type_name.len() == 1 {
-        type_name.get(0)
+        type_name.first()
     } else {
         None
     };
@@ -321,7 +321,7 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
                 break 'm;
             }
 
-            let Some(ref type_params) = node_type_params else {
+            let Some(type_params) = node_type_params else {
                 break 'm;
             };
 
@@ -333,8 +333,8 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
             };
 
             let resolved_elements =
-                resolve_type_elements_impl_type(ctx, &first_type_param, scope, type_parameters)?;
-            return resolve_extract_prop_types(ctx, resolved_elements, scope.id);
+                resolve_type_elements_impl_type(ctx, first_type_param, scope, type_parameters)?;
+            return resolve_extract_prop_types(resolved_elements, scope.id);
         }
         _ => {}
     }
@@ -379,7 +379,7 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
 
         return match resolved.value {
             TypeOrDecl::Type(ref ts_type) => {
-                resolve_type_elements_impl_type(ctx, &ts_type, scope, type_params.as_ref())
+                resolve_type_elements_impl_type(ctx, ts_type, scope, type_params.as_ref())
             }
             TypeOrDecl::Decl(ref decl) => {
                 resolve_type_elements_impl_decl(ctx, &decl.borrow(), scope, type_params.as_ref())
@@ -397,7 +397,7 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
 
     if SUPPORTED_BUILTINS_SET.contains(type_name_single) {
         return resolve_builtin(ctx, node, type_name_single, scope, type_parameters);
-    } else if let ("ReturnType", Some(ref type_params)) =
+    } else if let ("ReturnType", Some(type_params)) =
         (type_name_single.as_str(), node_type_params.as_ref())
     {
         // limited support, only reference types
@@ -416,7 +416,7 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
                 ts_type,
                 TsType::TsTypeRef(_) | TsType::TsTypeQuery(_) | TsType::TsImportType(_)
             ) {
-                resolved = resolve_type_reference(ctx, ReferenceTypes::TsType(&ts_type), scope);
+                resolved = resolve_type_reference(ctx, ReferenceTypes::TsType(ts_type), scope);
             }
 
             let Some(resolved) = resolved else {
@@ -466,7 +466,7 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
 
 fn type_elements_to_map(
     ctx: &mut TypeResolveContext,
-    elements: &Vec<TsTypeElement>,
+    elements: &[TsTypeElement],
     scope: &TypeScope,
     type_parameters: TypeParameters,
 ) -> ResolutionResult<ResolvedElements> {
@@ -648,9 +648,7 @@ fn resolve_interface_members(
         };
 
         for (key, value) in resolved.props {
-            if !base.props.contains_key(&key) {
-                base.props.insert(key, value);
-            }
+            base.props.entry(key).or_insert(value);
         }
 
         base.calls.append(&mut resolved.calls);
@@ -689,9 +687,9 @@ fn resolve_mapped_type(
             );
         }
 
-        resolve_string_type(ctx, &name_type, &child_scope)?
+        resolve_string_type(ctx, name_type, child_scope)?
     } else if let Some(ref constraint) = mapped_type.type_param.constraint {
-        resolve_string_type(ctx, &constraint, scope)?
+        resolve_string_type(ctx, constraint, scope)?
     } else {
         // Constraint must be present, otherwise we can't resolve
         return Err(error(
@@ -722,6 +720,7 @@ fn resolve_mapped_type(
     Ok(result)
 }
 
+#[allow(clippy::vec_box)]
 fn resolve_index_type(
     ctx: &mut TypeResolveContext,
     index_type: &TsIndexedAccessType,
@@ -743,10 +742,10 @@ fn resolve_index_type(
         ..
     }) = index_type.as_ref()
     {
-        return resolve_array_element_type(ctx, &obj_type, scope);
+        return resolve_array_element_type(ctx, obj_type, scope);
     }
 
-    let resolved = resolve_type_elements_impl_type(ctx, &obj_type, scope, None)?;
+    let resolved = resolve_type_elements_impl_type(ctx, obj_type, scope, None)?;
     let mut props = resolved.props;
     let mut types = Vec::<Box<TsType>>::new();
 
@@ -774,7 +773,7 @@ fn resolve_index_type(
         }
     } else {
         // Values of the string type
-        for key in resolve_string_type(ctx, &index_type, scope)? {
+        for key in resolve_string_type(ctx, index_type, scope)? {
             let Some(value) = props.remove(&key) else {
                 continue;
             };
@@ -786,6 +785,7 @@ fn resolve_index_type(
     Ok(types)
 }
 
+#[allow(clippy::vec_box)]
 fn resolve_array_element_type(
     ctx: &mut TypeResolveContext,
     array_element_type: &TsType,
@@ -824,7 +824,7 @@ fn resolve_array_element_type(
                 resolve_type_reference(ctx, ReferenceTypes::TsType(array_element_type), scope)
             {
                 if let TypeOrDecl::Type(ts_type) = &resolved.value {
-                    return resolve_array_element_type(ctx, &ts_type, scope);
+                    return resolve_array_element_type(ctx, ts_type, scope);
                 }
             };
 
@@ -873,7 +873,7 @@ fn get_reference_name(ts_type: ReferenceTypes) -> Vec<FervidAtom> {
 fn get_reference_name_from_entity(ts_entity_name: &TsEntityName) -> Vec<FervidAtom> {
     match ts_entity_name {
         TsEntityName::Ident(ident) => vec![ident.sym.to_owned()],
-        TsEntityName::TsQualifiedName(qualified_name) => qualified_name_to_path(&qualified_name),
+        TsEntityName::TsQualifiedName(qualified_name) => qualified_name_to_path(qualified_name),
     }
 }
 
@@ -916,9 +916,9 @@ fn resolve_global_scope(_ctx: &mut TypeResolveContext) -> Result<Option<Vec<Type
     Ok(None)
 }
 
-fn resolve_type_from_import<'t>(
+fn resolve_type_from_import(
     _ctx: &mut TypeResolveContext,
-    _ts_type: ReferenceTypes<'t>,
+    _ts_type: ReferenceTypes<'_>,
     _name: &str,
     _scope: &TypeScope,
 ) -> Option<ScopeTypeNode> {
@@ -1042,7 +1042,7 @@ fn resolve_string_type(
         TsType::TsUnionOrIntersectionType(TsUnionOrIntersectionType::TsUnionType(union_type)) => {
             let mut result = Vec::new();
             for typ in union_type.types.iter() {
-                result.append(&mut resolve_string_type(ctx, &typ, scope)?);
+                result.append(&mut resolve_string_type(ctx, typ, scope)?);
             }
             Ok(result)
         }
@@ -1058,7 +1058,7 @@ fn resolve_string_type(
                     ));
                 };
 
-                return resolve_string_type(ctx, &ts_type, scope);
+                return resolve_string_type(ctx, ts_type, scope);
             }
 
             let TsEntityName::Ident(ref type_name_ident) = type_ref.type_name else {
@@ -1078,7 +1078,7 @@ fn resolve_string_type(
 
                 let param = type_params.params.get(idx);
                 match param {
-                    Some(p) => resolve_string_type(ctx, &p, scope),
+                    Some(p) => resolve_string_type(ctx, p, scope),
                     None => Err(error(
                         ScriptErrorKind::ResolveTypeMissingTypeParam,
                         type_params.span,
@@ -1148,8 +1148,8 @@ fn resolve_string_type_expr(
             right,
             ..
         }) => {
-            let mut left = resolve_string_type_expr(ctx, &left, scope)?;
-            let mut right = resolve_string_type_expr(ctx, &right, scope)?;
+            let mut left = resolve_string_type_expr(ctx, left, scope)?;
+            let mut right = resolve_string_type_expr(ctx, right, scope)?;
             left.append(&mut right);
             Ok(left)
         }
@@ -1192,7 +1192,7 @@ fn resolve_builtin(
         ),
     };
 
-    let Some(ref type_params) = type_params else {
+    let Some(type_params) = type_params else {
         return Err(error(ScriptErrorKind::ResolveTypeMissingTypeParams, span));
     };
 
@@ -1203,7 +1203,7 @@ fn resolve_builtin(
         ));
     };
 
-    let mut t = resolve_type_elements_impl_type(ctx, &first_type_param, scope, type_parameters)?;
+    let mut t = resolve_type_elements_impl_type(ctx, first_type_param, scope, type_parameters)?;
 
     match name {
         "Partial" | "Required" => {
@@ -1231,7 +1231,7 @@ fn resolve_builtin(
                 ));
             };
 
-            let picked_or_omitted = resolve_string_type(ctx, &second_type_param, scope)?;
+            let picked_or_omitted = resolve_string_type(ctx, second_type_param, scope)?;
 
             // Q: is rebuilding a map faster than doing `retain`?
             // `retain` docs suggest `O(capacity)`, not `O(n)`
@@ -1298,7 +1298,7 @@ fn resolve_union_type_impl(
 
     // Try resolving a type reference
     if let TsType::TsTypeRef(_) = ts_type {
-        let resolved = resolve_type_reference(ctx, ReferenceTypes::TsType(&ts_type), scope);
+        let resolved = resolve_type_reference(ctx, ReferenceTypes::TsType(ts_type), scope);
 
         if let Some(resolved) = resolved {
             let ts_type = match resolved.value {
@@ -1352,17 +1352,15 @@ fn inner_resolve_type_reference<'t>(
     name: &[FervidAtom],
     only_exported: bool,
 ) -> Option<ScopeTypeNode> {
-    let name_single = if name.len() == 1 {
-        Some(&name[0])
-    } else if name.len() > 1 {
-        None
-    } else {
-        return None;
+    let name_single = match name.len() {
+        0 => return None,
+        1 => Some(&name[0]),
+        _ => None,
     };
 
     if let Some(name_single) = name_single {
-        if let Some(_) = scope.imports.get(name_single) {
-            return resolve_type_from_import(ctx, ts_type, &name_single, scope);
+        if scope.imports.contains_key(name_single) {
+            return resolve_type_from_import(ctx, ts_type, name_single, scope);
         };
 
         let lookup_source = match ts_type {
@@ -1419,7 +1417,7 @@ fn inner_resolve_type_reference<'t>(
         // `ns._ownerScope || scope`
         let ns_scope = ctx.get_scope(ns.owner_scope);
         let ns_scope = ns_scope.as_deref().map(|v| v.borrow());
-        let scope = ns_scope.as_deref().unwrap_or(&scope);
+        let scope = ns_scope.as_deref().unwrap_or(scope);
 
         if let Some(module_decl) = module_decl {
             let child_scope = module_decl_to_scope(ctx, module_decl, scope);
@@ -1735,9 +1733,8 @@ fn record_type_stmt(
     declares: &mut HashMap<FervidAtom, ScopeTypeNode>,
     overwrite_id: Option<FervidAtom>,
 ) {
-    match s {
-        Stmt::Decl(decl) => record_type_decl(decl, types, declares, overwrite_id),
-        _ => {}
+    if let Stmt::Decl(decl) = s {
+        record_type_decl(decl, types, declares, overwrite_id)
     }
 }
 
@@ -1753,7 +1750,7 @@ fn record_type_decl(
         }
 
         Decl::TsInterface(ts_interface) => {
-            record_type_interface_decl(&ts_interface, types, overwrite_id)
+            record_type_interface_decl(ts_interface, types, overwrite_id)
         }
 
         Decl::TsEnum(ts_enum_decl) => {
@@ -2258,14 +2255,14 @@ pub fn infer_runtime_type_type(
                         if let Some(first_type_param) =
                             type_ref.type_params.as_ref().and_then(|v| v.params.first())
                         {
-                            return infer_runtime_type_type(ctx, &first_type_param, scope, true);
+                            return infer_runtime_type_type(ctx, first_type_param, scope, true);
                         };
                     }
                     "Pick" | "Extract" => {
                         if let Some(second_type_param) =
                             type_ref.type_params.as_ref().and_then(|v| v.params.get(1))
                         {
-                            return infer_runtime_type_type(ctx, &second_type_param, scope, false);
+                            return infer_runtime_type_type(ctx, second_type_param, scope, false);
                         };
                     }
 
@@ -2313,7 +2310,7 @@ pub fn infer_runtime_type_type(
                             type_ref.type_params.as_ref().and_then(|v| v.params.first())
                         {
                             let mut inferred =
-                                infer_runtime_type_type(ctx, &first_type_param, scope, false);
+                                infer_runtime_type_type(ctx, first_type_param, scope, false);
                             inferred -= Types::Null;
                             return inferred;
                         };
@@ -2323,7 +2320,7 @@ pub fn infer_runtime_type_type(
                         if let Some(second_type_param) =
                             type_ref.type_params.as_ref().and_then(|v| v.params.get(1))
                         {
-                            return infer_runtime_type_type(ctx, &second_type_param, scope, false);
+                            return infer_runtime_type_type(ctx, second_type_param, scope, false);
                         };
                     }
 
@@ -2331,7 +2328,7 @@ pub fn infer_runtime_type_type(
                         if let Some(first_type_param) =
                             type_ref.type_params.as_ref().and_then(|v| v.params.first())
                         {
-                            return infer_runtime_type_type(ctx, &first_type_param, scope, false);
+                            return infer_runtime_type_type(ctx, first_type_param, scope, false);
                         };
                     }
 
@@ -2351,7 +2348,7 @@ pub fn infer_runtime_type_type(
                     (&intersection.types, true)
                 }
             };
-            let mut flattened = flatten_types(ctx, &types, scope, is_key_of);
+            let mut flattened = flatten_types(ctx, types, scope, is_key_of);
             if is_intersection {
                 flattened -= Types::Unknown;
             }
@@ -2481,7 +2478,7 @@ fn infer_runtime_type_type_elements(
         };
     }
 
-    return result;
+    result
 }
 
 pub fn infer_runtime_type_resolved_prop(
@@ -2510,7 +2507,7 @@ fn flatten_types(
 ) -> TypesSet {
     let mut result = FlagSet::<Types>::default();
     for ts_type in types {
-        result |= infer_runtime_type_type(ctx, &ts_type, scope, is_key_of);
+        result |= infer_runtime_type_type(ctx, ts_type, scope, is_key_of);
     }
     result
 }
@@ -2544,7 +2541,6 @@ fn infer_enum_type(ts_enum: &TsEnumDecl) -> TypesSet {
 /// Support for the `ExtractPropTypes` helper - it's non-exhaustive, mostly
 /// tailored towards popular component libs like element-plus and antd-vue.
 fn resolve_extract_prop_types(
-    ctx: &TypeResolveContext,
     mut resolved_elements: ResolvedElements,
     scope_id: usize,
 ) -> ResolutionResult<ResolvedElements> {
@@ -2562,7 +2558,7 @@ fn resolve_extract_prop_types(
         };
 
         if let Some(type_ann) = type_ann {
-            *raw = reverse_infer_type(ctx, &key, &type_ann, scope_id);
+            *raw = reverse_infer_type(key, type_ann, scope_id);
         } else {
             return Err(error(ScriptErrorKind::ResolveTypeUnresolvable, raw.span()));
         }
@@ -2572,18 +2568,11 @@ fn resolve_extract_prop_types(
 }
 
 #[inline]
-fn reverse_infer_type(
-    ctx: &TypeResolveContext,
-    key: &Expr,
-    ts_type: &TsType,
-    scope_id: usize,
-) -> ResolvedProp {
-    reverse_infer_type_impl(ctx, key, ts_type, scope_id, true, true)
+fn reverse_infer_type(key: &Expr, ts_type: &TsType, scope_id: usize) -> ResolvedProp {
+    reverse_infer_type_impl(key, ts_type, scope_id, true, true)
 }
 
-// TODO Is ctx needed?
 fn reverse_infer_type_impl(
-    ctx: &TypeResolveContext,
     key: &Expr,
     ts_type: &TsType,
     scope_id: usize,
@@ -2607,7 +2596,7 @@ fn reverse_infer_type_impl(
                 _ => false,
             };
 
-            return reverse_infer_type_impl(ctx, key, type_type, scope_id, optional, false);
+            return reverse_infer_type_impl(key, type_type, scope_id, optional, false);
         }
     }
 
@@ -2647,7 +2636,6 @@ fn reverse_infer_type_impl(
                     // https://github.com/vuejs/core/blob/422ef34e487f801e1162bed80c0e88e868576e1d/packages/compiler-sfc/src/script/resolveType.ts#L1857-L1860
 
                     return reverse_infer_type_impl(
-                        ctx,
                         key,
                         first_type_param,
                         scope_id,
@@ -2670,14 +2658,7 @@ fn reverse_infer_type_impl(
                 // but in reality it will always return on the first param:
                 // https://github.com/vuejs/core/blob/422ef34e487f801e1162bed80c0e88e868576e1d/packages/compiler-sfc/src/script/resolveType.ts#L1857-L1860
 
-                return reverse_infer_type_impl(
-                    ctx,
-                    key,
-                    first_type_param,
-                    scope_id,
-                    optional,
-                    true,
-                );
+                return reverse_infer_type_impl(key, first_type_param, scope_id, optional, true);
             }
         }
 
@@ -2758,7 +2739,7 @@ fn ctor_to_type(ctor_type: &str) -> Box<TsType> {
     }
 }
 
-fn capitalize_or_uncapitalize_atoms(atoms: &mut Vec<FervidAtom>, capitalize: bool) {
+fn capitalize_or_uncapitalize_atoms(atoms: &mut [FervidAtom], capitalize: bool) {
     for atom in atoms.iter_mut() {
         let mut buf = String::with_capacity(atom.len());
         if let Some(c) = atom.chars().next() {
@@ -3039,7 +3020,7 @@ mod tests {
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("bar")),
-            Some(&FlagSet::from(Types::String | Types::Boolean))
+            Some(&(Types::String | Types::Boolean))
         );
     }
 
@@ -3092,7 +3073,7 @@ mod tests {
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("color")),
-            Some(&FlagSet::from(Types::String | Types::Number))
+            Some(&(Types::String | Types::Number))
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("appearance")),
@@ -3153,11 +3134,11 @@ mod tests {
         assert_eq!(resolved.props.len(), 8);
         assert_eq!(
             resolved.props.get(&fervid_atom!("foo")),
-            Some(&FlagSet::from(Types::String | Types::Number))
+            Some(&(Types::String | Types::Number))
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("bar")),
-            Some(&FlagSet::from(Types::String | Types::Number))
+            Some(&(Types::String | Types::Number))
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("Foo")),
@@ -3340,7 +3321,7 @@ mod tests {
         assert_eq!(resolved.props.len(), 2);
         assert_eq!(
             resolved.props.get(&fervid_atom!("foo")),
-            Some(&FlagSet::from(Types::Number | Types::String))
+            Some(&(Types::Number | Types::String))
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("bar")),
@@ -3362,7 +3343,7 @@ mod tests {
         assert_eq!(resolved.props.len(), 4);
         assert_eq!(
             resolved.props.get(&fervid_atom!("foo")),
-            Some(&FlagSet::from(Types::Number | Types::String))
+            Some(&(Types::Number | Types::String))
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("bar")),
@@ -3370,11 +3351,11 @@ mod tests {
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("tuple")),
-            Some(&FlagSet::from(Types::Number | Types::String))
+            Some(&(Types::Number | Types::String))
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("namedTuple")),
-            Some(&FlagSet::from(Types::Number | Types::String))
+            Some(&(Types::Number | Types::String))
         );
     }
 
@@ -3501,7 +3482,7 @@ mod tests {
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
             resolved.props.get(&fervid_atom!("foo")),
-            Some(&FlagSet::from(Types::String | Types::Number))
+            Some(&(Types::String | Types::Number))
         );
     }
 
@@ -3563,7 +3544,7 @@ mod tests {
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("foo")),
-            Some(&FlagSet::from(Types::String | Types::Number))
+            Some(&(Types::String | Types::Number))
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("bar")),
@@ -3579,7 +3560,7 @@ mod tests {
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("arr")),
-            Some(&FlagSet::from(Types::String | Types::Number))
+            Some(&(Types::String | Types::Number))
         );
     }
 
@@ -3609,9 +3590,7 @@ mod tests {
         assert_eq!(resolved.props.len(), 2);
         assert_eq!(
             resolved.props.get(&fervid_atom!("foo")),
-            Some(&FlagSet::from(
-                Types::Symbol | Types::String | Types::Number
-            ))
+            Some(&(Types::Symbol | Types::String | Types::Number))
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("bar")),
@@ -3633,7 +3612,7 @@ mod tests {
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
             resolved.props.get(&fervid_atom!("foo")),
-            Some(&FlagSet::from(Types::String | Types::Number))
+            Some(&(Types::String | Types::Number))
         );
     }
 
@@ -3651,7 +3630,7 @@ mod tests {
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
             resolved.props.get(&fervid_atom!("foo")),
-            Some(&FlagSet::from(Types::String | Types::Number))
+            Some(&(Types::String | Types::Number))
         );
     }
 
@@ -3678,13 +3657,11 @@ mod tests {
         assert_eq!(resolved.props.len(), 7);
         assert_eq!(
             resolved.props.get(&fervid_atom!("record")),
-            Some(&FlagSet::from(Types::String | Types::Symbol))
+            Some(&(Types::String | Types::Symbol))
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("anyRecord")),
-            Some(&FlagSet::from(
-                Types::String | Types::Number | Types::Symbol
-            ))
+            Some(&(Types::String | Types::Number | Types::Symbol))
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("partial")),
@@ -3700,11 +3677,11 @@ mod tests {
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("pick")),
-            Some(&FlagSet::from(Types::String | Types::Number))
+            Some(&(Types::String | Types::Number))
         );
         assert_eq!(
             resolved.props.get(&fervid_atom!("extract")),
-            Some(&FlagSet::from(Types::String | Types::Number))
+            Some(&(Types::String | Types::Number))
         );
     }
 
@@ -4169,7 +4146,7 @@ mod tests {
         let scope = ctx.root_scope();
         if ctx.bindings_helper.is_ts {
             let mut scope = (*scope).borrow_mut();
-            scope.imports = ctx.bindings_helper.user_imports.clone();
+            scope.imports.clone_from(&ctx.bindings_helper.user_imports);
 
             record_types(
                 &mut ctx,
@@ -4190,23 +4167,15 @@ mod tests {
             .body
             .iter_mut()
             .find_map(|module_item| {
-                let Some(call_expr) = module_item
+                let call_expr = module_item
                     .as_mut_stmt()
                     .and_then(|v| v.as_mut_expr())
-                    .and_then(|v| v.expr.as_mut_call())
-                else {
-                    return None;
-                };
+                    .and_then(|v| v.expr.as_mut_call())?;
 
-                let Some(callee_ident) = call_expr.callee.as_expr().and_then(|v| v.as_ident())
-                else {
-                    return None;
-                };
+                let callee_ident = call_expr.callee.as_expr().and_then(|v| v.as_ident())?;
 
                 if callee_ident.sym == "defineProps" {
-                    let Some(ref mut type_args) = call_expr.type_args else {
-                        return None;
-                    };
+                    let type_args = call_expr.type_args.as_mut()?;
 
                     return type_args.params.first_mut();
                 }

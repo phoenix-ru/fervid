@@ -110,7 +110,7 @@ impl BindingsHelperTransform for BindingsHelper {
         patch_hints: &mut PatchHints,
     ) {
         // 0. Ensure that `v-model` value is a valid AssignTarget
-        let Some(assign_target) = convert_expr_to_assign_target(v_model.value.to_owned()) else {
+        let Some(assign_target) = convert_expr_to_assign_target((*v_model.value).to_owned()) else {
             // TODO Error
             return;
         };
@@ -185,7 +185,7 @@ impl BindingsHelperTransform for BindingsHelper {
             // Check variable existence in the current scope
             let found = current_scope.variables.iter().find(|it| *it == variable);
 
-            if let Some(_) = found {
+            if found.is_some() {
                 return BindingTypes::TemplateLocal;
             }
 
@@ -387,7 +387,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
         let strategy = self.determine_ident_transform_strategy(ident);
 
         match strategy {
-            IdentTransformStrategy::LeaveUnchanged => return,
+            IdentTransformStrategy::LeaveUnchanged => (),
 
             IdentTransformStrategy::DotValue => {
                 *expr = Expr::Member(MemberExpr {
@@ -395,7 +395,6 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     obj: Box::new(expr.to_owned()),
                     prop: MemberProp::Ident(fervid_atom!("value").into_ident().into()),
                 });
-                return;
             }
 
             IdentTransformStrategy::Unref => {
@@ -413,7 +412,6 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     }],
                     type_args: None,
                 });
-                return;
             }
 
             IdentTransformStrategy::Prefix(prefix) => {
@@ -422,7 +420,6 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     obj: Box::new(Expr::Ident(prefix.into_ident_spanned(span))),
                     prop: MemberProp::Ident(ident.to_owned().into()),
                 });
-                return;
             }
 
             IdentTransformStrategy::IsRefCheckUpdate => {
@@ -439,12 +436,10 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     update_prefix,
                     self.bindings_helper,
                 );
-                return;
             }
 
             IdentTransformStrategy::RewriteWithMemberExpr(member_expr) => {
                 *expr = Expr::Member(member_expr);
-                return;
             }
         }
     }
@@ -619,7 +614,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                 let span = ident.span;
 
                 match strategy {
-                    IdentTransformStrategy::LeaveUnchanged => return,
+                    IdentTransformStrategy::LeaveUnchanged => (),
 
                     IdentTransformStrategy::DotValue => {
                         *n = Pat::Expr(Box::new(Expr::Member(MemberExpr {
@@ -630,7 +625,6 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                                 sym: fervid_atom!("value"),
                             }),
                         })));
-                        return;
                     }
 
                     IdentTransformStrategy::Prefix(prefix) => {
@@ -639,12 +633,10 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                             obj: Box::new(Expr::Ident(prefix.into_ident())),
                             prop: MemberProp::Ident(ident.id.to_owned().into()),
                         })));
-                        return;
                     }
 
                     IdentTransformStrategy::RewriteWithMemberExpr(member_expr) => {
                         *n = Pat::Expr(Box::new(Expr::Member(member_expr)));
-                        return;
                     }
 
                     IdentTransformStrategy::Unref | IdentTransformStrategy::IsRefCheckUpdate => {
@@ -739,7 +731,12 @@ impl TransformVisitor<'_> {
         let symbol = &ident.sym;
 
         // Try to find variable in the local vars (e.g. arrow function params)
-        if let Some(_) = self.local_vars.iter().rfind(|it| &it.sym == symbol) {
+        if self
+            .local_vars
+            .iter()
+            .rfind(|it| &it.sym == symbol)
+            .is_some()
+        {
             self.has_js_bindings = true;
             return IdentTransformStrategy::LeaveUnchanged;
         }
@@ -769,7 +766,7 @@ impl TransformVisitor<'_> {
                 return IdentTransformStrategy::LeaveUnchanged;
             };
 
-            let member_prop = if is_valid_propname(&original_prop_name) {
+            let member_prop = if is_valid_propname(original_prop_name) {
                 MemberProp::Ident(IdentName {
                     span: ident.span,
                     sym: original_prop_name.to_owned(),
@@ -1014,9 +1011,9 @@ fn wrap_in_assignment(lhs: AssignTarget, rhs_expr: Box<Expr>, op: AssignOp) -> B
     }))
 }
 
-fn convert_expr_to_assign_target(expr: Box<Expr>) -> Option<AssignTarget> {
+fn convert_expr_to_assign_target(expr: Expr) -> Option<AssignTarget> {
     // Because AssignTarget is strongly typed, we have to map from `Expr` to `AssignTarget`
-    match *expr {
+    match expr {
         Expr::Array(arr) => Some(AssignTarget::Pat(AssignTargetPat::Array(
             convert_arr_lit_to_pat(arr),
         ))),

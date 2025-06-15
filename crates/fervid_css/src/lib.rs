@@ -31,8 +31,8 @@ pub use css::*;
 #[cfg(test)]
 #[allow(unused)]
 mod tests {
-    use swc_core::common::{Span, BytePos};
     use crate::css;
+    use swc_core::common::{BytePos, Span};
 
     macro_rules! test_output {
         ($input: expr, $expected: expr, $options: expr) => {
@@ -46,12 +46,15 @@ mod tests {
             // assert_eq!(actual, $expected);
 
             // SWC
-            let span = Span::new(
-                BytePos(1),
-                BytePos(1 + $input.len() as u32),
-            );
+            let span = Span::new(BytePos(1), BytePos(1 + $input.len() as u32));
             let mut errors = Vec::new();
-            let out = css::transform_css($input, span, Some("data-v-abcd1234"), &mut errors, Default::default());
+            let out = css::transform_css(
+                $input,
+                span,
+                Some("data-v-abcd1234"),
+                &mut errors,
+                Default::default(),
+            );
             assert_eq!(out.ok_or(()), $expected);
         };
     }

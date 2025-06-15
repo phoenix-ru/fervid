@@ -1,4 +1,4 @@
-use fervid_core::{ElementNode, BuiltinType};
+use fervid_core::{BuiltinType, ElementNode};
 use swc_core::ecma::ast::Expr;
 
 use crate::CodegenContext;
@@ -13,7 +13,11 @@ mod transition;
 mod transition_group;
 
 impl CodegenContext {
-    pub fn generate_builtin(&mut self, element_node: &ElementNode, builtin_type: BuiltinType) -> Expr {
+    pub fn generate_builtin(
+        &mut self,
+        element_node: &ElementNode,
+        builtin_type: BuiltinType,
+    ) -> Expr {
         match builtin_type {
             BuiltinType::Component => self.generate_component_builtin(element_node),
             BuiltinType::KeepAlive => self.generate_keepalive(element_node),

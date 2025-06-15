@@ -1,5 +1,5 @@
 use crate::OptionsApiBindings;
-use swc_core::ecma::ast::{ObjectLit, ArrayLit};
+use swc_core::ecma::ast::{ArrayLit, ObjectLit};
 
 use crate::script::utils::{collect_obj_fields, collect_string_arr};
 
@@ -7,7 +7,10 @@ use crate::script::utils::{collect_obj_fields, collect_string_arr};
 ///
 /// https://vuejs.org/api/options-state.html#emits
 #[inline]
-pub fn collect_emits_bindings_object(obj_lit: &ObjectLit, options_api_bindings: &mut OptionsApiBindings) {
+pub fn collect_emits_bindings_object(
+    obj_lit: &ObjectLit,
+    options_api_bindings: &mut OptionsApiBindings,
+) {
     collect_obj_fields(obj_lit, &mut options_api_bindings.emits)
 }
 

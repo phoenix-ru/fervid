@@ -1,4 +1,7 @@
-use swc_core::{common::Span, ecma::ast::{ComputedPropName, EsReserved, Ident, IdentName, PropName, Str}};
+use swc_core::{
+    common::Span,
+    ecma::ast::{ComputedPropName, EsReserved, Ident, IdentName, PropName, Str},
+};
 
 use crate::{AttributeOrBinding, FervidAtom, StrOrExpr, VBindDirective};
 
@@ -37,7 +40,10 @@ pub fn is_valid_propname(s: &str) -> bool {
 
 pub fn str_to_propname(s: &str, span: Span) -> PropName {
     if is_valid_propname(s) {
-        PropName::Ident(IdentName { span, sym: s.into() })
+        PropName::Ident(IdentName {
+            span,
+            sym: s.into(),
+        })
     } else {
         PropName::Str(Str {
             span,
@@ -62,9 +68,6 @@ pub fn atom_to_propname(sym: FervidAtom, span: Span) -> PropName {
 pub fn str_or_expr_to_propname(str_or_expr: StrOrExpr, span: Span) -> PropName {
     match str_or_expr {
         StrOrExpr::Str(sym) => atom_to_propname(sym, span),
-        StrOrExpr::Expr(expr) => PropName::Computed(ComputedPropName {
-            span,
-            expr,
-        }),
+        StrOrExpr::Expr(expr) => PropName::Computed(ComputedPropName { span, expr }),
     }
 }

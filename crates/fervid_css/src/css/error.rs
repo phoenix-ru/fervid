@@ -1,14 +1,15 @@
 use fervid_core::error::{Severity, SeverityLevel};
-use swc_core::common::{Spanned, Span};
-use swc_css_parser::error::{ErrorKind as ParseErrorKind, Error as ParseError};
+use swc_core::common::{Span, Spanned};
+use swc_css_parser::error::{Error as ParseError, ErrorKind as ParseErrorKind};
 
 #[derive(Debug)]
 pub struct CssError {
     pub span: Span,
-    pub kind: CssErrorKind
+    pub kind: CssErrorKind,
 }
 
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum CssErrorKind {
     ParseRecoverable(ParseErrorKind),
     ParseUnrecoverable(ParseErrorKind),
@@ -26,13 +27,10 @@ impl CssError {
             (true, true) => CssErrorKind::ParseDeepRecoverable(kind),
             (true, false) => CssErrorKind::ParseDeepUnrecoverable(kind),
             (false, true) => CssErrorKind::ParseRecoverable(kind),
-            (false, false) => CssErrorKind::ParseUnrecoverable(kind)
+            (false, false) => CssErrorKind::ParseUnrecoverable(kind),
         };
 
-        CssError {
-            span,
-            kind
-        }
+        CssError { span, kind }
     }
 }
 

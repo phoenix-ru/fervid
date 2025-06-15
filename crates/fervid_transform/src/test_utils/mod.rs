@@ -16,7 +16,9 @@ pub fn ts(raw: &str) -> Box<Expr> {
 }
 
 pub fn ts_module(raw: &str) -> Module {
-    parse_typescript_module(raw, 0, Default::default()).expect("Expected input to be parseable").0
+    parse_typescript_module(raw, 0, Default::default())
+        .expect("Expected input to be parseable")
+        .0
 }
 
 pub fn to_str(swc_node: &impl Node) -> String {

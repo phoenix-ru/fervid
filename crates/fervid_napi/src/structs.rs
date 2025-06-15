@@ -155,6 +155,7 @@ pub struct SerializedError {
 /// <https://github.com/vuejs/core/blob/020851e57d9a9f727c6ea07e9c1575430af02b73/packages/compiler-core/src/options.ts#L76>
 #[napi]
 #[allow(non_camel_case_types)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum BindingTypes {
     /// returned from data()
     DATA,
@@ -262,7 +263,10 @@ impl From<FervidTransformAssetUrlsOptions> for TransformAssetUrlsConfigOptions {
             let mut tags = FxHashMap::default();
 
             for mut tag in napi_tags {
-                tags.insert(tag.0.into(), tag.1.drain(..).map(FervidAtom::from).collect());
+                tags.insert(
+                    tag.0.into(),
+                    tag.1.drain(..).map(FervidAtom::from).collect(),
+                );
             }
 
             tags

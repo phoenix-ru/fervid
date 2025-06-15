@@ -173,7 +173,7 @@ pub fn register_import(
     } else if should_include_binding {
         let bindings = bindings_helper
             .options_api_bindings
-            .get_or_insert_with(|| Default::default());
+            .get_or_insert_with(Default::default);
         bindings.imports.push(SetupBinding::new_spanned(
             local.to_owned(),
             binding_type,
@@ -399,7 +399,6 @@ mod tests {
                     reactive: Some((fervid_atom!("reactive"), SyntaxContext::default())),
                     ..Default::default()
                 },
-                ..Default::default()
             }
         );
     }

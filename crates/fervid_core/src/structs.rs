@@ -366,7 +366,7 @@ pub struct VBindDirective {
     /// .attr modifier
     pub is_attr: bool,
     /// Byte location in source
-    pub span: Span
+    pub span: Span,
 }
 
 /// `v-model`

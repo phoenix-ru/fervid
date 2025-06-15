@@ -27,7 +27,7 @@ lazy_static! {
 
 pub fn transform_asset_urls(element_node: &mut ElementNode, ctx: &mut TransformSfcContext) {
     match &ctx.transform_asset_urls {
-        TransformAssetUrlsConfig::Disabled => return,
+        TransformAssetUrlsConfig::Disabled => (),
         TransformAssetUrlsConfig::EnabledDefault => {
             transform_element_asset_urls(
                 element_node,
@@ -69,12 +69,12 @@ fn transform_element_asset_urls(
             continue;
         };
 
-        if (!attrs.contains(&name) && !wild_card_attrs.contains(&name))
+        if (!attrs.contains(name) && !wild_card_attrs.contains(name))
             || value.trim().is_empty()
-            || is_external_url(&value)
-            || is_data_url(&value)
+            || is_external_url(value)
+            || is_data_url(value)
             || value.starts_with('#')
-            || (!options.include_absolute && !is_relative_url(&value))
+            || (!options.include_absolute && !is_relative_url(value))
         {
             continue;
         }
@@ -89,11 +89,11 @@ fn transform_element_asset_urls(
             }};
         }
 
-        if let (Some(base_str), Some('.')) = (options.base.as_ref(), value.chars().nth(0)) {
+        if let (Some(base_str), Some('.')) = (options.base.as_ref(), value.chars().next()) {
             // explicit base - directly rewrite relative urls into absolute url
             // to avoid generating extra imports
             // Allow for full hostnames provided in options.base
-            let Ok(base) = parse_url(&base_str) else {
+            let Ok(base) = parse_url(base_str) else {
                 bail!(TransformAssetUrlsBaseUrlParseFailed)
             };
 
@@ -127,7 +127,7 @@ fn transform_element_asset_urls(
             }
 
             // Join the path using `PathBuf` instead of `Url` to mimic the official compiler
-            let path_buf: PathBuf = [base.path(), strip_prefix(&value)].iter().collect();
+            let path_buf: PathBuf = [base.path(), strip_prefix(value)].iter().collect();
 
             for path_cmp in path_buf.components() {
                 match path_cmp {
@@ -168,7 +168,7 @@ fn transform_element_asset_urls(
         // Parsing using `url::Url` will actively remove any prefix `.` symbols or similar.
         // Unfortunately, reproducing `Node.js`s non-standard `url.parse` in Rust is not possible/feasible,
         // thus we assume that passed string is a valid path already.
-        let mut path = strip_prefix(&value);
+        let mut path = strip_prefix(value);
         let mut hash = None;
         if let Some(hash_pos) = path.find('#') {
             hash = Some(&path[hash_pos..]);
@@ -288,7 +288,7 @@ fn strip_prefix(url: &str) -> &str {
 }
 
 fn is_relative_url(url: &FervidAtom) -> bool {
-    let first_char = url.chars().nth(0);
+    let first_char = url.chars().next();
     matches!(first_char, Some('.' | '~' | '@'))
 }
 
