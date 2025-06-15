@@ -81,6 +81,12 @@ napi-version new_version:
     git add yarn.lock && \
     git add .yarn/install-state.gz
 
+# Commit staged NAPI changes from `napi-version` with a message which would trigger CI release
+napi-publish-commit:
+    cd {{justfile_directory()}}/crates/fervid_napi && \
+    VERSION=$(node -p "require('./package.json').version") && \
+    git commit -m "@fervid/napi@$VERSION"
+
 # --- Other ---
 
 # Run spell check across the project using cspell
