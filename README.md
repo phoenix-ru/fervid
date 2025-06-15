@@ -94,6 +94,16 @@ Deno bindings for usage in Deno.
 These crates allow authoring plugins for `fervid` in Rust using dynamically loaded libraries (`.so`, `.dll` and `.dylib`).
 These plugins allow anyone to customize how a Vue SFC is parsed, optimized and code-generated.
 
+## 🧑‍💻 Contributing
+
+This project uses [`just`](https://github.com/casey/just) as a task runner to simplify building, testing, and developing across all crates.
+
+To get started:
+- [install](https://github.com/casey/just?tab=readme-ov-file#installation) `just`;
+- Run `just` or check [justfile](./justfile) to see available commands.
+
+Any contributions are welcome!
+
 ## Roadmap
 Parser
 - [x] Template parsing
