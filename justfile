@@ -68,6 +68,19 @@ napi-build-release:
 napi-test:
     cd {{justfile_directory()}}/crates/fervid_napi && yarn test
 
+# Bump `@fervid/napi` version and stage a commit. `new_version` is a parameter of `yarn version`
+napi-version new_version:
+    cd {{justfile_directory()}}/crates/fervid_napi && \
+    yarn version {{new_version}} && \
+    yarn run version && \
+    VERSION=$(node -p "require('./package.json').version") && \
+    jq --arg v "$VERSION" '.optionalDependencies |= with_entries(.value = $v)' package.json > tmp && mv tmp package.json && \
+    yarn && \
+    git add package.json && \
+    git add npm/*/package.json && \
+    git add yarn.lock && \
+    git add .yarn/install-state.gz
+
 # --- Other ---
 
 # Run spell check across the project using cspell
