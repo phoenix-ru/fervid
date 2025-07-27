@@ -1,0 +1,28 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`dynamic v-on + static v-on should merged 1`] = `
+"import { createElementBlock as _createElementBlock, openBlock as _openBlock, toHandlerKey as _toHandlerKey } from "vue";
+export default {
+    __name: "example",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock("input", {
+            onBlur: (...args)=>_ctx.onBlur && _ctx.onBlur(...args),
+            [_toHandlerKey(_ctx.validateEvent)]: (...args)=>_ctx.onValidateEvent && _ctx.onValidateEvent(...args)
+        }));
+    }
+};
+"
+`;
+
+exports[`should work 1`] = `
+"import { createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, openBlock as _openBlock, toDisplayString as _toDisplayString } from "vue";
+export default {
+    __name: "example",
+    render (_ctx, _cache, $props, $setup, $data, $options) {
+        return (_openBlock(), _createElementBlock("div", null, [
+            _createElementVNode("p", null, _toDisplayString(_ctx.render), 1)
+        ]));
+    }
+};
+"
+`;

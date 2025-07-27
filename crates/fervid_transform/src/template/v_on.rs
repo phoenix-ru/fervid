@@ -1,9 +1,11 @@
-use fervid_core::{fervid_atom, BindingTypes, FervidAtom, IntoIdent, StrOrExpr, VOnDirective};
+use fervid_core::{
+    fervid_atom, BindingTypes, FervidAtom, IntoIdent, StrOrExpr, VOnDirective, VueImports,
+};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
         ArrowExpr, BinExpr, BinaryOp, BindingIdent, BlockStmtOrExpr, CallExpr, Callee, Expr,
-        ExprOrSpread, Pat, RestPat,
+        ExprOrSpread, Ident, Pat, RestPat,
     },
 };
 
@@ -24,6 +26,26 @@ impl TemplateVisitor<'_> {
                 self.ctx
                     .bindings_helper
                     .transform_expr(dynamic_event, scope_to_use);
+
+                // _toHandlerKey
+                let to_handler_key_ident = VueImports::ToHandlerKey.as_atom();
+                self.ctx.bindings_helper.vue_imports |= VueImports::ToHandlerKey;
+
+                // Wrap in `_toHandlerKey`
+                let value = std::mem::take(dynamic_event);
+                *dynamic_event = Box::new(Expr::Call(CallExpr {
+                    span: DUMMY_SP,
+                    ctxt: Default::default(),
+                    callee: Callee::Expr(Box::new(Expr::Ident(Ident {
+                        sym: to_handler_key_ident,
+                        ..Default::default()
+                    }))),
+                    args: vec![ExprOrSpread {
+                        spread: None,
+                        expr: value,
+                    }],
+                    type_args: None,
+                }));
             }
 
             None => {}
