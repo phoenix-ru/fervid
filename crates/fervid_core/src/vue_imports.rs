@@ -57,6 +57,8 @@ flags! {
         Teleport,
         #[strum(serialize = "_toDisplayString")]
         ToDisplayString,
+        #[strum(serialize = "_toHandlerKey")]
+        ToHandlerKey,
         #[strum(serialize = "_Transition")]
         Transition,
         #[strum(serialize = "_TransitionGroup")]
