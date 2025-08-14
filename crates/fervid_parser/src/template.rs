@@ -339,7 +339,7 @@ mod tests {
         );
         assert!(
             // Second v-pre should not be recognized as a directive, because it is inside the first
-            matches!(input_attr_2, AttributeOrBinding::RegularAttribute { name, value, .. } if name == "v-pre" && value == "")
+            matches!(input_attr_2, AttributeOrBinding::RegularAttribute { name, value, .. } if name == "v-pre" && value.is_empty())
         );
     }
 

@@ -232,6 +232,7 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
 /// - it handles the standard flow without plugins;
 /// - it compiles to `String` instead of SWC module;
 /// - it does not report errors.
+///
 /// This implementation is mostly meant for the WASM and NAPI beta.
 /// Later on, it will be replaced with a stable API.
 pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String> {

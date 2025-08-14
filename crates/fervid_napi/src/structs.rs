@@ -8,6 +8,7 @@ use napi_derive::napi;
 use swc_core::common::Spanned;
 
 /// Fervid: a compiler for Vue.js written in Rust
+#[allow(unexpected_cfgs)]
 #[napi(js_name = "Compiler")]
 #[derive(Clone)]
 pub struct FervidJsCompiler {

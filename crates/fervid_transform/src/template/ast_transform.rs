@@ -253,12 +253,12 @@ fn optimize_v_if_plus_v_for(mut parent: ElementNode) -> ElementNode {
         .starting_tag
         .directives
         .as_ref()
-        .map_or(false, |d| d.v_for.is_some());
+        .is_some_and(|d| d.v_for.is_some());
     let child_has_v_for = child
         .starting_tag
         .directives
         .as_ref()
-        .map_or(false, |d| d.v_for.is_some());
+        .is_some_and(|d| d.v_for.is_some());
     if parent_has_v_for && child_has_v_for {
         return parent;
     }

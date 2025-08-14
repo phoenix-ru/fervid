@@ -257,7 +257,7 @@ fn parse_element_starting_tag(input: &str) -> IResult<&str, (StartingTag, bool)>
         alt((tag(">"), tag("/>"))),
     ))(input)?;
 
-    #[cfg(dbg_print)]
+    #[cfg(feature = "dbg_print")]
     {
         println!("Tag name: {:?}", tag_name);
         println!("Attributes: {:?}", attributes);

@@ -205,7 +205,7 @@ impl<'s> ScopedTransformer<'s> {
     }
 
     /// 0. Prepare what selector to add.
-    /// It is always an attribute selector, e.g. `[data-v-abcd1234]`
+    ///    It is always an attribute selector, e.g. `[data-v-abcd1234]`
     fn get_subclass_selector_to_add(&self) -> SubclassSelector {
         SubclassSelector::Attribute(Box::new(AttributeSelector {
             span: DUMMY_SP,

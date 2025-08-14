@@ -12,11 +12,11 @@ license = "Apache-2.0"
 [lib]
 crate-type = ["cdylib"]
 
-[target.'cfg(not(target_os = "linux"))'.dependencies]
-mimalloc-rust = "0.2"
+# [target.'cfg(not(target_os = "linux"))'.dependencies]
+# mimalloc-rust = "0.2"
 
-[target.'cfg(all(target_os = "linux", not(all(target_env = "musl", target_arch = "aarch64"))))'.dependencies]
-mimalloc-rust = { version = "0.2", features = ["local-dynamic-tls"] }
+# [target.'cfg(all(target_os = "linux", not(all(target_env = "musl", target_arch = "aarch64"))))'.dependencies]
+# mimalloc-rust = { version = "0.2", features = ["local-dynamic-tls"] }
 
 [dependencies]
 fervid = { path = "../fervid", version = "0.2" }

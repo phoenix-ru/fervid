@@ -105,11 +105,11 @@ impl TransformSfcContext {
         bindings_helper.is_ts = sfc_descriptor
             .script_setup
             .as_ref()
-            .map_or(false, recognize_lang)
+            .is_some_and(recognize_lang)
             || sfc_descriptor
                 .script_legacy
                 .as_ref()
-                .map_or(false, recognize_lang);
+                .is_some_and(recognize_lang);
 
         // Set inline flag in `BindingsHelper`
         if bindings_helper.is_prod && sfc_descriptor.script_setup.is_some() {

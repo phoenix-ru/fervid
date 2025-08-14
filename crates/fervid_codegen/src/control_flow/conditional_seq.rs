@@ -84,7 +84,7 @@ fn should_wrap_in_block(element_node: &ElementNode) -> bool {
         .starting_tag
         .directives
         .as_ref()
-        .map_or(true, |d| d.v_for.is_none())
+        .is_none_or(|d| d.v_for.is_none())
 }
 
 #[cfg(test)]
