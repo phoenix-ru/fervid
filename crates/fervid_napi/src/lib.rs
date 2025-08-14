@@ -4,7 +4,7 @@
 // #[global_allocator]
 // static ALLOC: mimalloc_rust::GlobalMiMalloc = mimalloc_rust::GlobalMiMalloc;
 
-use std::{borrow::Cow, rc::Rc};
+use std::{borrow::Cow, marker::PhantomData, rc::Rc, sync::Arc};
 
 use fervid_transform::{PropsDestructureConfig, TransformAssetUrlsConfig};
 use napi::bindgen_prelude::*;
@@ -22,7 +22,9 @@ impl FervidJsCompiler {
     #[napi(constructor)]
     pub fn new(options: Option<FervidJsCompilerOptions>) -> Self {
         let options = options.unwrap_or_default();
-        FervidJsCompiler { options }
+        FervidJsCompiler {
+            options: Arc::new(options),
+        }
     }
 
     #[napi]
@@ -47,6 +49,7 @@ impl FervidJsCompiler {
             compiler: self.to_owned(),
             input: source,
             options,
+            env: PhantomData,
         };
         AsyncTask::with_optional_signal(task, signal)
     }
@@ -97,14 +100,14 @@ fn compile_impl(
     compile(source, compile_options).map_err(|e| Error::from_reason(e.to_string()))
 }
 
-fn convert(
+fn convert<'env>(
     env: Env,
     mut result: fervid::CompileResult,
     options: &FervidCompileOptions,
-) -> CompileResult {
+) -> CompileResult<'env> {
     // Serialize bindings if requested
     let setup_bindings = if matches!(options.output_setup_bindings, Some(true)) {
-        env.create_object()
+        Object::new(&env)
             .map(|mut obj| {
                 for binding in result.setup_bindings.drain(..) {
                     let _ = obj.set(
@@ -137,15 +140,16 @@ fn convert(
     }
 }
 
-pub struct CompileTask {
+pub struct CompileTask<'env> {
     compiler: FervidJsCompiler,
     input: String,
     options: FervidCompileOptions,
+    env: PhantomData<&'env ()>,
 }
 
 #[napi]
-impl Task for CompileTask {
-    type JsValue = CompileResult;
+impl<'env> Task for CompileTask<'env> {
+    type JsValue = CompileResult<'env>;
     type Output = fervid::CompileResult;
 
     fn compute(&mut self) -> napi::Result<Self::Output> {

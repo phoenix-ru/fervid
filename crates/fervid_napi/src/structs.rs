@@ -1,18 +1,17 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use fervid::FervidAtom;
 use fervid_transform::TransformAssetUrlsConfigOptions;
 use fxhash::FxHashMap;
-use napi::{Either, JsObject};
+use napi::{bindgen_prelude::Object, Either};
 use napi_derive::napi;
 use swc_core::common::Spanned;
 
 /// Fervid: a compiler for Vue.js written in Rust
-#[allow(unexpected_cfgs)]
 #[napi(js_name = "Compiler")]
 #[derive(Clone)]
 pub struct FervidJsCompiler {
-    pub options: FervidJsCompilerOptions,
+    pub options: Arc<FervidJsCompilerOptions>,
 }
 
 /// Raw options passed from the Node.js side
@@ -115,14 +114,14 @@ pub struct FervidTransformAssetUrlsOptions {
 }
 
 #[napi(object)]
-pub struct CompileResult {
+pub struct CompileResult<'env> {
     pub code: String,
     pub styles: Vec<Style>,
     pub errors: Vec<SerializedError>,
     pub custom_blocks: Vec<CustomBlock>,
     pub source_map: Option<String>,
     #[napi(ts_type = "Record<string, BindingTypes> | undefined")]
-    pub setup_bindings: Option<JsObject>,
+    pub setup_bindings: Option<Object<'env>>,
 }
 
 #[napi(object)]

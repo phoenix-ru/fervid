@@ -26,8 +26,8 @@ fervid_transform = { path = "../fervid_transform", version = "0.2" }
 swc_core = { workspace = true }
 fxhash = { workspace = true }
 
-napi = "2"
-napi-derive = "2"
+napi = "3"
+napi-derive = "3"
 
 [build-dependencies]
 napi-build = "2"
