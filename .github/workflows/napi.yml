@@ -203,6 +203,7 @@ jobs:
         with:
           node-version: 22
           cache: yarn
+          cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Install
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -318,6 +319,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: yarn
+          cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
           architecture: ${{ matrix.settings.architecture }}
       - name: Install dependencies
         run: yarn install
@@ -390,6 +392,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: yarn
+          cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Output docker params
         id: docker
         run: |
@@ -448,6 +451,7 @@ jobs:
         with:
           node-version: 22
           cache: yarn
+          cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Install dependencies
         run: |
           yarn config set supportedArchitectures.cpu "wasm32"
@@ -482,6 +486,7 @@ jobs:
         with:
           node-version: 22
           cache: yarn
+          cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Install dependencies
         run: yarn install
       - name: Create npm dirs
