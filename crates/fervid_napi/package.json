@@ -107,21 +107,6 @@
     "singleQuote": true,
     "arrowParens": "always"
   },
-  "optionalDependencies": {
-    "@fervid/napi-android-arm-eabi": "0.4.1",
-    "@fervid/napi-android-arm64": "0.4.1",
-    "@fervid/napi-darwin-arm64": "0.4.1",
-    "@fervid/napi-darwin-x64": "0.4.1",
-    "@fervid/napi-freebsd-x64": "0.4.1",
-    "@fervid/napi-linux-arm-gnueabihf": "0.4.1",
-    "@fervid/napi-linux-arm64-gnu": "0.4.1",
-    "@fervid/napi-linux-arm64-musl": "0.4.1",
-    "@fervid/napi-linux-x64-gnu": "0.4.1",
-    "@fervid/napi-linux-x64-musl": "0.4.1",
-    "@fervid/napi-win32-arm64-msvc": "0.4.1",
-    "@fervid/napi-win32-ia32-msvc": "0.4.1",
-    "@fervid/napi-win32-x64-msvc": "0.4.1"
-  },
   "packageManager": "yarn@4.9.2",
   "workspaces": [
     "npm/*"
