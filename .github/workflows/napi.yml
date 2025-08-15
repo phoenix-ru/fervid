@@ -198,6 +198,10 @@ jobs:
         working-directory: ${{ env.WORKING_DIR_PATH }}
     steps:
       - uses: actions/checkout@v5
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Enable Corepack
         run: corepack enable
       - name: Setup node
