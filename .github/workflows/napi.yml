@@ -198,7 +198,9 @@ jobs:
         working-directory: ${{ env.WORKING_DIR_PATH }}
     steps:
       - uses: actions/checkout@v5
+      # Windows needs double setup-node due to corepack
       - name: Setup node
+        if: ${{ contains(matrix.settings.host, 'windows') }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -322,6 +324,12 @@ jobs:
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v5
+      # Windows needs double setup-node due to corepack
+      - name: Setup node
+        if: ${{ contains(matrix.settings.host, 'windows') }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
       - name: Enable Corepack
         run: corepack enable
       - name: Setup node
@@ -379,7 +387,7 @@ jobs:
   #       run: docker run --rm -e CI=true -v $(pwd):/build -w /build node:${{ matrix.node }}-slim sh -c "corepack enable && yarn test"
 
   test-linux-binding:
-    name: Test Linux ${{ matrix.target }} - node@${{ matrix.node }}
+    name: Test bindings on ${{ matrix.target }} - node@${{ matrix.node }}
     needs:
       - build
     strategy:
@@ -448,7 +456,7 @@ jobs:
         uses: addnab/docker-run-action@v3
         with:
           image: ${{ steps.docker.outputs.IMAGE }}
-          options: -v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }} --platform ${{ steps.docker.outputs.PLATFORM }}
+          options: -v ${{ env.WORKING_DIR_PATH }}:/build -w /build -e CI=true --platform ${{ steps.docker.outputs.PLATFORM }}
           run: corepack enable && yarn test
 
   test-wasi:
