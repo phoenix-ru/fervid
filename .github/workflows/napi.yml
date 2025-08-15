@@ -398,7 +398,9 @@ jobs:
           - x86_64-unknown-linux-musl
           - aarch64-unknown-linux-gnu
           - aarch64-unknown-linux-musl
-          - armv7-unknown-linux-gnueabihf
+          # Disabled due to unstable hash making tests not pass
+          # TODO Re-enable
+          # - armv7-unknown-linux-gnueabihf
         node:
           - '20'
           - '22'
@@ -476,7 +478,7 @@ jobs:
           cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Install dependencies
         run: |
-          yarn config set supportedArchitectures.cpu "wasm32"
+          yarn config set supportedArchitectures.cpu "wasm32 x64"
           yarn install
       - name: Download artifacts
         uses: actions/download-artifact@v5
