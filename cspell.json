@@ -140,12 +140,14 @@
     "justfile",
     "clippy",
     "dashmap",
-    "ropey"
+    "ropey",
+    "indexmap"
   ],
   "ignorePaths": [
     ".github/**",
     "**/*.toml",
     "pnpm-lock.yaml",
+    "yarn.lock",
     "README.md",
     "**/*.snap",
     "crates/fervid_napi/__tests__/defineProps.spec.ts",
