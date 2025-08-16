@@ -485,7 +485,7 @@ jobs:
         uses: actions/download-artifact@v5
         with:
           name: bindings-wasm32-wasip1-threads
-          path: .
+          path: ${{ env.WORKING_DIR_PATH }}
       - name: List packages
         run: ls -R .
         shell: bash
