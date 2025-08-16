@@ -72,7 +72,7 @@ jobs:
           #   osxcross: true
           #   zig: true
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
       - name: Cache rust artifacts
         uses: Swatinem/rust-cache@v2
         with:
