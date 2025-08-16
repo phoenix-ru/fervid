@@ -8,7 +8,8 @@ use std::{
 
 use fervid_core::{fervid_atom, FervidAtom, IntoIdent, SfcScriptBlock};
 use flagset::FlagSet;
-use fxhash::FxHashMap as HashMap;
+use fxhash::{FxBuildHasher, FxHashMap as HashMap};
+use indexmap::IndexMap;
 use itertools::Itertools;
 use phf::{phf_set, Set};
 use strum_macros::{AsRefStr, EnumString, IntoStaticStr};
@@ -41,10 +42,11 @@ static SUPPORTED_BUILTINS_SET: Set<&'static str> = phf_set! {
 };
 
 pub type ResolutionResult<T> = Result<T, ScriptError>;
+pub type FxIndexMap<K, V> = IndexMap<K, V, FxBuildHasher>;
 
 #[derive(Default, Debug)]
 pub struct ResolvedElements {
-    pub props: HashMap<FervidAtom, ResolvedProp>,
+    pub props: FxIndexMap<FervidAtom, ResolvedProp>,
     pub calls: Vec<Either<TsFnType, TsCallSignatureDecl>>,
 }
 
@@ -768,13 +770,14 @@ fn resolve_index_type(
     }) = index_type.as_ref()
     {
         // Values of the map
-        for (_key, value) in props.drain() {
+        for (_key, value) in props.drain(..) {
             implementation!(value);
         }
     } else {
         // Values of the string type
         for key in resolve_string_type(ctx, index_type, scope)? {
-            let Some(value) = props.remove(&key) else {
+            // Note: this operation may be expensive, but we need it to preserve the order (for tests)
+            let Some(value) = props.shift_remove(&key) else {
                 continue;
             };
 
@@ -2775,7 +2778,7 @@ impl Spanned for ResolvedProp {
 mod tests {
     use fervid_core::SfcDescriptor;
     use fxhash::FxHashSet;
-    use swc_core::{alloc::collections::FxHashMap, ecma::ast::IdentName};
+    use swc_core::ecma::ast::IdentName;
     use swc_ecma_parser::TsSyntax;
 
     use super::*;
@@ -4092,11 +4095,11 @@ mod tests {
 
     #[derive(Debug)]
     struct ResolveResult {
-        props: FxHashMap<FervidAtom, TypesSet>,
+        props: FxIndexMap<FervidAtom, TypesSet>,
         calls: Vec<Either<TsFnType, TsCallSignatureDecl>>,
         #[allow(dead_code)]
         deps: FxHashSet<String>,
-        raw_props: HashMap<FervidAtom, ResolvedProp>,
+        raw_props: FxIndexMap<FervidAtom, ResolvedProp>,
     }
 
     fn resolve(code: &str) -> ResolveResult {
@@ -4186,7 +4189,7 @@ mod tests {
 
         let raw = resolve_type_elements(&mut ctx, target)?;
 
-        let mut props = FxHashMap::default();
+        let mut props = FxIndexMap::default();
         let raw_props = raw.props;
         for (prop_name, prop_type) in raw_props.iter() {
             props.insert(

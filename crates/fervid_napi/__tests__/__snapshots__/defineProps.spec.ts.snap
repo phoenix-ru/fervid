@@ -98,31 +98,7 @@ exports[`defineProps > should escape names w/ special symbols 1`] = `
 "import { defineComponent as _defineComponent } from "vue";
 export default _defineComponent({
     props: {
-        "aste*risk": {
-            type: null,
-            required: true
-        },
-        "back\\\\slash": {
-            type: null,
-            required: true
-        },
-        "semi;colon": {
-            type: null,
-            required: true
-        },
-        "curly{bra}ces": {
-            type: null,
-            required: true
-        },
-        "amper&sand": {
-            type: null,
-            required: true
-        },
-        "round(brack)ets": {
-            type: null,
-            required: true
-        },
-        "pl+us": {
+        "spa ce": {
             type: null,
             required: true
         },
@@ -130,23 +106,11 @@ export default _defineComponent({
             type: null,
             required: true
         },
-        "single'quote": {
+        'double"quote': {
             type: null,
             required: true
         },
-        "square[brack]ets": {
-            type: null,
-            required: true
-        },
-        "pi|pe": {
-            type: null,
-            required: true
-        },
-        "da-sh": {
-            type: null,
-            required: true
-        },
-        "til~de": {
+        "hash#tag": {
             type: null,
             required: true
         },
@@ -154,19 +118,27 @@ export default _defineComponent({
             type: null,
             required: true
         },
-        "equal=sign": {
+        "percentage%sign": {
             type: null,
             required: true
         },
-        'double"quote': {
+        "amper&sand": {
             type: null,
             required: true
         },
-        "angle<brack>ets": {
+        "single'quote": {
             type: null,
             required: true
         },
-        "spa ce": {
+        "round(brack)ets": {
+            type: null,
+            required: true
+        },
+        "aste*risk": {
+            type: null,
+            required: true
+        },
+        "pl+us": {
             type: null,
             required: true
         },
@@ -186,15 +158,15 @@ export default _defineComponent({
             type: null,
             required: true
         },
-        "at@sign": {
+        "semi;colon": {
             type: null,
             required: true
         },
-        "percentage%sign": {
+        "angle<brack>ets": {
             type: null,
             required: true
         },
-        "ca^ret": {
+        "equal=sign": {
             type: null,
             required: true
         },
@@ -202,11 +174,39 @@ export default _defineComponent({
             type: null,
             required: true
         },
-        "hash#tag": {
+        "at@sign": {
+            type: null,
+            required: true
+        },
+        "square[brack]ets": {
+            type: null,
+            required: true
+        },
+        "back\\\\slash": {
+            type: null,
+            required: true
+        },
+        "ca^ret": {
             type: null,
             required: true
         },
         "back\`tick": {
+            type: null,
+            required: true
+        },
+        "curly{bra}ces": {
+            type: null,
+            required: true
+        },
+        "pi|pe": {
+            type: null,
+            required: true
+        },
+        "da-sh": {
+            type: null,
+            required: true
+        },
+        "til~de": {
             type: null,
             required: true
         }
@@ -390,76 +390,47 @@ exports[`defineProps > w/ type 1`] = `
 "import { defineComponent as _defineComponent } from "vue";
 export default _defineComponent({
     props: {
-        unknownIntersection: {
-            type: Object,
-            required: true
-        },
-        unknown: {
-            type: null,
-            required: true
-        },
-        unknownUnionWithFunction: {
-            type: Function,
-            required: true,
-            skipCheck: true
-        },
-        set: {
-            type: Set,
-            required: true
-        },
-        foo: {
-            type: [
-                null,
-                Function
-            ],
-            required: true
-        },
-        intersection: {
-            type: Object,
-            required: true
-        },
-        unknownUnionWithBoolean: {
-            type: Boolean,
-            required: true,
-            skipCheck: true
-        },
-        recordRef: {
-            type: Object,
-            required: true
-        },
-        literalUnionMixed: {
-            type: [
-                String,
-                Number,
-                Boolean
-            ],
-            required: true
-        },
-        literal: {
+        string: {
             type: String,
+            required: true
+        },
+        number: {
+            type: Number,
+            required: true
+        },
+        boolean: {
+            type: Boolean,
+            required: true
+        },
+        object: {
+            type: Object,
+            required: true
+        },
+        objectLiteral: {
+            type: Object,
+            required: true
+        },
+        fn: {
+            type: Function,
+            required: true
+        },
+        functionRef: {
+            type: Function,
             required: true
         },
         objectRef: {
             type: Object,
             required: true
         },
-        nonNull: {
-            type: String,
-            required: true
-        },
-        intersection2: {
-            type: String,
-            required: true
-        },
-        optional: {
-            type: null,
-            required: false
-        },
-        extract: {
-            type: Number,
+        dateTime: {
+            type: Date,
             required: true
         },
         array: {
+            type: Array,
+            required: true
+        },
+        arrayRef: {
             type: Array,
             required: true
         },
@@ -467,20 +438,44 @@ export default _defineComponent({
             type: Array,
             required: true
         },
-        alias: {
-            type: Array,
+        set: {
+            type: Set,
+            required: true
+        },
+        literal: {
+            type: String,
+            required: true
+        },
+        optional: {
+            type: null,
+            required: false
+        },
+        recordRef: {
+            type: Object,
             required: true
         },
         interface: {
             type: Object,
             required: true
         },
+        alias: {
+            type: Array,
+            required: true
+        },
+        method: {
+            type: Function,
+            required: true
+        },
+        symbol: {
+            type: Symbol,
+            required: true
+        },
         error: {
             type: Error,
             required: true
         },
-        uppercase: {
-            type: String,
+        extract: {
+            type: Number,
             required: true
         },
         exclude: {
@@ -488,6 +483,18 @@ export default _defineComponent({
                 Number,
                 Boolean
             ],
+            required: true
+        },
+        uppercase: {
+            type: String,
+            required: true
+        },
+        params: {
+            type: Array,
+            required: true
+        },
+        nonNull: {
+            type: String,
             required: true
         },
         objectOrFn: {
@@ -504,65 +511,58 @@ export default _defineComponent({
             ],
             required: true
         },
-        arrayRef: {
-            type: Array,
-            required: true
-        },
-        boolean: {
-            type: Boolean,
-            required: true
-        },
-        unknownUnion: {
-            type: null,
+        literalUnion: {
+            type: String,
             required: true
         },
         literalUnionNumber: {
             type: Number,
             required: true
         },
-        object: {
+        literalUnionMixed: {
+            type: [
+                String,
+                Number,
+                Boolean
+            ],
+            required: true
+        },
+        intersection: {
             type: Object,
             required: true
         },
-        objectLiteral: {
+        intersection2: {
+            type: String,
+            required: true
+        },
+        foo: {
+            type: [
+                null,
+                Function
+            ],
+            required: true
+        },
+        unknown: {
+            type: null,
+            required: true
+        },
+        unknownUnion: {
+            type: null,
+            required: true
+        },
+        unknownIntersection: {
             type: Object,
             required: true
         },
-        fn: {
+        unknownUnionWithBoolean: {
+            type: Boolean,
+            required: true,
+            skipCheck: true
+        },
+        unknownUnionWithFunction: {
             type: Function,
-            required: true
-        },
-        string: {
-            type: String,
-            required: true
-        },
-        number: {
-            type: Number,
-            required: true
-        },
-        dateTime: {
-            type: Date,
-            required: true
-        },
-        method: {
-            type: Function,
-            required: true
-        },
-        symbol: {
-            type: Symbol,
-            required: true
-        },
-        params: {
-            type: Array,
-            required: true
-        },
-        literalUnion: {
-            type: String,
-            required: true
-        },
-        functionRef: {
-            type: Function,
-            required: true
+            required: true,
+            skipCheck: true
         }
     },
     __name: "anonymous",
@@ -633,7 +633,6 @@ exports[`defineProps > withDefaults (dynamic) w/ production mode 1`] = `
 import { defineComponent as _defineComponent, mergeDefaults as _mergeDefaults } from "vue";
 export default _defineComponent({
     props: _mergeDefaults({
-        qux: {},
         foo: {
             type: Function
         },
@@ -645,7 +644,8 @@ export default _defineComponent({
                 Boolean,
                 Function
             ]
-        }
+        },
+        qux: {}
     }, {
         ...defaults
     }),
@@ -716,6 +716,19 @@ exports[`defineProps > withDefaults (static) 1`] = `
 "import { defineComponent as _defineComponent } from "vue";
 export default _defineComponent({
     props: {
+        foo: {
+            type: String,
+            required: false,
+            default: 'hi'
+        },
+        bar: {
+            type: Number,
+            required: false
+        },
+        baz: {
+            type: Boolean,
+            required: true
+        },
         qux: {
             type: Function,
             required: false,
@@ -741,19 +754,6 @@ export default _defineComponent({
             get default () {
                 return 'fred';
             }
-        },
-        foo: {
-            type: String,
-            required: false,
-            default: 'hi'
-        },
-        bar: {
-            type: Number,
-            required: false
-        },
-        baz: {
-            type: Boolean,
-            required: true
         }
     },
     __name: "anonymous",
@@ -772,9 +772,6 @@ exports[`defineProps > withDefaults (static) w/ production mode 1`] = `
 "import { defineComponent as _defineComponent } from "vue";
 export default _defineComponent({
     props: {
-        qux: {
-            default: 'hi'
-        },
         foo: {},
         bar: {
             type: Boolean
@@ -785,6 +782,9 @@ export default _defineComponent({
                 Function
             ],
             default: true
+        },
+        qux: {
+            default: 'hi'
         }
     },
     __name: "anonymous",
