@@ -931,6 +931,7 @@ dependencies = [
  "fervid_css",
  "flagset",
  "fxhash",
+ "indexmap",
  "itertools 0.14.0",
  "lazy_static",
  "percent-encoding",

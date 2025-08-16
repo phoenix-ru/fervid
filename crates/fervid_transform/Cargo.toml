@@ -23,6 +23,7 @@ swc_core = { workspace = true, features = ["common", "ecma_ast", "ecma_visit"] }
 itertools = "*"
 url = "2"
 percent-encoding = "*"
+indexmap = "2.10.0"
 
 [dev-dependencies]
 swc_ecma_codegen = { workspace = true }

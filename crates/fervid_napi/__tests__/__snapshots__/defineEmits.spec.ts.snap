@@ -272,10 +272,10 @@ exports[`defineEmits > w/ type (type references in union) 1`] = `
 "import { defineComponent as _defineComponent } from "vue";
 export default _defineComponent({
     emits: [
-        "another",
         "some",
         "emit",
-        "change"
+        "change",
+        "another"
     ],
     __name: "anonymous",
     setup (__props, { emit: __emit, expose: __expose }) {
