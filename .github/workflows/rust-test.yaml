@@ -47,5 +47,11 @@ jobs:
         with:
           shared-key: cargo-test-${{ matrix.os }}
 
+      - name: Install additional deps
+        if: ${{ contains(matrix.os, 'macos') }}
+        run: |
+          brew update
+          brew install meson llvm
+
       - name: Run cargo test
         run: cargo test

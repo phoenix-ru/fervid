@@ -478,7 +478,7 @@ jobs:
           cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Install dependencies
         run: |
-          yarn config set supportedArchitectures.cpu '["current", "wasm32", "x64"]'
+          yarn config set --json supportedArchitectures.cpu '["current", "wasm32", "x64"]'
           yarn config set --json supportedArchitectures.libc '["current", "musl", "gnu"]'
           yarn install
       - name: Download artifacts
