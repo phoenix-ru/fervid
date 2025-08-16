@@ -112,12 +112,12 @@ describe('sfc reactive props destructure', () => {
         func: Function,
         ext: null
     }, {
-        ext: x,
-        __skip_ext: true,
         foo: 1,
         bar: ()=>({}),
         func: ()=>{},
-        __skip_func: true
+        __skip_func: true,
+        ext: x,
+        __skip_ext: true
     })`)
 
         assertCode(content)

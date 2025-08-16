@@ -95,8 +95,10 @@ pub struct BindingsHelper {
     pub template_scopes: Vec<TemplateScope>,
     /// Used for props destructure
     pub props_aliases: HashMap<FervidAtom, FervidAtom>,
-    /// Bindings collected from the props destructure variable declaration
-    pub props_destructured_bindings: HashMap<FervidAtom, PropsDestructureBinding>,
+    /// Bindings collected from the props destructure variable declaration.
+    /// Note that the vec is used here due to the expected small amount of props being destructured,
+    /// whilst this also preserves the order in which props were encountered, useful for testing.
+    pub props_destructured_bindings: Vec<(FervidAtom, PropsDestructureBinding)>,
     /// Used for props destructure to store `rest` of `const { foo, bar, ...rest } = defineProps()`
     pub props_destructure_rest_id: Option<FervidAtom>,
     /// Bindings in `<script setup>`
