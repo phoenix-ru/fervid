@@ -212,8 +212,8 @@ jobs:
           node-version: 22
           cache: yarn
           cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
-      - name: Install
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
         with:
           # Sync with rust-toolchain.toml
           # toolchain: stable

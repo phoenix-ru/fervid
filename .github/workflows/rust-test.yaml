@@ -37,6 +37,11 @@ jobs:
       #   uses: oxidecomputer/actions-rs_toolchain@oxide/master
       #   with:
       #     profile: minimal
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          # Sync with rust-toolchain.toml
+          toolchain: nightly-2025-04-16
       - name: Cache rust artifacts
         uses: Swatinem/rust-cache@v2
         with:
