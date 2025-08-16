@@ -53,5 +53,11 @@ jobs:
           brew update
           brew install meson llvm
 
+      - name: Setup Node.js
+        if: ${{ contains(matrix.os, 'macos') }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Run cargo test
         run: cargo test
