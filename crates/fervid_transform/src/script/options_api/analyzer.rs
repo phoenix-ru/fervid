@@ -1,10 +1,7 @@
-use fervid_core::BindingTypes;
-use swc_core::ecma::{
-    ast::{
-        ArrayLit, ArrowExpr, BlockStmtOrExpr, Decl, Expr, Function, Lit, Module, ModuleDecl,
-        ModuleItem, ObjectLit, Prop, PropName, PropOrSpread, Stmt, Tpl, VarDeclKind,
-    },
-    atoms::JsWord,
+use fervid_core::{BindingTypes, FervidAtom};
+use swc_core::ecma::ast::{
+    ArrayLit, ArrowExpr, BlockStmtOrExpr, Decl, Expr, Function, Lit, Module, ModuleDecl,
+    ModuleItem, ObjectLit, Prop, PropName, PropOrSpread, Stmt, Tpl, VarDeclKind,
 };
 
 use crate::{
@@ -184,7 +181,7 @@ fn analyze_top_level_decl(
 
 /// In Options API, `props`, `inject`, `emits` and `expose` may be arrays
 fn handle_options_array(
-    field: &JsWord,
+    field: &FervidAtom,
     array_lit: &ArrayLit,
     script_legacy_vars: &mut OptionsApiBindings,
 ) {
@@ -201,7 +198,7 @@ fn handle_options_array(
 
 /// Similar to [handle_options_array], only `data`, `setup` may be declared as arrow fns
 fn handle_options_arrow_function(
-    field: &JsWord,
+    field: &FervidAtom,
     arrow_expr: &ArrowExpr,
     script_legacy_vars: &mut OptionsApiBindings,
 ) {
@@ -236,7 +233,7 @@ fn handle_options_arrow_function(
 
 /// Same as [handle_options_arrow_function], `data` and `setup`
 fn handle_options_function(
-    field: &JsWord,
+    field: &FervidAtom,
     function: &Function,
     script_legacy_vars: &mut OptionsApiBindings,
 ) {
@@ -252,7 +249,7 @@ fn handle_options_function(
 }
 
 /// `name`
-fn handle_options_lit(field: &JsWord, lit: &Lit, script_legacy_vars: &mut OptionsApiBindings) {
+fn handle_options_lit(field: &FervidAtom, lit: &Lit, script_legacy_vars: &mut OptionsApiBindings) {
     if *field == *NAME {
         if let Lit::Str(name) = lit {
             script_legacy_vars.name = Some(name.value.to_owned())
@@ -261,7 +258,7 @@ fn handle_options_lit(field: &JsWord, lit: &Lit, script_legacy_vars: &mut Option
 }
 
 /// `name`
-fn handle_options_tpl(field: &JsWord, tpl: &Tpl, script_legacy_vars: &mut OptionsApiBindings) {
+fn handle_options_tpl(field: &FervidAtom, tpl: &Tpl, script_legacy_vars: &mut OptionsApiBindings) {
     if *field == *NAME {
         script_legacy_vars.name = get_string_tpl(tpl);
     }
@@ -269,7 +266,7 @@ fn handle_options_tpl(field: &JsWord, tpl: &Tpl, script_legacy_vars: &mut Option
 
 /// `props`, `computed`, `inject`, `emits`, `components`, `methods`, `directives`
 fn handle_options_obj(
-    field: &JsWord,
+    field: &FervidAtom,
     obj_lit: &ObjectLit,
     script_legacy_vars: &mut OptionsApiBindings,
 ) {

@@ -1,7 +1,6 @@
 use fervid_core::{fervid_atom, BindingTypes, FervidAtom};
-use swc_core::ecma::{
-    ast::{Id, Ident, ImportSpecifier, Module, ModuleDecl, ModuleExportName, ModuleItem},
-    atoms::JsWord,
+use swc_core::ecma::ast::{
+    Id, Ident, ImportSpecifier, Module, ModuleDecl, ModuleExportName, ModuleItem,
 };
 
 use crate::{
@@ -196,7 +195,7 @@ pub fn register_import(
 
 #[inline]
 fn collect_vue_import(
-    imported_word: &JsWord,
+    imported_word: &FervidAtom,
     used_as: Id,
     vue_import_aliases: &mut VueImportAliases,
 ) {

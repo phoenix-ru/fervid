@@ -1460,6 +1460,7 @@ fn module_decl_to_scope(
             global: decl.global,
             id: TsModuleName::Ident(decl.id.to_owned()),
             body: Some(*decl.body.to_owned()),
+            namespace: false,
         };
 
         scope.types.insert(
@@ -2024,6 +2025,7 @@ fn merge_namespaces(to: &mut TsModuleDecl, from: &mut TsModuleDecl) {
                         global: to_decl.declare,
                         id: TsModuleName::Ident(to_decl.id.to_owned()),
                         body: Some((*to_decl.body).to_owned()),
+                        namespace: false,
                     })),
                 })))
         }
@@ -2040,6 +2042,7 @@ fn merge_namespaces(to: &mut TsModuleDecl, from: &mut TsModuleDecl) {
                         global: from_decl.declare,
                         id: TsModuleName::Ident(from_decl.id.to_owned()),
                         body: Some((*from_decl.body).to_owned()),
+                        namespace: false,
                     })),
                 })))
         }
@@ -2072,6 +2075,7 @@ fn merge_namespaces_namespace_decl(to: &mut TsNamespaceDecl, from: &mut TsNamesp
                         global: to_decl.declare,
                         id: TsModuleName::Ident(to_decl.id.to_owned()),
                         body: Some((*to_decl.body).to_owned()),
+                        namespace: false,
                     })),
                 })))
         }
@@ -2088,6 +2092,7 @@ fn merge_namespaces_namespace_decl(to: &mut TsNamespaceDecl, from: &mut TsNamesp
                         global: from_decl.declare,
                         id: TsModuleName::Ident(from_decl.id.to_owned()),
                         body: Some((*from_decl.body).to_owned()),
+                        namespace: false,
                     })),
                 })))
         }

@@ -8,7 +8,7 @@ pub fn parse_js(expr: &str) -> PResult<Box<Expr>> {
         Syntax::Es(Default::default()),
         // EsVersion defaults to es5
         Default::default(),
-        StringInput::new(expr, BytePos(0), BytePos(0)),
+        StringInput::new(expr, BytePos(0), BytePos(expr.len() as u32)),
         None,
     );
 

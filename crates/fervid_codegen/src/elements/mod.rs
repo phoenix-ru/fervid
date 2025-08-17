@@ -1,14 +1,12 @@
 use fervid_core::{
-    AttributeOrBinding, ElementNode, IntoIdent, StartingTag, StrOrExpr, VBindDirective, VueImports,
+    AttributeOrBinding, ElementNode, FervidAtom, IntoIdent, StartingTag, StrOrExpr, VBindDirective,
+    VueImports,
 };
 use swc_core::{
     common::DUMMY_SP,
-    ecma::{
-        ast::{
-            ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Lit, Null, Number, ObjectLit,
-            PropOrSpread, Str,
-        },
-        atoms::JsWord,
+    ecma::ast::{
+        ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Lit, Null, Number, ObjectLit, PropOrSpread,
+        Str,
     },
 };
 
@@ -313,7 +311,7 @@ impl CodegenContext {
         self.maybe_generate_with_directives(create_element_expr, out)
     }
 
-    fn get_element_vmodel_directive_name(&mut self, starting_tag: &StartingTag) -> JsWord {
+    fn get_element_vmodel_directive_name(&mut self, starting_tag: &StartingTag) -> FervidAtom {
         // These cases need special handling of v-model
         // input type=* -> vModelText
         // input type="radio" -> vModelRadio

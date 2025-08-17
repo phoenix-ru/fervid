@@ -2,7 +2,7 @@ use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::{
         ast::{Expr, Ident, Pat},
-        atoms::{Atom, JsWord},
+        atoms::Atom,
     },
 };
 
@@ -190,7 +190,7 @@ pub struct PatchHints {
     /// Patch flags
     pub flags: PatchFlagsSet,
     /// Dynamic props
-    pub props: Vec<JsWord>,
+    pub props: Vec<FervidAtom>,
     /// Whether the node codegen needs to be surrounded by `(openBlock(),`
     pub should_use_block: bool,
 }
@@ -366,7 +366,7 @@ pub struct VBindDirective {
     /// .attr modifier
     pub is_attr: bool,
     /// Byte location in source
-    pub span: Span,
+    pub span: Span, // TODO Add constant type attribute to allow hoisting
 }
 
 /// `v-model`
