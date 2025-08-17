@@ -652,8 +652,6 @@ fn to_camel_case(raw: &str, out: &mut String) {
 
 #[cfg(test)]
 mod tests {
-    use swc_core::common::DUMMY_SP;
-
     use super::*;
 
     #[test]
@@ -910,7 +908,10 @@ mod tests {
             let mut vue_directives = None;
             let result = parser.try_parse_directive(
                 Attribute {
-                    span: DUMMY_SP,
+                    span: Span {
+                        lo: BytePos(1),
+                        hi: BytePos(name.len() as u32),
+                    },
                     namespace: None,
                     prefix: None,
                     name: FervidAtom::from(name),
@@ -1175,7 +1176,10 @@ mod tests {
         let mut vue_directives = None;
         let result = parser.try_parse_directive(
             Attribute {
-                span: DUMMY_SP,
+                span: Span {
+                    lo: BytePos(1),
+                    hi: BytePos((name.len() + value.len() + 3) as u32),
+                },
                 namespace: None,
                 prefix: None,
                 name: FervidAtom::from(name),
@@ -1197,7 +1201,10 @@ mod tests {
         let mut vue_directives = None;
         let result = parser.try_parse_directive(
             Attribute {
-                span: DUMMY_SP,
+                span: Span {
+                    lo: BytePos(1),
+                    hi: BytePos((name.len() + value.len() + 3) as u32),
+                },
                 namespace: None,
                 prefix: None,
                 name: FervidAtom::from(name),
@@ -1224,7 +1231,10 @@ mod tests {
         let mut vue_directives = None;
         let result = parser.try_parse_directive(
             Attribute {
-                span: DUMMY_SP,
+                span: Span {
+                    lo: BytePos(1),
+                    hi: BytePos((name.len() + value.len() + 3) as u32),
+                },
                 namespace: None,
                 prefix: None,
                 name: FervidAtom::from(name),

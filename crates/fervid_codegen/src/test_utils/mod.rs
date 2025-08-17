@@ -25,11 +25,11 @@ pub fn to_str(swc_node: impl Node) -> String {
 
     let _ = swc_node.emit_with(&mut emitter);
 
-    String::from_utf8(buff).unwrap()
+    String::from_utf8(buff).expect("buff must be a valid utf8 string")
 }
 
 pub fn js(raw: &str) -> Box<Expr> {
-    js_polyfill::parse_js(raw).unwrap()
+    js_polyfill::parse_js(raw).expect("input must be a valid js")
 }
 
 /// TEST ONLY

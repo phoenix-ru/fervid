@@ -267,10 +267,10 @@ const emit = defineEmits(['a', 'b'])
 
     assertCode(content)
     expect(content).toMatch(`emits: [
-        "another",
         "some",
         "emit",
-        "change"
+        "change",
+        "another"
     ]`)
   })
 

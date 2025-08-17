@@ -13,7 +13,7 @@ interface CompileOptions {
 
 function compile(opts: CompileOptions) {
   const source = `<template>${opts.source}</template>`
-  
+
   const compilerOptions: FervidJsCompilerOptions = {
     template: {
       transformAssetUrls: opts.transformAssetUrls

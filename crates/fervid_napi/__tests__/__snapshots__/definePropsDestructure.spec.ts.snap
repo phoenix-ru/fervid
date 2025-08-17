@@ -73,12 +73,12 @@ export default {
         func: Function,
         ext: null
     }, {
-        ext: x,
-        __skip_ext: true,
         foo: 1,
         bar: ()=>({}),
         func: ()=>{},
-        __skip_func: true
+        __skip_func: true,
+        ext: x,
+        __skip_ext: true
     }),
     __name: "anonymous"
 };
@@ -104,15 +104,6 @@ exports[`sfc reactive props destructure > default values w/ type declaration & k
 "import { defineComponent as _defineComponent } from "vue";
 export default _defineComponent({
     props: {
-        "onUpdate:modelValue": {
-            type: Function,
-            required: true
-        },
-        "foo:bar": {
-            type: String,
-            required: true,
-            default: 'foo-bar'
-        },
         foo: {
             type: Number,
             required: true,
@@ -122,6 +113,15 @@ export default _defineComponent({
             type: Number,
             required: true,
             default: 2
+        },
+        "foo:bar": {
+            type: String,
+            required: true,
+            default: 'foo-bar'
+        },
+        "onUpdate:modelValue": {
+            type: Function,
+            required: true
         }
     },
     __name: "anonymous",
@@ -164,6 +164,13 @@ exports[`sfc reactive props destructure > default values w/ type declaration, pr
 "import { defineComponent as _defineComponent } from "vue";
 export default _defineComponent({
     props: {
+        foo: {
+            default: 1
+        },
+        bar: {
+            default: ()=>({})
+        },
+        baz: {},
         boola: {
             type: Boolean
         },
@@ -176,14 +183,7 @@ export default _defineComponent({
         func: {
             type: Function,
             default: ()=>{}
-        },
-        foo: {
-            default: 1
-        },
-        bar: {
-            default: ()=>({})
-        },
-        baz: {}
+        }
     },
     __name: "anonymous"
 });

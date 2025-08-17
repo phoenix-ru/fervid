@@ -1,19 +1,22 @@
 #![deny(clippy::all)]
 
-#[cfg(not(all(target_os = "linux", target_env = "musl", target_arch = "aarch64")))]
-#[global_allocator]
-static ALLOC: mimalloc_rust::GlobalMiMalloc = mimalloc_rust::GlobalMiMalloc;
+// #[cfg(not(all(target_os = "linux", target_env = "musl", target_arch = "aarch64")))]
+// #[global_allocator]
+// static ALLOC: mimalloc_rust::GlobalMiMalloc = mimalloc_rust::GlobalMiMalloc;
 
-use std::{borrow::Cow, rc::Rc};
+use std::{borrow::Cow, marker::PhantomData, rc::Rc, sync::Arc};
 
 use fervid_transform::{PropsDestructureConfig, TransformAssetUrlsConfig};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
-use fervid::{compile, CompileOptions};
+use fervid::{compile, errors::CompileError, CompileOptions};
 use structs::{
     BindingTypes, CompileResult, FervidCompileOptions, FervidJsCompiler, FervidJsCompilerOptions,
 };
+use swc_core::common::{sync::Lrc, BytePos, SourceMap};
+
+use crate::structs::SerializedError;
 
 mod structs;
 
@@ -22,7 +25,9 @@ impl FervidJsCompiler {
     #[napi(constructor)]
     pub fn new(options: Option<FervidJsCompilerOptions>) -> Self {
         let options = options.unwrap_or_default();
-        FervidJsCompiler { options }
+        FervidJsCompiler {
+            options: Arc::new(options),
+        }
     }
 
     #[napi]
@@ -33,7 +38,7 @@ impl FervidJsCompiler {
         options: FervidCompileOptions,
     ) -> Result<CompileResult> {
         let compiled = compile_impl(self, &source, &options)?;
-        Ok(convert(env, compiled, &options))
+        Ok(convert(env, compiled, &options, &self.options, &source))
     }
 
     #[napi]
@@ -47,6 +52,7 @@ impl FervidJsCompiler {
             compiler: self.to_owned(),
             input: source,
             options,
+            env: PhantomData,
         };
         AsyncTask::with_optional_signal(task, signal)
     }
@@ -97,14 +103,16 @@ fn compile_impl(
     compile(source, compile_options).map_err(|e| Error::from_reason(e.to_string()))
 }
 
-fn convert(
+fn convert<'env>(
     env: Env,
     mut result: fervid::CompileResult,
     options: &FervidCompileOptions,
-) -> CompileResult {
+    compiler_options: &FervidJsCompilerOptions,
+    source: &str,
+) -> CompileResult<'env> {
     // Serialize bindings if requested
     let setup_bindings = if matches!(options.output_setup_bindings, Some(true)) {
-        env.create_object()
+        Object::new(&env)
             .map(|mut obj| {
                 for binding in result.setup_bindings.drain(..) {
                     let _ = obj.set(
@@ -127,7 +135,7 @@ fn convert(
             .into_iter()
             .map(|asset| asset.into())
             .collect(),
-        errors: result.errors.into_iter().map(|e| e.into()).collect(),
+        errors: convert_errors(result.errors, compiler_options, source),
         styles: result
             .styles
             .into_iter()
@@ -137,15 +145,47 @@ fn convert(
     }
 }
 
-pub struct CompileTask {
+fn convert_errors(
+    compile_errors: Vec<CompileError>,
+    compiler_options: &FervidJsCompilerOptions,
+    source: &str,
+) -> Vec<SerializedError> {
+    let mut errors: Vec<SerializedError> = compile_errors.into_iter().map(Into::into).collect();
+
+    let Some(ref diagnostics) = compiler_options.diagnostics else {
+        return errors;
+    };
+
+    if let Some(true) = diagnostics.error_lines_columns {
+        let cm: Lrc<SourceMap> = Default::default();
+        cm.new_source_file(
+            Lrc::new(swc_core::common::FileName::Anon),
+            source.to_owned(),
+        );
+
+        for error in errors.iter_mut() {
+            let start = cm.lookup_char_pos(BytePos(error.lo));
+            let end = cm.lookup_char_pos(BytePos(error.hi));
+            error.start_line_number = start.line as u32;
+            error.end_line_number = end.line as u32;
+            error.start_column = start.col.0 as u32;
+            error.end_column = end.col.0 as u32;
+        }
+    }
+
+    errors
+}
+
+pub struct CompileTask<'env> {
     compiler: FervidJsCompiler,
     input: String,
     options: FervidCompileOptions,
+    env: PhantomData<&'env ()>,
 }
 
 #[napi]
-impl Task for CompileTask {
-    type JsValue = CompileResult;
+impl<'env> Task for CompileTask<'env> {
+    type JsValue = CompileResult<'env>;
     type Output = fervid::CompileResult;
 
     fn compute(&mut self) -> napi::Result<Self::Output> {
@@ -153,6 +193,12 @@ impl Task for CompileTask {
     }
 
     fn resolve(&mut self, env: Env, result: Self::Output) -> napi::Result<Self::JsValue> {
-        Ok(convert(env, result, &self.options))
+        Ok(convert(
+            env,
+            result,
+            &self.options,
+            &self.compiler.options,
+            &self.input,
+        ))
     }
 }

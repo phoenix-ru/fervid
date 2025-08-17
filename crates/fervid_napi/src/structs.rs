@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use fervid::FervidAtom;
 use fervid_transform::TransformAssetUrlsConfigOptions;
 use fxhash::FxHashMap;
-use napi::{Either, JsObject};
+use napi::{bindgen_prelude::Object, Either};
 use napi_derive::napi;
 use swc_core::common::Spanned;
 
@@ -11,7 +11,7 @@ use swc_core::common::Spanned;
 #[napi(js_name = "Compiler")]
 #[derive(Clone)]
 pub struct FervidJsCompiler {
-    pub options: FervidJsCompilerOptions,
+    pub options: Arc<FervidJsCompilerOptions>,
 }
 
 /// Raw options passed from the Node.js side
@@ -51,6 +51,7 @@ pub struct FervidJsCompilerOptions {
 
     // Ignored, will be determined automatically based on `is_production` and `script` tags
     // pub inline_template: Option<bool>,
+    pub diagnostics: Option<FervidJsCompilerOptionsDiagnostics>,
 }
 
 #[napi(object)]
@@ -78,6 +79,12 @@ pub struct FervidJsCompilerOptionsScript {
 pub struct FervidJsCompilerOptionsStyle {
     /// Ignored
     pub trim: Option<bool>,
+}
+
+#[napi(object)]
+#[derive(Clone)]
+pub struct FervidJsCompilerOptionsDiagnostics {
+    pub error_lines_columns: Option<bool>,
 }
 
 #[napi(object)]
@@ -114,14 +121,14 @@ pub struct FervidTransformAssetUrlsOptions {
 }
 
 #[napi(object)]
-pub struct CompileResult {
+pub struct CompileResult<'env> {
     pub code: String,
     pub styles: Vec<Style>,
     pub errors: Vec<SerializedError>,
     pub custom_blocks: Vec<CustomBlock>,
     pub source_map: Option<String>,
     #[napi(ts_type = "Record<string, BindingTypes> | undefined")]
-    pub setup_bindings: Option<JsObject>,
+    pub setup_bindings: Option<Object<'env>>,
 }
 
 #[napi(object)]
@@ -145,6 +152,12 @@ pub struct SerializedError {
     pub lo: u32,
     pub hi: u32,
     pub message: String,
+
+    // Would be set to 0 unless diagnostics.error_lines_columns is enabled
+    pub start_line_number: u32,
+    pub end_line_number: u32,
+    pub start_column: u32,
+    pub end_column: u32,
 }
 
 /// This is a copied enum from `fervid_core` with `napi` implementation to avoid littering the core crate.
@@ -238,6 +251,10 @@ impl From<fervid::errors::CompileError> for SerializedError {
             lo: span.lo.0,
             hi: span.hi.0,
             message: value.to_string(),
+            end_column: 0,
+            end_line_number: 0,
+            start_column: 0,
+            start_line_number: 0,
         }
     }
 }

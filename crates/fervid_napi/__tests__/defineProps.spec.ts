@@ -698,7 +698,6 @@ const props = defineProps({ foo: String })
         expect(content).toMatch(/import {.*mergeDefaults as _mergeDefaults/)
         expect(content).toMatch(
             `_mergeDefaults({
-        qux: {},
         foo: {
             type: Function
         },
@@ -710,7 +709,8 @@ const props = defineProps({ foo: String })
                 Boolean,
                 Function
             ]
-        }
+        },
+        qux: {}
     }, {
         ...defaults
     })`.trim())

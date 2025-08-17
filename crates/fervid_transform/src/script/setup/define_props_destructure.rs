@@ -71,13 +71,16 @@ pub fn collect_props_destructure(
                 .insert(local.to_owned(), key.to_owned());
         }
 
-        ctx.bindings_helper.props_destructured_bindings.insert(
+        // Note: we are not checking for duplicate keys here.
+        // The assumption is that earlier/later tools would catch that.
+
+        ctx.bindings_helper.props_destructured_bindings.push((
             key.to_owned(),
             PropsDestructureBinding {
                 local: local.to_owned(),
                 default: default_value,
             },
-        );
+        ));
     }
 
     // https://github.com/vuejs/core/blob/466b30f4049ec89fb282624ec17d1a93472ab93f/packages/compiler-sfc/src/script/definePropsDestructure.ts#L52-L89

@@ -20,7 +20,7 @@ jobs:
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
       # - name: Install Rust
       #   uses: oxidecomputer/actions-rs_toolchain@oxide/master
       - name: Cache rust artifacts

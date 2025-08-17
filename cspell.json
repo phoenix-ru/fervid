@@ -138,14 +138,20 @@
     "hostnames",
     "signifiers",
     "justfile",
-    "clippy"
+    "clippy",
+    "dashmap",
+    "ropey",
+    "indexmap"
   ],
   "ignorePaths": [
     ".github/**",
     "**/*.toml",
+    "package.json",
     "pnpm-lock.yaml",
+    "yarn.lock",
     "README.md",
     "**/*.snap",
-    "crates/fervid_napi/__tests__/defineProps.spec.ts"
+    "crates/fervid_napi/__tests__/defineProps.spec.ts",
+    "crates/fervid_napi/*.(m|c)?js"
   ]
 }

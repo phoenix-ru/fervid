@@ -95,7 +95,7 @@ fn parse_vanilla_attr<'i>(
         Ok((input, _)) => {
             let (input, attr_value) = parse_attr_value(input)?;
 
-            #[cfg(dbg_print)]
+            #[cfg(feature = "dbg_print")]
             println!("Dynamic attr: value = {:?}", attr_value);
 
             out.push(AttributeOrBinding::RegularAttribute {
@@ -187,7 +187,7 @@ fn parse_directive<'i>(
         (input, None)
     };
 
-    #[cfg(dbg_print)]
+    #[cfg(feature = "dbg_print")]
     {
         println!();
         println!("Parsed directive {:?}", directive_name);
@@ -298,10 +298,7 @@ fn parse_directive<'i>(
                 handler: value.and_then(|value| {
                     // TODO span
                     let parse_result = parse_js(value, 0, 0);
-                    match parse_result {
-                        Ok(parsed_expr) => Some(parsed_expr),
-                        Err(_) => None,
-                    }
+                    parse_result.ok()
                 }),
                 modifiers,
                 span: DUMMY_SP,

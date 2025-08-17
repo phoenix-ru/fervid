@@ -10,9 +10,7 @@ jobs:
     name: Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      # - name: Install Rust
-      #   uses: oxidecomputer/actions-rs_toolchain@oxide/master
+      - uses: actions/checkout@v5
       - name: Cache rust artifacts
         uses: Swatinem/rust-cache@v2
         with:
@@ -32,15 +30,17 @@ jobs:
           - macos-latest
           - windows-latest
     steps:
-      - uses: actions/checkout@v3
-      # - name: Install Rust
-      #   uses: oxidecomputer/actions-rs_toolchain@oxide/master
-      #   with:
-      #     profile: minimal
+      - uses: actions/checkout@v5
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          # Sync with rust-toolchain.toml
+          toolchain: nightly-2025-04-16
       - name: Cache rust artifacts
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-test-${{ matrix.os }}
 
       - name: Run cargo test
-        run: cargo test
+        # Exclude NAPI crate due to build errors on macos and because it has separate test jobs
+        run: cargo test --workspace --all-targets --exclude fervid_napi

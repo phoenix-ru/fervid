@@ -228,7 +228,7 @@ fn process_define_props_impl(
             let mut props_destructured_bindings_arr = Vec::<Option<ExprOrSpread>>::with_capacity(
                 ctx.bindings_helper.props_destructured_bindings.len(),
             );
-            for key in ctx.bindings_helper.props_destructured_bindings.keys() {
+            for (key, _) in ctx.bindings_helper.props_destructured_bindings.iter() {
                 props_destructured_bindings_arr.push(Some(ExprOrSpread {
                     spread: None,
                     expr: Box::new(Expr::Lit(Lit::Str(Str {
@@ -486,8 +486,14 @@ fn gen_runtime_prop_from_type(
     let destructured = ctx
         .bindings_helper
         .props_destructured_bindings
-        .get(&key)
-        .and_then(|v| gen_destructured_default_value(v, prop.types, errors));
+        .iter()
+        .find_map(|(k, v)| {
+            if k != &key {
+                return None;
+            }
+
+            gen_destructured_default_value(v, prop.types, errors)
+        });
 
     if let Some(destructured) = destructured {
         default = Some(Box::new(Prop::KeyValue(KeyValueProp {

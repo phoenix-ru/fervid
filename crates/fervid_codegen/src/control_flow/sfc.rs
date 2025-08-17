@@ -2,12 +2,10 @@ use fervid_core::{
     fervid_atom, BindingTypes, FervidAtom, IntoIdent, SfcTemplateBlock, TemplateGenerationMode,
     VueImports,
 };
+use fxhash::FxHashMap;
 use swc_core::{
     atoms::Atom,
-    common::{
-        collections::AHashMap, source_map::SourceMapGenConfig, sync::Lrc, BytePos, FileName,
-        SourceMap, DUMMY_SP,
-    },
+    common::{source_map::SourceMapGenConfig, sync::Lrc, BytePos, FileName, SourceMap, DUMMY_SP},
     ecma::{
         ast::{
             ArrowExpr, AssignExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
@@ -586,7 +584,7 @@ impl CodegenContext {
                 v.names
             };
 
-            let map = cm.build_source_map_with_config(
+            let map = cm.build_source_map(
                 &source_map_buf,
                 None,
                 SourceMapConfig {
@@ -608,7 +606,7 @@ impl CodegenContext {
 
 struct SourceMapConfig<'a> {
     source_file_name: Option<&'a str>,
-    names: &'a AHashMap<BytePos, FervidAtom>,
+    names: &'a FxHashMap<BytePos, FervidAtom>,
 }
 
 impl SourceMapGenConfig for SourceMapConfig<'_> {
@@ -631,7 +629,7 @@ impl SourceMapGenConfig for SourceMapConfig<'_> {
 
 // Adapted from `swc_compiler_base`
 pub struct IdentCollector {
-    pub names: AHashMap<BytePos, Atom>,
+    pub names: FxHashMap<BytePos, Atom>,
 }
 
 impl Visit for IdentCollector {

@@ -112,12 +112,12 @@ describe('sfc reactive props destructure', () => {
         func: Function,
         ext: null
     }, {
-        ext: x,
-        __skip_ext: true,
         foo: 1,
         bar: ()=>({}),
         func: ()=>{},
-        __skip_func: true
+        __skip_func: true,
+        ext: x,
+        __skip_ext: true
     })`)
 
         assertCode(content)
@@ -202,15 +202,6 @@ describe('sfc reactive props destructure', () => {
         })
         expect(content).toMatch(`
     props: {
-        "onUpdate:modelValue": {
-            type: Function,
-            required: true
-        },
-        "foo:bar": {
-            type: String,
-            required: true,
-            default: 'foo-bar'
-        },
         foo: {
             type: Number,
             required: true,
@@ -220,6 +211,15 @@ describe('sfc reactive props destructure', () => {
             type: Number,
             required: true,
             default: 2
+        },
+        "foo:bar": {
+            type: String,
+            required: true,
+            default: 'foo-bar'
+        },
+        "onUpdate:modelValue": {
+            type: Function,
+            required: true
         }
     },`)
 
@@ -240,6 +240,13 @@ describe('sfc reactive props destructure', () => {
         // literals can be used as-is, non-literals are always returned from a
         // function
         expect(content).toMatch(`props: {
+        foo: {
+            default: 1
+        },
+        bar: {
+            default: ()=>({})
+        },
+        baz: {},
         boola: {
             type: Boolean
         },
@@ -252,14 +259,7 @@ describe('sfc reactive props destructure', () => {
         func: {
             type: Function,
             default: ()=>{}
-        },
-        foo: {
-            default: 1
-        },
-        bar: {
-            default: ()=>({})
-        },
-        baz: {}
+        }
     }`)
     })
 

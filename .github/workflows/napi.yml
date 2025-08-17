@@ -1,30 +1,34 @@
 name: Build NAPI
+
 env:
   DEBUG: napi:*
   APP_NAME: fervid
-  MACOSX_DEPLOYMENT_TARGET: '10.13'
+  MACOSX_DEPLOYMENT_TARGET: "10.13"
+  CARGO_INCREMENTAL: "1"
   WORKING_DIR_PATH: ${{ github.workspace }}/crates/fervid_napi
   CI: true
-permissions:
-  contents: write
-  id-token: write
-'on':
+
+on:
   push:
     branches:
       - master
     tags-ignore:
-      - '**'
+      - "**"
     paths-ignore:
-      - '**/*.md'
+      - "**/*.md"
       - LICENSE
-      - '**/*.gitignore'
+      - "**/*.gitignore"
       - .editorconfig
       - docs/**
   pull_request: null
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 defaults:
   run:
-    working-directory: './crates/fervid_napi'
+    working-directory: "./crates/fervid_napi"
 
 jobs:
   build:
@@ -32,115 +36,111 @@ jobs:
       fail-fast: false
       matrix:
         settings:
-          - host: windows-latest
-            build: yarn build
-            target: x86_64-pc-windows-msvc
-
-          - host: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
-            build: |
-              set -e &&
-              corepack enable &&
-              yarn build --target x86_64-unknown-linux-gnu &&
-              strip *.node
-
-          - host: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-alpine
-            build: |
-              set -e &&
-              corepack enable &&
-              yarn build &&
-              strip *.node
-
           - host: macos-latest
             target: x86_64-apple-darwin
-            build: |
-              corepack enable && yarn build
-              strip -x *.node
-
+            build: yarn build --target x86_64-apple-darwin
+          - host: windows-latest
+            build: yarn build --target x86_64-pc-windows-msvc
+            target: x86_64-pc-windows-msvc
+          - host: windows-latest
+            build: yarn build --target i686-pc-windows-msvc
+            target: i686-pc-windows-msvc
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            build: yarn build --target x86_64-unknown-linux-gnu --use-napi-cross
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            build: yarn build --target x86_64-unknown-linux-musl -x
           - host: macos-latest
             target: aarch64-apple-darwin
-            build: |
-              sudo rm -Rf /Library/Developer/CommandLineTools/SDKs/*;
-              export CC=$(xcrun -f clang);
-              export CXX=$(xcrun -f clang++);
-              SYSROOT=$(xcrun --sdk macosx --show-sdk-path);
-              export CFLAGS="-isysroot $SYSROOT -isystem $SYSROOT";
-              rustup target add aarch64-apple-darwin
-              yarn build --target aarch64-apple-darwin
-              strip -x *.node
-
+            build: yarn build --target aarch64-apple-darwin
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            build: yarn build --target aarch64-unknown-linux-gnu --use-napi-cross
+          - host: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            build: yarn build --target armv7-unknown-linux-gnueabihf --use-napi-cross
+          - host: ubuntu-latest
+            target: aarch64-linux-android
+            build: yarn build --target aarch64-linux-android
+          - host: ubuntu-latest
+            target: armv7-linux-androideabi
+            build: yarn build --target armv7-linux-androideabi
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            build: yarn build --target aarch64-unknown-linux-musl -x
+          - host: windows-latest
+            target: aarch64-pc-windows-msvc
+            build: yarn build --target aarch64-pc-windows-msvc
+          - host: ubuntu-latest
+            target: wasm32-wasip1-threads
+            build: yarn build --target wasm32-wasip1-threads
+    name: stable - ${{ matrix.settings.target }} - node@22
+    runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
         working-directory: ${{ env.WORKING_DIR_PATH }}
-    name: stable - ${{ matrix.settings.target }} - node@18
-    runs-on: ${{ matrix.settings.host }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      # Windows needs double setup-node due to corepack
+      - name: Setup node
+        if: ${{ contains(matrix.settings.host, 'windows') }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup node
         uses: actions/setup-node@v4
-        if: ${{ !matrix.settings.docker }}
         with:
-          node-version: 18
-          # cache: yarn
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        if: ${{ !matrix.settings.docker }}
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable
+          # Sync with rust-toolchain.toml
+          # toolchain: stable
+          toolchain: nightly-2025-04-16
           targets: ${{ matrix.settings.target }}
       - name: Cache cargo
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
+            ~/.napi-rs
             .cargo-cache
             target/
           key: ${{ matrix.settings.target }}-cargo-${{ matrix.settings.host }}
-      - uses: goto-bus-stop/setup-zig@v2
-        if: ${{ matrix.settings.target == 'armv7-unknown-linux-gnueabihf' }}
+      - uses: mlugg/setup-zig@v2
+        if: ${{ contains(matrix.settings.target, 'musl') }}
         with:
-          version: 0.11.0
+          version: 0.14.1
+      - name: Install cargo-zigbuild
+        uses: taiki-e/install-action@v2
+        if: ${{ contains(matrix.settings.target, 'musl') }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          tool: cargo-zigbuild
       - name: Setup toolchain
         run: ${{ matrix.settings.setup }}
         if: ${{ matrix.settings.setup }}
         shell: bash
-      - name: Setup node x86
-        if: matrix.settings.target == 'i686-pc-windows-msvc'
-        run: yarn config set supportedArchitectures.cpu "ia32"
-        shell: bash
       - name: Install dependencies
-        run: corepack enable; yarn install
-      - name: Setup node x86
-        uses: actions/setup-node@v4
-        if: matrix.settings.target == 'i686-pc-windows-msvc'
-        with:
-          node-version: 18
-          # cache: yarn
-          architecture: x86
-      - name: Build in docker
-        uses: addnab/docker-run-action@v3
-        if: ${{ matrix.settings.docker }}
-        with:
-          image: ${{ matrix.settings.docker }}
-          options: '--user 0:0 -v ${{ github.workspace }}/.cargo-cache/git/db:/usr/local/cargo/git/db -v ${{ github.workspace }}/.cargo/registry/cache:/usr/local/cargo/registry/cache -v ${{ github.workspace }}/.cargo/registry/index:/usr/local/cargo/registry/index -v ${{ github.workspace }}:/build -w /build/crates/fervid_napi'
-          run: ${{ matrix.settings.build }}
+        run: yarn install
       - name: Build
         run: ${{ matrix.settings.build }}
-        if: ${{ !matrix.settings.docker }}
-        shell: bash
-      - name: List directory before upload
-        run: ls -a
         shell: bash
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: bindings-${{ matrix.settings.target }}
-          path: ${{ env.WORKING_DIR_PATH }}/${{ env.APP_NAME }}.*.node
+          path: |
+            ${{ env.WORKING_DIR_PATH }}/${{ env.APP_NAME }}.*.node
+            ${{ env.WORKING_DIR_PATH }}/${{ env.APP_NAME }}.*.wasm
           if-no-files-found: error
 
   test-macOS-windows-binding:
@@ -151,28 +151,43 @@ jobs:
       fail-fast: false
       matrix:
         settings:
-          - host: macos-latest
-            target: x86_64-apple-darwin
           - host: windows-latest
             target: x86_64-pc-windows-msvc
+            architecture: x64
+          - host: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            architecture: arm64
+          - host: macos-latest
+            target: aarch64-apple-darwin
+            architecture: arm64
+          - host: macos-latest
+            target: x86_64-apple-darwin
+            architecture: x64
         node:
-          - '18'
-          - '20'
-    defaults:
-      run:
-        working-directory: ${{ env.WORKING_DIR_PATH }}
+          - "20"
+          - "22"
     runs-on: ${{ matrix.settings.host }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      # Windows needs double setup-node due to corepack
+      - name: Setup node
+        if: ${{ contains(matrix.settings.host, 'windows') }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-          # cache: yarn
+          cache: yarn
+          cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
+          architecture: ${{ matrix.settings.architecture }}
       - name: Install dependencies
-        run: corepack enable; yarn install
+        run: yarn install
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: bindings-${{ matrix.settings.target }}
           path: ${{ env.WORKING_DIR_PATH }}
@@ -182,57 +197,138 @@ jobs:
       - name: Test bindings
         run: yarn test
 
-  test-linux-x64-gnu-binding:
-    name: Test bindings on Linux-x64-gnu - node@${{ matrix.node }}
+  test-linux-binding:
+    name: Test bindings on ${{ matrix.target }} - node@${{ matrix.node }}
     needs:
       - build
     strategy:
       fail-fast: false
       matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-gnu
+          - aarch64-unknown-linux-musl
+          - armv7-unknown-linux-gnueabihf
         node:
-          - '18'
-          - '20'
-    defaults:
-      run:
-        working-directory: ${{ env.WORKING_DIR_PATH }}
-    runs-on: ubuntu-latest
+          - "20"
+          - "22"
+    runs-on: ${{ contains(matrix.target, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-          # cache: yarn
+          cache: yarn
+          cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
+      - name: Output docker params
+        id: docker
+        run: |
+          node -e "
+            if ('${{ matrix.target }}'.startsWith('aarch64')) {
+              console.log('PLATFORM=linux/arm64')
+            } else if ('${{ matrix.target }}'.startsWith('armv7')) {
+              console.log('PLATFORM=linux/arm/v7')
+            } else {
+              console.log('PLATFORM=linux/amd64')
+            }
+          " >> $GITHUB_OUTPUT
+          node -e "
+            if ('${{ matrix.target }}'.endsWith('-musl')) {
+              console.log('IMAGE=node:${{ matrix.node }}-alpine')
+            } else {
+              console.log('IMAGE=node:${{ matrix.node }}-slim')
+            }
+          " >> $GITHUB_OUTPUT
       - name: Install dependencies
-        run: corepack enable; yarn install
+        run: |
+          yarn config set --json supportedArchitectures.cpu '["current", "arm64", "x64", "arm"]'
+          yarn config set --json supportedArchitectures.libc '["current", "musl", "gnu"]'
+          yarn install
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
-          name: bindings-x86_64-unknown-linux-gnu
+          name: bindings-${{ matrix.target }}
+          path: ${{ env.WORKING_DIR_PATH }}
+      - name: List packages
+        run: ls -R .
+        shell: bash
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        if: ${{ contains(matrix.target, 'armv7') }}
+        with:
+          platforms: all
+      - run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+        if: ${{ contains(matrix.target, 'armv7') }}
+      - name: Test bindings
+        uses: addnab/docker-run-action@v3
+        with:
+          image: ${{ steps.docker.outputs.IMAGE }}
+          options: -v ${{ env.WORKING_DIR_PATH }}:/build -w /build -e CI=true --platform ${{ steps.docker.outputs.PLATFORM }}
+          run: corepack enable && yarn test
+
+  test-wasi:
+    name: Test WASI target
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
+      - name: Install dependencies
+        run: |
+          yarn config set --json supportedArchitectures.cpu '["current", "wasm32", "x64"]'
+          yarn config set --json supportedArchitectures.libc '["current", "musl", "gnu"]'
+          yarn install
+      - name: Download artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: bindings-wasm32-wasip1-threads
           path: ${{ env.WORKING_DIR_PATH }}
       - name: List packages
         run: ls -R .
         shell: bash
       - name: Test bindings
-        run: docker run --rm -e CI=true -v $(pwd):/build -w /build node:${{ matrix.node }}-slim sh -c "corepack enable && yarn test"
+        run: yarn test
+        env:
+          NAPI_RS_FORCE_WASI: 1
 
   publish:
     name: Publish
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     needs:
       - test-macOS-windows-binding
-      - test-linux-x64-gnu-binding
+      - test-linux-binding
+      - test-wasi
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - name: Enable Corepack
+        run: corepack enable
       - name: Setup node
         uses: actions/setup-node@v4
         with:
-          node-version: 18
-          # cache: yarn
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/yarn.lock
       - name: Install dependencies
-        run: corepack enable; yarn install
+        run: yarn install
+      - name: Create npm dirs
+        run: yarn napi create-npm-dirs
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: ${{ env.WORKING_DIR_PATH }}/artifacts
       - name: Move artifacts
@@ -240,6 +336,12 @@ jobs:
       - name: List packages
         run: ls -R ./npm
         shell: bash
+      - name: Upload WASM artifact for playground
+        uses: actions/upload-artifact@v4
+        with:
+          name: playground-artifact-wasm
+          path: ${{ env.WORKING_DIR_PATH }}/npm/wasm32-wasi
+          if-no-files-found: error
       - name: Publish
         if: ${{ github.ref == 'refs/heads/master' }}
         run: |
@@ -258,3 +360,91 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  playground-build:
+    name: Build playground
+    needs:
+      - publish
+
+    env:
+      PLAYGROUND_DIR_PATH: ${{ github.workspace }}/node/playground
+      NAPI_DIR_PATH: ${{ github.workspace }}/crates/fervid_napi
+
+    defaults:
+      run:
+        working-directory: ${{ env.PLAYGROUND_DIR_PATH }}
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download WASM NPM artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: playground-artifact-wasm
+          path: ${{ env.NAPI_DIR_PATH }}/npm/wasm32-wasi
+
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ${{ env.PLAYGROUND_DIR_PATH }}/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build playground
+        run: pnpm build
+
+      - name: Upload GitHub Pages artifact
+        if: ${{ github.ref == 'refs/heads/master' }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Artifact name
+          name: github-pages # optional, default is github-pages
+          # Path of the directory containing the static assets.
+          path: ${{ env.PLAYGROUND_DIR_PATH }} # default is _site/
+          # Duration after which artifact will expire in days.
+          retention-days: 31 # optional, default is 1
+
+  playground-deploy:
+    if: ${{ github.ref == 'refs/heads/master' }}
+
+    # Add a dependency to the build job
+    needs: playground-build
+
+    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
+    permissions:
+      contents: read
+      pages: write # to deploy to Pages
+      id-token: write # to verify the deployment originates from an appropriate source
+
+    # Deploy to the github-pages environment
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    # Specify runner + deployment step
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy GitHub Pages site
+        uses: actions/deploy-pages@v4
+        #with:
+        # Should this action only emit build telemetry instead of deploying the build artifact?
+        #emit_telemetry: # optional, default is false
+        # The status of the previous build.
+        #conclusion: # optional
+        # GitHub token
+        #token: # default is ${{ github.token }}
+        # Time in milliseconds after which to timeout and cancel the deployment (default: 10 minutes)
+        #timeout: # optional, default is 600000
+        # Maximum number of status report errors before cancelling a deployment (default: 10)
+        #error_count: # optional, default is 10
+        # Time in milliseconds between two deployment status report (default: 5 seconds)
+        #reporting_interval: # optional, default is 5000
+        # Name of the artifact to deploy
+        #artifact_name: # optional, default is github-pages
+        # Is this attempting to deploy a pull request as a GitHub Pages preview site? (NOTE: This feature is only in alpha currently and is not available to the public!)
+        #preview: # optional, default is false

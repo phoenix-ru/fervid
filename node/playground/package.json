@@ -1,0 +1,22 @@
+{
+  "name": "fervid-playground",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "farm start",
+    "build": "farm build",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@fervid/napi-wasm32-wasi": "file:../../crates/fervid_napi/npm/wasm32-wasi",
+    "@types/fervid__napi-wasm32-wasi": "file:../../crates/fervid_napi",
+    "monaco-editor": "^0.40.0"
+  },
+  "devDependencies": {
+    "@farmfe/cli": "^1.0.5",
+    "@farmfe/core": "^1.7.11",
+    "core-js": "^3.45.0",
+    "esbuild": "^0.25.9",
+    "vite-plugin-monaco-editor-esm": "^2.0.2"
+  }
+}

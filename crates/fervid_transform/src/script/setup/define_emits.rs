@@ -1,5 +1,6 @@
 use fervid_core::{BindingTypes, FervidAtom};
-use fxhash::FxHashSet;
+use fxhash::FxBuildHasher;
+use indexmap::IndexSet;
 use itertools::{Either, Itertools};
 use swc_core::{
     common::{Spanned, DUMMY_SP},
@@ -19,6 +20,8 @@ use crate::{
 };
 
 use super::macros::{TransformMacroResult, VarDeclHelper};
+
+type FxIndexSet<T> = IndexSet<T, FxBuildHasher>;
 
 pub fn process_define_emits(
     ctx: &mut TypeResolveContext,
@@ -102,8 +105,8 @@ pub fn process_define_emits(
 fn extract_runtime_emits(
     ctx: &mut TypeResolveContext,
     type_arg: &TsType,
-) -> Result<FxHashSet<FervidAtom>, ScriptError> {
-    let mut emits = FxHashSet::<FervidAtom>::default();
+) -> Result<FxIndexSet<FervidAtom>, ScriptError> {
+    let mut emits = FxIndexSet::<FervidAtom>::default();
 
     // Handle cases like `defineEmits<(e: 'foo' | 'bar') => void>()`
     if let TsType::TsFnOrConstructorType(TsFnOrConstructorType::TsFnType(ref ts_fn_type)) = type_arg
@@ -160,7 +163,7 @@ fn extract_runtime_emits(
 fn extract_event_names(
     ctx: &mut TypeResolveContext,
     event_name: &TsFnParam,
-    emits: &mut FxHashSet<FervidAtom>,
+    emits: &mut FxIndexSet<FervidAtom>,
 ) {
     let TsFnParam::Ident(ident) = event_name else {
         return;
