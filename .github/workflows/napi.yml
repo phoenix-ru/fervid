@@ -3,21 +3,21 @@ name: Build NAPI
 env:
   DEBUG: napi:*
   APP_NAME: fervid
-  MACOSX_DEPLOYMENT_TARGET: '10.13'
-  CARGO_INCREMENTAL: '1'
+  MACOSX_DEPLOYMENT_TARGET: "10.13"
+  CARGO_INCREMENTAL: "1"
   WORKING_DIR_PATH: ${{ github.workspace }}/crates/fervid_napi
   CI: true
 
-'on':
+on:
   push:
     branches:
       - master
     tags-ignore:
-      - '**'
+      - "**"
     paths-ignore:
-      - '**/*.md'
+      - "**/*.md"
       - LICENSE
-      - '**/*.gitignore'
+      - "**/*.gitignore"
       - .editorconfig
       - docs/**
   pull_request: null
@@ -28,7 +28,7 @@ concurrency:
 
 defaults:
   run:
-    working-directory: './crates/fervid_napi'
+    working-directory: "./crates/fervid_napi"
 
 jobs:
   # build:
@@ -319,8 +319,8 @@ jobs:
             target: x86_64-apple-darwin
             architecture: x64
         node:
-          - '20'
-          - '22'
+          - "20"
+          - "22"
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v5
@@ -400,8 +400,8 @@ jobs:
           - aarch64-unknown-linux-musl
           - armv7-unknown-linux-gnueabihf
         node:
-          - '20'
-          - '22'
+          - "20"
+          - "22"
     runs-on: ${{ contains(matrix.target, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v5
@@ -525,6 +525,12 @@ jobs:
       - name: List packages
         run: ls -R ./npm
         shell: bash
+      - name: Upload WASM artifact for playground
+        uses: actions/upload-artifact@v4
+        with:
+          name: playground-artifact-wasm
+          path: ${{ env.WORKING_DIR_PATH }}/npm/wasm32-wasi
+          if-no-files-found: error
       - name: Publish
         if: ${{ github.ref == 'refs/heads/master' }}
         run: |
@@ -543,3 +549,91 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  playground-build:
+    name: Build playground
+    needs:
+      - publish
+
+    env:
+      PLAYGROUND_DIR_PATH: ${{ github.workspace }}/node/playground
+      NAPI_DIR_PATH: ${{ github.workspace }}/crates/fervid_napi
+
+    defaults:
+      run:
+        working-directory: ${{ env.PLAYGROUND_DIR_PATH }}
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download WASM NPM artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: playground-artifact-wasm
+          path: ${{ env.NAPI_DIR_PATH }}/npm/wasm32-wasi
+
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ${{ env.PLAYGROUND_DIR_PATH }}/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build playground
+        run: pnpm build
+
+      - name: Upload GitHub Pages artifact
+        if: ${{ github.ref == 'refs/heads/master' }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Artifact name
+          name: github-pages # optional, default is github-pages
+          # Path of the directory containing the static assets.
+          path: ${{ env.PLAYGROUND_DIR_PATH }} # default is _site/
+          # Duration after which artifact will expire in days.
+          retention-days: 31 # optional, default is 1
+
+  playground-deploy:
+    if: ${{ github.ref == 'refs/heads/master' }}
+
+    # Add a dependency to the build job
+    needs: playground-build
+
+    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
+    permissions:
+      contents: read
+      pages: write # to deploy to Pages
+      id-token: write # to verify the deployment originates from an appropriate source
+
+    # Deploy to the github-pages environment
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    # Specify runner + deployment step
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy GitHub Pages site
+        uses: actions/deploy-pages@v4
+        #with:
+        # Should this action only emit build telemetry instead of deploying the build artifact?
+        #emit_telemetry: # optional, default is false
+        # The status of the previous build.
+        #conclusion: # optional
+        # GitHub token
+        #token: # default is ${{ github.token }}
+        # Time in milliseconds after which to timeout and cancel the deployment (default: 10 minutes)
+        #timeout: # optional, default is 600000
+        # Maximum number of status report errors before cancelling a deployment (default: 10)
+        #error_count: # optional, default is 10
+        # Time in milliseconds between two deployment status report (default: 5 seconds)
+        #reporting_interval: # optional, default is 5000
+        # Name of the artifact to deploy
+        #artifact_name: # optional, default is github-pages
+        # Is this attempting to deploy a pull request as a GitHub Pages preview site? (NOTE: This feature is only in alpha currently and is not available to the public!)
+        #preview: # optional, default is false

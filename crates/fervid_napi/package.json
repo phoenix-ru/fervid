@@ -56,6 +56,8 @@
     "bench": "node -r @swc-node/register benchmark/bench.ts",
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",
+    "build:wasm": "yarn build --target wasm32-wasip1-threads",
+    "build:wasm-debug": "yarn build:debug --target wasm32-wasip1-threads",
     "format": "run-p format:prettier format:rs format:toml",
     "format:prettier": "prettier . -w",
     "format:toml": "taplo format",
@@ -63,7 +65,6 @@
     "lint": "eslint . -c ./.eslintrc.yml",
     "prepublishOnly": "napi prepublish -t npm",
     "test": "vitest",
-    "universal": "napi universal",
     "version": "napi version"
   },
   "devDependencies": {

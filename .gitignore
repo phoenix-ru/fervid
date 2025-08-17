@@ -1,5 +1,6 @@
 /target
 **/node_modules
 *.node
+*.wasm
 **/dist
 crates/fervid_napi/npm

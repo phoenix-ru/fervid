@@ -122,6 +122,11 @@ export interface FervidJsCompilerOptions {
    * Default: files ending with `.ce.vue`
    */
   customElement?: undefined
+  diagnostics?: FervidJsCompilerOptionsDiagnostics
+}
+
+export interface FervidJsCompilerOptionsDiagnostics {
+  errorLinesColumns?: boolean
 }
 
 export interface FervidJsCompilerOptionsScript {
@@ -156,6 +161,10 @@ export interface SerializedError {
   lo: number
   hi: number
   message: string
+  startLineNumber: number
+  endLineNumber: number
+  startColumn: number
+  endColumn: number
 }
 
 export interface Style {

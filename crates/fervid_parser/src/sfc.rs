@@ -3,6 +3,7 @@ use swc_core::common::{BytePos, Span, Spanned, DUMMY_SP};
 use swc_ecma_parser::StringInput;
 use swc_html_ast::{Child, DocumentFragment, DocumentMode, Element, Namespace};
 use swc_html_parser::{
+    error::ErrorKind,
     lexer::Lexer,
     parser::{Parser, ParserConfig},
 };
@@ -108,6 +109,15 @@ impl SfcParser<'_, '_, '_> {
                 span: parsed_html.span,
             });
         }
+
+        // Ignore NonVoidHtmlElementStartTagWithTrailingSolidus because this is a difference of Vue SFC vs HTML
+        self.errors.retain(|parse_error| {
+            !matches!(
+                parse_error.kind,
+                ParseErrorKind::InvalidHtml(ref invalid_html_error)
+                if matches!(invalid_html_error.as_ref(), ErrorKind::NonVoidHtmlElementStartTagWithTrailingSolidus)
+            )
+        });
 
         Ok(sfc_descriptor)
     }

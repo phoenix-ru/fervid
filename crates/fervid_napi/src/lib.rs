@@ -10,10 +10,13 @@ use fervid_transform::{PropsDestructureConfig, TransformAssetUrlsConfig};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
-use fervid::{compile, CompileOptions};
+use fervid::{compile, errors::CompileError, CompileOptions};
 use structs::{
     BindingTypes, CompileResult, FervidCompileOptions, FervidJsCompiler, FervidJsCompilerOptions,
 };
+use swc_core::common::{sync::Lrc, BytePos, SourceMap};
+
+use crate::structs::SerializedError;
 
 mod structs;
 
@@ -35,7 +38,7 @@ impl FervidJsCompiler {
         options: FervidCompileOptions,
     ) -> Result<CompileResult> {
         let compiled = compile_impl(self, &source, &options)?;
-        Ok(convert(env, compiled, &options))
+        Ok(convert(env, compiled, &options, &self.options, &source))
     }
 
     #[napi]
@@ -104,6 +107,8 @@ fn convert<'env>(
     env: Env,
     mut result: fervid::CompileResult,
     options: &FervidCompileOptions,
+    compiler_options: &FervidJsCompilerOptions,
+    source: &str,
 ) -> CompileResult<'env> {
     // Serialize bindings if requested
     let setup_bindings = if matches!(options.output_setup_bindings, Some(true)) {
@@ -130,7 +135,7 @@ fn convert<'env>(
             .into_iter()
             .map(|asset| asset.into())
             .collect(),
-        errors: result.errors.into_iter().map(|e| e.into()).collect(),
+        errors: convert_errors(result.errors, compiler_options, source),
         styles: result
             .styles
             .into_iter()
@@ -138,6 +143,37 @@ fn convert<'env>(
             .collect(),
         setup_bindings,
     }
+}
+
+fn convert_errors(
+    compile_errors: Vec<CompileError>,
+    compiler_options: &FervidJsCompilerOptions,
+    source: &str,
+) -> Vec<SerializedError> {
+    let mut errors: Vec<SerializedError> = compile_errors.into_iter().map(Into::into).collect();
+
+    let Some(ref diagnostics) = compiler_options.diagnostics else {
+        return errors;
+    };
+
+    if let Some(true) = diagnostics.error_lines_columns {
+        let cm: Lrc<SourceMap> = Default::default();
+        cm.new_source_file(
+            Lrc::new(swc_core::common::FileName::Anon),
+            source.to_owned(),
+        );
+
+        for error in errors.iter_mut() {
+            let start = cm.lookup_char_pos(BytePos(error.lo));
+            let end = cm.lookup_char_pos(BytePos(error.hi));
+            error.start_line_number = start.line as u32;
+            error.end_line_number = end.line as u32;
+            error.start_column = start.col.0 as u32;
+            error.end_column = end.col.0 as u32;
+        }
+    }
+
+    errors
 }
 
 pub struct CompileTask<'env> {
@@ -157,6 +193,12 @@ impl<'env> Task for CompileTask<'env> {
     }
 
     fn resolve(&mut self, env: Env, result: Self::Output) -> napi::Result<Self::JsValue> {
-        Ok(convert(env, result, &self.options))
+        Ok(convert(
+            env,
+            result,
+            &self.options,
+            &self.compiler.options,
+            &self.input,
+        ))
     }
 }

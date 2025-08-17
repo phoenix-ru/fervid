@@ -51,6 +51,7 @@ pub struct FervidJsCompilerOptions {
 
     // Ignored, will be determined automatically based on `is_production` and `script` tags
     // pub inline_template: Option<bool>,
+    pub diagnostics: Option<FervidJsCompilerOptionsDiagnostics>,
 }
 
 #[napi(object)]
@@ -78,6 +79,12 @@ pub struct FervidJsCompilerOptionsScript {
 pub struct FervidJsCompilerOptionsStyle {
     /// Ignored
     pub trim: Option<bool>,
+}
+
+#[napi(object)]
+#[derive(Clone)]
+pub struct FervidJsCompilerOptionsDiagnostics {
+    pub error_lines_columns: Option<bool>,
 }
 
 #[napi(object)]
@@ -145,6 +152,12 @@ pub struct SerializedError {
     pub lo: u32,
     pub hi: u32,
     pub message: String,
+
+    // Would be set to 0 unless diagnostics.error_lines_columns is enabled
+    pub start_line_number: u32,
+    pub end_line_number: u32,
+    pub start_column: u32,
+    pub end_column: u32,
 }
 
 /// This is a copied enum from `fervid_core` with `napi` implementation to avoid littering the core crate.
@@ -238,6 +251,10 @@ impl From<fervid::errors::CompileError> for SerializedError {
             lo: span.lo.0,
             hi: span.hi.0,
             message: value.to_string(),
+            end_column: 0,
+            end_line_number: 0,
+            start_column: 0,
+            start_line_number: 0,
         }
     }
 }

@@ -37,18 +37,19 @@ fmt-check:
 clean:
     cargo clean
 
-# Run fmt-check, lint, and tests together
-check-all: fmt-check lint test
+# Run fmt-check, lint, spell, and tests together
+check-all: fmt-check lint test spell
 
 # --- WASM (crates/fervid_wasm) ---
 
-# Dev build for WebAssembly target
+# Build for WebAssembly target
 wasm-build:
-    cd {{justfile_directory()}}/crates/fervid_wasm && wasm-pack build --target web --dev
-
-# Release build for WebAssembly target
-wasm-build-release:
-    cd {{justfile_directory()}}/crates/fervid_wasm && wasm-pack build --target web
+    cd {{justfile_directory()}}/crates/fervid_napi && \
+    yarn build:wasm && \
+    yarn napi create-npm-dirs &&\
+    mkdir -p artifacts && \
+    cp *.wasm artifacts/ && \
+    yarn artifacts
 
 # Run the WASM playground preview server using node
 wasm-serve:

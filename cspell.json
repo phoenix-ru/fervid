@@ -146,6 +146,7 @@
   "ignorePaths": [
     ".github/**",
     "**/*.toml",
+    "package.json",
     "pnpm-lock.yaml",
     "yarn.lock",
     "README.md",

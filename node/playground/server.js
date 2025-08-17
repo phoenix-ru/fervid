@@ -22,7 +22,7 @@ const mimeTypes = {
 // Headers required for high resolution timers: https://developer.mozilla.org/en-US/docs/Web/API/Performance/now#security_requirements
 const highResCors = {
     'Cross-Origin-Opener-Policy': 'same-origin',
-    'Cross-Origin-Embedder-Policy': 'require-corp'
+    'Cross-Origin-Embedder-Policy': 'require-corp',
 }
 
 http.createServer(async function (request, response) {
@@ -32,8 +32,10 @@ http.createServer(async function (request, response) {
         return;
     }
     
-    const uri = url.parse(request.url).pathname
-    let filename = path.join(process.cwd(), uri)
+    const uri = new URL(`http://localhost:${port}${request.url}`).pathname
+
+    // const uri = url.parse(request.url).pathname
+    let filename = path.join(process.cwd(), 'dist', uri)
 
     try {
         const stats = await fs.stat(filename)
