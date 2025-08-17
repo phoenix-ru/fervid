@@ -11,8 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      # - name: Install Rust
-      #   uses: oxidecomputer/actions-rs_toolchain@oxide/master
       - name: Cache rust artifacts
         uses: Swatinem/rust-cache@v2
         with:
@@ -33,10 +31,6 @@ jobs:
           - windows-latest
     steps:
       - uses: actions/checkout@v5
-      # - name: Install Rust
-      #   uses: oxidecomputer/actions-rs_toolchain@oxide/master
-      #   with:
-      #     profile: minimal
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
@@ -47,17 +41,6 @@ jobs:
         with:
           shared-key: cargo-test-${{ matrix.os }}
 
-      - name: Install additional deps
-        if: ${{ contains(matrix.os, 'macos') }}
-        run: |
-          brew update
-          brew install meson llvm
-
-      - name: Setup Node.js
-        if: ${{ contains(matrix.os, 'macos') }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
       - name: Run cargo test
-        run: cargo test
+        # Exclude NAPI crate due to build errors on macos and because it has separate test jobs
+        run: cargo test --workspace --all-targets --exclude fervid_napi
