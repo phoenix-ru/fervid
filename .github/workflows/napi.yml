@@ -405,7 +405,7 @@ jobs:
           # Artifact name
           name: github-pages # optional, default is github-pages
           # Path of the directory containing the static assets.
-          path: ${{ env.PLAYGROUND_DIR_PATH }} # default is _site/
+          path: ${{ env.PLAYGROUND_DIR_PATH }}/dist # default is _site/
           # Duration after which artifact will expire in days.
           retention-days: 31 # optional, default is 1
 
