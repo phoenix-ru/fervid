@@ -9,7 +9,7 @@ export default defineConfig({
         },
         output: {
             path: 'dist',
-            publicPath: '/',
+            publicPath: './',
             targetEnv: 'browser'
         },
         define: {
