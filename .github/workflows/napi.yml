@@ -397,6 +397,8 @@ jobs:
 
       - name: Build playground
         run: pnpm build
+        env:
+          PUBLIC_PATH: /fervid/
 
       - name: Upload GitHub Pages artifact
         if: ${{ github.ref == 'refs/heads/master' }}

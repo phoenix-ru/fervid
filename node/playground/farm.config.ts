@@ -1,6 +1,8 @@
 import { defineConfig } from '@farmfe/core'
 import monacoEditorEsmPlugin from 'vite-plugin-monaco-editor-esm'
 
+const PUBLIC_PATH = process.env.PUBLIC_PATH || '/'
+
 export default defineConfig({
     compilation: {
         presetEnv: true,
@@ -9,7 +11,7 @@ export default defineConfig({
         },
         output: {
             path: 'dist',
-            publicPath: './',
+            publicPath: PUBLIC_PATH,
             targetEnv: 'browser'
         },
         define: {
