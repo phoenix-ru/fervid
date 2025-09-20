@@ -1,5 +1,5 @@
 import { defineConfig } from '@farmfe/core'
-import monacoEditorEsmPlugin from 'vite-plugin-monaco-editor-esm'
+import farmPluginWorker from '@farmfe/plugin-worker'
 
 const PUBLIC_PATH = process.env.PUBLIC_PATH || '/'
 
@@ -14,10 +14,6 @@ export default defineConfig({
             publicPath: PUBLIC_PATH,
             targetEnv: 'browser'
         },
-        define: {
-            // This is for some reason not handled by Farm correctly
-            NODE_DEBUG_NATIVE: ''
-        },
         // This leads to a Farm panic.
         // Enabling persistentCache in general leads to 2x slower builds
         // persistentCache: {
@@ -28,5 +24,7 @@ export default defineConfig({
         // }
         persistentCache: false
     },
-    vitePlugins: [monacoEditorEsmPlugin()],
+    plugins: [
+        farmPluginWorker()
+    ],
 })
