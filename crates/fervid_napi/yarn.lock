@@ -111,6 +111,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@emnapi/core@npm:^1.5.0":
+  version: 1.5.0
+  resolution: "@emnapi/core@npm:1.5.0"
+  dependencies:
+    "@emnapi/wasi-threads": "npm:1.1.0"
+    tslib: "npm:^2.4.0"
+  checksum: 10c0/52ba3485277706d92fa27d92b37e5b4f6ef0742c03ed68f8096f294c6bfa30f0752c82d4c2bfa14bff4dc30d63c9f71a8f9fb64a92743d00807d9e468fafd5ff
+  languageName: node
+  linkType: hard
+
 "@emnapi/runtime@npm:^1.4.0":
   version: 1.4.3
   resolution: "@emnapi/runtime@npm:1.4.3"
@@ -129,6 +139,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@emnapi/runtime@npm:^1.5.0":
+  version: 1.5.0
+  resolution: "@emnapi/runtime@npm:1.5.0"
+  dependencies:
+    tslib: "npm:^2.4.0"
+  checksum: 10c0/a85c9fc4e3af49cbe41e5437e5be2551392a931910cd0a5b5d3572532786927810c9cc1db11b232ec8f9657b33d4e6f7c4f985f1a052917d7cd703b5b2a20faa
+  languageName: node
+  linkType: hard
+
 "@emnapi/wasi-threads@npm:1.0.2":
   version: 1.0.2
   resolution: "@emnapi/wasi-threads@npm:1.0.2"
@@ -144,6 +163,15 @@ __metadata:
   dependencies:
     tslib: "npm:^2.4.0"
   checksum: 10c0/2c91a53e62f875800baf035c4d42c9c0d18e5afd9a31ca2aac8b435aeaeaeaac386b5b3d0d0e70aa7a5a9852bbe05106b1f680cd82cce03145c703b423d41313
+  languageName: node
+  linkType: hard
+
+"@emnapi/wasi-threads@npm:1.1.0":
+  version: 1.1.0
+  resolution: "@emnapi/wasi-threads@npm:1.1.0"
+  dependencies:
+    tslib: "npm:^2.4.0"
+  checksum: 10c0/e6d54bf2b1e64cdd83d2916411e44e579b6ae35d5def0dea61a3c452d9921373044dff32a8b8473ae60c80692bdc39323e98b96a3f3d87ba6886b24dd0ef7ca1
   languageName: node
   linkType: hard
 
@@ -425,6 +453,92 @@ __metadata:
   checksum: 10c0/c178c1b58c574200c0fd125af3e4bc775daba7ce434ba6d1eeaf9bcb64b2e9fea75efabffb3ed3ab28858e55a016a5efa95f509994ee4341b341199ca630b89e
   languageName: node
   linkType: hard
+
+"@fervid/napi-android-arm-eabi@workspace:npm/android-arm-eabi":
+  version: 0.0.0-use.local
+  resolution: "@fervid/napi-android-arm-eabi@workspace:npm/android-arm-eabi"
+  languageName: unknown
+  linkType: soft
+
+"@fervid/napi-android-arm64@workspace:npm/android-arm64":
+  version: 0.0.0-use.local
+  resolution: "@fervid/napi-android-arm64@workspace:npm/android-arm64"
+  languageName: unknown
+  linkType: soft
+
+"@fervid/napi-darwin-arm64@workspace:npm/darwin-arm64":
+  version: 0.0.0-use.local
+  resolution: "@fervid/napi-darwin-arm64@workspace:npm/darwin-arm64"
+  languageName: unknown
+  linkType: soft
+
+"@fervid/napi-darwin-x64@workspace:npm/darwin-x64":
+  version: 0.0.0-use.local
+  resolution: "@fervid/napi-darwin-x64@workspace:npm/darwin-x64"
+  languageName: unknown
+  linkType: soft
+
+"@fervid/napi-freebsd-x64@workspace:npm/freebsd-x64":
+  version: 0.0.0-use.local
+  resolution: "@fervid/napi-freebsd-x64@workspace:npm/freebsd-x64"
+  languageName: unknown
+  linkType: soft
+
+"@fervid/napi-linux-arm-gnueabihf@workspace:npm/linux-arm-gnueabihf":
+  version: 0.0.0-use.local
+  resolution: "@fervid/napi-linux-arm-gnueabihf@workspace:npm/linux-arm-gnueabihf"
+  languageName: unknown
+  linkType: soft
+
+"@fervid/napi-linux-arm64-gnu@workspace:npm/linux-arm64-gnu":
+  version: 0.0.0-use.local
+  resolution: "@fervid/napi-linux-arm64-gnu@workspace:npm/linux-arm64-gnu"
+  languageName: unknown
+  linkType: soft
+
+"@fervid/napi-linux-arm64-musl@workspace:npm/linux-arm64-musl":
+  version: 0.0.0-use.local
+  resolution: "@fervid/napi-linux-arm64-musl@workspace:npm/linux-arm64-musl"
+  languageName: unknown
+  linkType: soft
+
+"@fervid/napi-linux-x64-gnu@workspace:npm/linux-x64-gnu":
+  version: 0.0.0-use.local
+  resolution: "@fervid/napi-linux-x64-gnu@workspace:npm/linux-x64-gnu"
+  languageName: unknown
+  linkType: soft
+
+"@fervid/napi-linux-x64-musl@workspace:npm/linux-x64-musl":
+  version: 0.0.0-use.local
+  resolution: "@fervid/napi-linux-x64-musl@workspace:npm/linux-x64-musl"
+  languageName: unknown
+  linkType: soft
+
+"@fervid/napi-wasm32-wasi@workspace:npm/wasm32-wasi":
+  version: 0.0.0-use.local
+  resolution: "@fervid/napi-wasm32-wasi@workspace:npm/wasm32-wasi"
+  dependencies:
+    "@napi-rs/wasm-runtime": "npm:^1.0.5"
+  languageName: unknown
+  linkType: soft
+
+"@fervid/napi-win32-arm64-msvc@workspace:npm/win32-arm64-msvc":
+  version: 0.0.0-use.local
+  resolution: "@fervid/napi-win32-arm64-msvc@workspace:npm/win32-arm64-msvc"
+  languageName: unknown
+  linkType: soft
+
+"@fervid/napi-win32-ia32-msvc@workspace:npm/win32-ia32-msvc":
+  version: 0.0.0-use.local
+  resolution: "@fervid/napi-win32-ia32-msvc@workspace:npm/win32-ia32-msvc"
+  languageName: unknown
+  linkType: soft
+
+"@fervid/napi-win32-x64-msvc@workspace:npm/win32-x64-msvc":
+  version: 0.0.0-use.local
+  resolution: "@fervid/napi-win32-x64-msvc@workspace:npm/win32-x64-msvc"
+  languageName: unknown
+  linkType: soft
 
 "@fervid/napi@workspace:.":
   version: 0.0.0-use.local
@@ -1190,6 +1304,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@napi-rs/wasm-runtime@npm:^1.0.5":
+  version: 1.0.5
+  resolution: "@napi-rs/wasm-runtime@npm:1.0.5"
+  dependencies:
+    "@emnapi/core": "npm:^1.5.0"
+    "@emnapi/runtime": "npm:^1.5.0"
+    "@tybys/wasm-util": "npm:^0.10.1"
+  checksum: 10c0/8d29299933c57b6ead61f46fad5c3dfabc31e1356bbaf25c3a8ae57be0af0db0006a808f2c1bb16e28925e027f20e0856550dac94e015f56dd6ed53b38f9a385
+  languageName: node
+  linkType: hard
+
 "@napi-rs/wasm-tools-android-arm-eabi@npm:1.0.1":
   version: 1.0.1
   resolution: "@napi-rs/wasm-tools-android-arm-eabi@npm:1.0.1"
@@ -1943,6 +2068,15 @@ __metadata:
   dependencies:
     tslib: "npm:^2.4.0"
   checksum: 10c0/044feba55c1e2af703aa4946139969badb183ce1a659a75ed60bc195a90e73a3f3fc53bcd643497c9954597763ddb051fec62f80962b2ca6fc716ba897dc696e
+  languageName: node
+  linkType: hard
+
+"@tybys/wasm-util@npm:^0.10.1":
+  version: 0.10.1
+  resolution: "@tybys/wasm-util@npm:0.10.1"
+  dependencies:
+    tslib: "npm:^2.4.0"
+  checksum: 10c0/b255094f293794c6d2289300c5fbcafbb5532a3aed3a5ffd2f8dc1828e639b88d75f6a376dd8f94347a44813fd7a7149d8463477a9a49525c8b2dcaa38c2d1e8
   languageName: node
   linkType: hard
 
