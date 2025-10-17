@@ -4,19 +4,20 @@ use std::{cell::RefCell, rc::Rc};
 
 use fervid_core::{
     fervid_atom, BindingTypes, ComponentBinding, CustomDirectiveBinding, FervidAtom,
-    SfcCustomBlock, SfcStyleBlock, SfcTemplateBlock, TemplateGenerationMode, VueImportsSet,
+    SfcCustomBlock, SfcStyleBlock, SfcTemplateBlock, TemplateGenerationMode, VueImports,
+    VueImportsSet,
 };
 use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use smallvec::SmallVec;
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::ast::{
-        Decl, Expr, ExprOrSpread, Function, Id, ImportDecl, Module, ObjectLit, PropOrSpread, Str,
-        TsType,
+        Decl, Expr, ExprOrSpread, Function, Id, ImportDecl, Module, ObjectLit,
+        PropOrSpread, Str, TsType,
     },
 };
 
-use crate::error::TransformError;
+use crate::{error::TransformError, template::directive_transforms::DirectiveTransformsProvider};
 
 /// Context object. Currently very minimal but may grow over time.
 pub struct TransformSfcContext {
@@ -29,9 +30,13 @@ pub struct TransformSfcContext {
     pub bindings_helper: BindingsHelper,
     pub deps: HashSet<String>,
     pub transform_asset_urls: TransformAssetUrlsConfig,
+    /// Scopes for types
     pub scopes: Vec<TypeScopeContainer>,
+    /// Scopes for directives
+    pub directive_scopes: DirectiveScopes,
     pub errors: Vec<TransformError>,
     pub warnings: Vec<TransformError>,
+    pub directive_transforms: DirectiveTransformsProvider,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -151,6 +156,14 @@ pub struct TypeScope {
 /// Container for easy sharing and modification of scopes
 pub type TypeScopeContainer = Rc<RefCell<TypeScope>>;
 
+#[derive(Debug, Default)]
+pub struct DirectiveScopes {
+    pub v_for: u8,
+    pub v_slot: u8,
+    pub v_pre: u8,
+    pub v_once: u8,
+}
+
 // Todo maybe use SmallVec?
 #[derive(Debug, Default, PartialEq)]
 pub struct OptionsApiBindings {
@@ -255,6 +268,7 @@ pub struct TransformSfcOptions<'s> {
     pub scope_id: &'s str,
     pub filename: &'s str,
     pub transform_asset_urls: TransformAssetUrlsConfig,
+    pub directive_transforms: DirectiveTransformsProvider,
 }
 
 pub struct TransformSfcResult {
@@ -294,7 +308,7 @@ impl SetupBinding {
 
 #[cfg(test)]
 impl TransformSfcContext {
-    pub fn anonymous() -> TransformSfcContext {
+    pub fn anonymous() -> Self {
         let filename = "anonymous.vue".to_string();
         TransformSfcContext {
             filename: filename.to_owned(),
@@ -303,9 +317,11 @@ impl TransformSfcContext {
             props_destructure: PropsDestructureConfig::default(),
             deps: HashSet::default(),
             scopes: vec![],
+            directive_scopes: Default::default(),
             transform_asset_urls: TransformAssetUrlsConfig::default(),
             errors: vec![],
             warnings: vec![],
+            directive_transforms: Default::default(),
         }
     }
 }
@@ -366,5 +382,12 @@ impl Default for TransformAssetUrlsConfigOptions {
             include_absolute: false,
             tags,
         }
+    }
+}
+
+impl BindingsHelper {
+    pub fn helper(&mut self, vue_import: VueImports) -> VueImports {
+        self.vue_imports |= vue_import;
+        vue_import
     }
 }

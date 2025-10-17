@@ -463,3 +463,9 @@ pub enum TemplateGenerationMode {
     #[default]
     RenderFn,
 }
+
+impl TemplateGenerationMode {
+    pub fn is_inline(&self) -> bool {
+        matches!(self, TemplateGenerationMode::Inline)
+    }
+}

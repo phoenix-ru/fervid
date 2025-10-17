@@ -107,6 +107,16 @@ pub enum TemplateErrorKind {
     TransformAssetUrlsBaseUrlParseFailed,
     /// Failed parsing the configured base URL when doing asset URL transform
     TransformAssetUrlsUrlParseFailed,
+    /// v-model value must be a valid JavaScript member expression
+    VModelMalformedExpression,
+    /// v-model cannot be used on a prop, because local prop bindings are not writable. Use a v-bind binding combined with a v-on listener that emits update:x event instead
+    VModelOnProps,
+    /// v-model cannot be used on v-for or v-slot scope variables because they are not writable
+    VModelOnScopeVariable,
+    /// v-on is missing expression
+    VOnNoExpression,
+    /// v-slot can only be used on components or <template> tags.
+    VSlotMisplaced,
 }
 
 impl From<CssError> for TransformError {

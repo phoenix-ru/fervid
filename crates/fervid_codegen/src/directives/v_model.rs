@@ -24,6 +24,8 @@ impl CodegenContext {
         let span = v_model.span;
         let mut buf = String::new();
 
+        // TODO Move the props part into the transform
+
         // 1. Get bound attribute (part after `:` or `modelValue`).
         // `v-model="smth"` is same as `v-model:modelValue="smth"`
         let bound_attribute = v_model

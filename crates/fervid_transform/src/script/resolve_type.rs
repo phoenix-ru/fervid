@@ -4137,6 +4137,7 @@ mod tests {
                 scope_id: "test",
                 filename: "./Test.vue",
                 transform_asset_urls: crate::TransformAssetUrlsConfig::default(),
+                directive_transforms: Default::default(),
             },
         );
 

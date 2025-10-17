@@ -178,24 +178,11 @@ impl BindingsHelperTransform for BindingsHelper {
             return BindingTypes::JsGlobal;
         }
 
-        let mut current_scope_index = starting_scope;
-
-        // Check template scope
-        while let Some(current_scope) = self.template_scopes.get(current_scope_index as usize) {
-            // Check variable existence in the current scope
-            let found = current_scope.variables.iter().find(|it| *it == variable);
-
-            if found.is_some() {
-                return BindingTypes::TemplateLocal;
-            }
-
-            // Check if we reached the root scope, it will have itself as a parent
-            if current_scope.parent == current_scope_index {
-                break;
-            }
-
-            // Go to parent
-            current_scope_index = current_scope.parent;
+        if matches!(
+            self.find_in_template_scopes(starting_scope, variable),
+            BindingTypes::TemplateLocal
+        ) {
+            return BindingTypes::TemplateLocal;
         }
 
         // Check hash-map for convenience (we may have found the reference previously)
@@ -245,6 +232,32 @@ impl BindingsHelperTransform for BindingsHelper {
                     return BindingTypes::SetupMaybeRef;
                 }
             }
+        }
+
+        BindingTypes::Unresolved
+    }
+}
+
+impl BindingsHelper {
+    pub fn find_in_template_scopes(&self, starting_scope: u32, atom: &FervidAtom) -> BindingTypes {
+        let mut current_scope_index = starting_scope;
+
+        // Check template scope
+        while let Some(current_scope) = self.template_scopes.get(current_scope_index as usize) {
+            // Check variable existence in the current scope
+            let found = current_scope.variables.iter().find(|it| *it == atom);
+
+            if found.is_some() {
+                return BindingTypes::TemplateLocal;
+            }
+
+            // Check if we reached the root scope, it will have itself as a parent
+            if current_scope.parent == current_scope_index {
+                break;
+            }
+
+            // Go to parent
+            current_scope_index = current_scope.parent;
         }
 
         BindingTypes::Unresolved

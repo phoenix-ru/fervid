@@ -33,6 +33,8 @@ fn codegen_benchmark(c: &mut Criterion) {
                     transform_asset_urls: TransformAssetUrlsConfig::default(),
                     errors: vec![],
                     warnings: vec![],
+                    directive_scopes: Default::default(),
+                    directive_transforms: Default::default(),
                 };
 
                 fervid_transform::template::transform_and_record_template(template_block, &mut ctx);

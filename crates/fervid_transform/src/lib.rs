@@ -123,9 +123,11 @@ impl TransformSfcContext {
             bindings_helper,
             deps: Default::default(),
             scopes: vec![],
+            directive_scopes: Default::default(),
             transform_asset_urls: options.transform_asset_urls.clone(),
             errors: vec![],
             warnings: vec![],
+            directive_transforms: options.directive_transforms.to_owned(),
         }
     }
 

@@ -1,9 +1,14 @@
 pub mod asset_urls;
 pub mod ast_transform;
 pub mod collect_vars;
+pub mod core;
+pub mod dom;
+pub mod directive_transforms;
 pub mod expr_transform;
 pub mod js_builtins;
 pub mod resolutions;
+pub mod transform_element;
 pub mod utils;
+pub mod v_model;
 pub mod v_on;
 pub use ast_transform::transform_and_record_template;

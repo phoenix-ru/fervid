@@ -23,6 +23,8 @@ flags! {
         DefineComponent,
         #[strum(serialize = "_Fragment")]
         Fragment,
+        #[strum(serialize = "_guardReactiveProps")]
+        GuardReactiveProps,
         #[strum(serialize = "_isMemoSame")]
         IsMemoSame,
         #[strum(serialize = "_isRef")]
@@ -33,10 +35,14 @@ flags! {
         MergeDefaults,
         #[strum(serialize = "_mergeModels")]
         MergeModels,
+        #[strum(serialize = "_mergeProps")]
+        MergeProps,
         #[strum(serialize = "_normalizeClass")]
         NormalizeClass,
         #[strum(serialize = "_normalizeStyle")]
         NormalizeStyle,
+        #[strum(serialize = "_normalizeProps")]
+        NormalizeProps,
         #[strum(serialize = "_openBlock")]
         OpenBlock,
         #[strum(serialize = "_renderList")]
@@ -59,6 +65,8 @@ flags! {
         ToDisplayString,
         #[strum(serialize = "_toHandlerKey")]
         ToHandlerKey,
+        #[strum(serialize = "_toHandlers")]
+        ToHandlers,
         #[strum(serialize = "_Transition")]
         Transition,
         #[strum(serialize = "_TransitionGroup")]
