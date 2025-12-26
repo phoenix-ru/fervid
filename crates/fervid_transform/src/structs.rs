@@ -17,7 +17,7 @@ use swc_core::{
     },
 };
 
-use crate::{error::TransformError, template::directive_transforms::DirectiveTransformsProvider};
+use crate::{error::TransformError, template::{directive_transforms::DirectiveTransformsProvider, node_transforms::NodeTransformsProvider}};
 
 /// Context object. Currently very minimal but may grow over time.
 pub struct TransformSfcContext {
@@ -37,6 +37,7 @@ pub struct TransformSfcContext {
     pub errors: Vec<TransformError>,
     pub warnings: Vec<TransformError>,
     pub directive_transforms: DirectiveTransformsProvider,
+    pub node_transforms: NodeTransformsProvider,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -269,6 +270,7 @@ pub struct TransformSfcOptions<'s> {
     pub filename: &'s str,
     pub transform_asset_urls: TransformAssetUrlsConfig,
     pub directive_transforms: DirectiveTransformsProvider,
+    pub node_transforms: NodeTransformsProvider,
 }
 
 pub struct TransformSfcResult {
@@ -322,6 +324,7 @@ impl TransformSfcContext {
             errors: vec![],
             warnings: vec![],
             directive_transforms: Default::default(),
+            node_transforms: Default::default(),
         }
     }
 }

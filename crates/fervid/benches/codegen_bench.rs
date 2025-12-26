@@ -35,6 +35,7 @@ fn codegen_benchmark(c: &mut Criterion) {
                     warnings: vec![],
                     directive_scopes: Default::default(),
                     directive_transforms: Default::default(),
+                    node_transforms: Default::default(),
                 };
 
                 fervid_transform::template::transform_and_record_template(template_block, &mut ctx);

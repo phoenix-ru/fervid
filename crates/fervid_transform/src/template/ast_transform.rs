@@ -296,6 +296,63 @@ trait VisitMut {
 
 impl Visitor for TemplateVisitor<'_> {
     fn visit_element_node(&mut self, element_node: &mut ElementNode) {
+        #[cfg(feature = "new-pipeline")]
+        return self.visit_element_node_new(element_node);
+
+        #[cfg(not(feature = "new-pipeline"))]
+        return self.visit_element_node_old(element_node);
+    }
+
+    fn visit_conditional_node(&mut self, conditional_node: &mut ConditionalNodeSequence) {
+        // In this function, conditions are transformed first
+        // without updating the template scope and collecting its variables.
+        // I believe this is a correct way of doing it, because in VDOM the condition
+        // wraps around the node (`condition ? if_node : else_node`).
+        // However, I am not too sure about the `v-if` & `v-slot` combined usage.
+
+        self.ctx
+            .bindings_helper
+            .transform_expr(&mut conditional_node.if_node.condition, self.current_scope);
+        self.visit_element_node(&mut conditional_node.if_node.node);
+
+        for else_if_node in conditional_node.else_if_nodes.iter_mut() {
+            self.ctx
+                .bindings_helper
+                .transform_expr(&mut else_if_node.condition, self.current_scope);
+            self.visit_element_node(&mut else_if_node.node);
+        }
+
+        if let Some(ref mut else_node) = conditional_node.else_node {
+            self.visit_element_node(else_node);
+        }
+    }
+
+    fn visit_interpolation(&mut self, interpolation: &mut Interpolation) {
+        interpolation.template_scope = self.current_scope;
+
+        let has_js = self
+            .ctx
+            .bindings_helper
+            .transform_expr(&mut interpolation.value, self.current_scope);
+
+        interpolation.patch_flag = has_js;
+    }
+}
+
+impl TemplateVisitor<'_> {
+    pub fn new(ctx: &mut TransformSfcContext) -> TemplateVisitor {
+        TemplateVisitor {
+            ctx,
+            current_scope: 0,
+            v_for_scope: false,
+        }
+    }
+
+    fn visit_element_node_new(&mut self, element_node: &mut ElementNode) {
+
+    }
+
+    fn visit_element_node_old(&mut self, element_node: &mut ElementNode) {
         let parent_scope = self.current_scope;
         let mut scope_to_use = parent_scope;
 
@@ -700,51 +757,6 @@ impl Visitor for TemplateVisitor<'_> {
 
         // Restore the parent scope
         self.current_scope = parent_scope;
-    }
-
-    fn visit_conditional_node(&mut self, conditional_node: &mut ConditionalNodeSequence) {
-        // In this function, conditions are transformed first
-        // without updating the template scope and collecting its variables.
-        // I believe this is a correct way of doing it, because in VDOM the condition
-        // wraps around the node (`condition ? if_node : else_node`).
-        // However, I am not too sure about the `v-if` & `v-slot` combined usage.
-
-        self.ctx
-            .bindings_helper
-            .transform_expr(&mut conditional_node.if_node.condition, self.current_scope);
-        self.visit_element_node(&mut conditional_node.if_node.node);
-
-        for else_if_node in conditional_node.else_if_nodes.iter_mut() {
-            self.ctx
-                .bindings_helper
-                .transform_expr(&mut else_if_node.condition, self.current_scope);
-            self.visit_element_node(&mut else_if_node.node);
-        }
-
-        if let Some(ref mut else_node) = conditional_node.else_node {
-            self.visit_element_node(else_node);
-        }
-    }
-
-    fn visit_interpolation(&mut self, interpolation: &mut Interpolation) {
-        interpolation.template_scope = self.current_scope;
-
-        let has_js = self
-            .ctx
-            .bindings_helper
-            .transform_expr(&mut interpolation.value, self.current_scope);
-
-        interpolation.patch_flag = has_js;
-    }
-}
-
-impl TemplateVisitor<'_> {
-    pub fn new(ctx: &mut TransformSfcContext) -> TemplateVisitor {
-        TemplateVisitor {
-            ctx,
-            current_scope: 0,
-            v_for_scope: false,
-        }
     }
 
     // TODO Maybe do this in parser instead, because it sometimes needs this info

@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use enum_dispatch::enum_dispatch;
 use fervid_core::{ElementNode, Property, VBindDirective, VModelDirective, VOnDirective};
-use swc_core::ecma::ast::{Expr, PropOrSpread};
+use swc_core::ecma::ast::Expr;
 
 use crate::TransformSfcContext;
 

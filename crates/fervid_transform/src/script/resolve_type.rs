@@ -4138,6 +4138,7 @@ mod tests {
                 filename: "./Test.vue",
                 transform_asset_urls: crate::TransformAssetUrlsConfig::default(),
                 directive_transforms: Default::default(),
+                node_transforms: Default::default(),
             },
         );
 

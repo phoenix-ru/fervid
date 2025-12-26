@@ -59,6 +59,10 @@ pub struct PatchMarkers {
     pub should_use_block: bool,
 }
 
+pub fn post_transform_element_node(node: &ElementNode, ctx: &mut TransformSfcContext) {
+
+}
+
 pub fn build_props(
     node: &ElementNode,
     ctx: &mut TransformSfcContext,

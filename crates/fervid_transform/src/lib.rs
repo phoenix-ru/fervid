@@ -128,6 +128,7 @@ impl TransformSfcContext {
             errors: vec![],
             warnings: vec![],
             directive_transforms: options.directive_transforms.to_owned(),
+            node_transforms: options.node_transforms.to_owned(),
         }
     }
 

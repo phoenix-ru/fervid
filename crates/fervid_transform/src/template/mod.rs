@@ -5,6 +5,7 @@ pub mod core;
 pub mod dom;
 pub mod directive_transforms;
 pub mod expr_transform;
+pub mod node_transforms;
 pub mod js_builtins;
 pub mod resolutions;
 pub mod transform_element;
