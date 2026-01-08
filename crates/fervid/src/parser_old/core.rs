@@ -319,7 +319,7 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
                 starting_tag,
                 children: vec![],
                 template_scope: 0,
-                kind: ElementKind::Element,
+                tag_type: ElementKind::Element,
                 patch_hints: Default::default(),
                 span: DUMMY_SP, // TODO
             }),
@@ -346,7 +346,7 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
             starting_tag,
             children,
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP, // TODO
         }),

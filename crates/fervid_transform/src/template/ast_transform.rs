@@ -1,8 +1,8 @@
 use fervid_core::{
-    check_attribute_name, fervid_atom, is_from_default_slot, is_html_tag, AttributeOrBinding,
+    check_attribute_name, fervid_atom, is_from_default_slot, AttributeOrBinding,
     BindingTypes, BuiltinType, Conditional, ConditionalNodeSequence, ElementKind, ElementNode,
     FervidAtom, Interpolation, IntoIdent, Node, PatchFlags, PatchHints, SfcTemplateBlock,
-    StartingTag, StrOrExpr, TemplateGenerationMode, VBindDirective, VSlotDirective, VUE_BUILTINS,
+    StartingTag, StrOrExpr, TemplateGenerationMode, VBindDirective, VSlotDirective,
 };
 use smallvec::SmallVec;
 use swc_core::{
@@ -10,7 +10,7 @@ use swc_core::{
     ecma::ast::{Bool, Expr, Lit},
 };
 
-use crate::{TemplateScope, TransformSfcContext};
+use crate::{template::node_transforms::NodeTransforms, TemplateScope, TransformSfcContext};
 
 use super::{
     asset_urls::transform_asset_urls, collect_vars::collect_variables,
@@ -61,7 +61,7 @@ pub fn transform_and_record_template(
         }
 
         let new_root = Node::Element(ElementNode {
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             starting_tag: StartingTag {
                 tag_name: fervid_atom!("template"),
                 attributes: vec![],
@@ -349,7 +349,10 @@ impl TemplateVisitor<'_> {
     }
 
     fn visit_element_node_new(&mut self, element_node: &mut ElementNode) {
-
+        // Cloning transforms is fine here due to the structure being optimized for it
+        let node_transforms = self.ctx.node_transforms.clone();
+        node_transforms.pre_transform_element_node(self.ctx, element_node);
+        node_transforms.post_transform_element_node(self.ctx, element_node);
     }
 
     fn visit_element_node_old(&mut self, element_node: &mut ElementNode) {
@@ -357,9 +360,8 @@ impl TemplateVisitor<'_> {
         let mut scope_to_use = parent_scope;
 
         // Mark the node with a correct type (element, component or built-in)
-        let element_kind = self.recognize_element_kind(&element_node.starting_tag);
+        let element_kind = element_node.tag_type;
         let is_component = matches!(element_kind, ElementKind::Component);
-        element_node.kind = element_kind;
 
         if is_component {
             self.maybe_resolve_component(&element_node.starting_tag.tag_name);
@@ -758,35 +760,6 @@ impl TemplateVisitor<'_> {
         // Restore the parent scope
         self.current_scope = parent_scope;
     }
-
-    // TODO Maybe do this in parser instead, because it sometimes needs this info
-    fn recognize_element_kind(&self, starting_tag: &StartingTag) -> ElementKind {
-        let tag_name = &starting_tag.tag_name;
-
-        // First, check for a built-in
-        if let Some(builtin_type) = VUE_BUILTINS.get(tag_name) {
-            // Special case for `<component>`. If it does not have `is`, this is not a built-in
-            if tag_name.eq("component") {
-                let has_is = starting_tag
-                    .attributes
-                    .iter()
-                    .any(|attr| check_attribute_name(attr, "is"));
-
-                if !has_is {
-                    return ElementKind::Component;
-                }
-            }
-
-            return ElementKind::Builtin(*builtin_type);
-        }
-
-        // Then check if this is an HTML tag
-        if is_html_tag(&starting_tag.tag_name) {
-            ElementKind::Element
-        } else {
-            ElementKind::Component
-        }
-    }
 }
 
 impl VisitMut for Node {
@@ -809,23 +782,6 @@ mod tests {
 
     use super::*;
 
-    /// Special case: `<component>` without `is` attribute is not a builtin
-    #[test]
-    fn it_distinguishes_component_builtin_and_not() {
-        let starting_tag = StartingTag {
-            tag_name: "component".into(),
-            attributes: vec![],
-            directives: None,
-        };
-
-        let mut ctx = TransformSfcContext::anonymous();
-        let template_visitor = TemplateVisitor::new(&mut ctx);
-        assert!(matches!(
-            template_visitor.recognize_element_kind(&starting_tag),
-            ElementKind::Component
-        ));
-    }
-
     #[test]
     fn it_folds_basic_seq() {
         // <template><div>
@@ -844,7 +800,7 @@ mod tests {
                 },
                 children: vec![text_node(), if_node(), else_if_node(), else_node()],
                 template_scope: 0,
-                kind: ElementKind::Element,
+                tag_type: ElementKind::Element,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             })],
@@ -1036,7 +992,7 @@ mod tests {
                     span: DUMMY_SP,
                 }),
                 Node::Element(ElementNode {
-                    kind: ElementKind::Element,
+                    tag_type: ElementKind::Element,
                     starting_tag: StartingTag {
                         tag_name: "div".into(),
                         attributes: vec![],
@@ -1085,7 +1041,7 @@ mod tests {
                     else_node(),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Element,
+                tag_type: ElementKind::Element,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             })],
@@ -1122,7 +1078,7 @@ mod tests {
             },
             children: vec![],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
         });
@@ -1137,7 +1093,7 @@ mod tests {
             },
             children: vec![Node::Text("hello".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
         });
@@ -1163,7 +1119,7 @@ mod tests {
         // For cloning
         // <p>text</p>
         let p = ElementNode {
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             starting_tag: StartingTag {
                 tag_name: "p".into(),
                 attributes: vec![],
@@ -1176,7 +1132,7 @@ mod tests {
         };
         // <div v-if="false"></div>
         let div = ElementNode {
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             starting_tag: StartingTag {
                 tag_name: "div".into(),
                 attributes: vec![],
@@ -1192,7 +1148,7 @@ mod tests {
         };
         // <template></template>
         let tmpl = ElementNode {
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             starting_tag: StartingTag {
                 tag_name: "template".into(),
                 attributes: vec![],
@@ -1407,7 +1363,7 @@ mod tests {
             },
             children: vec![Node::Text("if".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
         })
@@ -1440,7 +1396,7 @@ mod tests {
             },
             children: vec![Node::Text("else-if".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
         })
@@ -1474,7 +1430,7 @@ mod tests {
             },
             children: vec![Node::Text("else".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
         })

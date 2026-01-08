@@ -118,12 +118,19 @@ impl TransformSfcContext {
 
         TransformSfcContext {
             filename: options.filename.to_string(),
+            // Explicitly not defined as a tiny performance optimization
+            // for it to be computed during `is_self_name` call.
+            // TODO: Implement `is_self_name` call
+            // const nameMatch = filename.replace(/\?.*$/, '').match(/([^/\\]+)\.\w+$/)
+            // selfName: nameMatch && capitalize(camelize(nameMatch[1])),
+            self_name: None,
             is_ce: options.is_ce,
             props_destructure: options.props_destructure,
             bindings_helper,
             deps: Default::default(),
             scopes: vec![],
             directive_scopes: Default::default(),
+            current_template_scope: 0,
             transform_asset_urls: options.transform_asset_urls.clone(),
             errors: vec![],
             warnings: vec![],

@@ -73,7 +73,7 @@ mod tests {
         // <keep-alive></keep-alive>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::KeepAlive),
+                tag_type: ElementKind::Builtin(BuiltinType::KeepAlive),
                 starting_tag: StartingTag {
                     tag_name: "keep-alive".into(),
                     attributes: vec![],
@@ -93,7 +93,7 @@ mod tests {
         // <keep-alive foo="bar" :baz="qux"></keep-alive>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::KeepAlive),
+                tag_type: ElementKind::Builtin(BuiltinType::KeepAlive),
                 starting_tag: StartingTag {
                     tag_name: "keep-alive".into(),
                     attributes: vec![
@@ -116,7 +116,7 @@ mod tests {
         // <keep-alive>foobar</keep-alive>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::KeepAlive),
+                tag_type: ElementKind::Builtin(BuiltinType::KeepAlive),
                 starting_tag: StartingTag {
                     tag_name: "keep-alive".into(),
                     attributes: vec![],
@@ -136,7 +136,7 @@ mod tests {
         // <keep-alive foo="bar" :baz="qux">foobar</keep-alive>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::KeepAlive),
+                tag_type: ElementKind::Builtin(BuiltinType::KeepAlive),
                 starting_tag: StartingTag {
                     tag_name: "keep-alive".into(),
                     attributes: vec![

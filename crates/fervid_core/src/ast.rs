@@ -2,10 +2,7 @@
 
 use swc_core::{
     common::{Span, DUMMY_SP},
-    ecma::ast::{
-        Bool, CallExpr, Callee, Expr, ExprOrSpread, IdentName, KeyValueProp, Lit, Prop, PropName,
-        PropOrSpread, Str,
-    },
+    ecma::ast::{Bool, CallExpr, Expr, IdentName, Lit, PropName, PropOrSpread, Str},
 };
 
 use crate::{FervidAtom, VueImports};
@@ -59,6 +56,7 @@ pub enum JsChildNode {
     CallExpression(Box<CallExpression>),
     ObjectExpression(Box<ObjectExpression>),
     ExpressionNode(Box<ExpressionNode>),
+    // Unused?
     OriginalValueMarker,
 }
 
@@ -94,10 +92,7 @@ pub fn create_object_expression(properties: Vec<Property>, span: Span) -> Object
     ObjectExpression { properties, span }
 }
 
-pub fn create_object_property(
-    key: ExpressionPropNameNode,
-    value: JsChildNode,
-) -> Property {
+pub fn create_object_property(key: ExpressionPropNameNode, value: JsChildNode) -> Property {
     Property { key, value }
 }
 
@@ -138,7 +133,11 @@ pub fn create_simple_expression_str(
             raw: None,
         }))),
         is_static,
-        const_type: ConstantTypes::CanStringify,
+        const_type: if is_static {
+            ConstantTypes::CanStringify
+        } else {
+            ConstantTypes::NotConstant
+        },
         is_handler_key: false,
     }
 }
@@ -155,18 +154,19 @@ pub fn create_simple_expression_str(
 // }
 
 impl From<PropOrSpread> for Property {
-    fn from(value: PropOrSpread) -> Self {
-        Property {
-            key: todo!(),
-            value: todo!(),
-        }
+    fn from(_value: PropOrSpread) -> Self {
+        todo!()
+        // Property {
+        //     key: todo!(),
+        //     value: todo!(),
+        // }
     }
 }
 
 // CallExpression
 
 impl From<CallExpr> for CallExpression {
-    fn from(value: CallExpr) -> Self {
+    fn from(_value: CallExpr) -> Self {
         todo!()
         // Self {
         //     callee: (),
@@ -198,9 +198,9 @@ impl ExpressionPropNameNode {
     }
 }
 
-impl Into<PropName> for ExpressionPropNameNode {
-    fn into(self) -> PropName {
-        match self {
+impl From<ExpressionPropNameNode> for PropName {
+    fn from(val: ExpressionPropNameNode) -> Self {
+        match val {
             ExpressionPropNameNode::SimpleExpression(s) => PropName::Ident(s.ast),
             ExpressionPropNameNode::CompoundExpression(c) => c.ast,
         }

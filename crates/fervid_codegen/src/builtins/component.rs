@@ -114,7 +114,7 @@ mod tests {
                 // <component></component>
                 test_out(
                     ElementNode {
-                        kind: ElementKind::Builtin(BuiltinType::Component),
+                        tag_type: ElementKind::Builtin(BuiltinType::Component),
                         starting_tag: StartingTag {
                             tag_name: "component".into(),
                             attributes: vec![],
@@ -137,7 +137,7 @@ mod tests {
         // <component is="div"></component>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Component),
+                tag_type: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
                     tag_name: "component".into(),
                     attributes: vec![regular_attribute("is", "div")],
@@ -157,7 +157,7 @@ mod tests {
         // <component :is="foo"></component>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Component),
+                tag_type: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
                     tag_name: "component".into(),
                     attributes: vec![v_bind_attribute("is", "foo")],
@@ -177,7 +177,7 @@ mod tests {
         // <component is="div" foo="bar" :baz="qux"></component>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Component),
+                tag_type: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
                     tag_name: "component".into(),
                     attributes: vec![
@@ -201,7 +201,7 @@ mod tests {
         // <component is="div">foobar</component>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Component),
+                tag_type: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
                     tag_name: "component".into(),
                     attributes: vec![regular_attribute("is", "div")],
@@ -223,14 +223,14 @@ mod tests {
         // </component>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Component),
+                tag_type: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
                     tag_name: "component".into(),
                     attributes: vec![regular_attribute("is", "div")],
                     directives: None,
                 },
                 children: vec![Node::Element(ElementNode {
-                    kind: ElementKind::Element,
+                    tag_type: ElementKind::Element,
                     starting_tag: StartingTag {
                         tag_name: "template".into(),
                         attributes: vec![],
@@ -265,7 +265,7 @@ mod tests {
         // </component>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Component),
+                tag_type: ElementKind::Builtin(BuiltinType::Component),
                 starting_tag: StartingTag {
                     tag_name: "component".into(),
                     attributes: vec![
@@ -278,7 +278,7 @@ mod tests {
                 children: vec![
                     Node::Text("foobar".into(), DUMMY_SP),
                     Node::Element(ElementNode {
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         starting_tag: StartingTag {
                             tag_name: "template".into(),
                             attributes: vec![],

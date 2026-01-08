@@ -171,7 +171,7 @@ mod tests {
     macro_rules! slot {
         ($attributes: expr, $children: expr) => {
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Slot),
+                tag_type: ElementKind::Builtin(BuiltinType::Slot),
                 starting_tag: StartingTag {
                     tag_name: "slot".into(),
                     attributes: $attributes,
@@ -283,7 +283,7 @@ mod tests {
                 vec![],
                 vec![
                     Node::Element(ElementNode {
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         starting_tag: StartingTag {
                             tag_name: "div".into(),
                             attributes: vec![],
@@ -295,7 +295,7 @@ mod tests {
                         span: DUMMY_SP,
                     }),
                     Node::Element(ElementNode {
-                        kind: ElementKind::Component,
+                        tag_type: ElementKind::Component,
                         starting_tag: StartingTag {
                             tag_name: "foo-component".into(),
                             attributes: vec![],
@@ -327,7 +327,7 @@ mod tests {
                 ],
                 vec![
                     Node::Element(ElementNode {
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         starting_tag: StartingTag {
                             tag_name: "div".into(),
                             attributes: vec![],
@@ -339,7 +339,7 @@ mod tests {
                         span: DUMMY_SP,
                     }),
                     Node::Element(ElementNode {
-                        kind: ElementKind::Component,
+                        tag_type: ElementKind::Component,
                         starting_tag: StartingTag {
                             tag_name: "foo-component".into(),
                             attributes: vec![],

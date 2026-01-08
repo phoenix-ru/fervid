@@ -81,7 +81,7 @@ pub enum Node {
 #[derive(Debug, Clone)]
 pub struct ElementNode {
     /// Marks the node as either an Element (HTML tag), Builtin (Vue) or Component
-    pub kind: ElementKind,
+    pub tag_type: ElementKind,
     pub starting_tag: StartingTag,
     pub children: Vec<Node>,
     pub template_scope: u32,
@@ -99,6 +99,7 @@ pub enum ElementKind {
 
 #[derive(Debug, Clone, Copy)]
 pub enum BuiltinType {
+    BaseTransition,
     Component,
     KeepAlive,
     Slot,

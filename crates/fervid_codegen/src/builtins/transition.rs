@@ -45,7 +45,7 @@ mod tests {
         // <transition></transition>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Transition),
+                tag_type: ElementKind::Builtin(BuiltinType::Transition),
                 starting_tag: StartingTag {
                     tag_name: "transition".into(),
                     attributes: vec![],
@@ -65,7 +65,7 @@ mod tests {
         // <transition foo="bar" :baz="qux"></transition>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Transition),
+                tag_type: ElementKind::Builtin(BuiltinType::Transition),
                 starting_tag: StartingTag {
                     tag_name: "transition".into(),
                     attributes: vec![
@@ -88,7 +88,7 @@ mod tests {
         // <transition>foobar</transition>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Transition),
+                tag_type: ElementKind::Builtin(BuiltinType::Transition),
                 starting_tag: StartingTag {
                     tag_name: "transition".into(),
                     attributes: vec![],
@@ -108,7 +108,7 @@ mod tests {
         // <transition foo="bar" :baz="qux">foobar</transition>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Transition),
+                tag_type: ElementKind::Builtin(BuiltinType::Transition),
                 starting_tag: StartingTag {
                     tag_name: "transition".into(),
                     attributes: vec![

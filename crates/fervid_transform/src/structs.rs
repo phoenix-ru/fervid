@@ -12,16 +12,22 @@ use smallvec::SmallVec;
 use swc_core::{
     common::{Span, DUMMY_SP},
     ecma::ast::{
-        Decl, Expr, ExprOrSpread, Function, Id, ImportDecl, Module, ObjectLit,
-        PropOrSpread, Str, TsType,
+        Decl, Expr, ExprOrSpread, Function, Id, ImportDecl, Module, ObjectLit, PropOrSpread, Str,
+        TsType,
     },
 };
 
-use crate::{error::TransformError, template::{directive_transforms::DirectiveTransformsProvider, node_transforms::NodeTransformsProvider}};
+use crate::{
+    error::TransformError,
+    template::{
+        directive_transforms::DirectiveTransformsProvider, node_transforms::NodeTransformsProvider,
+    },
+};
 
-/// Context object. Currently very minimal but may grow over time.
+/// Context object. Grows over time
 pub struct TransformSfcContext {
     pub filename: String,
+    pub self_name: Option<String>,
     // pub is_prod: bool, // This is a part of BindingsHelper
     /// Enable/disable the props destructure, or error when usage is encountered
     pub props_destructure: PropsDestructureConfig,
@@ -34,6 +40,7 @@ pub struct TransformSfcContext {
     pub scopes: Vec<TypeScopeContainer>,
     /// Scopes for directives
     pub directive_scopes: DirectiveScopes,
+    pub current_template_scope: u32,
     pub errors: Vec<TransformError>,
     pub warnings: Vec<TransformError>,
     pub directive_transforms: DirectiveTransformsProvider,
@@ -314,12 +321,14 @@ impl TransformSfcContext {
         let filename = "anonymous.vue".to_string();
         TransformSfcContext {
             filename: filename.to_owned(),
+            self_name: None,
             bindings_helper: BindingsHelper::default(),
             is_ce: false,
             props_destructure: PropsDestructureConfig::default(),
             deps: HashSet::default(),
             scopes: vec![],
             directive_scopes: Default::default(),
+            current_template_scope: 0,
             transform_asset_urls: TransformAssetUrlsConfig::default(),
             errors: vec![],
             warnings: vec![],

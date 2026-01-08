@@ -1,10 +1,12 @@
-use crate::FervidAtom;
+use crate::{BuiltinType, FervidAtom};
 use flagset::{flags, FlagSet};
 use strum_macros::{AsRefStr, EnumString, IntoStaticStr};
 
 flags! {
     #[derive(AsRefStr, EnumString, IntoStaticStr)]
     pub enum VueImports: u64 {
+        #[strum(serialize = "_BaseTransition")]
+        BaseTransition,
         #[strum(serialize = "_createBlock")]
         CreateBlock,
         #[strum(serialize = "_createCommentVNode")]
@@ -113,3 +115,19 @@ impl VueImports {
 }
 
 pub type VueImportsSet = FlagSet<VueImports>;
+
+impl From<BuiltinType> for VueImports {
+    fn from(value: BuiltinType) -> Self {
+        match value {
+            BuiltinType::BaseTransition => VueImports::BaseTransition,
+            BuiltinType::KeepAlive => VueImports::KeepAlive,
+            BuiltinType::Suspense => VueImports::Suspense,
+            BuiltinType::Teleport => VueImports::Teleport,
+            BuiltinType::Transition => VueImports::Transition,
+            BuiltinType::TransitionGroup => VueImports::TransitionGroup,
+            // Note: these built-ins are not valid
+            BuiltinType::Component => VueImports::ResolveComponent,
+            BuiltinType::Slot => VueImports::ResolveComponent,
+        }
+    }
+}

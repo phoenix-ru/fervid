@@ -46,7 +46,7 @@ mod tests {
         // <suspense></suspense>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Suspense),
+                tag_type: ElementKind::Builtin(BuiltinType::Suspense),
                 starting_tag: StartingTag {
                     tag_name: "suspense".into(),
                     attributes: vec![],
@@ -66,7 +66,7 @@ mod tests {
         // <suspense foo="bar" :baz="qux"></suspense>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Suspense),
+                tag_type: ElementKind::Builtin(BuiltinType::Suspense),
                 starting_tag: StartingTag {
                     tag_name: "suspense".into(),
                     attributes: vec![
@@ -89,7 +89,7 @@ mod tests {
         // <suspense>foobar</suspense>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Suspense),
+                tag_type: ElementKind::Builtin(BuiltinType::Suspense),
                 starting_tag: StartingTag {
                     tag_name: "suspense".into(),
                     attributes: vec![],
@@ -109,7 +109,7 @@ mod tests {
         // <suspense foo="bar" :baz="qux">foobar</suspense>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Suspense),
+                tag_type: ElementKind::Builtin(BuiltinType::Suspense),
                 starting_tag: StartingTag {
                     tag_name: "suspense".into(),
                     attributes: vec![

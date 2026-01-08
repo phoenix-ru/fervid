@@ -141,7 +141,9 @@
     "clippy",
     "dashmap",
     "ropey",
-    "indexmap"
+    "indexmap",
+    "fallthroughs",
+    "onclick"
   ],
   "ignorePaths": [
     ".github/**",

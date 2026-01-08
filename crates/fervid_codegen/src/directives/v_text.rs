@@ -37,7 +37,7 @@ mod tests {
             // <test-component v-text="foo + bar" />
             ElementNode {
                 children: vec![],
-                kind: ElementKind::Component,
+                tag_type: ElementKind::Component,
                 starting_tag: StartingTag {
                     tag_name: "test-component".into(),
                     attributes: vec![],
@@ -66,7 +66,7 @@ mod tests {
             // <h1 v-text="foo + bar" />
             ElementNode {
                 children: vec![],
-                kind: ElementKind::Element,
+                tag_type: ElementKind::Element,
                 starting_tag: StartingTag {
                     tag_name: "h1".into(),
                     attributes: vec![],
@@ -85,7 +85,7 @@ mod tests {
     }
 
     fn test_out(input: ElementNode, expected: &str, wrap_in_block: bool) {
-        let is_component = matches!(input.kind, ElementKind::Component);
+        let is_component = matches!(input.tag_type, ElementKind::Component);
 
         let mut ctx = CodegenContext::default();
         let out = if is_component {

@@ -27,6 +27,8 @@
 //!   scope_id: "filehash",
 //!   filename: "input.vue",
 //!   transform_asset_urls: fervid_transform::TransformAssetUrlsConfig::default(),
+//!   directive_transforms: Default::default(),
+//!   node_transforms: Default::default(),
 //! };
 //! let transform_result = fervid_transform::transform_sfc(sfc, transform_options, &mut transform_errors);
 //!

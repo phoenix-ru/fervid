@@ -90,7 +90,7 @@ pub enum DirectiveTransformsProvider {
 
 impl Default for DirectiveTransformsProvider {
     fn default() -> Self {
-        Self::Base(BaseDirectiveTransform::default())
+        Self::Base(BaseDirectiveTransform)
     }
 }
 

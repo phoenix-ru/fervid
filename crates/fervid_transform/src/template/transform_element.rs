@@ -1,23 +1,32 @@
+use std::borrow::Cow;
+
 use fervid_core::{
     create_call_expression, create_object_expression, create_object_property,
     create_simple_expression_bool, create_simple_expression_propname, create_simple_expression_str,
-    fervid_atom, AttributeOrBinding, BindingTypes, CallExpression, ElementNode, ExpressionNode, ExpressionPropNameNode, FervidAtom, JsChildNode,
-    ObjectExpression, PatchFlags, PatchHints, Property, SimpleExpressionPropNameNode, StartingTag, StrOrExpr, VCustomDirective, VModelDirective,
+    fervid_atom, AttributeOrBinding, BindingTypes, BuiltinType, CallExpression, ComponentBinding,
+    ElementKind, ElementNode, ExpressionNode, ExpressionPropNameNode, FervidAtom, IntoIdent,
+    JsChildNode, ObjectExpression, PatchFlags, PatchHints, Property, SimpleExpressionNode,
+    SimpleExpressionPropNameNode, StartingTag, StrOrExpr, VCustomDirective, VModelDirective,
     VueDirectives, VueImports,
 };
 use flagset::FlagSet;
 use phf::phf_set;
 use swc_core::{
     common::{util::take::Take, DUMMY_SP},
-    ecma::ast::{Expr, Lit},
+    ecma::ast::{Expr, IdentName, MemberExpr, MemberProp},
 };
 
 use crate::{
     error::{TemplateError, TemplateErrorKind, TransformError},
     template::{
-        directive_transforms::DirectiveTransforms, expr_transform::BindingsHelperTransform,
+        directive_transforms::DirectiveTransforms,
+        expr_transform::BindingsHelperTransform,
+        utils::{
+            find_prop, is_core_component, is_static_arg_of, to_camel_case, to_pascal_case,
+            to_valid_asset_id,
+        },
     },
-    TransformSfcContext,
+    BindingsHelper, SetupBinding, TransformSfcContext,
 };
 
 pub struct Props<'a> {
@@ -59,8 +68,200 @@ pub struct PatchMarkers {
     pub should_use_block: bool,
 }
 
-pub fn post_transform_element_node(node: &ElementNode, ctx: &mut TransformSfcContext) {
+pub fn post_transform_element_node(node: &mut ElementNode, ctx: &mut TransformSfcContext) {
+    if !matches!(node.tag_type, ElementKind::Element | ElementKind::Component) {
+        return;
+    }
 
+    // TODO Finish the implementation
+}
+
+enum ResolveComponentTypeReturn {
+    CallExpression(CallExpression),
+    Builtin(BuiltinType),
+    Expr(Box<Expr>),
+}
+
+/// https://github.com/vuejs/core/blob/aac7e1898907445c8f89b22047a9bfcf0a6e91b8/packages/compiler-core/src/transforms/transformElement.ts#L227-L320
+fn resolve_component_type(
+    node: &mut ElementNode,
+    ctx: &mut TransformSfcContext,
+    ssr: bool,
+) -> ResolveComponentTypeReturn {
+    let mut tag = Cow::Borrowed(&node.starting_tag.tag_name);
+
+    // 1. Dynamic component
+    let is_explicit_dynamic = is_component_tag(&node.starting_tag);
+    let is_prop = find_prop(node, "is", false, true);
+    if let Some(is_prop) = is_prop {
+        if is_explicit_dynamic {
+            let mut exp: Option<ExpressionNode> = None;
+            if let AttributeOrBinding::RegularAttribute { value, span, .. } = is_prop {
+                exp = Some(ExpressionNode::SimpleExpression(
+                    create_simple_expression_str(value.clone(), true, *span),
+                ));
+            } else if let AttributeOrBinding::VBind(v_bind_directive) = is_prop {
+                // Note: we assume this is a simple expression while we don't have this information
+                exp = Some(ExpressionNode::SimpleExpression(SimpleExpressionNode {
+                    ast: v_bind_directive.value.clone(),
+                    is_static: false,
+                    const_type: fervid_core::ConstantTypes::NotConstant,
+                    is_handler_key: false,
+                }));
+                // Note: the official transform handles `:is` shorthand expansion (`:is` -> `:is="is"`)
+                // and transformation, but Fervid already expands the shorthands during parsing
+            }
+
+            if let Some(exp) = exp {
+                return ResolveComponentTypeReturn::CallExpression(create_call_expression(
+                    ctx.bindings_helper
+                        .helper(VueImports::ResolveDynamicComponent),
+                    vec![JsChildNode::ExpressionNode(Box::new(exp))],
+                    DUMMY_SP,
+                ));
+            }
+        } else if let AttributeOrBinding::RegularAttribute { value, .. } = is_prop {
+            if let Some(value_without_prefix) = value.strip_prefix("vue:") {
+                // <button is="vue:xxx">
+                // if not <component>, only is value that starts with "vue:" will be
+                // treated as component by the parse phase and reach here, unless it's
+                // compat mode where all is values are considered components
+                tag = Cow::Owned(FervidAtom::from(value_without_prefix));
+            }
+        }
+    }
+
+    // 2. Built-in component (Teleport, Transition, KeepAlive, Suspense...)
+    if let Some(built_in) = is_core_component(&tag) {
+        // built-ins are simply fallthroughs / have special handling during ssr
+        // so we don't need to import their runtime equivalents
+        if !ssr {
+            ctx.bindings_helper.helper(built_in.into());
+        }
+        return ResolveComponentTypeReturn::Builtin(built_in);
+    }
+
+    // 3. User component (from setup bindings)
+    // Note: `resolve_component_setup_reference` already handles `.` inside component name
+    if let Some(resolved_from_setup) = resolve_component_setup_reference(ctx, &tag) {
+        return ResolveComponentTypeReturn::Expr(resolved_from_setup);
+    }
+
+    // 4 & 5 common
+    let tag_ident = FervidAtom::from(to_valid_asset_id(&tag, "component")).into_ident();
+    ctx.bindings_helper.helper(VueImports::ResolveComponent);
+
+    // 4. Self referencing component (inferred from filename)
+    if let Some(self_name) = &ctx.self_name {
+        let mut pascal_name = String::with_capacity(tag.len());
+        to_pascal_case(&tag, &mut pascal_name);
+        if pascal_name.eq(self_name) {
+            ctx.bindings_helper.components.insert(
+                tag.into_owned(),
+                ComponentBinding::RuntimeResolved(
+                    Box::new(tag_ident.to_owned()),
+                    /* is_self_reference = */ true,
+                ),
+            );
+
+            return ResolveComponentTypeReturn::Expr(Box::new(Expr::Ident(tag_ident)));
+        }
+    }
+
+    // 5. User component (resolve)
+    ctx.bindings_helper.components.insert(
+        tag.into_owned(),
+        ComponentBinding::RuntimeResolved(Box::new(tag_ident.to_owned()), false),
+    );
+    ResolveComponentTypeReturn::Expr(Box::new(Expr::Ident(tag_ident)))
+}
+
+// TODO: This duplicates `TemplateVisitor::maybe_resolve_component`, clean up the other implementation
+/// This is a custom implementation of `resolveSetupReference`
+/// which is tailored for components and caches the result in `ctx.bindings_helper.components`
+/// for compatibility with the existing codegen.
+/// It also utilizes `transform_expr` instead of a fixed transformation
+/// for closer integration with the existing transform logic.
+fn resolve_component_setup_reference(
+    ctx: &mut TransformSfcContext,
+    tag_name: &FervidAtom,
+) -> Option<Box<Expr>> {
+    // Check the existing resolutions.
+    // Do nothing if found, regardless if it was previously resolved or not,
+    // because codegen will handle the runtime resolution.
+    match ctx.bindings_helper.components.get(tag_name) {
+        Some(ComponentBinding::Resolved(resolved)) => return Some(resolved.to_owned()),
+        Some(ComponentBinding::Unresolved) => return None,
+        Some(_) => unreachable!("Only ComponentBinding::Resolved and Unresolved are expected"),
+        None => {}
+    }
+
+    // If the tag name contains a dot, it won't be found in the bindings - look directly for a namespaced component
+    // Example: `<Foo.Bar>`
+    let namespace_dot_idx = tag_name.find('.');
+    let found = match namespace_dot_idx {
+        Some(dot_idx) => find_binding(&mut ctx.bindings_helper, &tag_name[..dot_idx]),
+        None => find_binding(&mut ctx.bindings_helper, tag_name),
+    };
+
+    if let Some(found) = found {
+        let mut resolved_to = Expr::Ident(found.sym.to_owned().into_ident());
+
+        // For `Component` binding types, do not transform.
+        // TODO I am not sure about `Imported` though,
+        // the official compiler sees them as if `SetupMaybeRef` and transforms.
+        if !matches!(found.binding_type, BindingTypes::Component) {
+            ctx.bindings_helper
+                .transform_expr(&mut resolved_to, ctx.current_template_scope);
+        }
+
+        // For namespaced components, add the second part (`Bar` in `<Foo.Bar>`)
+        if let Some(dot_idx) = namespace_dot_idx {
+            resolved_to = Expr::Member(MemberExpr {
+                span: DUMMY_SP,
+                obj: Box::new(resolved_to),
+                prop: MemberProp::Ident(IdentName {
+                    span: DUMMY_SP,
+                    sym: FervidAtom::from(&tag_name[(dot_idx + 1)..]),
+                }),
+            })
+        }
+
+        // Was resolved
+        ctx.bindings_helper.components.insert(
+            tag_name.to_owned(),
+            ComponentBinding::Resolved(Box::new(resolved_to.to_owned())),
+        );
+
+        Some(Box::new(resolved_to))
+    } else {
+        // Was not resolved
+        ctx.bindings_helper
+            .components
+            .insert(tag_name.to_owned(), ComponentBinding::Unresolved);
+
+        None
+    }
+}
+
+fn find_binding<'a>(
+    bindings_helper: &'a mut BindingsHelper,
+    tag_name: &str,
+) -> Option<&'a SetupBinding> {
+    // `component-name`s like that should be transformed to `ComponentName`s
+    let mut searched_pascal = String::with_capacity(tag_name.len());
+    to_pascal_case(tag_name, &mut searched_pascal);
+
+    // and to `componentName`
+    let mut searched_camel = String::with_capacity(tag_name.len());
+    to_camel_case(tag_name, &mut searched_camel);
+
+    bindings_helper
+        .setup_bindings
+        .iter()
+        .find(|binding| binding.sym == searched_pascal || binding.sym == searched_camel)
+
+    // TODO Auto-importing the components can happen here
 }
 
 pub fn build_props(
@@ -333,7 +534,7 @@ pub fn build_props(
                 if !ssr {
                     for prop in directive_transform_result.props.iter() {
                         analyze_patch_flag(
-                            &prop,
+                            prop,
                             &mut patch_markers,
                             is_component,
                             is_dynamic_component,
@@ -487,8 +688,7 @@ pub fn build_props(
 
                     props_expression = Some(PropsExpression::CallExpression(Box::new(
                         create_call_expression(
-                            ctx.bindings_helper
-                                .helper(VueImports::NormalizeProps),
+                            ctx.bindings_helper.helper(VueImports::NormalizeProps),
                             args,
                             DUMMY_SP,
                         ),
@@ -500,8 +700,7 @@ pub fn build_props(
                             let class_prop_value = std::mem::replace(
                                 &mut class_prop.value,
                                 create_call_expression(
-                                    ctx.bindings_helper
-                                        .helper(VueImports::NormalizeClass),
+                                    ctx.bindings_helper.helper(VueImports::NormalizeClass),
                                     Vec::with_capacity(1),
                                     DUMMY_SP,
                                 )
@@ -524,8 +723,7 @@ pub fn build_props(
                             let style_prop_value = std::mem::replace(
                                 &mut style_prop.value,
                                 create_call_expression(
-                                    ctx.bindings_helper
-                                        .helper(VueImports::NormalizeStyle),
+                                    ctx.bindings_helper.helper(VueImports::NormalizeStyle),
                                     Vec::with_capacity(1),
                                     DUMMY_SP,
                                 )
@@ -548,8 +746,7 @@ pub fn build_props(
             PropsExpression::ExpressionNode(expr) => {
                 let args = vec![JsChildNode::CallExpression(Box::new(
                     create_call_expression(
-                        ctx.bindings_helper
-                            .helper(VueImports::GuardReactiveProps),
+                        ctx.bindings_helper.helper(VueImports::GuardReactiveProps),
                         vec![JsChildNode::ExpressionNode(expr)],
                         DUMMY_SP,
                     ),
@@ -557,8 +754,7 @@ pub fn build_props(
 
                 props_expression = Some(PropsExpression::CallExpression(Box::new(
                     create_call_expression(
-                        ctx.bindings_helper
-                            .helper(VueImports::NormalizeProps),
+                        ctx.bindings_helper.helper(VueImports::NormalizeProps),
                         args,
                         DUMMY_SP,
                     ),
@@ -569,7 +765,7 @@ pub fn build_props(
 
     // TODO Finish the function but keep in mind that `buildProps` is called on node exit,
     // i.e. after all the children have been transformed.
-    // I likely have to re-think the scoping mechanism and identifiers injection to accomodate for the change
+    // I likely have to re-think the scoping mechanism and identifiers injection to accommodate for the change
 
     // The current design of `v-for` is quite convoluted, but the actual function which is executed is `processFor`
     // which manages the scope and identifiers and processes the code generation on exit,
@@ -604,8 +800,8 @@ fn analyze_patch_flag(
 
     let name = &key.ast.sym;
 
-    let is_event_handler = is_on(&name);
-    let is_reserved = is_reserved_prop(&name);
+    let is_event_handler = is_on(name);
+    let is_reserved = is_reserved_prop(name);
 
     if is_event_handler
         && (!is_component || is_dynamic_component)
@@ -645,7 +841,7 @@ fn analyze_patch_flag(
         "ref" => patch_markers.has_ref = true,
         "class" => patch_markers.has_class_binding = true,
         "style" => patch_markers.has_style_binding = true,
-        x if x != "key" && !patch_markers.dynamic_prop_names.contains(&name) => {
+        x if x != "key" && !patch_markers.dynamic_prop_names.contains(name) => {
             patch_markers.dynamic_prop_names.push(name.to_owned());
         }
         _ => {}
@@ -653,7 +849,7 @@ fn analyze_patch_flag(
 
     if is_component
         && (name == "class" || name == "style")
-        && !patch_markers.dynamic_prop_names.contains(&name)
+        && !patch_markers.dynamic_prop_names.contains(name)
     {
         patch_markers.dynamic_prop_names.push(name.to_owned());
     }
@@ -684,9 +880,9 @@ impl From<&Expr> for PropsExpression {
     }
 }
 
-impl Into<JsChildNode> for PropsExpression {
-    fn into(self) -> JsChildNode {
-        match self {
+impl From<PropsExpression> for JsChildNode {
+    fn from(val: PropsExpression) -> Self {
+        match val {
             PropsExpression::ObjectExpression(o) => JsChildNode::ObjectExpression(o),
             PropsExpression::CallExpression(c) => JsChildNode::CallExpression(c),
             PropsExpression::ExpressionNode(e) => JsChildNode::ExpressionNode(e),
@@ -695,16 +891,6 @@ impl Into<JsChildNode> for PropsExpression {
 }
 
 // TODO: Move to transform core/utils.rs
-fn is_static_arg_of(arg: Option<&StrOrExpr>, name: &str) -> bool {
-    match arg {
-        Some(StrOrExpr::Str(s)) if s == name => true,
-        Some(StrOrExpr::Expr(expr)) => match expr.as_ref() {
-            Expr::Lit(Lit::Str(s)) if s.value == name => true,
-            _ => false,
-        },
-        _ => false,
-    }
-}
 fn is_static_exp(arg: &JsChildNode) -> bool {
     match arg {
         JsChildNode::ExpressionNode(expression_node) => match expression_node.as_ref() {
@@ -726,7 +912,7 @@ fn is_static_exp_str_or_expr(arg: &StrOrExpr) -> bool {
 }
 fn get_static_exp(arg: &ExpressionPropNameNode) -> Option<&SimpleExpressionPropNameNode> {
     match arg {
-        ExpressionPropNameNode::SimpleExpression(s) if s.is_static => Some(&s),
+        ExpressionPropNameNode::SimpleExpression(s) if s.is_static => Some(s),
         _ => None,
     }
 }

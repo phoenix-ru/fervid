@@ -1,6 +1,7 @@
 use fervid_core::{
-    fervid_atom, is_html_tag, AttributeOrBinding, ElementNode, FervidAtom, Interpolation, Node,
-    PatchHints, SfcTemplateBlock, StartingTag, VueDirectives,
+    check_attribute_name, fervid_atom, is_html_tag, AttributeOrBinding, ElementKind, ElementNode,
+    FervidAtom, Interpolation, Node, PatchHints, SfcTemplateBlock, StartingTag, VueDirectives,
+    VUE_BUILTINS,
 };
 use swc_core::common::{BytePos, Span};
 use swc_ecma_parser::{Syntax, TsSyntax};
@@ -105,6 +106,8 @@ impl SfcParser<'_, '_, '_> {
             self.is_pre = true;
         }
 
+        let tag_type = recognize_element_kind(&tag_name, &attributes);
+
         let starting_tag = StartingTag {
             tag_name,
             attributes,
@@ -112,7 +115,7 @@ impl SfcParser<'_, '_, '_> {
         };
 
         let result = Node::Element(ElementNode {
-            kind: fervid_core::ElementKind::Element,
+            tag_type,
             starting_tag,
             children: self.process_element_children(children),
             template_scope: 0,
@@ -276,11 +279,45 @@ impl SfcParser<'_, '_, '_> {
     }
 }
 
+fn recognize_element_kind(tag_name: &FervidAtom, attributes: &[AttributeOrBinding]) -> ElementKind {
+    // First, check for a built-in
+    if let Some(builtin_type) = VUE_BUILTINS.get(tag_name) {
+        // Special case for `<component>`. If it does not have `is`, this is not a built-in
+        if tag_name.eq("component") {
+            let has_is = attributes
+                .iter()
+                .any(|attr| check_attribute_name(attr, "is"));
+
+            if !has_is {
+                return ElementKind::Component;
+            }
+        }
+
+        return ElementKind::Builtin(*builtin_type);
+    }
+
+    // Then check if this is an HTML tag
+    if is_html_tag(tag_name) {
+        ElementKind::Element
+    } else {
+        ElementKind::Component
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use swc_core::ecma::ast::Expr;
 
     use super::*;
+
+    /// Special case: `<component>` without `is` attribute is not a builtin
+    #[test]
+    fn it_distinguishes_component_builtin_and_not() {
+        assert!(matches!(
+            recognize_element_kind(&fervid_atom!("component"), &[]),
+            ElementKind::Component
+        ));
+    }
 
     #[test]
     fn it_acknowledges_v_pre() {

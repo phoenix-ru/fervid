@@ -49,7 +49,7 @@ impl CodegenContext {
         }
 
         // Generate the relevant render code depending on ElementKind
-        let mut result = match element_node.kind {
+        let mut result = match element_node.tag_type {
             ElementKind::Builtin(builtin_type) => self.generate_builtin(element_node, builtin_type),
             ElementKind::Element => self.generate_element_vnode(element_node, wrap_in_block),
             ElementKind::Component => self.generate_component_vnode(element_node, wrap_in_block),

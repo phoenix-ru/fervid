@@ -36,7 +36,7 @@ pub enum NodeTransformsProvider {
 
 impl Default for NodeTransformsProvider {
     fn default() -> Self {
-        Self::Base(BaseNodeTransform::default())
+        Self::Base(BaseNodeTransform)
     }
 }
 

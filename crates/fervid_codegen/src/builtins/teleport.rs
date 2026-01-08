@@ -63,7 +63,7 @@ mod tests {
         // <teleport></teleport>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Teleport),
+                tag_type: ElementKind::Builtin(BuiltinType::Teleport),
                 starting_tag: StartingTag {
                     tag_name: "teleport".into(),
                     attributes: vec![],
@@ -83,7 +83,7 @@ mod tests {
         // <teleport foo="bar" :baz="qux"></teleport>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Teleport),
+                tag_type: ElementKind::Builtin(BuiltinType::Teleport),
                 starting_tag: StartingTag {
                     tag_name: "teleport".into(),
                     attributes: vec![
@@ -106,7 +106,7 @@ mod tests {
         // <teleport>foobar</teleport>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Teleport),
+                tag_type: ElementKind::Builtin(BuiltinType::Teleport),
                 starting_tag: StartingTag {
                     tag_name: "teleport".into(),
                     attributes: vec![],
@@ -126,7 +126,7 @@ mod tests {
         // <teleport foo="bar" :baz="qux">foobar</teleport>
         test_out(
             ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Teleport),
+                tag_type: ElementKind::Builtin(BuiltinType::Teleport),
                 starting_tag: StartingTag {
                     tag_name: "teleport".into(),
                     attributes: vec![

@@ -25,6 +25,7 @@ fn codegen_benchmark(c: &mut Criterion) {
                 let filename = "anonymous.vue".to_string();
                 let mut ctx = TransformSfcContext {
                     filename: filename.to_owned(),
+                    self_name: None,
                     bindings_helper: BindingsHelper::default(),
                     is_ce: false,
                     props_destructure: PropsDestructureConfig::default(),
@@ -34,6 +35,7 @@ fn codegen_benchmark(c: &mut Criterion) {
                     errors: vec![],
                     warnings: vec![],
                     directive_scopes: Default::default(),
+                    current_template_scope: 0,
                     directive_transforms: Default::default(),
                     node_transforms: Default::default(),
                 };

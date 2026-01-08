@@ -1,6 +1,6 @@
 use fervid_core::{
-    fervid_atom, str_or_expr_to_propname, ComponentBinding, ElementNode, FervidAtom, Node,
-    PatchHints, StartingTag, StrOrExpr, VSlotDirective, VueDirectives, VueImports,
+    fervid_atom, str_or_expr_to_propname, ComponentBinding, ElementNode, FervidAtom, IntoIdent,
+    Node, PatchHints, StartingTag, StrOrExpr, VSlotDirective, VueDirectives, VueImports,
 };
 use swc_core::{
     common::{Span, DUMMY_SP},
@@ -193,14 +193,14 @@ impl CodegenContext {
 
         // We need sorted entries for stable output.
         // Entries are sorted by a component name (first element of tuple in hashmap entry)
-        let mut sorted_components: Vec<(&FervidAtom, &Ident)> = self
+        let mut sorted_components: Vec<(&FervidAtom, &Ident, bool)> = self
             .bindings_helper
             .components
             .iter()
             .filter_map(
                 |(component_name, component_resolution)| match component_resolution {
-                    ComponentBinding::RuntimeResolved(ident) => {
-                        Some((component_name, ident.as_ref()))
+                    ComponentBinding::RuntimeResolved(ident, is_self_reference) => {
+                        Some((component_name, ident.as_ref(), *is_self_reference))
                     }
                     _ => None,
                 },
@@ -210,7 +210,23 @@ impl CodegenContext {
         sorted_components.sort_by(|a, b| a.0.cmp(b.0));
 
         // Key is a component as used in template, value is the assigned Js identifier
-        for (component_name, component_identifier) in sorted_components.iter() {
+        for (component_name, component_identifier, is_self_reference) in sorted_components.iter() {
+            let mut args = Vec::with_capacity(1 + *is_self_reference as usize);
+            args.push(ExprOrSpread {
+                spread: None,
+                expr: Box::new(Expr::Lit(Lit::Str(Str {
+                    span: DUMMY_SP,
+                    value: (*component_name).to_owned(),
+                    raw: None,
+                }))),
+            });
+            if *is_self_reference {
+                args.push(ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(true.into()),
+                });
+            }
+
             // _component_ident_name = resolveComponent("component-name")
             result.push(VarDeclarator {
                 span: DUMMY_SP,
@@ -221,20 +237,10 @@ impl CodegenContext {
                 init: Some(Box::new(Expr::Call(CallExpr {
                     span: DUMMY_SP,
                     ctxt: Default::default(),
-                    callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                        span: DUMMY_SP,
-                        ctxt: Default::default(),
-                        sym: resolve_component_ident.to_owned(),
-                        optional: false,
-                    }))),
-                    args: vec![ExprOrSpread {
-                        spread: None,
-                        expr: Box::new(Expr::Lit(Lit::Str(Str {
-                            span: DUMMY_SP,
-                            value: (*component_name).to_owned(),
-                            raw: None,
-                        }))),
-                    }],
+                    callee: Callee::Expr(Box::new(Expr::Ident(
+                        resolve_component_ident.to_owned().into_ident(),
+                    ))),
+                    args,
                     type_args: None,
                 }))),
                 definite: false,
@@ -515,7 +521,7 @@ impl CodegenContext {
             Some(ComponentBinding::Resolved(component_binding)) => {
                 return (**component_binding).to_owned()
             }
-            Some(ComponentBinding::RuntimeResolved(component_identifier)) => {
+            Some(ComponentBinding::RuntimeResolved(component_identifier, _)) => {
                 return Expr::Ident((**component_identifier).to_owned())
             }
             _ => {}
@@ -540,7 +546,7 @@ impl CodegenContext {
 
         self.bindings_helper.components.insert(
             tag_name.to_owned(),
-            ComponentBinding::RuntimeResolved(Box::new(resolve_identifier.to_owned())),
+            ComponentBinding::RuntimeResolved(Box::new(resolve_identifier.to_owned()), false),
         );
 
         Expr::Ident(resolve_identifier)
@@ -655,7 +661,7 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
-                kind: ElementKind::Component,
+                tag_type: ElementKind::Component,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
@@ -673,7 +679,7 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
-                kind: ElementKind::Component,
+                tag_type: ElementKind::Component,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
@@ -697,7 +703,7 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
-                kind: ElementKind::Component,
+                tag_type: ElementKind::Component,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
@@ -726,13 +732,13 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
                     }),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Component,
+                tag_type: ElementKind::Component,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
@@ -772,18 +778,18 @@ mod tests {
                             },
                             children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
                             template_scope: 0,
-                            kind: ElementKind::Element,
+                            tag_type: ElementKind::Element,
                             patch_hints: Default::default(),
                             span: DUMMY_SP,
                         }),
                     ],
                     template_scope: 0,
-                    kind: ElementKind::Element,
+                    tag_type: ElementKind::Element,
                     patch_hints: Default::default(),
                     span: DUMMY_SP,
                 })],
                 template_scope: 0,
-                kind: ElementKind::Component,
+                tag_type: ElementKind::Component,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
@@ -826,18 +832,18 @@ mod tests {
                             },
                             children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
                             template_scope: 0,
-                            kind: ElementKind::Element,
+                            tag_type: ElementKind::Element,
                             patch_hints: Default::default(),
                             span: DUMMY_SP,
                         }),
                     ],
                     template_scope: 0,
-                    kind: ElementKind::Element,
+                    tag_type: ElementKind::Element,
                     patch_hints: Default::default(),
                     span: DUMMY_SP,
                 })],
                 template_scope: 0,
-                kind: ElementKind::Component,
+                tag_type: ElementKind::Component,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
@@ -882,7 +888,7 @@ mod tests {
                             }),
                         ],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
                     }),
@@ -908,19 +914,19 @@ mod tests {
                                 },
                                 children: vec![Node::Text("two".into(), DUMMY_SP)],
                                 template_scope: 0,
-                                kind: ElementKind::Element,
+                                tag_type: ElementKind::Element,
                                 patch_hints: Default::default(),
                                 span: DUMMY_SP,
                             }),
                         ],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
                     }),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Component,
+                tag_type: ElementKind::Component,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
@@ -952,7 +958,7 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
                     }),
@@ -970,13 +976,13 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from slot".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
                     }),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Component,
+                tag_type: ElementKind::Component,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
@@ -1018,13 +1024,13 @@ mod tests {
                                 },
                                 children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
                                 template_scope: 0,
-                                kind: ElementKind::Element,
+                                tag_type: ElementKind::Element,
                                 patch_hints: Default::default(),
                                 span: DUMMY_SP,
                             }),
                         ],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
                     }),
@@ -1042,13 +1048,13 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from slot".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
                     }),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Component,
+                tag_type: ElementKind::Component,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
@@ -1082,7 +1088,7 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from slot".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
                     }),
@@ -1095,13 +1101,13 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
                     }),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Component,
+                tag_type: ElementKind::Component,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
@@ -1139,7 +1145,7 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from slot".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
                     }),
@@ -1165,13 +1171,13 @@ mod tests {
                                 },
                                 children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
                                 template_scope: 0,
-                                kind: ElementKind::Element,
+                                tag_type: ElementKind::Element,
                                 patch_hints: Default::default(),
                                 span: DUMMY_SP,
                             }),
                         ],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
                     }),
@@ -1189,13 +1195,13 @@ mod tests {
                         },
                         children: vec![Node::Text("hello from baz".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
                     }),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Component,
+                tag_type: ElementKind::Component,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
             },
