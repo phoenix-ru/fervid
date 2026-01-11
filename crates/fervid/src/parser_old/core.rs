@@ -322,6 +322,7 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
                 tag_type: ElementKind::Element,
                 patch_hints: Default::default(),
                 span: DUMMY_SP, // TODO
+                codegen_node: None,
             }),
         ));
     }
@@ -349,6 +350,7 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
             tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP, // TODO
+            codegen_node: None,
         }),
     ))
 }

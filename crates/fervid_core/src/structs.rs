@@ -1,10 +1,12 @@
 use swc_core::{
-    common::{Span, DUMMY_SP},
+    common::{Span, Spanned, DUMMY_SP},
     ecma::{
         ast::{Expr, Ident, Pat},
         atoms::Atom,
     },
 };
+
+use crate::VNodeCall;
 
 pub type FervidAtom = Atom;
 
@@ -87,6 +89,7 @@ pub struct ElementNode {
     pub template_scope: u32,
     pub patch_hints: PatchHints,
     pub span: Span,
+    pub codegen_node: Option<Box<ElementNodeCodegenNode>>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -95,6 +98,38 @@ pub enum ElementKind {
     #[default]
     Element,
     Component,
+}
+
+#[derive(Debug, Clone)]
+pub enum ElementNodeCodegenNode {
+    VNodeCall(VNodeCall),
+}
+
+impl ElementNode {
+    /// Helper function for creating a minimal version of ElementNode. The type is `Element`
+    pub fn new(starting_tag: StartingTag) -> Self {
+        Self::new_with_children(starting_tag, vec![])
+    }
+    /// Helper function for creating a minimal version of ElementNode with children. The type is `Element`
+    pub fn new_with_children(starting_tag: StartingTag, children: Vec<Node>) -> Self {
+        Self::new_with_children_and_type(starting_tag, children, ElementKind::Element)
+    }
+    /// Helper function for creating an ElementNode with children and tag type
+    pub fn new_with_children_and_type(
+        starting_tag: StartingTag,
+        children: Vec<Node>,
+        tag_type: ElementKind,
+    ) -> Self {
+        ElementNode {
+            tag_type,
+            starting_tag,
+            children,
+            template_scope: 0,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
+            codegen_node: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -121,6 +156,7 @@ pub struct ConditionalNodeSequence {
     pub if_node: Box<Conditional>,
     pub else_if_nodes: Vec<Conditional>,
     pub else_node: Option<Box<ElementNode>>,
+    pub span: Span,
 }
 
 /// A wrapper around an `ElementNode` with a condition attached to it.
@@ -468,5 +504,17 @@ pub enum TemplateGenerationMode {
 impl TemplateGenerationMode {
     pub fn is_inline(&self) -> bool {
         matches!(self, TemplateGenerationMode::Inline)
+    }
+}
+
+impl Spanned for Node {
+    fn span(&self) -> Span {
+        match self {
+            Node::Element(element_node) => element_node.span,
+            Node::Text(_atom, span) => *span,
+            Node::Interpolation(interpolation) => interpolation.span,
+            Node::Comment(_atom, span) => *span,
+            Node::ConditionalSeq(conditional_node_sequence) => conditional_node_sequence.span,
+        }
     }
 }

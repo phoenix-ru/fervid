@@ -10,7 +10,7 @@ use crate::{
 pub fn transform_model(
     ctx: &mut TransformSfcContext,
     v_model: &mut VModelDirective,
-    element_node: &ElementNode,
+    _element_node: &ElementNode,
     scope_to_use: u32,
 ) {
     // Note: expression is always defined on `v_model`, guaranteed by the parser

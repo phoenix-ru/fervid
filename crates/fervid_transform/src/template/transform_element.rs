@@ -4,16 +4,16 @@ use fervid_core::{
     create_call_expression, create_object_expression, create_object_property,
     create_simple_expression_bool, create_simple_expression_propname, create_simple_expression_str,
     fervid_atom, AttributeOrBinding, BindingTypes, BuiltinType, CallExpression, ComponentBinding,
-    ElementKind, ElementNode, ExpressionNode, ExpressionPropNameNode, FervidAtom, IntoIdent,
-    JsChildNode, ObjectExpression, PatchFlags, PatchHints, Property, SimpleExpressionNode,
-    SimpleExpressionPropNameNode, StartingTag, StrOrExpr, VCustomDirective, VModelDirective,
-    VueDirectives, VueImports,
+    ElementKind, ElementNode, ElementNodeCodegenNode, ExpressionNode, ExpressionPropNameNode,
+    FervidAtom, IntoIdent, JsChildNode, Node, PatchFlags, PatchHints, Property, PropsExpression,
+    SimpleExpressionNode, SimpleExpressionPropNameNode, StartingTag, StrOrExpr, VCustomDirective,
+    VModelDirective, VNodeCall, VNodeCallTag, VNodeChildren, VueDirectives, VueImports,
 };
 use flagset::FlagSet;
 use phf::phf_set;
 use swc_core::{
-    common::{util::take::Take, DUMMY_SP},
-    ecma::ast::{Expr, IdentName, MemberExpr, MemberProp},
+    common::{util::take::Take, Span, Spanned, DUMMY_SP},
+    ecma::ast::{ArrayLit, Expr, ExprOrSpread, IdentName, Lit, MemberExpr, MemberProp, Str},
 };
 
 use crate::{
@@ -32,12 +32,6 @@ use crate::{
 pub struct Props<'a> {
     pub attributes: &'a [AttributeOrBinding],
     pub directives: Option<&'a VueDirectives>,
-}
-
-pub enum PropsExpression {
-    ObjectExpression(Box<ObjectExpression>),
-    CallExpression(Box<CallExpression>),
-    ExpressionNode(Box<ExpressionNode>),
 }
 
 pub enum RuntimeDirective {
@@ -69,17 +63,159 @@ pub struct PatchMarkers {
 }
 
 pub fn post_transform_element_node(node: &mut ElementNode, ctx: &mut TransformSfcContext) {
+    // TODO: This filter might discard built-in components which seem to be handled here
+    // The official compiler only handles elements and components (no SLOT or TEMPLATE),
+    // and implicitly considers built-in components here as well
     if !matches!(node.tag_type, ElementKind::Element | ElementKind::Component) {
         return;
     }
 
-    // TODO Finish the implementation
-}
+    let is_component = matches!(node.tag_type, ElementKind::Component);
 
-enum ResolveComponentTypeReturn {
-    CallExpression(CallExpression),
-    Builtin(BuiltinType),
-    Expr(Box<Expr>),
+    let vnode_tag = if is_component {
+        resolve_component_type(node, ctx, false)
+    } else {
+        VNodeCallTag::Expr(Box::new(Expr::Lit(Lit::Str(Str::from(
+            node.starting_tag.tag_name.to_owned(),
+        )))))
+    };
+
+    let tag = node.starting_tag.tag_name.to_owned();
+    let is_dynamic_component = matches!(vnode_tag, VNodeCallTag::CallExpression(_));
+
+    let mut should_use_block = is_dynamic_component
+        || matches!(&vnode_tag, VNodeCallTag::Builtin(BuiltinType::Teleport | BuiltinType::Suspense))
+        // <svg> and <foreignObject> must be forced into blocks so that block
+        // updates inside get proper isSVG flag at runtime. (#639, #643)
+        // This is technically web-specific, but splitting the logic out of core
+        // leads to too much unnecessary complexity.
+        || (!is_component && matches!(tag.as_str(), "svg" | "foreignObject" | "math"));
+
+    let mut vnode_props: Option<PropsExpression> = None;
+    let mut vnode_directives: Option<ArrayLit> = None;
+    let mut vnode_children: Option<VNodeChildren> = None;
+    let mut patch_hints = PatchHints::default();
+
+    // Props
+    if !node.starting_tag.attributes.is_empty() {
+        let props_build_result = build_props(
+            node,
+            ctx,
+            ctx.current_template_scope,
+            None,
+            is_component,
+            is_dynamic_component,
+            false,
+        );
+
+        vnode_props = props_build_result.props;
+        should_use_block |= props_build_result.patch_hints.should_use_block;
+        patch_hints = props_build_result.patch_hints;
+
+        if !props_build_result.directives.is_empty() {
+            // Convert runtime directives into array-of-arrays
+            let directives_array_elements = props_build_result
+                .directives
+                .into_iter()
+                .map(|dir| {
+                    Some(ExprOrSpread {
+                        spread: None,
+                        expr: Box::new(Expr::Array(build_directive_args(dir, ctx))),
+                    })
+                })
+                .collect();
+            vnode_directives = Some(ArrayLit {
+                span: DUMMY_SP,
+                elems: directives_array_elements,
+            });
+        }
+    }
+
+    // Children
+    if !node.children.is_empty() {
+        if matches!(vnode_tag, VNodeCallTag::Builtin(BuiltinType::KeepAlive)) {
+            // Although a built-in component, we compile KeepAlive with raw children
+            // instead of slot functions so that it can be used inside Transition
+            // or other Transition-wrapping HOCs.
+            // To ensure correct updates with block optimizations, we need to:
+            // 1. Force keep-alive into a block. This avoids its children being
+            //    collected by a parent block.
+            should_use_block = true;
+            // 2. Force keep-alive to always be updated, since it uses raw children.
+            patch_hints.flags |= PatchFlags::DynamicSlots;
+            if !ctx.bindings_helper.is_prod && node.children.len() > 1 {
+                let span = Span {
+                    lo: node
+                        .children
+                        .first()
+                        .map(|child| child.span_lo())
+                        .unwrap_or_else(|| node.span.lo),
+                    hi: node
+                        .children
+                        .last()
+                        .map(|child| child.span_hi())
+                        .unwrap_or_else(|| node.span.hi),
+                };
+                ctx.errors
+                    .push(TransformError::TemplateError(TemplateError {
+                        span,
+                        kind: TemplateErrorKind::KeepAliveInvalidChildren,
+                    }));
+            }
+        }
+
+        let should_build_as_slots = is_component
+            && !matches!(
+                vnode_tag,
+                VNodeCallTag::Builtin(
+                    // Teleport is not a real component and has dedicated runtime handling
+                    BuiltinType::Teleport
+                    // explained above.
+                    | BuiltinType::KeepAlive
+                )
+            );
+
+        if should_build_as_slots {
+            todo!("implement buildSlots")
+        } else if node.children.len() == 1
+            && !matches!(vnode_tag, VNodeCallTag::Builtin(BuiltinType::Teleport))
+        {
+            let child = &node.children[0];
+            // Note: Official implementation additionally checks for COMPOUND_EXPRESSION here
+            // This is done because text + interpolation nodes are joined into a single COMPOUND_EXPRESSION node
+            // https://github.com/vuejs/core/blob/623bfb29a23c36bf935e7faefa64d1baa69d465c/packages/compiler-core/src/transforms/transformElement.ts#L181-L201
+            // TODO: Fervid doesn't yet merge Text nodes into a compound node
+            // TODO: Consider constant type instead
+            let mut has_dynamic_text_child = false;
+            if let Node::Interpolation(interpolation) = child {
+                has_dynamic_text_child = true;
+                if interpolation.patch_flag {
+                    patch_hints.flags |= PatchFlags::Text;
+                }
+            }
+            if has_dynamic_text_child || matches!(child, Node::Text(_, _)) {
+                vnode_children = Some(VNodeChildren::UseFirstChildTextNode);
+            } else {
+                vnode_children = Some(VNodeChildren::UseElementChildren);
+            }
+        } else {
+            vnode_children = Some(VNodeChildren::UseElementChildren);
+        }
+    }
+
+    // PatchFlag & dynamicPropNames
+    // Note: stringification is not done here
+
+    node.codegen_node = Some(Box::new(ElementNodeCodegenNode::VNodeCall(VNodeCall {
+        tag: vnode_tag,
+        props: vnode_props,
+        children: vnode_children,
+        patch_hints,
+        directives: vnode_directives,
+        is_block: should_use_block,
+        disable_tracking: false,
+        is_component,
+    })));
 }
 
 /// https://github.com/vuejs/core/blob/aac7e1898907445c8f89b22047a9bfcf0a6e91b8/packages/compiler-core/src/transforms/transformElement.ts#L227-L320
@@ -87,7 +223,7 @@ fn resolve_component_type(
     node: &mut ElementNode,
     ctx: &mut TransformSfcContext,
     ssr: bool,
-) -> ResolveComponentTypeReturn {
+) -> VNodeCallTag {
     let mut tag = Cow::Borrowed(&node.starting_tag.tag_name);
 
     // 1. Dynamic component
@@ -113,7 +249,7 @@ fn resolve_component_type(
             }
 
             if let Some(exp) = exp {
-                return ResolveComponentTypeReturn::CallExpression(create_call_expression(
+                return VNodeCallTag::CallExpression(create_call_expression(
                     ctx.bindings_helper
                         .helper(VueImports::ResolveDynamicComponent),
                     vec![JsChildNode::ExpressionNode(Box::new(exp))],
@@ -138,13 +274,13 @@ fn resolve_component_type(
         if !ssr {
             ctx.bindings_helper.helper(built_in.into());
         }
-        return ResolveComponentTypeReturn::Builtin(built_in);
+        return VNodeCallTag::Builtin(built_in);
     }
 
     // 3. User component (from setup bindings)
     // Note: `resolve_component_setup_reference` already handles `.` inside component name
     if let Some(resolved_from_setup) = resolve_component_setup_reference(ctx, &tag) {
-        return ResolveComponentTypeReturn::Expr(resolved_from_setup);
+        return VNodeCallTag::Expr(resolved_from_setup);
     }
 
     // 4 & 5 common
@@ -164,7 +300,7 @@ fn resolve_component_type(
                 ),
             );
 
-            return ResolveComponentTypeReturn::Expr(Box::new(Expr::Ident(tag_ident)));
+            return VNodeCallTag::Expr(Box::new(Expr::Ident(tag_ident)));
         }
     }
 
@@ -173,7 +309,7 @@ fn resolve_component_type(
         tag.into_owned(),
         ComponentBinding::RuntimeResolved(Box::new(tag_ident.to_owned()), false),
     );
-    ResolveComponentTypeReturn::Expr(Box::new(Expr::Ident(tag_ident)))
+    VNodeCallTag::Expr(Box::new(Expr::Ident(tag_ident)))
 }
 
 // TODO: This duplicates `TemplateVisitor::maybe_resolve_component`, clean up the other implementation
@@ -855,7 +991,11 @@ fn analyze_patch_flag(
     }
 }
 
-fn dedupe_properties(properties: Vec<Property>) -> Vec<Property> {
+fn dedupe_properties(_properties: Vec<Property>) -> Vec<Property> {
+    todo!()
+}
+
+fn build_directive_args(_dir: RuntimeDirective, _ctx: &mut TransformSfcContext) -> ArrayLit {
     todo!()
 }
 
@@ -863,46 +1003,9 @@ fn is_component_tag(tag: &StartingTag) -> bool {
     matches!(tag.tag_name.as_str(), "component" | "Component")
 }
 
-impl From<&Expr> for PropsExpression {
-    fn from(value: &Expr) -> Self {
-        match value {
-            Expr::Call(call_expr) => {
-                PropsExpression::CallExpression(Box::new(call_expr.to_owned().into()))
-            }
-            Expr::Object(obj_expr) => {
-                PropsExpression::ObjectExpression(Box::new(ObjectExpression {
-                    properties: obj_expr.props.iter().cloned().map(Into::into).collect(),
-                    span: obj_expr.span,
-                }))
-            }
-            _ => PropsExpression::ExpressionNode(Box::new(value.to_owned().into())),
-        }
-    }
-}
-
-impl From<PropsExpression> for JsChildNode {
-    fn from(val: PropsExpression) -> Self {
-        match val {
-            PropsExpression::ObjectExpression(o) => JsChildNode::ObjectExpression(o),
-            PropsExpression::CallExpression(c) => JsChildNode::CallExpression(c),
-            PropsExpression::ExpressionNode(e) => JsChildNode::ExpressionNode(e),
-        }
-    }
-}
-
 // TODO: Move to transform core/utils.rs
 fn is_static_exp(arg: &JsChildNode) -> bool {
-    match arg {
-        JsChildNode::ExpressionNode(expression_node) => match expression_node.as_ref() {
-            ExpressionNode::SimpleExpression(simple_expression_node)
-                if simple_expression_node.is_static =>
-            {
-                true
-            }
-            _ => false,
-        },
-        _ => false,
-    }
+    matches!(arg, JsChildNode::ExpressionNode(expression_node) if matches!(expression_node.as_ref(), ExpressionNode::SimpleExpression(simple_expression_node) if simple_expression_node.is_static))
 }
 fn is_static_exp_str_or_expr(arg: &StrOrExpr) -> bool {
     match arg {

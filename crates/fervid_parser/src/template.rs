@@ -121,6 +121,7 @@ impl SfcParser<'_, '_, '_> {
             template_scope: 0,
             patch_hints: PatchHints::default(),
             span: element.span,
+            codegen_node: None,
         });
 
         self.is_pre = old_is_pre;

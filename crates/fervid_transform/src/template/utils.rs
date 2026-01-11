@@ -55,10 +55,9 @@ pub fn find_prop<'a>(
 pub fn is_static_arg_of(arg: Option<&StrOrExpr>, name: &str) -> bool {
     match arg {
         Some(StrOrExpr::Str(s)) if s == name => true,
-        Some(StrOrExpr::Expr(expr)) => match expr.as_ref() {
-            Expr::Lit(Lit::Str(s)) if s.value == name => true,
-            _ => false,
-        },
+        Some(StrOrExpr::Expr(expr)) => {
+            matches!(expr.as_ref(), Expr::Lit(Lit::Str(s)) if s.value == name)
+        }
         _ => false,
     }
 }

@@ -1,8 +1,8 @@
 use fervid_core::{
-    check_attribute_name, fervid_atom, is_from_default_slot, AttributeOrBinding,
-    BindingTypes, BuiltinType, Conditional, ConditionalNodeSequence, ElementKind, ElementNode,
-    FervidAtom, Interpolation, IntoIdent, Node, PatchFlags, PatchHints, SfcTemplateBlock,
-    StartingTag, StrOrExpr, TemplateGenerationMode, VBindDirective, VSlotDirective,
+    check_attribute_name, fervid_atom, is_from_default_slot, AttributeOrBinding, BindingTypes,
+    BuiltinType, Conditional, ConditionalNodeSequence, ElementKind, ElementNode, FervidAtom,
+    Interpolation, IntoIdent, Node, PatchFlags, PatchHints, SfcTemplateBlock, StartingTag,
+    StrOrExpr, TemplateGenerationMode, VBindDirective, VSlotDirective,
 };
 use smallvec::SmallVec;
 use swc_core::{
@@ -71,6 +71,7 @@ pub fn transform_and_record_template(
             template_scope: 0,
             patch_hints,
             span: template.span,
+            codegen_node: None,
         });
         template.roots.push(new_root);
     }
@@ -184,6 +185,7 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
             // The already existing sequence should end, and the new sequence should start.
             if let Some(v_if) = directives.v_if.take() {
                 finish_seq!();
+                let span = child_element.span;
                 seq = Some(ConditionalNodeSequence {
                     if_node: Box::new(Conditional {
                         condition: *v_if,
@@ -191,6 +193,7 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
                     }),
                     else_if_nodes: vec![],
                     else_node: None,
+                    span,
                 });
                 continue;
             }
@@ -203,6 +206,7 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
                     continue;
                 };
 
+                seq.span.hi = child_element.span.hi;
                 seq.else_if_nodes.push(Conditional {
                     condition: *v_else_if,
                     node: deref_element!(child),
@@ -218,6 +222,7 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
                     continue;
                 };
 
+                cond_seq.span.hi = child_element.span.hi;
                 cond_seq.else_node = Some(Box::new(deref_element!(child)));
 
                 // `else` node always finishes the sequence
@@ -348,6 +353,7 @@ impl TemplateVisitor<'_> {
         }
     }
 
+    #[allow(unused)]
     fn visit_element_node_new(&mut self, element_node: &mut ElementNode) {
         // Cloning transforms is fine here due to the structure being optimized for it
         let node_transforms = self.ctx.node_transforms.clone();
@@ -803,6 +809,7 @@ mod tests {
                 tag_type: ElementKind::Element,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
+                codegen_node: None,
             })],
             span: DUMMY_SP,
         };
@@ -1002,6 +1009,7 @@ mod tests {
                     template_scope: 0,
                     patch_hints: PatchHints::default(),
                     span: DUMMY_SP,
+                    codegen_node: None,
                 }),
             ],
             span: DUMMY_SP,
@@ -1044,6 +1052,7 @@ mod tests {
                 tag_type: ElementKind::Element,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
+                codegen_node: None,
             })],
             span: DUMMY_SP,
         };
@@ -1081,6 +1090,7 @@ mod tests {
             tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         });
 
         let no_directives2 = Node::Element(ElementNode {
@@ -1096,6 +1106,7 @@ mod tests {
             tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         });
 
         let mut sfc_template = SfcTemplateBlock {
@@ -1129,6 +1140,7 @@ mod tests {
             template_scope: 0,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         };
         // <div v-if="false"></div>
         let div = ElementNode {
@@ -1145,6 +1157,7 @@ mod tests {
             template_scope: 0,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         };
         // <template></template>
         let tmpl = ElementNode {
@@ -1158,6 +1171,7 @@ mod tests {
             template_scope: 0,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         };
         let sfc_tmpl = SfcTemplateBlock {
             lang: "html".into(),
@@ -1366,6 +1380,7 @@ mod tests {
             tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -1399,6 +1414,7 @@ mod tests {
             tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -1433,6 +1449,7 @@ mod tests {
             tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 

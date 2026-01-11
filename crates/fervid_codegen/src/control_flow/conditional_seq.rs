@@ -113,10 +113,12 @@ mod tests {
                         tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
+                        codegen_node: None,
                     },
                 }),
                 else_if_nodes: vec![],
                 else_node: None,
+                span: DUMMY_SP,
             },
             r#"foo||true?(_openBlock(),_createElementBlock("h1",null,"hello")):_createCommentVNode("v-if")"#,
         )
@@ -141,6 +143,7 @@ mod tests {
                         tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
+                        codegen_node: None,
                     },
                 }),
                 else_if_nodes: vec![],
@@ -155,7 +158,9 @@ mod tests {
                     tag_type: ElementKind::Element,
                     patch_hints: Default::default(),
                     span: DUMMY_SP,
+                    codegen_node: None,
                 })),
+                span: DUMMY_SP,
             },
             r#"foo||true?(_openBlock(),_createElementBlock("h1",null,"hello")):(_openBlock(),_createElementBlock("h2",null,"bye"))"#,
         )
@@ -181,6 +186,7 @@ mod tests {
                         tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
+                        codegen_node: None,
                     },
                 }),
                 else_if_nodes: vec![
@@ -197,6 +203,7 @@ mod tests {
                             tag_type: ElementKind::Element,
                             patch_hints: Default::default(),
                             span: DUMMY_SP,
+                            codegen_node: None,
                         },
                     },
                     Conditional {
@@ -212,10 +219,12 @@ mod tests {
                             tag_type: ElementKind::Element,
                             patch_hints: Default::default(),
                             span: DUMMY_SP,
+                            codegen_node: None,
                         },
                     },
                 ],
                 else_node: None,
+                span: DUMMY_SP,
             },
             r#"foo?(_openBlock(),_createElementBlock("h1",null,"hello")):true?(_openBlock(),_createElementBlock("h2",null,"hi")):undefined?(_openBlock(),_createElementBlock("h3",null,"bye")):_createCommentVNode("v-if")"#,
         )
@@ -242,6 +251,7 @@ mod tests {
                         tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
+                        codegen_node: None,
                     },
                 }),
                 else_if_nodes: vec![
@@ -258,6 +268,7 @@ mod tests {
                             tag_type: ElementKind::Element,
                             patch_hints: Default::default(),
                             span: DUMMY_SP,
+                            codegen_node: None,
                         },
                     },
                     Conditional {
@@ -273,6 +284,7 @@ mod tests {
                             tag_type: ElementKind::Element,
                             patch_hints: Default::default(),
                             span: DUMMY_SP,
+                            codegen_node: None,
                         },
                     },
                 ],
@@ -287,7 +299,9 @@ mod tests {
                     tag_type: ElementKind::Element,
                     patch_hints: Default::default(),
                     span: DUMMY_SP,
+                    codegen_node: None,
                 })),
+                span: DUMMY_SP,
             },
             r#"foo?(_openBlock(),_createElementBlock("h1",null,"hello")):true?(_openBlock(),_createElementBlock("h2",null,"hi")):undefined?(_openBlock(),_createElementBlock("h3",null,"good morning")):(_openBlock(),_createElementBlock("h4",null,"bye"))"#,
         )

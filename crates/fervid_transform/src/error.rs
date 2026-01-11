@@ -103,6 +103,9 @@ pub enum ScriptErrorKind {
 
 #[derive(Debug)]
 pub enum TemplateErrorKind {
+    // <KeepAlive> expects exactly one child component.
+    // https://vuejs.org/error-reference/#compiler-46
+    KeepAliveInvalidChildren,
     /// Failed parsing the URL when doing asset URL transform
     TransformAssetUrlsBaseUrlParseFailed,
     /// Failed parsing the configured base URL when doing asset URL transform

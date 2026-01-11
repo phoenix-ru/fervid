@@ -72,18 +72,15 @@ mod tests {
     fn it_generates_empty_keepalive() {
         // <keep-alive></keep-alive>
         test_out(
-            ElementNode {
-                tag_type: ElementKind::Builtin(BuiltinType::KeepAlive),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "keep-alive".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![],
+                ElementKind::Builtin(BuiltinType::KeepAlive),
+            ),
             r#"_createVNode(_KeepAlive)"#,
         )
     }
@@ -92,9 +89,8 @@ mod tests {
     fn it_generates_keepalive_attrs() {
         // <keep-alive foo="bar" :baz="qux"></keep-alive>
         test_out(
-            ElementNode {
-                tag_type: ElementKind::Builtin(BuiltinType::KeepAlive),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "keep-alive".into(),
                     attributes: vec![
                         regular_attribute("foo", "bar"),
@@ -102,11 +98,9 @@ mod tests {
                     ],
                     directives: None,
                 },
-                children: vec![],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![],
+                ElementKind::Builtin(BuiltinType::KeepAlive),
+            ),
             r#"_createVNode(_KeepAlive,{foo:"bar",baz:qux})"#,
         )
     }
@@ -115,18 +109,15 @@ mod tests {
     fn it_generates_keepalive_children() {
         // <keep-alive>foobar</keep-alive>
         test_out(
-            ElementNode {
-                tag_type: ElementKind::Builtin(BuiltinType::KeepAlive),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "keep-alive".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![Node::Text("foobar".into(), DUMMY_SP)],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![Node::Text("foobar".into(), DUMMY_SP)],
+                ElementKind::Builtin(BuiltinType::KeepAlive),
+            ),
             r#"(_openBlock(),_createBlock(_KeepAlive,null,[_createTextVNode("foobar")],1024))"#,
         )
     }
@@ -135,9 +126,8 @@ mod tests {
     fn it_generates_full_keepalive() {
         // <keep-alive foo="bar" :baz="qux">foobar</keep-alive>
         test_out(
-            ElementNode {
-                tag_type: ElementKind::Builtin(BuiltinType::KeepAlive),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "keep-alive".into(),
                     attributes: vec![
                         regular_attribute("foo", "bar"),
@@ -145,11 +135,9 @@ mod tests {
                     ],
                     directives: None,
                 },
-                children: vec![Node::Text("foobar".into(), DUMMY_SP)],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![Node::Text("foobar".into(), DUMMY_SP)],
+                ElementKind::Builtin(BuiltinType::KeepAlive),
+            ),
             r#"(_openBlock(),_createBlock(_KeepAlive,{foo:"bar",baz:qux},[_createTextVNode("foobar")],1024))"#,
         )
     }

@@ -62,18 +62,15 @@ mod tests {
     fn it_generates_empty_teleport() {
         // <teleport></teleport>
         test_out(
-            ElementNode {
-                tag_type: ElementKind::Builtin(BuiltinType::Teleport),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "teleport".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![],
+                ElementKind::Builtin(BuiltinType::Teleport),
+            ),
             r#"(_openBlock(),_createBlock(_Teleport))"#,
         )
     }
@@ -82,9 +79,8 @@ mod tests {
     fn it_generates_teleport_attrs() {
         // <teleport foo="bar" :baz="qux"></teleport>
         test_out(
-            ElementNode {
-                tag_type: ElementKind::Builtin(BuiltinType::Teleport),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "teleport".into(),
                     attributes: vec![
                         regular_attribute("foo", "bar"),
@@ -92,11 +88,9 @@ mod tests {
                     ],
                     directives: None,
                 },
-                children: vec![],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![],
+                ElementKind::Builtin(BuiltinType::Teleport),
+            ),
             r#"(_openBlock(),_createBlock(_Teleport,{foo:"bar",baz:qux}))"#,
         )
     }
@@ -105,18 +99,15 @@ mod tests {
     fn it_generates_teleport_children() {
         // <teleport>foobar</teleport>
         test_out(
-            ElementNode {
-                tag_type: ElementKind::Builtin(BuiltinType::Teleport),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "teleport".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![Node::Text("foobar".into(), DUMMY_SP)],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![Node::Text("foobar".into(), DUMMY_SP)],
+                ElementKind::Builtin(BuiltinType::Teleport),
+            ),
             r#"(_openBlock(),_createBlock(_Teleport,null,[_createTextVNode("foobar")]))"#,
         )
     }
@@ -125,9 +116,8 @@ mod tests {
     fn it_generates_full_teleport() {
         // <teleport foo="bar" :baz="qux">foobar</teleport>
         test_out(
-            ElementNode {
-                tag_type: ElementKind::Builtin(BuiltinType::Teleport),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "teleport".into(),
                     attributes: vec![
                         regular_attribute("foo", "bar"),
@@ -135,11 +125,9 @@ mod tests {
                     ],
                     directives: None,
                 },
-                children: vec![Node::Text("foobar".into(), DUMMY_SP)],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![Node::Text("foobar".into(), DUMMY_SP)],
+                ElementKind::Builtin(BuiltinType::Teleport),
+            ),
             r#"(_openBlock(),_createBlock(_Teleport,{foo:"bar",baz:qux},[_createTextVNode("foobar")]))"#,
         )
     }

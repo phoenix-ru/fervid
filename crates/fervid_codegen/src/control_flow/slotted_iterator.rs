@@ -213,6 +213,7 @@ mod tests {
             tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -232,6 +233,7 @@ mod tests {
             tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -256,6 +258,7 @@ mod tests {
             tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -272,6 +275,7 @@ mod tests {
             tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -294,6 +298,7 @@ mod tests {
             tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -316,6 +321,7 @@ mod tests {
             tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 }

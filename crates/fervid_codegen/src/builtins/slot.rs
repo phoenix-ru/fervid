@@ -170,18 +170,15 @@ mod tests {
 
     macro_rules! slot {
         ($attributes: expr, $children: expr) => {
-            ElementNode {
-                tag_type: ElementKind::Builtin(BuiltinType::Slot),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "slot".into(),
                     attributes: $attributes,
                     directives: None,
                 },
-                children: $children,
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            }
+                $children,
+                ElementKind::Builtin(BuiltinType::Slot),
+            )
         };
     }
 
@@ -282,30 +279,23 @@ mod tests {
             slot!(
                 vec![],
                 vec![
-                    Node::Element(ElementNode {
-                        tag_type: ElementKind::Element,
-                        starting_tag: StartingTag {
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "div".into(),
                             attributes: vec![],
                             directives: None
                         },
-                        children: vec![Node::Text("Placeholder".into(), DUMMY_SP)],
-                        template_scope: 0,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
-                    Node::Element(ElementNode {
-                        tag_type: ElementKind::Component,
-                        starting_tag: StartingTag {
+                        vec![Node::Text("Placeholder".into(), DUMMY_SP)],
+                    )),
+                    Node::Element(ElementNode::new_with_children_and_type(
+                        StartingTag {
                             tag_name: "foo-component".into(),
                             attributes: vec![],
                             directives: None
                         },
-                        children: vec![],
-                        template_scope: 0,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    })
+                        vec![],
+                        ElementKind::Component,
+                    ))
                 ]
             ),
             r#"_renderSlot(_ctx.$slots,"default",{},[_createElementVNode("div",null,"Placeholder"),_createVNode(_component_foo_component)])"#,
@@ -326,30 +316,23 @@ mod tests {
                     v_bind_attribute("baz", "qux"),
                 ],
                 vec![
-                    Node::Element(ElementNode {
-                        tag_type: ElementKind::Element,
-                        starting_tag: StartingTag {
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "div".into(),
                             attributes: vec![],
                             directives: None
                         },
-                        children: vec![Node::Text("Placeholder".into(), DUMMY_SP)],
-                        template_scope: 0,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
-                    Node::Element(ElementNode {
-                        tag_type: ElementKind::Component,
-                        starting_tag: StartingTag {
+                        vec![Node::Text("Placeholder".into(), DUMMY_SP)],
+                    )),
+                    Node::Element(ElementNode::new_with_children_and_type(
+                        StartingTag {
                             tag_name: "foo-component".into(),
                             attributes: vec![],
                             directives: None
                         },
-                        children: vec![],
-                        template_scope: 0,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    })
+                        vec![],
+                        ElementKind::Component
+                    ))
                 ]
             ),
             r#"_renderSlot(_ctx.$slots,"test-slot",{foo:"bar",baz:qux},[_createElementVNode("div",null,"Placeholder"),_createVNode(_component_foo_component)])"#,

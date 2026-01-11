@@ -2,12 +2,12 @@
 
 use swc_core::{
     common::{Span, DUMMY_SP},
-    ecma::ast::{Bool, CallExpr, Expr, IdentName, Lit, PropName, PropOrSpread, Str},
+    ecma::ast::{ArrayLit, Bool, CallExpr, Expr, IdentName, Lit, PropName, PropOrSpread, Str},
 };
 
-use crate::{FervidAtom, VueImports};
+use crate::{BuiltinType, FervidAtom, PatchHints, VueImports};
 
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub enum ConstantTypes {
     #[default]
     NotConstant = 0,
@@ -16,6 +16,7 @@ pub enum ConstantTypes {
     CanStringify,
 }
 
+#[derive(Debug, Clone)]
 pub struct SimpleExpressionNode {
     pub ast: Box<Expr>,
     pub is_static: bool,
@@ -23,16 +24,19 @@ pub struct SimpleExpressionNode {
     pub is_handler_key: bool,
 }
 
+#[derive(Debug, Clone)]
 pub struct CompoundExpressionNode {
     pub ast: Box<Expr>,
     pub is_handler_key: bool,
 }
 
+#[derive(Debug, Clone)]
 pub enum ExpressionNode {
     SimpleExpression(SimpleExpressionNode),
     CompoundExpression(CompoundExpressionNode),
 }
 
+#[derive(Debug, Clone)]
 pub struct SimpleExpressionPropNameNode {
     pub ast: IdentName,
     pub is_static: bool,
@@ -40,18 +44,55 @@ pub struct SimpleExpressionPropNameNode {
     pub is_handler_key: bool,
 }
 
+#[derive(Debug, Clone)]
 pub struct CompoundExpressionPropNameNode {
     pub ast: PropName,
     pub is_handler_key: bool,
 }
 
+#[derive(Debug, Clone)]
 pub enum ExpressionPropNameNode {
     SimpleExpression(SimpleExpressionPropNameNode),
     CompoundExpression(CompoundExpressionPropNameNode),
 }
 
+#[derive(Debug, Clone)]
+pub enum VNodeCallTag {
+    CallExpression(CallExpression),
+    Builtin(BuiltinType),
+    Expr(Box<Expr>),
+}
+
+#[derive(Debug, Clone)]
+pub enum PropsExpression {
+    ObjectExpression(Box<ObjectExpression>),
+    CallExpression(Box<CallExpression>),
+    ExpressionNode(Box<ExpressionNode>),
+}
+
+#[derive(Debug, Clone)]
+pub enum VNodeChildren {
+    /// Use the children from parent element
+    UseElementChildren,
+    /// Use the first and only child (which is a text node) from parent element
+    UseFirstChildTextNode,
+}
+
+#[derive(Debug, Clone)]
+pub struct VNodeCall {
+    pub tag: VNodeCallTag,
+    pub props: Option<PropsExpression>,
+    pub children: Option<VNodeChildren>,
+    pub patch_hints: PatchHints,
+    pub directives: Option<ArrayLit>,
+    pub is_block: bool,
+    pub disable_tracking: bool,
+    pub is_component: bool,
+}
+
 // JS Node Types
 
+#[derive(Debug, Clone)]
 pub enum JsChildNode {
     CallExpression(Box<CallExpression>),
     ObjectExpression(Box<ObjectExpression>),
@@ -60,17 +101,20 @@ pub enum JsChildNode {
     OriginalValueMarker,
 }
 
+#[derive(Debug, Clone)]
 pub struct CallExpression {
     pub callee: VueImports,
     pub span: Span,
     pub arguments: Vec<JsChildNode>,
 }
 
+#[derive(Debug, Clone)]
 pub struct ObjectExpression {
     pub properties: Vec<Property>,
     pub span: Span,
 }
 
+#[derive(Debug, Clone)]
 pub struct Property {
     pub key: ExpressionPropNameNode,
     pub value: JsChildNode,
@@ -213,6 +257,25 @@ impl From<SimpleExpressionPropNameNode> for ExpressionPropNameNode {
     }
 }
 
+// PropsExpression
+
+impl From<&Expr> for PropsExpression {
+    fn from(value: &Expr) -> Self {
+        match value {
+            Expr::Call(call_expr) => {
+                PropsExpression::CallExpression(Box::new(call_expr.to_owned().into()))
+            }
+            Expr::Object(obj_expr) => {
+                PropsExpression::ObjectExpression(Box::new(ObjectExpression {
+                    properties: obj_expr.props.iter().cloned().map(Into::into).collect(),
+                    span: obj_expr.span,
+                }))
+            }
+            _ => PropsExpression::ExpressionNode(Box::new(value.to_owned().into())),
+        }
+    }
+}
+
 // JsChildNode
 
 impl From<SimpleExpressionNode> for JsChildNode {
@@ -224,5 +287,15 @@ impl From<SimpleExpressionNode> for JsChildNode {
 impl From<CallExpression> for JsChildNode {
     fn from(value: CallExpression) -> Self {
         Self::CallExpression(Box::new(value))
+    }
+}
+
+impl From<PropsExpression> for JsChildNode {
+    fn from(val: PropsExpression) -> Self {
+        match val {
+            PropsExpression::ObjectExpression(o) => JsChildNode::ObjectExpression(o),
+            PropsExpression::CallExpression(c) => JsChildNode::CallExpression(c),
+            PropsExpression::ExpressionNode(e) => JsChildNode::ExpressionNode(e),
+        }
     }
 }

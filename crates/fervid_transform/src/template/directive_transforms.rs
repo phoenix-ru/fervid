@@ -15,27 +15,27 @@ pub struct DirectiveTransformResult {
 pub trait DirectiveTransforms: Debug {
     fn transform_v_bind(
         &self,
-        ctx: &mut TransformSfcContext,
-        v_bind: &VBindDirective,
-        node: &ElementNode,
+        _ctx: &mut TransformSfcContext,
+        _v_bind: &VBindDirective,
+        _node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
         todo!()
     }
 
     fn transform_v_on(
         &self,
-        ctx: &mut TransformSfcContext,
-        v_on: &VOnDirective,
-        node: &ElementNode,
+        _ctx: &mut TransformSfcContext,
+        _v_on: &VOnDirective,
+        _node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
         todo!()
     }
 
     fn transform_v_model(
         &self,
-        ctx: &mut TransformSfcContext,
-        v_model: &VModelDirective,
-        node: &ElementNode,
+        _ctx: &mut TransformSfcContext,
+        _v_model: &VModelDirective,
+        _node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
         todo!()
     }
