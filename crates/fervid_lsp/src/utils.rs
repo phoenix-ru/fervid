@@ -27,7 +27,7 @@ pub fn is_ident_char(c: char) -> bool {
 }
 
 /// Extracts prefix from the current cursor.
-/// Example: if cursor | is at som|ething, the extracted prefix is `som`
+/// Example: if cursor | is at some|thing, the extracted prefix is `some`
 pub fn extract_prefix(rope: &Rope, cursor_char: usize) -> String {
     let mut start = cursor_char;
 
@@ -44,7 +44,7 @@ pub fn extract_prefix(rope: &Rope, cursor_char: usize) -> String {
 }
 
 /// Extracts the full token under the current cursor.
-/// Example: if cursor | is at som|ething, the extracted token is `something`
+/// Example: if cursor | is at some|thing, the extracted token is `something`
 pub fn extract_token_at(rope: &ropey::Rope, cursor_char: usize) -> String {
     let len = rope.len_chars();
     if cursor_char > len {

@@ -141,7 +141,8 @@
     "clippy",
     "dashmap",
     "ropey",
-    "indexmap"
+    "indexmap",
+    "nuxt"
   ],
   "ignorePaths": [
     ".github/**",
