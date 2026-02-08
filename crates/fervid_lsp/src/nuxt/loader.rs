@@ -4,6 +4,7 @@ use tokio::fs;
 use tower_lsp::lsp_types::{MessageType, WorkspaceFolder};
 
 use crate::nuxt::parser::{parse_globals, ParseGlobalsResult};
+use crate::nuxt::resolver::resolve_global_paths;
 use crate::nuxt::NuxtInfo;
 use crate::utils::workspace_uri_to_path;
 use crate::Backend;
@@ -25,17 +26,11 @@ pub async fn load_nuxt_for_workspaces(backend: &Backend, workspace_folders: &[Wo
         let components_path = nuxt_dir.join("components.d.ts");
 
         // Read files async, ignore missing
-        let imports_source = match fs::read_to_string(&imports_path).await {
-            Ok(s) => Some(s),
-            Err(_) => None,
-        };
-        let components_source = match fs::read_to_string(&components_path).await {
-            Ok(s) => Some(s),
-            Err(_) => None,
-        };
+        let imports_source = fs::read_to_string(&imports_path).await.ok();
+        let components_source = fs::read_to_string(&components_path).await.ok();
 
         let ParseGlobalsResult {
-            globals,
+            mut globals,
             is_error_loading_components,
             is_error_loading_imports,
         } = parse_globals(
@@ -44,6 +39,8 @@ pub async fn load_nuxt_for_workspaces(backend: &Backend, workspace_folders: &[Wo
             components_source.as_deref(),
             &components_path,
         );
+
+        resolve_global_paths(&root, &mut globals).await;
 
         // Store resolved paths even if missing
         backend.nuxt_info.insert(

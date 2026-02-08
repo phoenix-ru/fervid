@@ -1,5 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
+use fervid_core::FervidAtom;
 use fxhash::FxHashMap;
 use swc_core::{
     common::{FileName, SourceMap},
@@ -11,7 +12,7 @@ use swc_core::{
 };
 use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsSyntax};
 
-use crate::nuxt::NuxtGlobals;
+use crate::nuxt::{NuxtGlobalTarget, NuxtGlobals};
 
 pub struct ParseGlobalsResult {
     pub globals: NuxtGlobals,
@@ -35,7 +36,7 @@ pub fn parse_globals(
 
     let imports = imports_source
         .and_then(
-            |src| match parse_nuxt_imports_dts(src, &imports_path, source_map.clone()) {
+            |src| match parse_nuxt_imports_dts(src, imports_path, source_map.clone()) {
                 Ok(v) => Some(v),
                 Err(error) => {
                     errors.push(error);
@@ -47,16 +48,16 @@ pub fn parse_globals(
         .unwrap_or_default();
 
     let components = components_source
-        .and_then(|src| {
-            match parse_nuxt_components_dts(src, &components_path, source_map.clone()) {
+        .and_then(
+            |src| match parse_nuxt_components_dts(src, components_path, source_map.clone()) {
                 Ok(v) => Some(v),
                 Err(error) => {
                     errors.push(error);
                     is_error_loading_components = true;
                     None
                 }
-            }
-        })
+            },
+        )
         .unwrap_or_default();
 
     ParseGlobalsResult {
@@ -73,9 +74,9 @@ fn parse_nuxt_components_dts(
     source: &str,
     path: &PathBuf,
     cm: Arc<SourceMap>,
-) -> Result<FxHashMap<String, String>, swc_ecma_parser::error::Error> {
+) -> Result<FxHashMap<FervidAtom, NuxtGlobalTarget>, swc_ecma_parser::error::Error> {
     let module = parse_ts_module(source, path, &cm)?;
-    let mut out: FxHashMap<String, String> = FxHashMap::default();
+    let mut out: FxHashMap<FervidAtom, NuxtGlobalTarget> = FxHashMap::default();
 
     for item in module.body {
         let ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(export_decl)) = item else {
@@ -96,7 +97,7 @@ fn parse_nuxt_components_dts(
             };
 
             if let Some(import_path) = find_first_import_type_path(&type_ann.type_ann) {
-                out.insert(ident.id.sym.to_string(), import_path);
+                out.insert(ident.id.sym.to_owned(), NuxtGlobalTarget::new(import_path));
             }
         }
     }
@@ -108,9 +109,9 @@ fn parse_nuxt_imports_dts(
     source: &str,
     path: &PathBuf,
     cm: Arc<SourceMap>,
-) -> Result<FxHashMap<String, String>, swc_ecma_parser::error::Error> {
+) -> Result<FxHashMap<FervidAtom, NuxtGlobalTarget>, swc_ecma_parser::error::Error> {
     let module = parse_ts_module(source, path, &cm)?;
-    let mut out: FxHashMap<String, String> = FxHashMap::default();
+    let mut out: FxHashMap<FervidAtom, NuxtGlobalTarget> = FxHashMap::default();
 
     for item in module.body {
         let ModuleItem::ModuleDecl(ModuleDecl::ExportNamed(named)) = item else {
@@ -122,7 +123,7 @@ fn parse_nuxt_imports_dts(
             continue;
         };
 
-        let specifier = src.value.to_string();
+        let specifier = src.value.to_owned();
 
         for s in &named.specifiers {
             match s {
@@ -133,7 +134,7 @@ fn parse_nuxt_imports_dts(
                         .map(module_export_name_to_string)
                         .unwrap_or_else(|| module_export_name_to_string(orig));
 
-                    out.insert(name, specifier.clone());
+                    out.insert(name, NuxtGlobalTarget::new(specifier.to_owned()));
                 }
                 ExportSpecifier::Default(_) => {
                     // `export { default as X } from ...` comes as Named with orig=Ident("default")
@@ -141,7 +142,7 @@ fn parse_nuxt_imports_dts(
                 ExportSpecifier::Namespace(ns) => {
                     // `export * as foo from "..."` -> foo
                     let name = module_export_name_to_string(&ns.name);
-                    out.insert(name, specifier.clone());
+                    out.insert(name, NuxtGlobalTarget::new(specifier.to_owned()));
                 }
             }
         }
@@ -150,10 +151,10 @@ fn parse_nuxt_imports_dts(
     Ok(out)
 }
 
-// Walk TS types to find `import("...")` path.
-fn find_first_import_type_path(ty: &TsType) -> Option<String> {
+/// Walk TS types to find `import("...")` path.
+fn find_first_import_type_path(ty: &TsType) -> Option<FervidAtom> {
     match ty {
-        TsType::TsImportType(import_ty) => Some(import_ty.arg.value.to_string()),
+        TsType::TsImportType(import_ty) => Some(import_ty.arg.value.to_owned()),
 
         TsType::TsTypeQuery(q) => {
             // typeof import("...").default often becomes a TsTypeQuery whose expr_name
@@ -167,7 +168,7 @@ fn find_first_import_type_path(ty: &TsType) -> Option<String> {
                 .as_ref()?
                 .params
                 .iter()
-                .find_map(|arg0: &Box<TsType>| find_first_import_type_path(arg0))
+                .find_map(|arg0| find_first_import_type_path(arg0))
         }
 
         TsType::TsTypeLit(lit) => {
@@ -187,11 +188,11 @@ fn find_first_import_type_path(ty: &TsType) -> Option<String> {
             TsUnionOrIntersectionType::TsUnionType(u) => u
                 .types
                 .iter()
-                .find_map(|arg0: &Box<TsType>| find_first_import_type_path(arg0)),
+                .find_map(|arg0| find_first_import_type_path(arg0)),
             TsUnionOrIntersectionType::TsIntersectionType(i) => i
                 .types
                 .iter()
-                .find_map(|arg0: &Box<TsType>| find_first_import_type_path(arg0)),
+                .find_map(|arg0| find_first_import_type_path(arg0)),
         },
 
         TsType::TsParenthesizedType(p) => find_first_import_type_path(&p.type_ann),
@@ -210,17 +211,17 @@ fn find_first_import_type_path(ty: &TsType) -> Option<String> {
     }
 }
 
-fn find_import_in_type_query(q: &TsTypeQuery) -> Option<String> {
+fn find_import_in_type_query(q: &TsTypeQuery) -> Option<FervidAtom> {
     match &q.expr_name {
-        TsTypeQueryExpr::Import(import_ty) => Some(import_ty.arg.value.to_string()),
+        TsTypeQueryExpr::Import(import_ty) => Some(import_ty.arg.value.to_owned()),
         TsTypeQueryExpr::TsEntityName(_) => None,
     }
 }
 
-fn module_export_name_to_string(n: &ModuleExportName) -> String {
+fn module_export_name_to_string(n: &ModuleExportName) -> FervidAtom {
     match n {
-        ModuleExportName::Ident(i) => i.sym.to_string(),
-        ModuleExportName::Str(s) => s.value.to_string(),
+        ModuleExportName::Ident(i) => i.sym.to_owned(),
+        ModuleExportName::Str(s) => s.value.to_owned(),
     }
 }
 

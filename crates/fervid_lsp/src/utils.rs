@@ -1,4 +1,4 @@
-use std::path::{Component, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use ropey::Rope;
 use tower_lsp::lsp_types::{Url, WorkspaceFolder};
@@ -15,7 +15,7 @@ pub fn uri_to_path(uri: &Url) -> Option<std::path::PathBuf> {
     uri.to_file_path().ok()
 }
 
-pub fn pick_workspace_root<'a>(roots: &'a [PathBuf], file: &PathBuf) -> Option<&'a PathBuf> {
+pub fn pick_workspace_root<'a>(roots: &'a [PathBuf], file: &Path) -> Option<&'a PathBuf> {
     roots
         .iter()
         .filter(|root_path| file.starts_with(root_path))

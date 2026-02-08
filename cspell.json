@@ -142,7 +142,9 @@
     "dashmap",
     "ropey",
     "indexmap",
-    "nuxt"
+    "nuxt",
+    "vueuse",
+    "demi"
   ],
   "ignorePaths": [
     ".github/**",

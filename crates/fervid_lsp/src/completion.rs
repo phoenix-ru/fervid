@@ -1,7 +1,7 @@
 use fervid_core::FervidAtom;
 use serde_json::json;
 use tower_lsp::jsonrpc::{Error, ErrorCode, Result};
-use tower_lsp::lsp_types::{Position, Url};
+use tower_lsp::lsp_types::{CompletionItem, InsertTextFormat, Position, Url};
 
 use crate::utils::extract_prefix;
 use crate::{
@@ -10,10 +10,27 @@ use crate::{
     Backend,
 };
 
-pub enum FervidCompletionItem {
-    Component { name: FervidAtom },
-    Prop { name: FervidAtom },
-    Import { name: FervidAtom },
+pub struct FervidCompletionItem {
+    name: FervidAtom,
+    kind: CompletionItemKind,
+    source_kind: CompletionSourceKind,
+    source_origin: Option<FervidAtom>,
+}
+
+#[derive(Clone, Copy)]
+pub enum CompletionItemKind {
+    Component,
+    Import,
+    #[allow(dead_code)]
+    Prop,
+}
+
+pub enum CompletionSourceKind {
+    /// Completions retrieved from Nuxt metadata (auto-imports and components)
+    Nuxt,
+    /// Completions retrieved from the current file
+    #[allow(dead_code)]
+    Local,
 }
 
 pub fn provide_completions(
@@ -42,7 +59,7 @@ pub fn provide_completions(
 
     let prefix = extract_prefix(&rope, cursor_char);
 
-    let doc_path = uri_to_path(&uri).ok_or(Error {
+    let doc_path = uri_to_path(uri).ok_or(Error {
         code: ErrorCode::InvalidParams,
         message: "Unable to resolve completion path as file".into(),
         data: Some(json!(uri.as_str())),
@@ -77,22 +94,88 @@ pub fn completion_from_globals(globals: &NuxtGlobals, prefix: &str) -> Vec<Fervi
     let mut result = Vec::new();
 
     // Components
-    for name in globals.components.keys() {
+    for (name, target) in globals.components.iter() {
         if prefix.is_empty() || name.starts_with(prefix) {
-            result.push(FervidCompletionItem::Component {
+            result.push(FervidCompletionItem {
                 name: name.as_str().into(),
+                kind: CompletionItemKind::Component,
+                source_kind: CompletionSourceKind::Nuxt,
+                source_origin: Some(target.spec.to_owned()),
             });
         }
     }
 
     // Imports
-    for name in globals.imports.keys() {
+    for (name, target) in globals.imports.iter() {
         if prefix.is_empty() || name.starts_with(prefix) {
-            result.push(FervidCompletionItem::Import {
+            result.push(FervidCompletionItem {
                 name: name.as_str().into(),
+                kind: CompletionItemKind::Import,
+                source_kind: CompletionSourceKind::Nuxt,
+                source_origin: Some(target.spec.to_owned()),
             });
         }
     }
 
     result
+}
+
+impl From<FervidCompletionItem> for tower_lsp::lsp_types::CompletionItem {
+    fn from(val: FervidCompletionItem) -> Self {
+        let name = val.name.to_string();
+        let label = name.clone();
+        let detail = Some(format_detail(val.source_kind, val.kind, val.source_origin));
+
+        match val.kind {
+            CompletionItemKind::Component => CompletionItem {
+                label,
+                kind: Some(tower_lsp::lsp_types::CompletionItemKind::CLASS),
+                insert_text: Some(name),
+                detail,
+                ..Default::default()
+            },
+            CompletionItemKind::Prop => CompletionItem {
+                label,
+                kind: Some(tower_lsp::lsp_types::CompletionItemKind::VARIABLE),
+                insert_text: Some(format!("{}=\"$1\"", name)),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                detail,
+                ..Default::default()
+            },
+            CompletionItemKind::Import => CompletionItem {
+                label,
+                kind: Some(tower_lsp::lsp_types::CompletionItemKind::FUNCTION),
+                insert_text: Some(name),
+                detail,
+                ..Default::default()
+            },
+        }
+    }
+}
+
+fn format_detail(
+    source_kind: CompletionSourceKind,
+    completion_kind: CompletionItemKind,
+    source_origin: Option<FervidAtom>,
+) -> String {
+    let prefix = format_source_prefix(source_kind, completion_kind);
+    if let Some(source_origin) = source_origin {
+        format!("{prefix} from {source_origin}")
+    } else {
+        prefix.to_string()
+    }
+}
+
+fn format_source_prefix(
+    source_kind: CompletionSourceKind,
+    completion_kind: CompletionItemKind,
+) -> &'static str {
+    match (source_kind, completion_kind) {
+        (CompletionSourceKind::Local, CompletionItemKind::Component) => "Local component",
+        (CompletionSourceKind::Local, CompletionItemKind::Import) => "Import",
+        (CompletionSourceKind::Local, CompletionItemKind::Prop) => "Prop",
+        (CompletionSourceKind::Nuxt, CompletionItemKind::Component) => "Nuxt component",
+        (CompletionSourceKind::Nuxt, CompletionItemKind::Import) => "Nuxt auto-import",
+        (CompletionSourceKind::Nuxt, CompletionItemKind::Prop) => "Prop",
+    }
 }

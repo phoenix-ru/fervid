@@ -12,7 +12,7 @@ use tower_lsp::lsp_types::notification::Notification;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
-use crate::completion::{provide_completions, FervidCompletionItem};
+use crate::completion::provide_completions;
 use crate::definition::goto_definition;
 use crate::nuxt::loader::load_nuxt_for_workspaces;
 use crate::nuxt::{NuxtGlobals, NuxtInfo};
@@ -62,7 +62,10 @@ impl LanguageServer for Backend {
         }
 
         Ok(InitializeResult {
-            server_info: None,
+            server_info: Some(ServerInfo {
+                name: env!("CARGO_PKG_NAME").to_string(),
+                version: Some(env!("CARGO_PKG_VERSION").to_string()),
+            }),
             offset_encoding: None,
             capabilities: ServerCapabilities {
                 // inlay_hint_provider: Some(OneOf::Left(true)),
@@ -404,39 +407,7 @@ impl LanguageServer for Backend {
 
             let mut ret = Vec::with_capacity(completions.len());
             for item in completions {
-                match item {
-                    FervidCompletionItem::Component { name } => {
-                        let s = name.to_string();
-                        ret.push(CompletionItem {
-                            label: s.clone(),
-                            kind: Some(CompletionItemKind::CLASS),
-                            insert_text: Some(s.clone()),
-                            detail: Some("Nuxt component".into()),
-                            ..Default::default()
-                        });
-                    }
-                    FervidCompletionItem::Prop { name } => {
-                        let s = name.to_string();
-                        ret.push(CompletionItem {
-                            label: s.clone(),
-                            kind: Some(CompletionItemKind::VARIABLE),
-                            insert_text: Some(format!("{}=\"$1\"", s)),
-                            insert_text_format: Some(InsertTextFormat::SNIPPET),
-                            detail: Some("Vue prop".into()),
-                            ..Default::default()
-                        });
-                    }
-                    FervidCompletionItem::Import { name } => {
-                        let s = name.to_string();
-                        ret.push(CompletionItem {
-                            label: s.clone(),
-                            kind: Some(CompletionItemKind::FUNCTION),
-                            insert_text: Some(s.clone()),
-                            detail: Some("Nuxt auto-import".into()),
-                            ..Default::default()
-                        });
-                    }
-                }
+                ret.push(item.into());
             }
 
             Ok(Some(ret))
