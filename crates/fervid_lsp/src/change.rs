@@ -52,21 +52,38 @@ pub async fn on_change<'a>(backend: &Backend, params: TextDocumentItem<'a>) {
     // 4. Do SFC transformation in the background to not block CPU
     let client = backend.client.clone();
     let analysis_map = backend.analysis_map.clone();
-    let uri = params.uri.clone();
     let version = params.version;
     let file_hash = compute_scope_id(params.text);
 
     task::spawn(async move {
-        let mut transform_errors = Vec::new();
-        let transform_options = TransformSfcOptions {
-            is_prod: true,
-            is_ce: false,
-            props_destructure: fervid_transform::PropsDestructureConfig::True,
-            scope_id: &file_hash,
-            filename: uri.as_str(),
-            transform_asset_urls: fervid_transform::TransformAssetUrlsConfig::Disabled,
+        // TODO: Evaluate the use of `rayon` here - `transform_sfc` is already incredibly fast
+        let transform_result = task::spawn_blocking(move || {
+            let mut transform_errors = Vec::new();
+            let transform_options = TransformSfcOptions {
+                is_prod: true,
+                is_ce: false,
+                props_destructure: fervid_transform::PropsDestructureConfig::True,
+                scope_id: &file_hash,
+                filename: &uri_key,
+                transform_asset_urls: fervid_transform::TransformAssetUrlsConfig::Disabled,
+            };
+            (
+                transform_sfc(sfc, transform_options, &mut transform_errors),
+                transform_errors,
+            )
+        })
+        .await;
+
+        let Ok((transform_result, transform_errors)) = transform_result else {
+            // join error (panic inside blocking task)
+            let _ = client
+                .log_message(
+                    tower_lsp::lsp_types::MessageType::ERROR,
+                    "transform_sfc task panicked",
+                )
+                .await;
+            return;
         };
-        let transform_result = transform_sfc(sfc, transform_options, &mut transform_errors);
 
         if !transform_errors.is_empty() {
             let diagnostics = transform_errors
@@ -94,7 +111,7 @@ pub async fn on_change<'a>(backend: &Backend, params: TextDocumentItem<'a>) {
             template_block: transform_result.template_block,
         };
 
-        analysis_map.insert(uri.to_string(), Arc::new(analysis));
+        analysis_map.insert(params.uri.to_string(), Arc::new(analysis));
 
         // backend.semantic_token_map
         //     .insert(params.uri.to_string(), semantic_tokens);
