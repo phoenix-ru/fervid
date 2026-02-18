@@ -148,7 +148,6 @@ impl LanguageServer for Backend {
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
-        dbg!(&params.text);
         if let Some(text) = params.text {
             let item = TextDocumentItem {
                 uri: params.text_document.uri,
