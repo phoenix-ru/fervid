@@ -264,11 +264,12 @@ jobs:
       - run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
         if: ${{ contains(matrix.target, 'armv7') }}
       - name: Test bindings
-        uses: addnab/docker-run-action@v3
+        uses: tj-actions/docker-run@v2
         with:
           image: ${{ steps.docker.outputs.IMAGE }}
+          name: test-bindings-${{ matrix.target }}
           options: -v ${{ env.WORKING_DIR_PATH }}:/build -w /build -e CI=true --platform ${{ steps.docker.outputs.PLATFORM }}
-          run: corepack enable && yarn test
+          args: corepack enable && yarn test
 
   test-wasi:
     name: Test WASI target
