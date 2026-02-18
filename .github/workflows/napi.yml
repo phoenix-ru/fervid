@@ -269,7 +269,7 @@ jobs:
           image: ${{ steps.docker.outputs.IMAGE }}
           name: test-bindings-${{ matrix.target }}
           options: -v ${{ env.WORKING_DIR_PATH }}:/build -w /build -e CI=true --platform ${{ steps.docker.outputs.PLATFORM }}
-          args: corepack enable && yarn test
+          args: '"corepack enable && yarn test"'
 
   test-wasi:
     name: Test WASI target
