@@ -405,69 +405,6 @@ impl LanguageServer for Backend {
         Ok(completions.map(CompletionResponse::Array))
     }
 
-    // async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-    //     let uri = params.text_document_position.text_document.uri;
-    //     let position = params.text_document_position.position;
-    //     let completions = || -> Option<Vec<CompletionItem>> {
-    //         let rope = self.document_map.get(&uri.to_string())?;
-    //         let ast = self.ast_map.get(&uri.to_string())?;
-    //         let char = rope.try_line_to_char(position.line as usize).ok()?;
-    //         let offset = char + position.character as usize;
-
-    //         let completions = completion(&ast, offset);
-    //         let mut ret = Vec::with_capacity(completions.len());
-
-    //         for completion in completions {
-    //             match completion {
-    //                 FervidCompletionItem::Component { name } => {
-    //                     // TODO Auto insert required props depending on config?
-
-    //                     let name_string = name.to_string();
-
-    //                     ret.push(CompletionItem {
-    //                         label: name_string.clone(),
-    //                         kind: Some(CompletionItemKind::VARIABLE),
-    //                         insert_text: Some(name_string.clone()),
-    //                         detail: Some(name_string),
-    //                         ..Default::default()
-    //                     });
-    //                 }
-
-    //                 FervidCompletionItem::Prop { name } => {
-    //                     // ret.push(CompletionItem {
-    //                     //     label: name.clone(),
-    //                     //     kind: Some(CompletionItemKind::FUNCTION),
-    //                     //     detail: Some(name.clone()),
-    //                     //     insert_text: Some(format!(
-    //                     //         "{}({})",
-    //                     //         name,
-    //                     //         args.iter()
-    //                     //             .enumerate()
-    //                     //             .map(|(index, item)| { format!("${{{}:{}}}", index + 1, item) })
-    //                     //             .collect::<Vec<_>>()
-    //                     //             .join(",")
-    //                     //     )),
-    //                     //     insert_text_format: Some(InsertTextFormat::SNIPPET),
-    //                     //     ..Default::default()
-    //                     // });
-    //                     let name_string = name.to_string();
-
-    //                     ret.push(CompletionItem {
-    //                         label: name_string.clone(),
-    //                         kind: Some(CompletionItemKind::VARIABLE),
-    //                         insert_text: Some(format!("{}=\"$1\"", name_string)),
-    //                         insert_text_format: Some(InsertTextFormat::SNIPPET),
-    //                         detail: Some(name_string),
-    //                         ..Default::default()
-    //                     });
-    //                 }
-    //             }
-    //         }
-    //         Some(ret)
-    //     }();
-    //     Ok(completions.map(CompletionResponse::Array))
-    // }
-
     // async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
     //     let workspace_edit = || -> Option<WorkspaceEdit> {
     //         let uri = params.text_document_position.text_document.uri;
