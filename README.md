@@ -10,6 +10,9 @@ Currently in alpha stage, the closest goal is to reach feature-parity with the c
 ## Getting started
 Instructions on how to use `fervid` in Vue CLI and Vite are coming very soon!
 
+### Editor support
+
+Fervid includes an experimental Language Server (`fervid_lsp`) with fast Nuxt-oriented completion and go-to-definition. See [`crates/fervid_lsp/README.md`](./crates/fervid_lsp/README.md) for installation and setup.
 
 ## Progress till MVP ![84%](https://geps.dev/progress/84)
 A minimal target of this project includes (see [Roadmap](#roadmap)):

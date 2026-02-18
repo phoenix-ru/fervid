@@ -23,7 +23,10 @@ pub enum CompileError {
 
 impl std::fmt::Display for CompileError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            CompileError::SfcParse(parse_error) => write!(f, "{parse_error}"),
+            CompileError::TransformError(transform_error) => write!(f, "{transform_error}"),
+        }
     }
 }
 

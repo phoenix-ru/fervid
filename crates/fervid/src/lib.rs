@@ -65,11 +65,7 @@ pub use fervid_transform::{
     style::should_transform_style_block, transform_sfc, PropsDestructureConfig, SetupBinding,
     TransformSfcOptions,
 };
-use fxhash::FxHasher32;
-use std::{
-    borrow::Cow,
-    hash::{Hash, Hasher},
-};
+use std::borrow::Cow;
 use swc_core::{common::FileName, ecma::ast::Expr};
 
 // TODO Add severity to errors
@@ -149,12 +145,7 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
 
     // For scopes
     // TODO Research if it's better to compute that on the caller site or here
-    let file_hash = {
-        let mut hasher = FxHasher32::default();
-        source.hash(&mut hasher);
-        let num = hasher.finish();
-        format!("{:x}", num)
-    };
+    let file_hash = compute_scope_id(source);
 
     // Transform
     let mut transform_errors = Vec::new();
@@ -246,12 +237,7 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
     let sfc = parser.parse_sfc().map_err(|err| err.to_string())?;
 
     // For scopes
-    let file_hash = {
-        let mut hasher = FxHasher32::default();
-        source.hash(&mut hasher);
-        let num = hasher.finish();
-        format!("{:x}", num)
-    };
+    let file_hash = compute_scope_id(source);
 
     // Transform
     let mut transform_errors = Vec::new();
