@@ -9,6 +9,7 @@ dashmap = "6.1.0"
 env_logger = "0.11.8"
 fervid_core = { path="../fervid_core", version = "0.2" }
 fervid_parser = { path="../fervid_parser", version = "0.2" }
+fervid_transform = { path="../fervid_transform", version = "0.2" }
 fxhash = { workspace = true }
 log = "0.4.27"
 ropey = "1.6.1"

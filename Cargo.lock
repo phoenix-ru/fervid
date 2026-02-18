@@ -1061,6 +1061,7 @@ dependencies = [
  "env_logger",
  "fervid_core",
  "fervid_parser",
+ "fervid_transform",
  "fxhash",
  "log",
  "ropey",

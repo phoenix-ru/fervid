@@ -1,4 +1,6 @@
 use fervid_core::FervidAtom;
+use fervid_transform::BindingsHelper;
+use fxhash::FxHashMap;
 use serde_json::json;
 use tower_lsp::jsonrpc::{Error, ErrorCode, Result};
 use tower_lsp::lsp_types::{CompletionItem, InsertTextFormat, Position, Url};
@@ -23,6 +25,7 @@ pub enum CompletionItemKind {
     Import,
     #[allow(dead_code)]
     Prop,
+    Variable,
 }
 
 pub enum CompletionSourceKind {
@@ -38,14 +41,13 @@ pub fn provide_completions(
     position: &Position,
     uri: &Url,
 ) -> Result<Vec<FervidCompletionItem>> {
-    let rope = backend
-        .document_map
-        .get(&uri.to_string())
-        .ok_or_else(|| Error {
-            code: ErrorCode::InvalidParams,
-            message: "Unable to find contents of a file".into(),
-            data: Some(json!(uri.as_str())),
-        })?;
+    let uri_key = uri.to_string();
+
+    let rope = backend.document_map.get(&uri_key).ok_or_else(|| Error {
+        code: ErrorCode::InvalidParams,
+        message: "Unable to find contents of a file".into(),
+        data: Some(json!(uri.as_str())),
+    })?;
 
     // TODO: this is not UTF-16 safe, LSP seems to use UTF-16, but ropey seemingly uses chars
     let line_start_char = rope
@@ -79,45 +81,81 @@ pub fn provide_completions(
 
     let root_key = root.to_string_lossy().to_string();
 
+    let mut result = FxHashMap::default();
+
+    // Global completions from Nuxt
     let globals = backend.nuxt_globals.get(&root_key).ok_or_else(|| Error {
         code: ErrorCode::ServerError(-33012),
         message: "Unable to find workspace root data".into(),
         data: Some(json!(root_key)),
     })?;
+    completion_from_globals(&globals, &prefix, &mut result);
 
-    Ok(completion_from_globals(&globals, &prefix))
+    // Local document completions
+    if let Some(analysis) = backend.analysis_map.get(&uri_key) {
+        completion_from_setup_bindings(&analysis.bindings, &prefix, &mut result);
+    }
+
+    Ok(result.into_values().collect())
 }
 
 /// Naive implementation of completions using prefix matching from globals.
 /// It is naive in a sense that it does not consider the surrounding context (are we inside `<script>` or `<template>`)
-pub fn completion_from_globals(globals: &NuxtGlobals, prefix: &str) -> Vec<FervidCompletionItem> {
-    let mut result = Vec::new();
-
+pub fn completion_from_globals(
+    globals: &NuxtGlobals,
+    prefix: &str,
+    out: &mut FxHashMap<FervidAtom, FervidCompletionItem>,
+) {
     // Components
     for (name, target) in globals.components.iter() {
         if prefix.is_empty() || name.starts_with(prefix) {
-            result.push(FervidCompletionItem {
-                name: name.as_str().into(),
-                kind: CompletionItemKind::Component,
-                source_kind: CompletionSourceKind::Nuxt,
-                source_origin: Some(target.spec.to_owned()),
-            });
+            out.insert(
+                name.to_owned(),
+                FervidCompletionItem {
+                    name: name.as_str().into(),
+                    kind: CompletionItemKind::Component,
+                    source_kind: CompletionSourceKind::Nuxt,
+                    source_origin: Some(target.spec.to_owned()),
+                },
+            );
         }
     }
 
     // Imports
     for (name, target) in globals.imports.iter() {
         if prefix.is_empty() || name.starts_with(prefix) {
-            result.push(FervidCompletionItem {
-                name: name.as_str().into(),
-                kind: CompletionItemKind::Import,
-                source_kind: CompletionSourceKind::Nuxt,
-                source_origin: Some(target.spec.to_owned()),
-            });
+            out.insert(
+                name.to_owned(),
+                FervidCompletionItem {
+                    name: name.to_owned(),
+                    kind: CompletionItemKind::Import,
+                    source_kind: CompletionSourceKind::Nuxt,
+                    source_origin: Some(target.spec.to_owned()),
+                },
+            );
         }
     }
+}
 
-    result
+pub fn completion_from_setup_bindings(
+    bindings: &BindingsHelper,
+    prefix: &str,
+    out: &mut FxHashMap<FervidAtom, FervidCompletionItem>,
+) {
+    for b in bindings.setup_bindings.iter() {
+        let name = &b.sym; // FervidAtom
+        if prefix.is_empty() || name.as_ref().starts_with(prefix) {
+            out.insert(
+                name.to_owned(),
+                FervidCompletionItem {
+                    name: name.to_owned(),
+                    kind: CompletionItemKind::Variable,
+                    source_kind: CompletionSourceKind::Local,
+                    source_origin: None,
+                },
+            );
+        }
+    }
 }
 
 impl From<FervidCompletionItem> for tower_lsp::lsp_types::CompletionItem {
@@ -149,6 +187,13 @@ impl From<FervidCompletionItem> for tower_lsp::lsp_types::CompletionItem {
                 detail,
                 ..Default::default()
             },
+            CompletionItemKind::Variable => CompletionItem {
+                label,
+                kind: Some(tower_lsp::lsp_types::CompletionItemKind::VARIABLE),
+                insert_text: Some(name),
+                detail,
+                ..Default::default()
+            },
         }
     }
 }
@@ -174,8 +219,10 @@ fn format_source_prefix(
         (CompletionSourceKind::Local, CompletionItemKind::Component) => "Local component",
         (CompletionSourceKind::Local, CompletionItemKind::Import) => "Import",
         (CompletionSourceKind::Local, CompletionItemKind::Prop) => "Prop",
+        (CompletionSourceKind::Local, CompletionItemKind::Variable) => "Variable",
         (CompletionSourceKind::Nuxt, CompletionItemKind::Component) => "Nuxt component",
         (CompletionSourceKind::Nuxt, CompletionItemKind::Import) => "Nuxt auto-import",
         (CompletionSourceKind::Nuxt, CompletionItemKind::Prop) => "Prop",
+        (CompletionSourceKind::Nuxt, CompletionItemKind::Variable) => "Variable",
     }
 }

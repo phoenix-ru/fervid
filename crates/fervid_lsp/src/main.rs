@@ -1,43 +1,27 @@
-use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use dashmap::DashMap;
-use fervid_core::SfcDescriptor;
-use fervid_parser::{ParseError, SfcParser};
 use log::debug;
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::notification::Notification;
 use tower_lsp::lsp_types::*;
-use tower_lsp::{Client, LanguageServer, LspService, Server};
+use tower_lsp::{LanguageServer, LspService, Server};
 
+use crate::change::on_change;
 use crate::completion::provide_completions;
 use crate::definition::goto_definition;
 use crate::nuxt::loader::load_nuxt_for_workspaces;
-use crate::nuxt::{NuxtGlobals, NuxtInfo};
+use crate::structs::{Backend, TextDocumentItem};
 use crate::utils::workspace_uri_to_path;
 
+mod change;
 mod completion;
 mod definition;
 mod nuxt;
+mod structs;
 mod utils;
-
-type WorkspaceKey = String;
-
-#[derive(Debug)]
-struct Backend {
-    client: Client,
-    ast_map: DashMap<String, SfcDescriptor>,
-    // semantic_map: DashMap<String, Semantic>,
-    document_map: DashMap<String, Rope>,
-    // semantic_token_map: DashMap<String, Vec<ImCompleteSemanticToken>>,
-    workspace_roots: RwLock<Vec<PathBuf>>,
-
-    // Nuxt-specific
-    nuxt_info: DashMap<WorkspaceKey, Arc<NuxtInfo>>,
-    nuxt_globals: DashMap<WorkspaceKey, Arc<NuxtGlobals>>,
-}
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
@@ -140,20 +124,26 @@ impl LanguageServer for Backend {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         debug!("file opened");
-        self.on_change(TextDocumentItem {
-            uri: params.text_document.uri,
-            text: &params.text_document.text,
-            version: Some(params.text_document.version),
-        })
+        on_change(
+            self,
+            TextDocumentItem {
+                uri: params.text_document.uri,
+                text: &params.text_document.text,
+                version: Some(params.text_document.version),
+            },
+        )
         .await
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        self.on_change(TextDocumentItem {
-            text: &params.content_changes[0].text,
-            uri: params.text_document.uri,
-            version: Some(params.text_document.version),
-        })
+        on_change(
+            self,
+            TextDocumentItem {
+                text: &params.content_changes[0].text,
+                uri: params.text_document.uri,
+                version: Some(params.text_document.version),
+            },
+        )
         .await
     }
 
@@ -165,7 +155,7 @@ impl LanguageServer for Backend {
                 text: &text,
                 version: None,
             };
-            self.on_change(item).await;
+            on_change(self, item).await;
             _ = self.client.semantic_tokens_refresh().await;
         }
         debug!("file saved!");
@@ -544,79 +534,6 @@ impl Notification for CustomNotification {
     type Params = InlayHintParams;
     const METHOD: &'static str = "custom/notification";
 }
-struct TextDocumentItem<'a> {
-    uri: Url,
-    text: &'a str,
-    version: Option<i32>,
-}
-
-impl Backend {
-    async fn on_change<'a>(&self, params: TextDocumentItem<'a>) {
-        let rope = Rope::from_str(params.text);
-        self.document_map
-            .insert(params.uri.to_string(), rope.clone());
-
-        let (sfc, sfc_parsing_errors) = parse(params.text);
-
-        let diagnostics = sfc_parsing_errors
-            .into_iter()
-            .filter_map(|parse_error| {
-                let message = parse_error.kind.to_string();
-                let span = parse_error.span;
-                let start_position = offset_to_position(span.lo.0 as usize, &rope)?;
-                let end_position = offset_to_position(span.hi.0 as usize, &rope)?;
-                Some(Diagnostic::new_simple(
-                    Range::new(start_position, end_position),
-                    message,
-                ))
-            })
-            .collect::<Vec<_>>();
-
-        if let Some(ast) = sfc {
-            // match analyze_program(&ast) {
-            //     Ok(semantic) => {
-            //         self.semantic_map.insert(params.uri.to_string(), semantic);
-            //     }
-            //     Err(err) => {
-            //         self.semantic_token_map.remove(&params.uri.to_string());
-            //         let span = err.span();
-            //         let start_position = offset_to_position(span.start, &rope);
-            //         let end_position = offset_to_position(span.end, &rope);
-            //         let diag = start_position
-            //             .and_then(|start| end_position.map(|end| (start, end)))
-            //             .map(|(start, end)| {
-            //                 Diagnostic::new_simple(Range::new(start, end), format!("{err:?}"))
-            //             });
-            //         if let Some(diag) = diag {
-            //             diagnostics.push(diag);
-            //         }
-            //     }
-            // };
-            self.ast_map.insert(params.uri.to_string(), ast);
-        }
-
-        self.client
-            .publish_diagnostics(params.uri.clone(), diagnostics, params.version)
-            .await;
-        // self.semantic_token_map
-        //     .insert(params.uri.to_string(), semantic_tokens);
-    }
-}
-
-fn parse(input: &str) -> (Option<SfcDescriptor>, Vec<ParseError>) {
-    let mut sfc_parsing_errors = Vec::new();
-
-    let mut parser = SfcParser::new(input, &mut sfc_parsing_errors);
-    let sfc = match parser.parse_sfc() {
-        Ok(sfc) => Some(sfc),
-        Err(e) => {
-            sfc_parsing_errors.push(e);
-            None
-        }
-    };
-
-    (sfc, sfc_parsing_errors)
-}
 
 #[tokio::main]
 async fn main() {
@@ -627,7 +544,8 @@ async fn main() {
 
     let (service, socket) = LspService::build(|client| Backend {
         client,
-        ast_map: DashMap::new(),
+        analysis_map: Arc::new(DashMap::new()),
+        ast_map: Arc::new(DashMap::new()),
         document_map: DashMap::new(),
         // semantic_token_map: DashMap::new(),
         // semantic_map: DashMap::new(),
