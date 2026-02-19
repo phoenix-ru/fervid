@@ -2,5 +2,7 @@ packages:
   - "crates/fervid_farmfe"
   - "crates/fervid_napi"
   - "crates/fervid_napi/npm/*"
-  - "node/*"
+  - "node/unplugin"
+  # Playground needs to be its own workspace for Farm to build correctly
+  - "!node/playground"
   - "node/examples/*"
