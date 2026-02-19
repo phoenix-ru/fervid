@@ -1,4 +1,4 @@
-use phf::{phf_set, Set};
+use phf::{Set, phf_set};
 
 pub static JS_BUILTINS: Set<&'static str> = phf_set! {
     // Specials

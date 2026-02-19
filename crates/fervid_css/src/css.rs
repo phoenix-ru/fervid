@@ -7,7 +7,7 @@ use fervid_core::error::Severity;
 use swc_core::common::Span;
 use swc_css_parser::parser::ParserConfig;
 
-pub use codegen::{stringify, StringifyOptions};
+pub use codegen::{StringifyOptions, stringify};
 pub use error::CssError;
 pub use parse::parse_stylesheet;
 pub use transform::ScopedTransformer;

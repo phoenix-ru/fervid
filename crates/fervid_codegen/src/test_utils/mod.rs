@@ -1,9 +1,9 @@
 use fervid_core::{AttributeOrBinding, VBindDirective, VOnDirective};
 use swc_core::{
-    common::{SourceMap, DUMMY_SP},
+    common::{DUMMY_SP, SourceMap},
     ecma::ast::Expr,
 };
-use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
+use swc_ecma_codegen::{Emitter, Node, text_writer::JsWriter};
 
 mod js_polyfill;
 

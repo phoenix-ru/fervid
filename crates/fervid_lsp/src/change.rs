@@ -4,9 +4,9 @@ use crate::{
     offset_to_position,
     structs::{Backend, DocumentAnalysis, TextDocumentItem},
 };
-use fervid_core::{compute_scope_id, SfcDescriptor};
+use fervid_core::{SfcDescriptor, compute_scope_id};
 use fervid_parser::{ParseError, SfcParser};
-use fervid_transform::{transform_sfc, TransformSfcOptions};
+use fervid_transform::{TransformSfcOptions, transform_sfc};
 use ropey::Rope;
 use swc_core::common::Spanned;
 use tokio::task;

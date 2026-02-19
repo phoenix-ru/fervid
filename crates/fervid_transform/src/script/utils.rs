@@ -1,6 +1,6 @@
 //! A collection of utils for working with SWC structs
 
-use fervid_core::{fervid_atom, FervidAtom};
+use fervid_core::{FervidAtom, fervid_atom};
 use swc_core::ecma::ast::{
     ArrayLit, BlockStmt, Callee, Expr, ExprOrSpread, Function, Lit, Module, ObjectLit, Prop,
     PropName, PropOrSpread, ReturnStmt, Stmt, Tpl,
@@ -61,7 +61,7 @@ pub fn find_function(object: &ObjectLit, name: FervidAtom) -> Option<&Function> 
 /// Finds the return statement in the [BlockStmt]. The search will occur from the statement end.
 pub fn find_return(block_stmt: &BlockStmt) -> Option<&ReturnStmt> {
     block_stmt.stmts.iter().rev().find_map(|stmt| match stmt {
-        Stmt::Return(ref return_stmt) => Some(return_stmt),
+        Stmt::Return(return_stmt) => Some(return_stmt),
 
         _ => None,
     })
@@ -119,8 +119,8 @@ pub fn collect_obj_prop_or_spread(prop_or_spread: &PropOrSpread, out: &mut Vec<F
 #[inline]
 pub fn collect_obj_propname(prop_name: &PropName, out: &mut Vec<FervidAtom>) {
     match prop_name {
-        PropName::Ident(ref ident) => out.push(ident.sym.to_owned()),
-        PropName::Str(ref s) => out.push(s.value.to_owned()),
+        PropName::Ident(ident) => out.push(ident.sym.to_owned()),
+        PropName::Str(s) => out.push(s.value.to_owned()),
 
         // I am not really sure how computed keys (e.g. `foo` in `{ [foo]: bar }`)
         // should be recognized. I believe they should not.
@@ -230,7 +230,7 @@ pub fn resolve_object_key(key: &PropName) -> Option<FervidAtom> {
 
 /// https://github.com/vuejs/core/blob/32bc647faba56f50a37d18b08fcc0e11b49c791f/packages/compiler-sfc/src/script/utils.ts#L39-L52
 pub fn is_call_of(expr: &Expr, test: &FervidAtom) -> bool {
-    let Expr::Call(ref call_expr) = expr else {
+    let Expr::Call(call_expr) = expr else {
         return false;
     };
 
@@ -238,7 +238,7 @@ pub fn is_call_of(expr: &Expr, test: &FervidAtom) -> bool {
         return false;
     };
 
-    let Expr::Ident(ref callee_ident) = callee_expr.as_ref() else {
+    let Expr::Ident(callee_ident) = callee_expr.as_ref() else {
         return false;
     };
 

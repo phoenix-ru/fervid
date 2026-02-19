@@ -459,6 +459,7 @@ impl LanguageServer for Backend {
     //     Ok(None)
     // }
 }
+#[allow(unused)]
 #[derive(Debug, Deserialize, Serialize)]
 struct InlayHintParams {
     path: String,

@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use fervid::PropsDestructureConfig;
 use fervid_transform::{BindingsHelper, TransformAssetUrlsConfig, TransformSfcContext};
 use swc_core::common::DUMMY_SP;

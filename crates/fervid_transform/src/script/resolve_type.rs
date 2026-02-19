@@ -6,15 +6,15 @@ use std::{
     rc::Rc,
 };
 
-use fervid_core::{fervid_atom, FervidAtom, IntoIdent, SfcScriptBlock};
+use fervid_core::{FervidAtom, IntoIdent, SfcScriptBlock, fervid_atom};
 use flagset::FlagSet;
 use fxhash::{FxBuildHasher, FxHashMap as HashMap};
 use indexmap::IndexMap;
 use itertools::Itertools;
-use phf::{phf_set, Set};
+use phf::{Set, phf_set};
 use strum_macros::{AsRefStr, EnumString, IntoStaticStr};
 use swc_core::{
-    common::{pass::Either, Span, Spanned, DUMMY_SP},
+    common::{DUMMY_SP, Span, Spanned, pass::Either},
     ecma::ast::{
         BinExpr, BinaryOp, Class, ClassDecl, Decl, DefaultDecl, ExportDecl, ExportSpecifier, Expr,
         FnDecl, FnExpr, Function, Ident, Lit, Module, ModuleDecl, ModuleExportName, ModuleItem,
@@ -29,8 +29,8 @@ use swc_core::{
 };
 
 use crate::{
-    error::{ScriptError, ScriptErrorKind},
     ImportBinding, ScopeTypeNode, TransformSfcContext, TypeOrDecl, TypeScope, TypeScopeContainer,
+    error::{ScriptError, ScriptErrorKind},
 };
 
 static SUPPORTED_BUILTINS_SET: Set<&'static str> = phf_set! {
@@ -174,22 +174,21 @@ fn resolve_type_elements_impl_type(
         ),
 
         TsType::TsImportType(import_type) => {
-            if let Some(type_args) = import_type.type_args.as_ref() {
-                if import_type.arg.value == "vue"
-                    && matches!(import_type.qualifier.as_ref(), Some(TsEntityName::Ident(id)) if id.sym == "ExtractPropTypes")
-                {
-                    let Some(first_type_param) = type_args.params.first() else {
-                        return Err(error(
-                            ScriptErrorKind::ResolveTypeMissingTypeParam,
-                            type_args.span,
-                        ));
-                    };
+            if let Some(type_args) = import_type.type_args.as_ref()
+                && import_type.arg.value == "vue"
+                && matches!(import_type.qualifier.as_ref(), Some(TsEntityName::Ident(id)) if id.sym == "ExtractPropTypes")
+            {
+                let Some(first_type_param) = type_args.params.first() else {
+                    return Err(error(
+                        ScriptErrorKind::ResolveTypeMissingTypeParam,
+                        type_args.span,
+                    ));
+                };
 
-                    let resolved_elements =
-                        resolve_type_elements_impl_type(ctx, first_type_param, scope, None)?;
+                let resolved_elements =
+                    resolve_type_elements_impl_type(ctx, first_type_param, scope, None)?;
 
-                    return resolve_extract_prop_types(resolved_elements, scope.id);
-                }
+                return resolve_extract_prop_types(resolved_elements, scope.id);
             }
 
             // TODO
@@ -446,7 +445,7 @@ fn resolve_type_elements_impl_type_ref_or_expr_with_type_args(
                     };
 
                     match decl.deref() {
-                        Decl::Fn(ref fn_decl) => fn_decl
+                        Decl::Fn(fn_decl) => fn_decl
                             .function
                             .return_type
                             .as_ref()
@@ -526,20 +525,20 @@ fn type_elements_to_map(
         }
 
         match ts_type_element {
-            TsTypeElement::TsPropertySignature(ref signature) => {
+            TsTypeElement::TsPropertySignature(signature) => {
                 implementation!(
                     signature,
                     ResolvedPropValue::TsPropertySignature(signature.to_owned())
                 );
             }
-            TsTypeElement::TsMethodSignature(ref signature) => {
+            TsTypeElement::TsMethodSignature(signature) => {
                 implementation!(
                     signature,
                     ResolvedPropValue::TsMethodSignature(signature.to_owned())
                 );
             }
 
-            TsTypeElement::TsCallSignatureDecl(ref signature) => {
+            TsTypeElement::TsCallSignatureDecl(signature) => {
                 result.calls.push(Either::Right(signature.to_owned()));
             }
 
@@ -758,7 +757,7 @@ fn resolve_index_type(
                 ResolvedPropValue::TsMethodSignature(ref s) => &s.type_ann,
             };
 
-            if let Some(ref type_ann) = target_type {
+            if let &Some(ref type_ann) = target_type {
                 types.push(type_ann.type_ann.to_owned());
             }
         };
@@ -805,7 +804,7 @@ fn resolve_array_element_type(
             .map(|t| t.ty.to_owned())
             .collect_vec()),
 
-        TsType::TsTypeRef(ref type_ref) => {
+        TsType::TsTypeRef(type_ref) => {
             let ref_name = get_reference_name_from_entity(&type_ref.type_name);
             let ref_name = if ref_name.len() == 1 {
                 &ref_name[0]
@@ -825,10 +824,9 @@ fn resolve_array_element_type(
             // Reference
             if let Some(resolved) =
                 resolve_type_reference(ctx, ReferenceTypes::TsType(array_element_type), scope)
+                && let TypeOrDecl::Type(ts_type) = &resolved.value
             {
-                if let TypeOrDecl::Type(ts_type) = &resolved.value {
-                    return resolve_array_element_type(ctx, ts_type, scope);
-                }
+                return resolve_array_element_type(ctx, ts_type, scope);
             };
 
             Err(error(
@@ -845,7 +843,7 @@ fn get_reference_name(ts_type: ReferenceTypes) -> Vec<FervidAtom> {
     match ts_type {
         ReferenceTypes::TsExprWithTypeArgs(ts_expr_with_type_args) => {
             let expr = &ts_expr_with_type_args.expr;
-            if let Expr::Ident(ref ident) = expr.as_ref() {
+            if let Expr::Ident(ident) = expr.as_ref() {
                 return vec![ident.sym.to_owned()];
             }
         }
@@ -891,7 +889,7 @@ fn qualified_name_to_path(qual_name: &TsQualifiedName) -> Vec<FervidAtom> {
                 next_entity = &next_qual_name.left;
                 has_next = true;
             }
-            TsEntityName::Ident(ref ident) => {
+            TsEntityName::Ident(ident) => {
                 idents.push(ident.sym.to_owned());
                 has_next = false;
             }
@@ -1258,10 +1256,9 @@ fn find_static_property_type<'t>(ts_type: &'t TsTypeLit, key: &str) -> Option<&'
         };
 
         if let (false, Some(k), Some(type_ann)) = (s.computed, get_id(&s.key), s.type_ann.as_ref())
+            && k == key
         {
-            if k == key {
-                return Some(type_ann.type_ann.as_ref());
-            }
+            return Some(type_ann.type_ann.as_ref());
         }
 
         None
@@ -2202,7 +2199,7 @@ pub fn infer_runtime_type_type(
         TsType::TsKeywordType(keyword) => match keyword.kind {
             TsKeywordTypeKind::TsStringKeyword => return return_value!(Types::String),
             TsKeywordTypeKind::TsNumberKeyword | TsKeywordTypeKind::TsBigIntKeyword => {
-                return return_value!(Types::Number)
+                return return_value!(Types::Number);
             }
             TsKeywordTypeKind::TsBooleanKeyword => return return_value!(Types::Boolean),
             TsKeywordTypeKind::TsObjectKeyword => return return_value!(Types::Object),
@@ -2528,7 +2525,7 @@ fn infer_enum_type(ts_enum: &TsEnumDecl) -> TypesSet {
             continue;
         };
 
-        let Expr::Lit(ref lit) = initializer.as_ref() else {
+        let Expr::Lit(lit) = initializer.as_ref() else {
             continue;
         };
 
@@ -2622,16 +2619,15 @@ fn reverse_infer_type_impl(
                     );
                 } else if let ("PropType", Some(type_params)) =
                     (type_name, type_ref.type_params.as_ref())
+                    && let Some(first_type_param) = type_params.params.first()
                 {
-                    if let Some(first_type_param) = type_params.params.first() {
-                        // PropType<{}>
-                        return create_property(
-                            Box::new(key.to_owned()),
-                            first_type_param.to_owned(),
-                            optional,
-                            scope_id,
-                        );
-                    }
+                    // PropType<{}>
+                    return create_property(
+                        Box::new(key.to_owned()),
+                        first_type_param.to_owned(),
+                        optional,
+                        scope_id,
+                    );
                 }
             }
 
@@ -3975,8 +3971,12 @@ mod tests {
     fn unsupported_computed_keys() {
         let result = try_resolve("defineProps<{ [Foo]: string }>()");
 
-        assert!(result
-            .is_err_and(|e| matches!(e.kind, ScriptErrorKind::ResolveTypeUnsupportedComputedKey)));
+        assert!(
+            result.is_err_and(|e| matches!(
+                e.kind,
+                ScriptErrorKind::ResolveTypeUnsupportedComputedKey
+            ))
+        );
     }
 
     #[test]
@@ -3986,8 +3986,10 @@ mod tests {
         // NOTE: This is a difference with the official compiler.
         // Official implementation looks at index type first (in this case `K`) and finds an issue there,
         // but fervid looks at referenced type first (`X`) and it cannot resolve TypeRef which is a different error.
-        assert!(result_official
-            .is_err_and(|e| matches!(e.kind, ScriptErrorKind::ResolveTypeUnresolvable)));
+        assert!(
+            result_official
+                .is_err_and(|e| matches!(e.kind, ScriptErrorKind::ResolveTypeUnresolvable))
+        );
 
         // This case compensates for the above difference
         let result_fervid = try_resolve(
@@ -3997,8 +3999,10 @@ mod tests {
             ",
         );
 
-        assert!(result_fervid
-            .is_err_and(|e| matches!(e.kind, ScriptErrorKind::ResolveTypeUnsupportedIndexType)));
+        assert!(
+            result_fervid
+                .is_err_and(|e| matches!(e.kind, ScriptErrorKind::ResolveTypeUnsupportedIndexType))
+        );
     }
 
     #[test]
@@ -4013,23 +4017,27 @@ mod tests {
     fn should_not_error_on_unresolved_type_when_inferring_runtime_type() {
         assert!(try_resolve("defineProps<{ foo: T }>()").is_ok());
         assert!(try_resolve("defineProps<{ foo: T['bar'] }>()").is_ok());
-        assert!(try_resolve(
-            "
+        assert!(
+            try_resolve(
+                "
             import type P from 'unknown'
             defineProps<{ foo: P }>()"
-        )
-        .is_ok());
+            )
+            .is_ok()
+        );
     }
 
     #[test]
     fn error_against_failed_extends() {
-        assert!(try_resolve(
-            "
+        assert!(
+            try_resolve(
+                "
             import type Base from 'unknown'
             interface Props extends Base {}
             defineProps<Props>()"
-        )
-        .is_err_and(|e| matches!(e.kind, ScriptErrorKind::ResolveTypeExtendsBaseType)));
+            )
+            .is_err_and(|e| matches!(e.kind, ScriptErrorKind::ResolveTypeExtendsBaseType))
+        );
     }
 
     // TODO Support `@vue-ignore`

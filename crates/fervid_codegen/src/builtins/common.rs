@@ -1,6 +1,6 @@
-use fervid_core::{fervid_atom, AttributeOrBinding, ElementNode, IntoIdent};
+use fervid_core::{AttributeOrBinding, ElementNode, IntoIdent, fervid_atom};
 use swc_core::{
-    common::{Span, DUMMY_SP},
+    common::{DUMMY_SP, Span},
     ecma::ast::{Expr, KeyValueProp, Lit, Number, ObjectLit, Prop, PropName, PropOrSpread},
 };
 

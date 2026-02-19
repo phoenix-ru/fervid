@@ -3,11 +3,11 @@ use std::sync::Arc;
 use tokio::fs;
 use tower_lsp::lsp_types::{MessageType, WorkspaceFolder};
 
-use crate::nuxt::parser::{parse_globals, ParseGlobalsResult};
-use crate::nuxt::resolver::resolve_global_paths;
-use crate::nuxt::NuxtInfo;
-use crate::utils::workspace_uri_to_path;
 use crate::Backend;
+use crate::nuxt::NuxtInfo;
+use crate::nuxt::parser::{ParseGlobalsResult, parse_globals};
+use crate::nuxt::resolver::resolve_global_paths;
+use crate::utils::workspace_uri_to_path;
 
 pub async fn load_nuxt_for_workspaces(backend: &Backend, workspace_folders: &[WorkspaceFolder]) {
     for workspace_folder in workspace_folders {

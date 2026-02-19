@@ -1,7 +1,7 @@
 use swc_css_ast::{PseudoClassSelectorChildren, PseudoElementSelectorChildren, Stylesheet};
 use swc_css_codegen::{
-    writer::basic::{BasicCssWriter, BasicCssWriterConfig},
     CodeGenerator, CodegenConfig, Emit,
+    writer::basic::{BasicCssWriter, BasicCssWriterConfig},
 };
 
 pub struct StringifyOptions {

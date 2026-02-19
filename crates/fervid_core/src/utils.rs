@@ -32,10 +32,11 @@ pub fn is_valid_ident(s: &str) -> bool {
 pub fn is_valid_propname(s: &str) -> bool {
     let mut chars = s.chars();
 
-    if let Some(first) = chars.next() {
-        if Ident::is_valid_start(first) && chars.all(Ident::is_valid_continue) {
-            return true;
-        }
+    if let Some(first) = chars.next()
+        && Ident::is_valid_start(first)
+        && chars.all(Ident::is_valid_continue)
+    {
+        return true;
     }
 
     false

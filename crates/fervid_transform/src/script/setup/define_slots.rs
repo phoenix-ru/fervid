@@ -5,8 +5,8 @@ use swc_core::{
 };
 
 use crate::{
-    error::{ScriptError, ScriptErrorKind, TransformError},
     BindingsHelper, SfcExportedObjectHelper,
+    error::{ScriptError, ScriptErrorKind, TransformError},
 };
 
 use super::macros::TransformMacroResult;

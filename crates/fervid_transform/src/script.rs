@@ -8,11 +8,11 @@ use swc_core::{
     ecma::ast::{Function, Module, ObjectLit},
 };
 
-use crate::{error::TransformError, structs::TransformScriptsResult, TransformSfcContext};
+use crate::{TransformSfcContext, error::TransformError, structs::TransformScriptsResult};
 
 use self::{
     imports::process_imports,
-    options_api::{transform_and_record_script_options_api, AnalyzeOptions},
+    options_api::{AnalyzeOptions, transform_and_record_script_options_api},
     setup::{merge_sfc_helper, transform_and_record_script_setup},
 };
 
@@ -180,8 +180,8 @@ fn pretransform(
 
 #[cfg(test)]
 mod tests {
-    use swc_core::common::{sync::Lrc, SourceMap, Span};
-    use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
+    use swc_core::common::{SourceMap, Span, sync::Lrc};
+    use swc_ecma_codegen::{Emitter, Node, text_writer::JsWriter};
 
     use super::*;
     use crate::test_utils::parser::parse_javascript_module;

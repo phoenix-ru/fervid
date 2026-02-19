@@ -1,10 +1,10 @@
 use std::{fmt::Write, path::PathBuf};
 
 use fervid_core::{
-    fervid_atom, AttributeOrBinding, ElementNode, FervidAtom, StrOrExpr, VBindDirective,
+    AttributeOrBinding, ElementNode, FervidAtom, StrOrExpr, VBindDirective, fervid_atom,
 };
 use swc_core::{
-    common::{Span, DUMMY_SP},
+    common::{DUMMY_SP, Span},
     ecma::ast::{
         BinExpr, BinaryOp, Expr, Ident, ImportDecl, ImportDefaultSpecifier, ImportSpecifier, Lit,
         Str,
@@ -13,8 +13,8 @@ use swc_core::{
 use url::Url;
 
 use crate::{
-    error::{TemplateError, TemplateErrorKind, TransformError},
     TransformAssetUrlsConfig, TransformAssetUrlsConfigOptions, TransformSfcContext,
+    error::{TemplateError, TemplateErrorKind, TransformError},
 };
 
 lazy_static! {
@@ -36,7 +36,7 @@ pub fn transform_asset_urls(element_node: &mut ElementNode, ctx: &mut TransformS
                 &mut ctx.bindings_helper.imports,
             );
         }
-        TransformAssetUrlsConfig::EnabledOptions(ref opts) => {
+        TransformAssetUrlsConfig::EnabledOptions(opts) => {
             transform_element_asset_urls(
                 element_node,
                 opts,

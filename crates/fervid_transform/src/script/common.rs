@@ -1,7 +1,7 @@
 use fervid_core::BindingTypes;
 use swc_core::ecma::ast::{Callee, ClassDecl, Expr, FnDecl, ObjectPatProp, Pat, RestPat};
 
-use crate::{script::utils::unroll_paren_seq, structs::VueImportAliases, SetupBinding};
+use crate::{SetupBinding, script::utils::unroll_paren_seq, structs::VueImportAliases};
 
 use super::utils::is_static;
 
@@ -152,7 +152,7 @@ pub fn extract_variables_from_pat(pat: &Pat, out: &mut Vec<SetupBinding>, is_con
     match pat {
         // Base case for recursion
         // Idents are easy to collect
-        Pat::Ident(ref decl_ident) => {
+        Pat::Ident(decl_ident) => {
             let binding_type = if is_const {
                 BindingTypes::SetupMaybeRef
             } else {

@@ -1,8 +1,8 @@
 use swc_core::{
-    common::{comments::SingleThreadedComments, BytePos, Span},
+    common::{BytePos, Span, comments::SingleThreadedComments},
     ecma::ast::{EsVersion, Expr, Module},
 };
-use swc_ecma_parser::{lexer::Lexer, EsSyntax, Parser, StringInput, Syntax, TsSyntax};
+use swc_ecma_parser::{EsSyntax, Parser, StringInput, Syntax, TsSyntax, lexer::Lexer};
 
 pub fn parse_javascript_module(
     input: &str,

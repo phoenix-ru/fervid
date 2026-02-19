@@ -6,8 +6,8 @@ use tower_lsp::{
 };
 
 use crate::{
-    utils::{extract_token_at, pick_workspace_root, uri_to_path},
     Backend,
+    utils::{extract_token_at, pick_workspace_root, uri_to_path},
 };
 
 pub fn goto_definition(

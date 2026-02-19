@@ -1,15 +1,15 @@
-use fervid_core::{fervid_atom, BindingTypes, FervidAtom};
+use fervid_core::{BindingTypes, FervidAtom, fervid_atom};
 use swc_core::ecma::ast::{
     Id, Ident, ImportSpecifier, Module, ModuleDecl, ModuleExportName, ModuleItem,
 };
 
 use crate::{
+    BindingsHelper, ImportBinding, SetupBinding,
     atoms::{
         COMPUTED, DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_PROPS, REACTIVE, REF, TO_REF, VUE, WATCH,
     },
     error::{ScriptError, ScriptErrorKind, TransformError},
     structs::VueImportAliases,
-    BindingsHelper, ImportBinding, SetupBinding,
 };
 
 /// Collects imports and removes duplicates

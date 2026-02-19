@@ -1,7 +1,7 @@
-use fervid_core::{fervid_atom, SfcStyleBlock};
+use fervid_core::{SfcStyleBlock, fervid_atom};
 use swc_html_ast::{Child, Element};
 
-use crate::{error::ParseErrorKind, ParseError, SfcParser};
+use crate::{ParseError, SfcParser, error::ParseErrorKind};
 
 impl SfcParser<'_, '_, '_> {
     pub fn parse_sfc_style_element(&mut self, mut element: Element) -> Option<SfcStyleBlock> {

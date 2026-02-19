@@ -1,6 +1,6 @@
 use fervid_core::{
-    fervid_atom, is_html_tag, AttributeOrBinding, ElementNode, FervidAtom, Interpolation, Node,
-    PatchHints, SfcTemplateBlock, StartingTag, VueDirectives,
+    AttributeOrBinding, ElementNode, FervidAtom, Interpolation, Node, PatchHints, SfcTemplateBlock,
+    StartingTag, VueDirectives, fervid_atom, is_html_tag,
 };
 use swc_core::common::{BytePos, Span};
 use swc_ecma_parser::{Syntax, TsSyntax};

@@ -1,5 +1,5 @@
 use swc_core::{common::BytePos, ecma::ast::Expr};
-use swc_ecma_parser::{lexer::Lexer, PResult, Parser, StringInput, Syntax};
+use swc_ecma_parser::{PResult, Parser, StringInput, Syntax, lexer::Lexer};
 
 /// Parses js as a temporary measure
 pub fn parse_js(expr: &str) -> PResult<Box<Expr>> {

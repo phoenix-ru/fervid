@@ -96,6 +96,9 @@ mod tests {
             phase: Default::default(),
         };
 
-        assert_eq!(crate::test_utils::to_str(vue_import_decl), "import{createBlock as _createBlock,normalizeClass as _normalizeClass,openBlock as _openBlock,toDisplayString as _toDisplayString,withCtx as _withCtx,withDirectives as _withDirectives,withModifiers as _withModifiers}from\"vue\";");
+        assert_eq!(
+            crate::test_utils::to_str(vue_import_decl),
+            "import{createBlock as _createBlock,normalizeClass as _normalizeClass,openBlock as _openBlock,toDisplayString as _toDisplayString,withCtx as _withCtx,withDirectives as _withDirectives,withModifiers as _withModifiers}from\"vue\";"
+        );
     }
 }

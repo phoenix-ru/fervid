@@ -1,7 +1,7 @@
-use fervid_core::{is_valid_propname, BindingTypes, FervidAtom, IntoIdent};
+use fervid_core::{BindingTypes, FervidAtom, IntoIdent, is_valid_propname};
 use fxhash::{FxHashMap, FxHashSet};
 use swc_core::{
-    common::{BytePos, Span, Spanned, DUMMY_SP},
+    common::{BytePos, DUMMY_SP, Span, Spanned},
     ecma::{
         ast::{
             ArrayPat, AssignTarget, AssignTargetPat, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
@@ -16,6 +16,7 @@ use swc_core::{
 };
 
 use crate::{
+    PropsDestructureBinding, PropsDestructureConfig, SetupBinding, VueImportAliases,
     atoms::{DEFINE_PROPS, PROPS_HELPER, TO_REF, WATCH},
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::{
@@ -23,7 +24,6 @@ use crate::{
         resolve_type::TypeResolveContext,
         utils::{is_call_of, resolve_object_key},
     },
-    PropsDestructureBinding, PropsDestructureConfig, SetupBinding, VueImportAliases,
 };
 
 use super::utils::unwrap_ts_node_expr;
@@ -280,10 +280,10 @@ impl<'a> Walker<'a> {
         for module_item in module_items.iter_mut() {
             match module_item {
                 ModuleItem::ModuleDecl(module_decl) => {
-                    if let ModuleDecl::ExportDecl(export_decl) = module_decl {
-                        if let Decl::Var(ref var_decl) = export_decl.decl {
-                            self.collect_variable_declaration(var_decl);
-                        }
+                    if let ModuleDecl::ExportDecl(export_decl) = module_decl
+                        && let Decl::Var(ref var_decl) = export_decl.decl
+                    {
+                        self.collect_variable_declaration(var_decl);
                     }
                 }
                 ModuleItem::Stmt(stmt) => {
@@ -377,14 +377,14 @@ impl<'a> Walker<'a> {
             return;
         };
 
-        let Expr::Ident(ref callee_ident) = callee_expr.as_ref() else {
+        let Expr::Ident(callee_ident) = callee_expr.as_ref() else {
             return;
         };
 
         // First argument of CallExpr needs to exist and be an expression (not a spread)
         let Some(ExprOrSpread {
             spread: None,
-            expr: ref first_arg,
+            expr: first_arg,
         }) = call_expr.args.first()
         else {
             return;
@@ -534,7 +534,7 @@ impl<'a> VisitMut for Walker<'a> {
                 }
 
                 Stmt::Labeled(labeled_stmt) => {
-                    if let Stmt::Decl(Decl::Var(ref var_decl)) = labeled_stmt.body.as_ref() {
+                    if let Stmt::Decl(Decl::Var(var_decl)) = labeled_stmt.body.as_ref() {
                         self.collect_variable_declaration(var_decl);
                     }
                 }
@@ -645,7 +645,7 @@ impl<'a> VisitMut for Walker<'a> {
     fn visit_mut_object_lit(&mut self, object_lit: &mut ObjectLit) {
         for prop in object_lit.props.iter_mut() {
             match prop {
-                PropOrSpread::Prop(ref mut prop) => {
+                PropOrSpread::Prop(prop) => {
                     // For shorthand, expand it and visit the value part
                     if let Some(shorthand) = prop.as_mut_shorthand() {
                         let prop_name = PropName::Ident(IdentName {
@@ -668,7 +668,7 @@ impl<'a> VisitMut for Walker<'a> {
                     }
                 }
 
-                PropOrSpread::Spread(ref mut spread) => {
+                PropOrSpread::Spread(spread) => {
                     spread.visit_mut_with(self);
                 }
             }

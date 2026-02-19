@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use fervid::FervidAtom;
 use fervid_transform::TransformAssetUrlsConfigOptions;
 use fxhash::FxHashMap;
-use napi::{bindgen_prelude::Object, Either};
+use napi::{Either, bindgen_prelude::Object};
 use napi_derive::napi;
 use swc_core::common::Spanned;
 

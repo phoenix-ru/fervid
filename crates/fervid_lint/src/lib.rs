@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use swc_core::{
     common::{
-        errors::HANDLER, sync::Lrc, FilePathMapping, Globals, Mark, SourceMap, SyntaxContext,
-        GLOBALS,
+        FilePathMapping, GLOBALS, Globals, Mark, SourceMap, SyntaxContext, errors::HANDLER,
+        sync::Lrc,
     },
     ecma::{
         ast::{EsVersion, Program},
@@ -12,7 +12,7 @@ use swc_core::{
 };
 use swc_ecma_lints::{self, rule::Rule, rules::LintParams};
 use swc_ecma_transforms_base::resolver;
-use swc_error_reporters::handler::{try_with_handler, HandlerOpts};
+use swc_error_reporters::handler::{HandlerOpts, try_with_handler};
 
 pub fn lint(input: &str) {
     let mut parse_errors = Vec::new();

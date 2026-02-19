@@ -1,6 +1,6 @@
 use fervid_core::{ConditionalNodeSequence, ElementNode};
 use swc_core::{
-    common::{Spanned, DUMMY_SP},
+    common::{DUMMY_SP, Spanned},
     ecma::ast::{CondExpr, Expr},
 };
 
