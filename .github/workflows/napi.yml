@@ -263,7 +263,7 @@ jobs:
         with:
           image: ${{ steps.docker.outputs.IMAGE }}
           name: test-bindings-${{ matrix.target }}
-          options: -v ${{ steps.docker.outputs.PNPM_STORE_PATH }}:${{ steps.docker.outputs.PNPM_STORE_PATH }} -v ${{ env.WORKING_DIR_PATH }}:/build -w /build -e CI=true --platform ${{ steps.docker.outputs.PLATFORM }}
+          options: -v ${{ steps.docker.outputs.PNPM_STORE_PATH }}:${{ steps.docker.outputs.PNPM_STORE_PATH }} -v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }}/crates/fervid_napi -e CI=true --platform ${{ steps.docker.outputs.PLATFORM }}
           args: npm run test
 
   test-wasi:
