@@ -19,9 +19,18 @@ importers:
       '@babel/parser':
         specifier: ^7.28.0
         version: 7.29.0
+      '@emnapi/core':
+        specifier: ^1.8.1
+        version: 1.8.1
+      '@emnapi/runtime':
+        specifier: ^1.8.1
+        version: 1.8.1
       '@napi-rs/cli':
-        specifier: ^3.1.4
+        specifier: ^3.5.1
         version: 3.5.1(@emnapi/runtime@1.8.1)(@types/node@20.19.33)
+      '@napi-rs/wasm-runtime':
+        specifier: ^1.1.1
+        version: 1.1.1
       '@swc-node/register':
         specifier: ^1.10.10
         version: 1.11.1(@swc/core@1.15.11(@swc/helpers@0.5.18))(@swc/types@0.1.25)(typescript@5.9.3)
