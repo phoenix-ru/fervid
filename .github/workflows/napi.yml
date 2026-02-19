@@ -89,7 +89,6 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          # cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/pnpm-lock.yaml
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -132,7 +131,6 @@ jobs:
           node-version: 22
           cache: pnpm
           architecture: x86
-          # cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/pnpm-lock.yaml
       - name: Build
         run: ${{ matrix.settings.build }}
         shell: bash
@@ -178,7 +176,6 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
-          # cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/pnpm-lock.yaml
           architecture: ${{ matrix.settings.architecture }}
       - name: Install dependencies
         run: pnpm install
@@ -219,7 +216,6 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
-          # cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/pnpm-lock.yaml
       - name: Output docker params
         id: docker
         run: |
@@ -280,7 +276,6 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          # cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/pnpm-lock.yaml
       - name: Install dependencies
         run: pnpm install
       - name: Download artifacts
@@ -315,7 +310,6 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          # cache-dependency-path: ${{ env.WORKING_DIR_PATH }}/pnpm-lock.yaml
       - name: Install dependencies
         run: pnpm install
       - name: Download all artifacts
@@ -384,7 +378,6 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          # cache-dependency-path: ${{ env.PLAYGROUND_DIR_PATH }}/pnpm-lock.yaml
       - name: Install dependencies
         run: pnpm install
 
