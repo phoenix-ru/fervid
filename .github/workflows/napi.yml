@@ -374,10 +374,11 @@ jobs:
       - name: setup pnpm
         uses: pnpm/action-setup@v4
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
+          cache-dependency-path: ${{ env.PLAYGROUND_DIR_PATH }}/pnpm-lock.yaml
       - name: Install dependencies
         run: pnpm install
 
