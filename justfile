@@ -46,7 +46,7 @@ check-all: fmt-check lint test spell
 wasm-build:
     cd {{justfile_directory()}}/crates/fervid_napi && \
     pnpm build:wasm && \
-    pnpm napi create-npm-dirs &&\
+    pnpm napi create-npm-dirs && \
     mkdir -p artifacts && \
     cp *.wasm artifacts/ && \
     pnpm artifacts

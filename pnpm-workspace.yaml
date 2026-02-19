@@ -1,0 +1,6 @@
+packages:
+  - "crates/fervid_farmfe"
+  - "crates/fervid_napi"
+  - "crates/fervid_napi/npm/*"
+  - "node/*"
+  - "node/examples/*"
