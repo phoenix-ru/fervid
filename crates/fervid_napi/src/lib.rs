@@ -10,11 +10,11 @@ use fervid_transform::{PropsDestructureConfig, TransformAssetUrlsConfig};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
-use fervid::{compile, errors::CompileError, CompileOptions};
+use fervid::{CompileOptions, compile, errors::CompileError};
 use structs::{
     BindingTypes, CompileResult, FervidCompileOptions, FervidJsCompiler, FervidJsCompilerOptions,
 };
-use swc_core::common::{sync::Lrc, BytePos, SourceMap};
+use swc_core::common::{BytePos, SourceMap, sync::Lrc};
 
 use crate::structs::SerializedError;
 
@@ -36,7 +36,7 @@ impl FervidJsCompiler {
         env: Env,
         source: String,
         options: FervidCompileOptions,
-    ) -> Result<CompileResult> {
+    ) -> Result<CompileResult<'_>> {
         let compiled = compile_impl(self, &source, &options)?;
         Ok(convert(env, compiled, &options, &self.options, &source))
     }
@@ -47,7 +47,7 @@ impl FervidJsCompiler {
         source: String,
         options: FervidCompileOptions,
         signal: Option<AbortSignal>,
-    ) -> AsyncTask<CompileTask> {
+    ) -> AsyncTask<CompileTask<'_>> {
         let task = CompileTask {
             compiler: self.to_owned(),
             input: source,

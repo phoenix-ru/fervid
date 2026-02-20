@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, RwLock},
 };
-use tower_lsp::{lsp_types::Url, Client};
+use tower_lsp::{Client, lsp_types::Url};
 
 type WorkspaceKey = String;
 

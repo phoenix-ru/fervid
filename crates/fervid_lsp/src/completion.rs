@@ -7,9 +7,9 @@ use tower_lsp::lsp_types::{CompletionItem, InsertTextFormat, Position, Url};
 
 use crate::utils::extract_prefix;
 use crate::{
+    Backend,
     nuxt::NuxtGlobals,
     utils::{pick_workspace_root, uri_to_path},
-    Backend,
 };
 
 pub struct FervidCompletionItem {

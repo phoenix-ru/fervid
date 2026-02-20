@@ -1,8 +1,8 @@
 use fervid_core::{
-    str_to_propname, CustomDirectiveBinding, FervidAtom, StrOrExpr, VueDirectives, VueImports,
+    CustomDirectiveBinding, FervidAtom, StrOrExpr, VueDirectives, VueImports, str_to_propname,
 };
 use swc_core::{
-    common::{Span, DUMMY_SP},
+    common::{DUMMY_SP, Span},
     ecma::ast::{
         ArrayLit, BindingIdent, Bool, CallExpr, Callee, Expr, ExprOrSpread, Ident, KeyValueProp,
         Lit, Number, ObjectLit, Pat, Prop, PropOrSpread, Str, UnaryExpr, UnaryOp, VarDeclarator,
@@ -225,10 +225,10 @@ impl CodegenContext {
         let existing_directive_binding = self.bindings_helper.custom_directives.get(directive_name);
         match existing_directive_binding {
             Some(CustomDirectiveBinding::Resolved(directive_binding)) => {
-                return (**directive_binding).to_owned()
+                return (**directive_binding).to_owned();
             }
             Some(CustomDirectiveBinding::RuntimeResolved(directive_ident)) => {
-                return Expr::Ident((**directive_ident).to_owned())
+                return Expr::Ident((**directive_ident).to_owned());
             }
             _ => {}
         }

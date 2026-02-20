@@ -1,11 +1,11 @@
 use fervid_core::{
-    fervid_atom, BindingTypes, FervidAtom, IntoIdent, SfcTemplateBlock, TemplateGenerationMode,
-    VueImports,
+    BindingTypes, FervidAtom, IntoIdent, SfcTemplateBlock, TemplateGenerationMode, VueImports,
+    fervid_atom,
 };
 use fxhash::FxHashMap;
 use swc_core::{
     atoms::Atom,
-    common::{source_map::SourceMapGenConfig, sync::Lrc, BytePos, FileName, SourceMap, DUMMY_SP},
+    common::{BytePos, DUMMY_SP, FileName, SourceMap, source_map::SourceMapGenConfig, sync::Lrc},
     ecma::{
         ast::{
             ArrowExpr, AssignExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
@@ -14,10 +14,10 @@ use swc_core::{
             Pat, Prop, PropName, PropOrSpread, ReturnStmt, SetterProp, Stmt, Str, VarDecl,
             VarDeclKind, VarDeclarator,
         },
-        visit::{noop_visit_type, Visit, VisitWith},
+        visit::{Visit, VisitWith, noop_visit_type},
     },
 };
-use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
+use swc_ecma_codegen::{Emitter, Node, text_writer::JsWriter};
 
 use crate::context::CodegenContext;
 
@@ -129,15 +129,15 @@ impl CodegenContext {
             }
         } else if matches!(template_generation_mode, TemplateGenerationMode::RenderFn) {
             // No template but dev mode: still generate return bindings for setup
-            if let Some(ref mut setup_fn) = synthetic_setup_fn {
-                if let Some(ref mut setup_body) = setup_fn.body {
-                    let return_bindings = self.generate_return_bindings();
-                    if !return_bindings.props.is_empty() {
-                        setup_body.stmts.push(Stmt::Return(ReturnStmt {
-                            span: DUMMY_SP,
-                            arg: Some(Box::new(Expr::Object(return_bindings))),
-                        }));
-                    }
+            if let Some(ref mut setup_fn) = synthetic_setup_fn
+                && let Some(ref mut setup_body) = setup_fn.body
+            {
+                let return_bindings = self.generate_return_bindings();
+                if !return_bindings.props.is_empty() {
+                    setup_body.stmts.push(Stmt::Return(ReturnStmt {
+                        span: DUMMY_SP,
+                        arg: Some(Box::new(Expr::Object(return_bindings))),
+                    }));
                 }
             }
         }

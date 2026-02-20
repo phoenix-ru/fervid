@@ -1,5 +1,5 @@
 use fervid_core::{
-    check_attribute_name, fervid_atom, AttributeOrBinding, ElementNode, IntoIdent, VueImports,
+    AttributeOrBinding, ElementNode, IntoIdent, VueImports, check_attribute_name, fervid_atom,
 };
 use swc_core::ecma::ast::{
     ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Lit, MemberExpr, MemberProp, ObjectLit, Str,

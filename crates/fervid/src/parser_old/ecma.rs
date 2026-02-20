@@ -2,7 +2,7 @@ use swc_core::{
     common::BytePos,
     ecma::ast::{Expr, Module, Pat},
 };
-use swc_ecma_parser::{lexer::Lexer, PResult, Parser, StringInput, Syntax};
+use swc_ecma_parser::{PResult, Parser, StringInput, Syntax, lexer::Lexer};
 
 pub fn parse_js(raw: &str, span_start: u32, span_end: u32) -> PResult<Box<Expr>> {
     // let comments = SingleThreadedComments::default();

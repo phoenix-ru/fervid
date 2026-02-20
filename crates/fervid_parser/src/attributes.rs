@@ -12,8 +12,8 @@ use swc_ecma_parser::Syntax;
 use swc_html_ast::Attribute;
 
 use crate::{
-    error::{ParseError, ParseErrorKind},
     SfcParser,
+    error::{ParseError, ParseErrorKind},
 };
 
 impl SfcParser<'_, '_, '_> {
@@ -586,7 +586,7 @@ type ItervarOrIterable<'a> = (&'a str, Span);
 fn split_itervar_and_iterable(
     raw: &str,
     original_span: Span,
-) -> Option<(ItervarOrIterable, ItervarOrIterable)> {
+) -> Option<(ItervarOrIterable<'_>, ItervarOrIterable<'_>)> {
     // `item in iterable` or `item of iterable`
     let split_idx = raw.find(" in ").or_else(|| raw.find(" of "))?;
     const SPLIT_LEN: usize = " in ".len();

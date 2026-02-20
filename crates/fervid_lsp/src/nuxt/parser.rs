@@ -10,7 +10,7 @@ use swc_core::{
         TsUnionOrIntersectionType,
     },
 };
-use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsSyntax};
+use swc_ecma_parser::{Parser, StringInput, Syntax, TsSyntax, lexer::Lexer};
 
 use crate::nuxt::{NuxtGlobalTarget, NuxtGlobals};
 
@@ -173,12 +173,11 @@ fn find_first_import_type_path(ty: &TsType) -> Option<FervidAtom> {
 
         TsType::TsTypeLit(lit) => {
             for m in &lit.members {
-                if let TsTypeElement::TsPropertySignature(p) = m {
-                    if let Some(t) = &p.type_ann {
-                        if let Some(found) = find_first_import_type_path(&t.type_ann) {
-                            return Some(found);
-                        }
-                    }
+                if let TsTypeElement::TsPropertySignature(p) = m
+                    && let Some(t) = &p.type_ann
+                    && let Some(found) = find_first_import_type_path(&t.type_ann)
+                {
+                    return Some(found);
                 }
             }
             None

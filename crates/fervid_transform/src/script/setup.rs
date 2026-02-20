@@ -2,7 +2,7 @@ use define_props_destructure::transform_destructured_props;
 use fervid_core::{BindingTypes, IntoIdent, SfcScriptBlock, TemplateGenerationMode};
 use macros::VarDeclHelper;
 use swc_core::{
-    common::{Span, DUMMY_SP},
+    common::{DUMMY_SP, Span},
     ecma::ast::{
         BindingIdent, BlockStmt, CallExpr, Callee, Decl, Expr, ExprStmt, Function, Ident,
         IdentName, KeyValuePatProp, KeyValueProp, ModuleDecl, ModuleItem, ObjectPat, ObjectPatProp,
@@ -11,7 +11,8 @@ use swc_core::{
 };
 
 use crate::{
-    atoms::{EMIT, EMITS, EMIT_HELPER, EXPOSE, EXPOSE_HELPER, PROPS, PROPS_HELPER},
+    SetupBinding, TransformSfcContext,
+    atoms::{EMIT, EMIT_HELPER, EMITS, EXPOSE, EXPOSE_HELPER, PROPS, PROPS_HELPER},
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::{
         common::{
@@ -22,7 +23,6 @@ use crate::{
         utils::is_static,
     },
     structs::SfcExportedObjectHelper,
-    SetupBinding, TransformSfcContext,
 };
 
 mod await_detection;
@@ -449,14 +449,14 @@ fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param
 #[cfg(test)]
 mod tests {
     use crate::{
+        SetupBinding, TransformSfcContext,
         error::{ScriptError, ScriptErrorKind, TransformError},
         script::imports::process_imports,
         span,
         test_utils::parser::*,
-        SetupBinding, TransformSfcContext,
     };
-    use fervid_core::{fervid_atom, BindingTypes, SfcScriptBlock};
-    use swc_core::common::{BytePos, Span, DUMMY_SP};
+    use fervid_core::{BindingTypes, SfcScriptBlock, fervid_atom};
+    use swc_core::common::{BytePos, DUMMY_SP, Span};
 
     use super::transform_and_record_script_setup;
 

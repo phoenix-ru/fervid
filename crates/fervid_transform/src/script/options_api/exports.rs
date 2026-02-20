@@ -50,13 +50,13 @@ fn collect_module_export_name(
     binding_type: BindingTypes,
 ) {
     match module_export_name {
-        ModuleExportName::Ident(ref ns_export_ident) => out.push(SetupBinding::new_spanned(
+        ModuleExportName::Ident(ns_export_ident) => out.push(SetupBinding::new_spanned(
             ns_export_ident.sym.to_owned(),
             binding_type,
             ns_export_ident.span,
         )),
 
-        ModuleExportName::Str(ref ns_export_str) => out.push(SetupBinding::new_spanned(
+        ModuleExportName::Str(ns_export_str) => out.push(SetupBinding::new_spanned(
             ns_export_str.value.to_owned(),
             binding_type,
             ns_export_str.span,

@@ -5,18 +5,18 @@ use nom::combinator::fail;
 use nom::error::{ErrorKind, ParseError};
 use nom::multi::many0;
 use nom::sequence::{delimited, preceded};
-use nom::{bytes::complete::tag, sequence::tuple, IResult};
+use nom::{IResult, bytes::complete::tag, sequence::tuple};
 use std::str;
 use swc_core::common::DUMMY_SP;
 use swc_core::ecma::ast::Module;
 
 use super::attributes::parse_attributes;
 use super::ecma::{parse_js, parse_js_module};
-use super::html_utils::{classify_element_kind, html_name, space0, TagKind};
+use super::html_utils::{TagKind, classify_element_kind, html_name, space0};
 use fervid_core::{
-    fervid_atom, AttributeOrBinding, ElementKind, ElementNode, FervidAtom, Interpolation, Node,
-    SfcCustomBlock, SfcDescriptor, SfcScriptBlock, SfcScriptLang, SfcStyleBlock, SfcTemplateBlock,
-    StartingTag,
+    AttributeOrBinding, ElementKind, ElementNode, FervidAtom, Interpolation, Node, SfcCustomBlock,
+    SfcDescriptor, SfcScriptBlock, SfcScriptLang, SfcStyleBlock, SfcTemplateBlock, StartingTag,
+    fervid_atom,
 };
 
 /// Parses the Vue Single-File Component

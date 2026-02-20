@@ -56,8 +56,8 @@
     "bench": "node -r @swc-node/register benchmark/bench.ts",
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",
-    "build:wasm": "yarn build --target wasm32-wasip1-threads",
-    "build:wasm-debug": "yarn build:debug --target wasm32-wasip1-threads",
+    "build:wasm": "pnpm build --target wasm32-wasip1-threads",
+    "build:wasm-debug": "pnpm build:debug --target wasm32-wasip1-threads",
     "format": "run-p format:prettier format:rs format:toml",
     "format:prettier": "prettier . -w",
     "format:toml": "taplo format",
@@ -69,11 +69,14 @@
   },
   "devDependencies": {
     "@babel/parser": "^7.28.0",
-    "@napi-rs/cli": "^3.1.4",
+    "@emnapi/core": "^1.8.1",
+    "@emnapi/runtime": "^1.8.1",
+    "@napi-rs/cli": "^3.5.1",
+    "@napi-rs/wasm-runtime": "^1.1.1",
     "@swc-node/register": "^1.10.10",
     "@swc/core": "^1.13.3",
     "@taplo/cli": "^0.7.0",
-    "@types/node": "^20.19.10",
+    "@types/node": "^24.10.13",
     "@typescript-eslint/eslint-plugin": "^8.39.1",
     "@typescript-eslint/parser": "^8.39.1",
     "@vue/compiler-sfc": "^3.5.18",
@@ -85,10 +88,10 @@
     "eslint-plugin-prettier": "^5.5.4",
     "husky": "^9.1.7",
     "kleur": "^4.1.5",
-    "lint-staged": "^15.5.2",
+    "lint-staged": "^16.2.7",
     "prettier": "^3.6.2",
     "typescript": "^5.5.4",
-    "vitest": "^3.2.4"
+    "vitest": "^4.0.18"
   },
   "lint-staged": {
     "*.@(js|ts|tsx)": [
@@ -107,9 +110,5 @@
     "trailingComma": "all",
     "singleQuote": true,
     "arrowParens": "always"
-  },
-  "packageManager": "yarn@4.9.2",
-  "workspaces": [
-    "npm/*"
-  ]
+  }
 }

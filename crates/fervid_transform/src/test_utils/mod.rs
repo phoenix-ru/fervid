@@ -1,9 +1,9 @@
 pub mod parser;
 
 use parser::parse_typescript_module;
-use swc_core::common::{sync::Lrc, SourceMap};
+use swc_core::common::{SourceMap, sync::Lrc};
 use swc_core::ecma::ast::{Expr, Module};
-use swc_ecma_codegen::{text_writer::JsWriter, Emitter, Node};
+use swc_ecma_codegen::{Emitter, Node, text_writer::JsWriter};
 
 use self::parser::{parse_javascript_expr, parse_typescript_expr};
 

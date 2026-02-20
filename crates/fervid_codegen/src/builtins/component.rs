@@ -2,7 +2,7 @@
 //! Please do not confuse with the user components.
 
 use fervid_core::{
-    check_attribute_name, AttributeOrBinding, ElementNode, StrOrExpr, VBindDirective, VueImports,
+    AttributeOrBinding, ElementNode, StrOrExpr, VBindDirective, VueImports, check_attribute_name,
 };
 use swc_core::ecma::ast::{
     CallExpr, Callee, Expr, ExprOrSpread, Ident, Lit, ObjectLit, PropOrSpread, Str,

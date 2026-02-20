@@ -1,6 +1,6 @@
 use fervid_core::{
-    fervid_atom, is_valid_propname, BindingTypes, FervidAtom, IntoIdent, PatchFlags, PatchHints,
-    StrOrExpr, TemplateGenerationMode, VModelDirective, VueImports,
+    BindingTypes, FervidAtom, IntoIdent, PatchFlags, PatchHints, StrOrExpr, TemplateGenerationMode,
+    VModelDirective, VueImports, fervid_atom, is_valid_propname,
 };
 use swc_core::{
     common::DUMMY_SP,
@@ -17,8 +17,8 @@ use swc_core::{
 };
 
 use crate::{
-    script::common::extract_variables_from_pat, template::js_builtins::JS_BUILTINS, BindingsHelper,
-    SetupBinding,
+    BindingsHelper, SetupBinding, script::common::extract_variables_from_pat,
+    template::js_builtins::JS_BUILTINS,
 };
 
 use super::utils::wrap_in_event_arrow;
@@ -455,7 +455,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
     fn visit_mut_object_lit(&mut self, n: &mut ObjectLit) {
         for prop in n.props.iter_mut() {
             match prop {
-                PropOrSpread::Prop(ref mut prop) => {
+                PropOrSpread::Prop(prop) => {
                     // For shorthand, expand it and visit the value part
                     if let Some(shorthand) = prop.as_mut_shorthand() {
                         let prop_name = PropName::Ident(IdentName {
@@ -477,7 +477,7 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     }
                 }
 
-                PropOrSpread::Spread(ref mut spread) => {
+                PropOrSpread::Spread(spread) => {
                     spread.visit_mut_with(self);
                 }
             }
@@ -1065,9 +1065,9 @@ fn convert_obj_lit_to_pat(_obj_lit: ObjectLit) -> ObjectPat {
 #[cfg(test)]
 mod tests {
     use crate::{
+        BindingsHelper, SetupBinding, TemplateScope,
         template::{expr_transform::BindingsHelperTransform, js_builtins::JS_BUILTINS},
         test_utils::{parser::parse_javascript_expr, to_str},
-        BindingsHelper, SetupBinding, TemplateScope,
     };
     use fervid_core::{
         BindingTypes, FervidAtom, PatchHints, StrOrExpr, TemplateGenerationMode, VModelDirective,

@@ -8,6 +8,7 @@ use swc_core::{
 };
 
 use crate::{
+    SetupBinding, TransformSfcContext,
     atoms::{
         DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_MODEL, DEFINE_OPTIONS, DEFINE_PROPS, DEFINE_SLOTS,
         EXPOSE_HELPER, MERGE_MODELS_HELPER, WITH_DEFAULTS,
@@ -26,7 +27,6 @@ use crate::{
         },
     },
     structs::SfcExportedObjectHelper,
-    SetupBinding, TransformSfcContext,
 };
 
 use super::define_model::postprocess_models;
@@ -92,7 +92,7 @@ pub fn collect_macros(
                         continue;
                     };
 
-                    let Expr::Call(ref call_expr) = init.as_ref() else {
+                    let Expr::Call(call_expr) = init.as_ref() else {
                         continue;
                     };
 
@@ -100,7 +100,7 @@ pub fn collect_macros(
                         continue;
                     };
 
-                    let Expr::Ident(ref callee_ident) = callee_expr.as_ref() else {
+                    let Expr::Ident(callee_ident) = callee_expr.as_ref() else {
                         continue;
                     };
 
@@ -133,7 +133,7 @@ pub fn collect_macros(
             }
 
             Stmt::Expr(expr_stmt) => {
-                let Expr::Call(ref call_expr) = expr_stmt.expr.as_ref() else {
+                let Expr::Call(call_expr) = expr_stmt.expr.as_ref() else {
                     continue;
                 };
 
@@ -141,7 +141,7 @@ pub fn collect_macros(
                     continue;
                 };
 
-                let Expr::Ident(ref callee_ident) = callee_expr.as_ref() else {
+                let Expr::Ident(callee_ident) = callee_expr.as_ref() else {
                     continue;
                 };
 

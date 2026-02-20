@@ -11,20 +11,15 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@fervid/unplugin": "link:../../unplugin",
+    "@fervid/unplugin": "workspace:*",
     "html-webpack-plugin": "^5.6.3",
     "rollup": "^4.46.2",
-    "unplugin": "^1.16.1",
+    "unplugin": "^3.0.0",
     "webpack": "^5.101.1",
-    "webpack-cli": "^5.1.4",
+    "webpack-cli": "^6.0.1",
     "webpack-dev-server": "^5.2.2"
   },
   "dependencies": {
     "vue": "^3.5.18"
-  },
-  "pnpm": {
-    "overrides": {
-      "@fervid/unplugin": "../../unplugin"
-    }
   }
 }

@@ -5,6 +5,7 @@ use swc_core::ecma::ast::{
 };
 
 use crate::{
+    OptionsApiBindings, SetupBinding,
     atoms::*,
     script::{
         common::{
@@ -14,7 +15,6 @@ use crate::{
         utils::get_string_tpl,
     },
     structs::VueImportAliases,
-    OptionsApiBindings, SetupBinding,
 };
 
 use super::{
@@ -94,12 +94,12 @@ pub fn analyze_top_level_items(
         match *module_item {
             ModuleItem::ModuleDecl(ref module_decl) => {
                 match module_decl {
-                    ModuleDecl::ExportNamed(ref named_exports) => {
+                    ModuleDecl::ExportNamed(named_exports) => {
                         collect_exports_named(named_exports, &mut out.setup)
                     }
 
                     // Collects an export from e.g. `export function foo() {}` or `export const bar = 'baz'`
-                    ModuleDecl::ExportDecl(ref export_decl) => {
+                    ModuleDecl::ExportDecl(export_decl) => {
                         analyze_top_level_decl(&export_decl.decl, &mut out.setup, vue_imports);
                     }
 
@@ -147,14 +147,15 @@ fn analyze_top_level_decl(
                 extract_variables_from_pat(&var_declarator.name, &mut collected_bindings, is_const);
 
                 // Process RHS
-                if is_const && is_ident {
-                    if let Some(ref init_expr) = var_declarator.init {
-                        // Resolve only when this is a constant identifier.
-                        // For destructures correct bindings are already assigned.
-                        let rhs_type = categorize_expr(init_expr, vue_user_imports);
+                if is_const
+                    && is_ident
+                    && let Some(ref init_expr) = var_declarator.init
+                {
+                    // Resolve only when this is a constant identifier.
+                    // For destructures correct bindings are already assigned.
+                    let rhs_type = categorize_expr(init_expr, vue_user_imports);
 
-                        enrich_binding_types(&mut collected_bindings, rhs_type, is_const, is_ident);
-                    }
+                    enrich_binding_types(&mut collected_bindings, rhs_type, is_const, is_ident);
                 }
 
                 out.append(&mut collected_bindings);
@@ -250,10 +251,10 @@ fn handle_options_function(
 
 /// `name`
 fn handle_options_lit(field: &FervidAtom, lit: &Lit, script_legacy_vars: &mut OptionsApiBindings) {
-    if *field == *NAME {
-        if let Lit::Str(name) = lit {
-            script_legacy_vars.name = Some(name.value.to_owned())
-        }
+    if *field == *NAME
+        && let Lit::Str(name) = lit
+    {
+        script_legacy_vars.name = Some(name.value.to_owned())
     }
 }
 

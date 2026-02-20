@@ -4,8 +4,8 @@
 // #[global_allocator]
 // static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-use fervid::{compile, CompileOptions, CompileResult, PropsDestructureConfig};
-use swc_core::common::{sync::Lrc, SourceMap, Spanned};
+use fervid::{CompileOptions, CompileResult, PropsDestructureConfig, compile};
+use swc_core::common::{SourceMap, Spanned, sync::Lrc};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(getter_with_clone)]

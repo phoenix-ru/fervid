@@ -1,4 +1,4 @@
-use fervid_core::{fervid_atom, IntoIdent};
+use fervid_core::{IntoIdent, fervid_atom};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{ArrowExpr, CallExpr, Callee, Expr, ExprOrSpread, Number},

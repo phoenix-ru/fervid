@@ -1,9 +1,9 @@
 use fervid_core::{
-    atom_to_propname, fervid_atom, str_to_propname, BindingTypes, FervidAtom, IntoIdent, VueImports,
+    BindingTypes, FervidAtom, IntoIdent, VueImports, atom_to_propname, fervid_atom, str_to_propname,
 };
 use flagset::FlagSet;
 use swc_core::{
-    common::{Span, Spanned, DUMMY_SP},
+    common::{DUMMY_SP, Span, Spanned},
     ecma::ast::{
         ArrayLit, ArrowExpr, BindingIdent, BlockStmtOrExpr, Bool, CallExpr, Callee, Expr,
         ExprOrSpread, GetterProp, IdentName, KeyValueProp, Lit, MethodProp, ObjectLit, ParenExpr,
@@ -12,17 +12,17 @@ use swc_core::{
 };
 
 use crate::{
+    PropsDestructureBinding, PropsDestructureConfig, SetupBinding, SfcExportedObjectHelper,
     atoms::{DEFINE_PROPS, PROPS_HELPER},
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::{
         resolve_type::{
-            infer_runtime_type_resolved_prop, resolve_type_elements, ResolutionResult,
-            ResolvedPropValue, TypeResolveContext, Types, TypesSet,
+            ResolutionResult, ResolvedPropValue, TypeResolveContext, Types, TypesSet,
+            infer_runtime_type_resolved_prop, resolve_type_elements,
         },
         setup::utils::to_runtime_type_string,
         utils::{collect_obj_fields, collect_string_arr},
     },
-    PropsDestructureBinding, PropsDestructureConfig, SetupBinding, SfcExportedObjectHelper,
 };
 
 use super::{
@@ -732,14 +732,14 @@ fn gen_destructured_default_value(
     // Check previously inferred type against the naively inferred type of the default value
     if !inferred_type.is_empty() && !inferred_type.contains(Types::Null) {
         let value_type = infer_value_type(unwrapped);
-        if let Some(value_type) = value_type {
-            if !inferred_type.contains(value_type) {
-                errors.push(TransformError::ScriptError(ScriptError {
-                    span: unwrapped.span(),
-                    kind: ScriptErrorKind::DefinePropsDestructureDeclaredTypeMismatch,
-                }));
-                return None;
-            }
+        if let Some(value_type) = value_type
+            && !inferred_type.contains(value_type)
+        {
+            errors.push(TransformError::ScriptError(ScriptError {
+                span: unwrapped.span(),
+                kind: ScriptErrorKind::DefinePropsDestructureDeclaredTypeMismatch,
+            }));
+            return None;
         }
     }
 

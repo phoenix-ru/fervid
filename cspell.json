@@ -151,6 +151,7 @@
     "**/*.toml",
     "package.json",
     "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
     "yarn.lock",
     "README.md",
     "**/*.snap",

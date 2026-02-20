@@ -1,6 +1,6 @@
 use nom::{
-    bytes::complete::{take_while, take_while1},
     IResult,
+    bytes::complete::{take_while, take_while1},
 };
 
 // According to https://www.w3.org/TR/2011/WD-html5-20110525/syntax.html#elements-0

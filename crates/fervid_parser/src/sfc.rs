@@ -1,5 +1,5 @@
-use fervid_core::{fervid_atom, SfcDescriptor};
-use swc_core::common::{BytePos, Span, Spanned, DUMMY_SP};
+use fervid_core::{SfcDescriptor, fervid_atom};
+use swc_core::common::{BytePos, DUMMY_SP, Span, Spanned};
 use swc_ecma_parser::StringInput;
 use swc_html_ast::{Child, DocumentFragment, DocumentMode, Element, Namespace};
 use swc_html_parser::{
@@ -9,8 +9,8 @@ use swc_html_parser::{
 };
 
 use crate::{
-    error::{ParseError, ParseErrorKind},
     SfcParser,
+    error::{ParseError, ParseErrorKind},
 };
 
 type SwcHtmlParserError = swc_html_parser::error::Error;

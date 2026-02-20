@@ -1,4 +1,4 @@
-use fervid_core::{is_from_default_slot, Node};
+use fervid_core::{Node, is_from_default_slot};
 
 #[derive(PartialEq)]
 pub enum SlottedIteratorMode {
@@ -83,11 +83,7 @@ impl<'n> SlottedIterator<'n> {
                 let is_suitable =
                     (self.mode == SlottedIteratorMode::Default) == is_from_default_slot(node);
 
-                if is_suitable {
-                    Some(node)
-                } else {
-                    None
-                }
+                if is_suitable { Some(node) } else { None }
             }
             None => None,
         }

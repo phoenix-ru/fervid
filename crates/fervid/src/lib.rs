@@ -62,8 +62,8 @@ pub use fervid_core::*;
 use fervid_parser::SfcParser;
 use fervid_transform::TransformAssetUrlsConfig;
 pub use fervid_transform::{
-    style::should_transform_style_block, transform_sfc, PropsDestructureConfig, SetupBinding,
-    TransformSfcOptions,
+    PropsDestructureConfig, SetupBinding, TransformSfcOptions, style::should_transform_style_block,
+    transform_sfc,
 };
 use std::borrow::Cow;
 use swc_core::{common::FileName, ecma::ast::Expr};

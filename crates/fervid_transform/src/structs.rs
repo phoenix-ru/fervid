@@ -3,13 +3,13 @@
 use std::{cell::RefCell, rc::Rc};
 
 use fervid_core::{
-    fervid_atom, BindingTypes, ComponentBinding, CustomDirectiveBinding, FervidAtom,
-    SfcCustomBlock, SfcStyleBlock, SfcTemplateBlock, TemplateGenerationMode, VueImportsSet,
+    BindingTypes, ComponentBinding, CustomDirectiveBinding, FervidAtom, SfcCustomBlock,
+    SfcStyleBlock, SfcTemplateBlock, TemplateGenerationMode, VueImportsSet, fervid_atom,
 };
 use fxhash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use smallvec::SmallVec;
 use swc_core::{
-    common::{Span, DUMMY_SP},
+    common::{DUMMY_SP, Span},
     ecma::ast::{
         Decl, Expr, ExprOrSpread, Function, Id, ImportDecl, Module, ObjectLit, PropOrSpread, Str,
         TsType,

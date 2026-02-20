@@ -2,8 +2,8 @@ use fervid_core::BindingTypes;
 use swc_core::ecma::ast::{BlockStmt, Expr};
 
 use crate::{
-    script::utils::{collect_block_stmt_return_fields, collect_obj_fields, unroll_paren_seq},
     OptionsApiBindings, SetupBinding,
+    script::utils::{collect_block_stmt_return_fields, collect_obj_fields, unroll_paren_seq},
 };
 
 /// Collects all the bindings from `setup`, e.g. `setup() { return { foo: 'bar', baz: 42 } }`
