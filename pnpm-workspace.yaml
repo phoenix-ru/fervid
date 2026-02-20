@@ -1,8 +1,12 @@
 packages:
-  - "crates/fervid_farmfe"
-  - "crates/fervid_napi"
-  - "crates/fervid_napi/npm/*"
-  - "node/unplugin"
-  # Playground needs to be its own workspace for Farm to build correctly
-  - "!node/playground"
-  - "node/examples/*"
+  - crates/fervid_farmfe
+  - crates/fervid_napi
+  - crates/fervid_napi/npm/*
+  - node/unplugin
+  - '!node/playground'
+  - node/examples/*
+
+overrides:
+  ajv@<8.18.0: '>=8.18.0'
+  minimatch@<10.2.1: '>=10.2.1'
+  tmp@<=0.2.3: '>=0.2.4'
