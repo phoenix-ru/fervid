@@ -1,6 +1,6 @@
 use std::mem;
 
-use fervid_core::{fervid_atom, BindingTypes, FervidAtom, VueImports};
+use fervid_core::{BindingTypes, FervidAtom, VueImports, fervid_atom};
 use itertools::Itertools;
 use swc_core::{
     common::DUMMY_SP,
@@ -11,10 +11,10 @@ use swc_core::{
 };
 
 use crate::{
+    BindingsHelper, SetupBinding, SfcDefineModel, SfcExportedObjectHelper,
     atoms::{MODEL_VALUE, PROPS_HELPER, USE_MODEL_HELPER},
     error::{ScriptError, ScriptErrorKind, TransformError},
-    script::resolve_type::{infer_runtime_type_type, TypeResolveContext, Types, TypesSet},
-    BindingsHelper, SetupBinding, SfcDefineModel, SfcExportedObjectHelper,
+    script::resolve_type::{TypeResolveContext, Types, TypesSet, infer_runtime_type_type},
 };
 
 use super::{
@@ -104,11 +104,13 @@ pub fn process_define_model(
         ));
 
     // Binding type of the model itself
-    if let Some(var_decl) = var_decl {
-        if var_decl.is_const && var_decl.lhs.is_ident() && var_decl.bindings.len() == 1 {
-            let binding = &mut var_decl.bindings[0];
-            binding.binding_type = BindingTypes::SetupRef;
-        }
+    if let Some(var_decl) = var_decl
+        && var_decl.is_const
+        && var_decl.lhs.is_ident()
+        && var_decl.bindings.len() == 1
+    {
+        let binding = &mut var_decl.bindings[0];
+        binding.binding_type = BindingTypes::SetupRef;
     }
 
     // _useModel(__props, "model-name", %model options%)
@@ -338,7 +340,7 @@ pub fn postprocess_models(
         }
 
         if !codegen_options.is_empty() {
-            if let Expr::Object(ref mut options_obj) = &mut *model_value {
+            if let Expr::Object(options_obj) = &mut *model_value {
                 options_obj.props.append(&mut codegen_options)
             } else {
                 // Surround the existing with spread

@@ -1,6 +1,6 @@
 //! Helper module to provide commonly used Vue words as static symbols (`FervidAtom`)
 
-use fervid_core::{fervid_atom, FervidAtom};
+use fervid_core::{FervidAtom, fervid_atom};
 
 lazy_static! {
     pub static ref VUE: FervidAtom = fervid_atom!("vue");

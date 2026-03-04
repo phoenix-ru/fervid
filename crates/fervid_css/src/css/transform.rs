@@ -1,4 +1,4 @@
-use swc_core::common::{Span, Spanned, DUMMY_SP};
+use swc_core::common::{DUMMY_SP, Span, Spanned};
 use swc_css_ast::{
     AtRule, AttributeSelector, Combinator, ComplexSelector, ComplexSelectorChildren,
     ComponentValue, Ident, ListOfComponentValues, PseudoClassSelectorChildren,

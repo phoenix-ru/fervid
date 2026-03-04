@@ -3,7 +3,7 @@ use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
 use itertools::{Either, Itertools};
 use swc_core::{
-    common::{Spanned, DUMMY_SP},
+    common::{DUMMY_SP, Spanned},
     ecma::ast::{
         ArrayLit, CallExpr, Expr, ExprOrSpread, Ident, Lit, Str, TsFnOrConstructorType, TsFnParam,
         TsLit, TsType,
@@ -11,12 +11,12 @@ use swc_core::{
 };
 
 use crate::{
+    SfcExportedObjectHelper, TypeOrDecl,
     atoms::EMIT_HELPER,
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::resolve_type::{
-        resolve_type_elements, resolve_union_type, ResolvedElements, TypeResolveContext,
+        ResolvedElements, TypeResolveContext, resolve_type_elements, resolve_union_type,
     },
-    SfcExportedObjectHelper, TypeOrDecl,
 };
 
 use super::macros::{TransformMacroResult, VarDeclHelper};
@@ -109,8 +109,7 @@ fn extract_runtime_emits(
     let mut emits = FxIndexSet::<FervidAtom>::default();
 
     // Handle cases like `defineEmits<(e: 'foo' | 'bar') => void>()`
-    if let TsType::TsFnOrConstructorType(TsFnOrConstructorType::TsFnType(ref ts_fn_type)) = type_arg
-    {
+    if let TsType::TsFnOrConstructorType(TsFnOrConstructorType::TsFnType(ts_fn_type)) = type_arg {
         // Expect first param in fn, e.g. `e: 'foo' | 'bar'` in example above
         let Some(first_fn_param) = ts_fn_type.params.first() else {
             return Err(ScriptError {

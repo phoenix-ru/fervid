@@ -1,9 +1,9 @@
 use fervid_core::{
-    fervid_atom, str_or_expr_to_propname, ComponentBinding, ElementNode, FervidAtom, IntoIdent,
-    Node, PatchHints, StartingTag, StrOrExpr, VSlotDirective, VueDirectives, VueImports,
+    ComponentBinding, ElementNode, FervidAtom, IntoIdent, Node, PatchHints, StartingTag, StrOrExpr,
+    VSlotDirective, VueDirectives, VueImports, fervid_atom, str_or_expr_to_propname,
 };
 use swc_core::{
-    common::{Span, DUMMY_SP},
+    common::{DUMMY_SP, Span},
     ecma::ast::{
         ArrayLit, ArrowExpr, BindingIdent, BlockStmtOrExpr, CallExpr, Callee, Expr, ExprOrSpread,
         Ident, KeyValueProp, Lit, Null, Number, ObjectLit, Pat, Prop, PropOrSpread, Str,
@@ -519,10 +519,10 @@ impl CodegenContext {
         let existing_component_binding = self.bindings_helper.components.get(tag_name);
         match existing_component_binding {
             Some(ComponentBinding::Resolved(component_binding)) => {
-                return (**component_binding).to_owned()
+                return (**component_binding).to_owned();
             }
             Some(ComponentBinding::RuntimeResolved(component_identifier, _)) => {
-                return Expr::Ident((**component_identifier).to_owned())
+                return Expr::Ident((**component_identifier).to_owned());
             }
             _ => {}
         }

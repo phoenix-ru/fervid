@@ -1,4 +1,4 @@
-use swc_core::common::{input::StringInput, Span};
+use swc_core::common::{Span, input::StringInput};
 use swc_css_ast::{ComplexSelector, Stylesheet};
 use swc_css_parser::{
     self,

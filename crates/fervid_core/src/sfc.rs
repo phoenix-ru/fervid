@@ -2,7 +2,7 @@ use swc_core::{common::Span, ecma::ast::Module};
 
 use crate::{FervidAtom, Node, StartingTag};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct SfcDescriptor {
     pub template: Option<SfcTemplateBlock>,
     pub script_legacy: Option<SfcScriptBlock>,

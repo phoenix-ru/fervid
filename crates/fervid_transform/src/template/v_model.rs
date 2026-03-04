@@ -2,8 +2,8 @@ use fervid_core::{BindingTypes, ElementNode, VModelDirective};
 use swc_core::common::Spanned;
 
 use crate::{
-    error::{TemplateError, TemplateErrorKind, TransformError},
     TransformSfcContext,
+    error::{TemplateError, TemplateErrorKind, TransformError},
 };
 
 // Adapted from https://github.com/vuejs/core/blob/24fccb4ee4139d41df0e395bce96ce7fbb6a50a9/packages/compiler-core/src/transforms/vModel.ts#L23-L156

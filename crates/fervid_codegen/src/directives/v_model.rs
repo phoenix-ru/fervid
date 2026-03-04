@@ -1,5 +1,5 @@
 use fervid_core::{
-    str_or_expr_to_propname, str_to_propname, FervidAtom, StrOrExpr, VModelDirective,
+    FervidAtom, StrOrExpr, VModelDirective, str_or_expr_to_propname, str_to_propname,
 };
 use swc_core::{
     common::Span,
@@ -154,14 +154,14 @@ fn generate_v_model_handler_propname(
     span: Span,
 ) -> PropName {
     match bound_attribute {
-        StrOrExpr::Str(ref s) => {
+        StrOrExpr::Str(s) => {
             buf.reserve(9 + s.len());
             buf.push_str("onUpdate:");
             let _ = to_camelcase(s, buf); // ignore fault
             str_to_propname(buf, span)
         }
 
-        StrOrExpr::Expr(ref expr) => {
+        StrOrExpr::Expr(expr) => {
             let addition = Expr::Bin(BinExpr {
                 span,
                 op: BinaryOp::Add,

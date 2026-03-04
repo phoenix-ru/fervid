@@ -45,11 +45,11 @@ check-all: fmt-check lint test spell
 # Build for WebAssembly target
 wasm-build:
     cd {{justfile_directory()}}/crates/fervid_napi && \
-    yarn build:wasm && \
-    yarn napi create-npm-dirs &&\
+    pnpm build:wasm && \
+    pnpm napi create-npm-dirs && \
     mkdir -p artifacts && \
     cp *.wasm artifacts/ && \
-    yarn artifacts
+    pnpm artifacts
 
 # Run the WASM playground preview server using node
 wasm-serve:
@@ -57,30 +57,29 @@ wasm-serve:
 
 # --- NAPI (crates/fervid_napi) ---
 
-# Dev build for NAPI bindings using Yarn
+# Dev build for NAPI bindings using PNPM
 napi-build:
-    cd {{justfile_directory()}}/crates/fervid_napi && yarn build:debug
+    cd {{justfile_directory()}}/crates/fervid_napi && pnpm build:debug
 
-# Release build for NAPI bindings using Yarn
+# Release build for NAPI bindings using PNPM
 napi-build-release:
-    cd {{justfile_directory()}}/crates/fervid_napi && yarn build
+    cd {{justfile_directory()}}/crates/fervid_napi && pnpm build
 
 # Run tests for the NAPI bindings
 napi-test:
-    cd {{justfile_directory()}}/crates/fervid_napi && yarn test
+    cd {{justfile_directory()}}/crates/fervid_napi && pnpm test
 
-# Bump `@fervid/napi` version and stage a commit. `new_version` is a parameter of `yarn version`
+# Bump `@fervid/napi` version and stage a commit. `new_version` is a parameter of `pnpm version`
 napi-version new_version:
     cd {{justfile_directory()}}/crates/fervid_napi && \
-    yarn version {{new_version}} && \
-    yarn run version && \
+    pnpm version {{new_version}} && \
+    pnpm run version && \
     VERSION=$(node -p "require('./package.json').version") && \
     jq --arg v "$VERSION" '.optionalDependencies |= with_entries(.value = $v)' package.json > tmp && mv tmp package.json && \
-    yarn && \
+    pnpm i && \
     git add package.json && \
     git add npm/*/package.json && \
-    git add yarn.lock && \
-    git add .yarn/install-state.gz
+    git add pnpm-lock.yaml
 
 # Commit staged NAPI changes from `napi-version` with a message which would trigger CI release
 napi-publish-commit:

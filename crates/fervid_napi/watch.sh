@@ -1,3 +1,3 @@
 #!/bin/bash
 
-yarn build
+pnpm build

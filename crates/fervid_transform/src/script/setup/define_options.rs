@@ -1,12 +1,12 @@
 use swc_core::{
-    common::{Spanned, DUMMY_SP},
+    common::{DUMMY_SP, Spanned},
     ecma::ast::{CallExpr, Expr, ExprOrSpread, Prop, PropOrSpread},
 };
 
 use crate::{
+    SfcExportedObjectHelper,
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::setup::utils::unwrap_ts_node_expr,
-    SfcExportedObjectHelper,
 };
 
 use super::macros::TransformMacroResult;

@@ -1,5 +1,5 @@
 use crate::{BuiltinType, FervidAtom};
-use flagset::{flags, FlagSet};
+use flagset::{FlagSet, flags};
 use strum_macros::{AsRefStr, EnumString, IntoStaticStr};
 
 flags! {

@@ -1,4 +1,4 @@
-use fervid_core::{fervid_atom, SfcStyleBlock};
+use fervid_core::{SfcStyleBlock, fervid_atom};
 use fervid_css::*;
 use swc_core::{
     common::DUMMY_SP,

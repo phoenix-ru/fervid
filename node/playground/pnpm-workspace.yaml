@@ -1,0 +1,1 @@
+# This file is required since Farm cannot correctly resolve its dependencies from PNPM store otherwise

@@ -143,13 +143,17 @@
     "ropey",
     "indexmap",
     "fallthroughs",
-    "onclick"
+    "onclick",
+    "nuxt",
+    "vueuse",
+    "demi"
   ],
   "ignorePaths": [
     ".github/**",
     "**/*.toml",
     "package.json",
     "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
     "yarn.lock",
     "README.md",
     "**/*.snap",

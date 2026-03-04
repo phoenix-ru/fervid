@@ -1,22 +1,24 @@
 use std::borrow::Cow;
 
 use fervid_core::{
-    create_call_expression, create_object_expression, create_object_property,
-    create_simple_expression_bool, create_simple_expression_propname, create_simple_expression_str,
-    fervid_atom, AttributeOrBinding, BindingTypes, BuiltinType, CallExpression, ComponentBinding,
-    ElementKind, ElementNode, ElementNodeCodegenNode, ExpressionNode, ExpressionPropNameNode,
-    FervidAtom, IntoIdent, JsChildNode, Node, PatchFlags, PatchHints, Property, PropsExpression,
+    AttributeOrBinding, BindingTypes, BuiltinType, CallExpression, ComponentBinding, ElementKind,
+    ElementNode, ElementNodeCodegenNode, ExpressionNode, ExpressionPropNameNode, FervidAtom,
+    IntoIdent, JsChildNode, Node, PatchFlags, PatchHints, Property, PropsExpression,
     SimpleExpressionNode, SimpleExpressionPropNameNode, StartingTag, StrOrExpr, VCustomDirective,
     VModelDirective, VNodeCall, VNodeCallTag, VNodeChildren, VueDirectives, VueImports,
+    create_call_expression, create_object_expression, create_object_property,
+    create_simple_expression_bool, create_simple_expression_propname, create_simple_expression_str,
+    fervid_atom,
 };
 use flagset::FlagSet;
 use phf::phf_set;
 use swc_core::{
-    common::{util::take::Take, Span, Spanned, DUMMY_SP},
+    common::{DUMMY_SP, Span, Spanned, util::take::Take},
     ecma::ast::{ArrayLit, Expr, ExprOrSpread, IdentName, Lit, MemberExpr, MemberProp, Str},
 };
 
 use crate::{
+    BindingsHelper, SetupBinding, TransformSfcContext,
     error::{TemplateError, TemplateErrorKind, TransformError},
     template::{
         directive_transforms::DirectiveTransforms,
@@ -26,7 +28,6 @@ use crate::{
             to_valid_asset_id,
         },
     },
-    BindingsHelper, SetupBinding, TransformSfcContext,
 };
 
 pub struct Props<'a> {
@@ -256,14 +257,14 @@ fn resolve_component_type(
                     DUMMY_SP,
                 ));
             }
-        } else if let AttributeOrBinding::RegularAttribute { value, .. } = is_prop {
-            if let Some(value_without_prefix) = value.strip_prefix("vue:") {
-                // <button is="vue:xxx">
-                // if not <component>, only is value that starts with "vue:" will be
-                // treated as component by the parse phase and reach here, unless it's
-                // compat mode where all is values are considered components
-                tag = Cow::Owned(FervidAtom::from(value_without_prefix));
-            }
+        } else if let AttributeOrBinding::RegularAttribute { value, .. } = is_prop
+            && let Some(value_without_prefix) = value.strip_prefix("vue:")
+        {
+            // <button is="vue:xxx">
+            // if not <component>, only is value that starts with "vue:" will be
+            // treated as component by the parse phase and reach here, unless it's
+            // compat mode where all is values are considered components
+            tag = Cow::Owned(FervidAtom::from(value_without_prefix));
         }
     }
 
@@ -714,17 +715,17 @@ pub fn build_props(
         }
 
         // Skip v-slot - it is handled by its dedicated transform.
-        if let Some(ref _v_slot) = directives.v_slot {
-            if !is_component {
-                // TODO Add span to v-slot directive
-                let span = DUMMY_SP;
+        if let Some(ref _v_slot) = directives.v_slot
+            && !is_component
+        {
+            // TODO Add span to v-slot directive
+            let span = DUMMY_SP;
 
-                ctx.errors
-                    .push(TransformError::TemplateError(TemplateError {
-                        span,
-                        kind: TemplateErrorKind::VSlotMisplaced,
-                    }));
-            }
+            ctx.errors
+                .push(TransformError::TemplateError(TemplateError {
+                    span,
+                    kind: TemplateErrorKind::VSlotMisplaced,
+                }));
         }
 
         // User directives
@@ -831,22 +832,21 @@ pub fn build_props(
                     )));
                 } else {
                     // No dynamic key
-                    if let Some(class_prop) = class_prop {
-                        if !is_static_exp(&class_prop.value) {
-                            let class_prop_value = std::mem::replace(
-                                &mut class_prop.value,
-                                create_call_expression(
-                                    ctx.bindings_helper.helper(VueImports::NormalizeClass),
-                                    Vec::with_capacity(1),
-                                    DUMMY_SP,
-                                )
-                                .into(),
-                            );
+                    if let Some(class_prop) = class_prop
+                        && !is_static_exp(&class_prop.value)
+                    {
+                        let class_prop_value = std::mem::replace(
+                            &mut class_prop.value,
+                            create_call_expression(
+                                ctx.bindings_helper.helper(VueImports::NormalizeClass),
+                                Vec::with_capacity(1),
+                                DUMMY_SP,
+                            )
+                            .into(),
+                        );
 
-                            if let JsChildNode::CallExpression(ref mut call_expr) = class_prop.value
-                            {
-                                call_expr.arguments.push(class_prop_value);
-                            }
+                        if let JsChildNode::CallExpression(ref mut call_expr) = class_prop.value {
+                            call_expr.arguments.push(class_prop_value);
                         }
                     }
 

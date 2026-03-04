@@ -3,10 +3,10 @@ use swc_core::{
     common::Span,
     ecma::ast::{Expr, Module, Pat},
 };
-use swc_ecma_parser::{lexer::Lexer, EsSyntax, Parser, StringInput, Syntax, TsSyntax};
+use swc_ecma_parser::{EsSyntax, Parser, StringInput, Syntax, TsSyntax, lexer::Lexer};
 use swc_html_ast::{Child, Element};
 
-use crate::{error::ParseErrorKind, ParseError, SfcParser};
+use crate::{ParseError, SfcParser, error::ParseErrorKind};
 
 impl SfcParser<'_, '_, '_> {
     /// Parses the `<script>` and `<script setup>`, both in EcmaScript and TypeScript

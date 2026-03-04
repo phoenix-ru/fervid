@@ -1,3 +1,6 @@
+use std::hash::{Hash, Hasher};
+
+use fxhash::FxHasher32;
 use swc_core::{
     common::Span,
     ecma::ast::{ComputedPropName, EsReserved, Ident, IdentName, PropName, Str},
@@ -29,10 +32,11 @@ pub fn is_valid_ident(s: &str) -> bool {
 pub fn is_valid_propname(s: &str) -> bool {
     let mut chars = s.chars();
 
-    if let Some(first) = chars.next() {
-        if Ident::is_valid_start(first) && chars.all(Ident::is_valid_continue) {
-            return true;
-        }
+    if let Some(first) = chars.next()
+        && Ident::is_valid_start(first)
+        && chars.all(Ident::is_valid_continue)
+    {
+        return true;
     }
 
     false
@@ -70,4 +74,11 @@ pub fn str_or_expr_to_propname(str_or_expr: StrOrExpr, span: Span) -> PropName {
         StrOrExpr::Str(sym) => atom_to_propname(sym, span),
         StrOrExpr::Expr(expr) => PropName::Computed(ComputedPropName { span, expr }),
     }
+}
+
+pub fn compute_scope_id(source: &str) -> String {
+    let mut hasher = FxHasher32::default();
+    source.hash(&mut hasher);
+    let num = hasher.finish();
+    format!("{:x}", num)
 }

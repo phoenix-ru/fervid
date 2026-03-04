@@ -331,10 +331,10 @@ impl CodegenContext {
                             match value.as_ref() {
                                 "checkbox" => {
                                     return self
-                                        .get_and_add_import_ident(VueImports::VModelCheckbox)
+                                        .get_and_add_import_ident(VueImports::VModelCheckbox);
                                 }
                                 "radio" => {
-                                    return self.get_and_add_import_ident(VueImports::VModelRadio)
+                                    return self.get_and_add_import_ident(VueImports::VModelRadio);
                                 }
                                 _ => return self.get_and_add_import_ident(VueImports::VModelText),
                             }
@@ -345,7 +345,7 @@ impl CodegenContext {
                             argument: Some(StrOrExpr::Str(s)),
                             ..
                         }) if s == "type" => {
-                            return self.get_and_add_import_ident(VueImports::VModelDynamic)
+                            return self.get_and_add_import_ident(VueImports::VModelDynamic);
                         }
 
                         _ => continue,

@@ -6,7 +6,7 @@ use swc_core::{
     },
 };
 
-use crate::{error::TransformError, BindingsHelper};
+use crate::{BindingsHelper, error::TransformError};
 
 mod analyzer;
 mod components;
@@ -175,10 +175,10 @@ fn unroll_default_export_expr(mut expr: Expr) -> Expr {
 mod tests {
     use super::*;
     use crate::{
-        script::imports::process_imports, span, test_utils::parser::*, OptionsApiBindings,
-        SetupBinding,
+        OptionsApiBindings, SetupBinding, script::imports::process_imports, span,
+        test_utils::parser::*,
     };
-    use fervid_core::{fervid_atom, BindingTypes};
+    use fervid_core::{BindingTypes, fervid_atom};
     use swc_core::common::{BytePos, Span};
 
     struct TestAnalyzeResult {

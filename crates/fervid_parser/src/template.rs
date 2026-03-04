@@ -1,7 +1,7 @@
 use fervid_core::{
-    check_attribute_name, fervid_atom, is_html_tag, AttributeOrBinding, ElementKind, ElementNode,
-    FervidAtom, Interpolation, Node, PatchHints, SfcTemplateBlock, StartingTag, VueDirectives,
-    VUE_BUILTINS,
+    AttributeOrBinding, ElementKind, ElementNode, FervidAtom, Interpolation, Node, PatchHints,
+    SfcTemplateBlock, StartingTag, VUE_BUILTINS, VueDirectives, check_attribute_name, fervid_atom,
+    is_html_tag,
 };
 use swc_core::common::{BytePos, Span};
 use swc_ecma_parser::{Syntax, TsSyntax};

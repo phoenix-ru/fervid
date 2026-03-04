@@ -50,7 +50,7 @@ mod tests {
     use fervid_core::{Node, SfcDescriptor, SfcScriptLang};
     use swc_core::ecma::ast::{ModuleDecl, ModuleItem};
 
-    use crate::{error::ParseErrorKind, ParseError, SfcParser};
+    use crate::{ParseError, SfcParser, error::ParseErrorKind};
 
     const SHOULD_EXIST: &str = "Should exist";
 
@@ -380,18 +380,22 @@ h1 { color: red }
     fn should_only_allow_single_template_element() {
         let (_, errors) =
             parse_with_errors("<template><div/></template><template><div/></template>");
-        assert!(errors
-            .iter()
-            .any(|e| matches!(&e.kind, ParseErrorKind::DuplicateTemplate)));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(&e.kind, ParseErrorKind::DuplicateTemplate))
+        );
     }
 
     #[test]
     fn should_only_allow_single_script_element() {
         let (_, errors) =
             parse_with_errors("<script>console.log(1)</script><script>console.log(1)</script>");
-        assert!(errors
-            .iter()
-            .any(|e| matches!(&e.kind, ParseErrorKind::DuplicateScriptOptions)));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(&e.kind, ParseErrorKind::DuplicateScriptOptions))
+        );
     }
 
     #[test]
@@ -399,9 +403,11 @@ h1 { color: red }
         let (_, errors) = parse_with_errors(
             "<script setup>console.log(1)</script><script setup>console.log(1)</script>",
         );
-        assert!(errors
-            .iter()
-            .any(|e| matches!(&e.kind, ParseErrorKind::DuplicateScriptSetup)));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(&e.kind, ParseErrorKind::DuplicateScriptSetup))
+        );
     }
 
     #[test]
@@ -415,9 +421,11 @@ h1 { color: red }
     #[test]
     fn should_throw_error_if_no_template_or_script_is_present() {
         let (_, errors) = parse_with_errors("import { ref } from 'vue'");
-        assert!(errors
-            .iter()
-            .any(|e| matches!(&e.kind, ParseErrorKind::MissingTemplateOrScript)));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(&e.kind, ParseErrorKind::MissingTemplateOrScript))
+        );
     }
 
     fn parse(source: &str) -> SfcDescriptor {

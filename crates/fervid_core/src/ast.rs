@@ -1,7 +1,7 @@
 // Adapted from https://github.com/vuejs/core/blob/5a8aa0b2ba575e098cbb63b396e9bcb751eb3a0f/packages/compiler-core/src/ast.ts
 
 use swc_core::{
-    common::{Span, DUMMY_SP},
+    common::{DUMMY_SP, Span},
     ecma::ast::{ArrayLit, Bool, CallExpr, Expr, IdentName, Lit, PropName, PropOrSpread, Str},
 };
 

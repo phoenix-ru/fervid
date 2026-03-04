@@ -1,10 +1,10 @@
 use fervid_core::{
-    fervid_atom, str_to_propname, AttributeOrBinding, FervidAtom, IntoIdent, StrOrExpr,
-    VBindDirective, VOnDirective, VueImports,
+    AttributeOrBinding, FervidAtom, IntoIdent, StrOrExpr, VBindDirective, VOnDirective, VueImports,
+    fervid_atom, str_to_propname,
 };
 use regex::Regex;
 use swc_core::{
-    common::{Span, Spanned, DUMMY_SP},
+    common::{DUMMY_SP, Span, Spanned},
     ecma::ast::{
         ArrayLit, ArrowExpr, BinExpr, BinaryOp, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
         ComputedPropName, Expr, ExprOrSpread, Ident, IdentName, KeyValueProp, Lit, ObjectLit, Prop,

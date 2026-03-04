@@ -1,8 +1,8 @@
 use fervid_core::{
-    check_attribute_name, fervid_atom, is_from_default_slot, AttributeOrBinding, BindingTypes,
-    BuiltinType, Conditional, ConditionalNodeSequence, ElementKind, ElementNode, FervidAtom,
-    Interpolation, IntoIdent, Node, PatchFlags, PatchHints, SfcTemplateBlock, StartingTag,
-    StrOrExpr, TemplateGenerationMode, VBindDirective, VSlotDirective,
+    AttributeOrBinding, BindingTypes, BuiltinType, Conditional, ConditionalNodeSequence,
+    ElementKind, ElementNode, FervidAtom, Interpolation, IntoIdent, Node, PatchFlags, PatchHints,
+    SfcTemplateBlock, StartingTag, StrOrExpr, TemplateGenerationMode, VBindDirective,
+    VSlotDirective, check_attribute_name, fervid_atom, is_from_default_slot,
 };
 use smallvec::SmallVec;
 use swc_core::{
@@ -10,7 +10,7 @@ use swc_core::{
     ecma::ast::{Bool, Expr, Lit},
 };
 
-use crate::{template::node_transforms::NodeTransforms, TemplateScope, TransformSfcContext};
+use crate::{TemplateScope, TransformSfcContext, template::node_transforms::NodeTransforms};
 
 use super::{
     asset_urls::transform_asset_urls, collect_vars::collect_variables,
@@ -108,9 +108,11 @@ fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
     // For removing the middle whitespace text nodes, we need sliding windows of three nodes
     for (index, window) in children.windows(3).enumerate() {
         match window {
-            [Node::Element(_) | Node::Comment(_, _), Node::Text(middle, _), Node::Element(_) | Node::Comment(_, _)]
-                if middle.trim().is_empty() =>
-            {
+            [
+                Node::Element(_) | Node::Comment(_, _),
+                Node::Text(middle, _),
+                Node::Element(_) | Node::Comment(_, _),
+            ] if middle.trim().is_empty() => {
                 discard_mask |= 1 << (index + 1);
             }
             _ => {}
@@ -345,7 +347,7 @@ impl Visitor for TemplateVisitor<'_> {
 }
 
 impl TemplateVisitor<'_> {
-    pub fn new(ctx: &mut TransformSfcContext) -> TemplateVisitor {
+    pub fn new(ctx: &'_ mut TransformSfcContext) -> TemplateVisitor<'_> {
         TemplateVisitor {
             ctx,
             current_scope: 0,
@@ -490,7 +492,7 @@ impl TemplateVisitor<'_> {
                     }
 
                     let Some(StrOrExpr::Str(ref argument)) = v_bind.argument else {
-                        if let Some(StrOrExpr::Expr(ref mut expr)) = v_bind.argument.as_mut() {
+                        if let Some(StrOrExpr::Expr(expr)) = v_bind.argument.as_mut() {
                             self.ctx.bindings_helper.transform_expr(expr, scope_to_use);
                         }
 
@@ -548,7 +550,7 @@ impl TemplateVisitor<'_> {
                     }
                 }
 
-                AttributeOrBinding::VOn(ref mut v_on) => {
+                AttributeOrBinding::VOn(v_on) => {
                     // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L589C54-L589C71
                     // inline before-update hooks need to force block so that it is invoked
                     // before children
@@ -1220,12 +1222,13 @@ mod tests {
 
             // Folded to `<p v-if="val">text</p>`
             assert!(cond.if_node.node.starting_tag.tag_name == "p");
-            assert!(cond
-                .if_node
-                .node
-                .children
-                .first()
-                .is_some_and(|v| matches!(v, Node::Text(_, _))))
+            assert!(
+                cond.if_node
+                    .node
+                    .children
+                    .first()
+                    .is_some_and(|v| matches!(v, Node::Text(_, _)))
+            )
         };
 
         // <template v-if="val" v-for="i in 3"><p>text</p></template>
@@ -1246,15 +1249,19 @@ mod tests {
             // Folded to `<p v-if="val" v-for="i in 3">text</p>`
             let cond_node = &cond.if_node.node;
             assert!(cond_node.starting_tag.tag_name == "p");
-            assert!(cond_node
-                .children
-                .first()
-                .is_some_and(|v| matches!(v, Node::Text(_, _))));
-            assert!(cond_node
-                .starting_tag
-                .directives
-                .as_ref()
-                .is_some_and(|d| d.v_for.is_some()));
+            assert!(
+                cond_node
+                    .children
+                    .first()
+                    .is_some_and(|v| matches!(v, Node::Text(_, _)))
+            );
+            assert!(
+                cond_node
+                    .starting_tag
+                    .directives
+                    .as_ref()
+                    .is_some_and(|d| d.v_for.is_some())
+            );
         };
 
         // <template v-if="val"><p v-for="j in 3">text</p></template>
@@ -1273,15 +1280,19 @@ mod tests {
             // Folded to `<p v-if="val" v-for="i in 3">text</p>`
             let cond_node = &cond.if_node.node;
             assert!(cond_node.starting_tag.tag_name == "p");
-            assert!(cond_node
-                .children
-                .first()
-                .is_some_and(|v| matches!(v, Node::Text(_, _))));
-            assert!(cond_node
-                .starting_tag
-                .directives
-                .as_ref()
-                .is_some_and(|d| d.v_for.is_some()));
+            assert!(
+                cond_node
+                    .children
+                    .first()
+                    .is_some_and(|v| matches!(v, Node::Text(_, _)))
+            );
+            assert!(
+                cond_node
+                    .starting_tag
+                    .directives
+                    .as_ref()
+                    .is_some_and(|d| d.v_for.is_some())
+            );
         };
 
         // <template v-if="val" v-for="i in 3"><p v-for="j in 3">text</p></template>
@@ -1307,21 +1318,25 @@ mod tests {
             // Not folded
             let cond_node = &cond.if_node.node;
             assert!(cond_node.starting_tag.tag_name == "template");
-            assert!(cond_node
-                .starting_tag
-                .directives
-                .as_ref()
-                .is_some_and(|d| d.v_for.is_some()));
+            assert!(
+                cond_node
+                    .starting_tag
+                    .directives
+                    .as_ref()
+                    .is_some_and(|d| d.v_for.is_some())
+            );
 
             let Some(Node::Element(first_child)) = cond_node.children.first() else {
                 panic!("First child should be an element")
             };
             assert!(first_child.starting_tag.tag_name == "p");
-            assert!(first_child
-                .starting_tag
-                .directives
-                .as_ref()
-                .is_some_and(|d| d.v_for.is_some()));
+            assert!(
+                first_child
+                    .starting_tag
+                    .directives
+                    .as_ref()
+                    .is_some_and(|d| d.v_for.is_some())
+            );
         };
 
         // <div v-if="false"></div>
@@ -1333,10 +1348,12 @@ mod tests {
             assert!(cond.if_node.node.starting_tag.tag_name == "div");
             let else_if_node = &cond.else_if_nodes.first().expect("Should exist").node;
             assert!(else_if_node.starting_tag.tag_name == "p");
-            assert!(else_if_node
-                .children
-                .first()
-                .is_some_and(|v| matches!(v, Node::Text(_, _))));
+            assert!(
+                else_if_node
+                    .children
+                    .first()
+                    .is_some_and(|v| matches!(v, Node::Text(_, _)))
+            );
         };
 
         // <div v-if="false"></div>
@@ -1348,10 +1365,12 @@ mod tests {
             assert!(cond.if_node.node.starting_tag.tag_name == "div");
             let else_node = cond.else_node.as_ref().expect("Should exist");
             assert!(else_node.starting_tag.tag_name == "p");
-            assert!(else_node
-                .children
-                .first()
-                .is_some_and(|v| matches!(v, Node::Text(_, _))));
+            assert!(
+                else_node
+                    .children
+                    .first()
+                    .is_some_and(|v| matches!(v, Node::Text(_, _)))
+            );
         };
     }
 
@@ -1361,7 +1380,7 @@ mod tests {
     }
 
     fn check_text_node(node: &Node) {
-        assert!(matches!(node, Node::Text(text, DUMMY_SP) if text == "text"));
+        assert!(matches!(node, Node::Text(text, span) if text == "text" && *span == DUMMY_SP));
     }
 
     // <h1 v-if="true">if</h1>

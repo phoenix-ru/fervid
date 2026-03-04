@@ -1,4 +1,4 @@
-use fervid_core::{fervid_atom, AttributeOrBinding, FervidAtom, SfcCustomBlock, StartingTag};
+use fervid_core::{AttributeOrBinding, FervidAtom, SfcCustomBlock, StartingTag, fervid_atom};
 use swc_html_ast::Element;
 
 use crate::SfcParser;

@@ -1,4 +1,4 @@
-use fervid_core::{fervid_atom, IntoIdent, VueImports};
+use fervid_core::{IntoIdent, VueImports, fervid_atom};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{

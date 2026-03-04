@@ -1,5 +1,5 @@
 use fervid_core::{
-    fervid_atom, BindingTypes, FervidAtom, IntoIdent, StrOrExpr, VOnDirective, VueImports,
+    BindingTypes, FervidAtom, IntoIdent, StrOrExpr, VOnDirective, VueImports, fervid_atom,
 };
 use swc_core::{
     common::DUMMY_SP,
@@ -277,11 +277,11 @@ fn unwrap_parens(expr: &Expr) -> &Expr {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{fervid_atom, BindingTypes, TemplateGenerationMode};
+    use fervid_core::{BindingTypes, TemplateGenerationMode, fervid_atom};
 
     use crate::{
-        test_utils::{to_str, ts},
         SetupBinding, TransformSfcContext,
+        test_utils::{to_str, ts},
     };
 
     use super::*;

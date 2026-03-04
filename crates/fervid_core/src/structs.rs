@@ -1,5 +1,5 @@
 use swc_core::{
-    common::{Span, Spanned, DUMMY_SP},
+    common::{DUMMY_SP, Span, Spanned},
     ecma::{
         ast::{Expr, Ident, Pat},
         atoms::Atom,

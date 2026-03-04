@@ -93,6 +93,7 @@ impl CodegenContext {
     ///   without a surrounding `createTextVNode` call.
     ///
     /// Returns `true` if all the nodes were inlined successfully
+    #[allow(unused_assignments)]
     pub fn generate_node_sequence<'n>(
         &mut self,
         iter: &mut impl Iterator<Item = &'n Node>,

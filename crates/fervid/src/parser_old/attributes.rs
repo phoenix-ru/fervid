@@ -3,6 +3,7 @@ use fervid_core::{
     VModelDirective, VOnDirective, VSlotDirective, VueDirectives,
 };
 use nom::{
+    Err, IResult,
     branch::alt,
     bytes::complete::{tag, take_till},
     character::complete::char,
@@ -10,7 +11,6 @@ use nom::{
     error::{ErrorKind, ParseError},
     multi::many0,
     sequence::{delimited, preceded},
-    Err, IResult,
 };
 use swc_core::common::DUMMY_SP;
 
@@ -167,7 +167,7 @@ fn parse_directive<'i>(
             return Err(nom::Err::Error(nom::error::Error {
                 code: nom::error::ErrorKind::Tag,
                 input,
-            }))
+            }));
         }
     };
 
@@ -331,18 +331,18 @@ fn parse_directive<'i>(
             };
 
             // TODO Span
-            if let Ok(itervar) = parse_js(itervar, 0, 0) {
-                if let Ok(iterable) = parse_js(iterable, 0, 0) {
-                    push_directive!(
-                        v_for,
-                        VForDirective {
-                            iterable,
-                            itervar,
-                            patch_flags: Default::default(),
-                            span: DUMMY_SP
-                        }
-                    );
-                }
+            if let Ok(itervar) = parse_js(itervar, 0, 0)
+                && let Ok(iterable) = parse_js(iterable, 0, 0)
+            {
+                push_directive!(
+                    v_for,
+                    VForDirective {
+                        iterable,
+                        itervar,
+                        patch_flags: Default::default(),
+                        span: DUMMY_SP
+                    }
+                );
             };
         }
         "model" => {

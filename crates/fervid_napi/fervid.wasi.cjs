@@ -39,7 +39,7 @@ if (__nodeFs.existsSync(__wasmDebugFilePath)) {
   __wasmFilePath = __wasmDebugFilePath
 } else if (!__nodeFs.existsSync(__wasmFilePath)) {
   try {
-    __wasmFilePath = __nodePath.resolve('@fervid/napi-wasm32-wasi')
+    __wasmFilePath = require.resolve('@fervid/napi-wasm32-wasi/fervid.wasm32-wasi.wasm')
   } catch {
     throw new Error('Cannot find fervid.wasm32-wasi.wasm file, and @fervid/napi-wasm32-wasi package is not installed.')
   }
