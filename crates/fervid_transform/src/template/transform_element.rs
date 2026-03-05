@@ -6,11 +6,12 @@ use fervid_core::{
     IntoIdent, JsChildNode, Node, PatchFlags, PatchHints, Property, PropsExpression,
     SimpleExpressionNode, SimpleExpressionPropNameNode, StartingTag, StrOrExpr, VCustomDirective,
     VModelDirective, VNodeCall, VNodeCallTag, VNodeChildren, VueDirectives, VueImports,
-    create_call_expression, create_object_expression, create_object_property,
-    create_simple_expression_bool, create_simple_expression_propname, create_simple_expression_str,
-    fervid_atom,
+    create_array_expression, create_call_expression, create_object_expression,
+    create_object_property, create_simple_expression_bool, create_simple_expression_propname,
+    create_simple_expression_str, fervid_atom,
 };
 use flagset::FlagSet;
+use fxhash::FxHashMap;
 use phf::phf_set;
 use swc_core::{
     common::{DUMMY_SP, Span, Spanned, util::take::Take},
@@ -991,8 +992,60 @@ fn analyze_patch_flag(
     }
 }
 
-fn dedupe_properties(_properties: Vec<Property>) -> Vec<Property> {
-    todo!()
+/// Dedupe props in an object literal.
+/// Literal duplicated attributes would have been warned during the parse phase,
+/// however, it's possible to encounter duplicated `onXXX` handlers with different
+/// modifiers. We also need to merge static and dynamic class / style attributes.
+/// - onXXX handlers / style: merge into array
+/// - class: merge into single expression with concatenation
+fn dedupe_properties(properties: Vec<Property>) -> Vec<Property> {
+    let mut known_props = FxHashMap::<FervidAtom, usize>::default();
+    let mut deduped = Vec::<Property>::new();
+
+    for prop in properties {
+        let ExpressionPropNameNode::SimpleExpression(ref prop_key) = prop.key else {
+            deduped.push(prop);
+            continue;
+        };
+
+        if !prop_key.is_static {
+            deduped.push(prop);
+            continue;
+        }
+
+        let name = &prop_key.ast.sym;
+
+        if let Some(existing) = known_props.get_mut(name).and_then(|v| deduped.get_mut(*v)) {
+            if matches!(name.as_str(), "style" | "class") || is_on(name) {
+                merge_as_array(existing, prop);
+            }
+        } else {
+            let name = name.clone();
+            let idx = deduped.len();
+            deduped.push(prop);
+            known_props.insert(name, idx);
+        }
+    }
+
+    deduped
+}
+
+fn merge_as_array(existing: &mut Property, incoming: Property) {
+    if let JsChildNode::ArrayExpression(ref mut array) = existing.value {
+        array.elements.push(incoming.value);
+    } else {
+        let existing_value = std::mem::replace(
+            &mut existing.value,
+            JsChildNode::ArrayExpression(Box::new(create_array_expression(
+                Vec::with_capacity(2),
+                existing.span,
+            ))),
+        );
+        if let JsChildNode::ArrayExpression(ref mut v) = existing.value {
+            v.elements.push(existing_value);
+            v.elements.push(incoming.value);
+        };
+    }
 }
 
 fn build_directive_args(_dir: RuntimeDirective, _ctx: &mut TransformSfcContext) -> ArrayLit {

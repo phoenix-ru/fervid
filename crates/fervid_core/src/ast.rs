@@ -97,8 +97,9 @@ pub enum JsChildNode {
     CallExpression(Box<CallExpression>),
     ObjectExpression(Box<ObjectExpression>),
     ExpressionNode(Box<ExpressionNode>),
+    ArrayExpression(Box<ArrayExpression>),
     // Unused?
-    OriginalValueMarker,
+    // OriginalValueMarker,
 }
 
 #[derive(Debug, Clone)]
@@ -118,6 +119,13 @@ pub struct ObjectExpression {
 pub struct Property {
     pub key: ExpressionPropNameNode,
     pub value: JsChildNode,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct ArrayExpression {
+    pub elements: Vec<JsChildNode>,
+    pub span: Span,
 }
 
 pub fn create_call_expression(
@@ -137,7 +145,15 @@ pub fn create_object_expression(properties: Vec<Property>, span: Span) -> Object
 }
 
 pub fn create_object_property(key: ExpressionPropNameNode, value: JsChildNode) -> Property {
-    Property { key, value }
+    Property {
+        key,
+        value,
+        span: DUMMY_SP,
+    }
+}
+
+pub fn create_array_expression(elements: Vec<JsChildNode>, span: Span) -> ArrayExpression {
+    ArrayExpression { elements, span }
 }
 
 pub fn create_simple_expression_propname(
