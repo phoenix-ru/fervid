@@ -22,6 +22,7 @@ use crate::{
     BindingsHelper, SetupBinding, TransformSfcContext,
     error::{TemplateError, TemplateErrorKind, TransformError},
     template::{
+        core::v_slot::build_slots,
         directive_transforms::DirectiveTransforms,
         expr_transform::BindingsHelperTransform,
         utils::{
@@ -178,7 +179,11 @@ pub fn post_transform_element_node(node: &mut ElementNode, ctx: &mut TransformSf
             );
 
         if should_build_as_slots {
-            todo!("implement buildSlots")
+            let slots = build_slots(node, ctx);
+            if slots.has_dynamic_slots {
+                patch_hints.flags |= PatchFlags::DynamicSlots;
+            }
+            vnode_children = Some(VNodeChildren::Slots(slots));
         } else if node.children.len() == 1
             && !matches!(vnode_tag, VNodeCallTag::Builtin(BuiltinType::Teleport))
         {

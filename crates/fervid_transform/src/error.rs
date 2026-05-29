@@ -118,6 +118,14 @@ pub enum TemplateErrorKind {
     VModelOnScopeVariable,
     /// v-on is missing expression
     VOnNoExpression,
+    /// v-else/v-else-if has no adjacent v-if or v-else-if.
+    VElseNoAdjacentIf,
+    /// Mixed v-slot usage on both the component and nested <template>. When there are multiple named slots, all slots should use <template> syntax to avoid scope ambiguity.
+    VSlotMixedSlotUsage,
+    /// Duplicate slot names found.
+    VSlotDuplicateSlotNames,
+    /// Extraneous children found when component already has explicitly named default slot. These children will be ignored.
+    VSlotExtraneousDefaultSlotChildren,
     /// v-slot can only be used on components or <template> tags.
     VSlotMisplaced,
 }

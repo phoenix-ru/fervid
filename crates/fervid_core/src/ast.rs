@@ -1,11 +1,12 @@
 // Adapted from https://github.com/vuejs/core/blob/5a8aa0b2ba575e098cbb63b396e9bcb751eb3a0f/packages/compiler-core/src/ast.ts
 
+use smallvec::SmallVec;
 use swc_core::{
     common::{DUMMY_SP, Span},
-    ecma::ast::{ArrayLit, Bool, CallExpr, Expr, IdentName, Lit, PropName, PropOrSpread, Str},
+    ecma::ast::{ArrayLit, Bool, CallExpr, Expr, IdentName, Lit, Pat, PropName, PropOrSpread, Str},
 };
 
-use crate::{BuiltinType, FervidAtom, PatchHints, VueImports};
+use crate::{BuiltinType, FervidAtom, PatchHints, StrOrExpr, VueImports};
 
 #[derive(Debug, Clone, Default)]
 pub enum ConstantTypes {
@@ -76,6 +77,75 @@ pub enum VNodeChildren {
     UseElementChildren,
     /// Use the first and only child (which is a text node) from parent element
     UseFirstChildTextNode,
+    /// Build component slots from the parent element's children.
+    Slots(Slots),
+}
+
+#[derive(Debug, Clone)]
+pub struct Slots {
+    pub slots: Vec<SlotBuild>,
+    pub dynamic_slots: Vec<DynamicSlot>,
+    pub has_dynamic_slots: bool,
+    pub slot_flag: SlotFlag,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SlotFlag {
+    Stable = 1,
+    Dynamic = 2,
+    Forwarded = 3,
+}
+
+#[derive(Debug, Clone)]
+pub struct SlotBuild {
+    pub name: StrOrExpr,
+    pub props: Option<Box<Pat>>,
+    pub source: SlotSource,
+}
+
+#[derive(Debug, Clone)]
+pub enum DynamicSlot {
+    Conditional(DynamicSlotConditional),
+    RenderList(DynamicSlotRenderList),
+}
+
+#[derive(Debug, Clone)]
+pub struct DynamicSlotConditional {
+    pub if_slot: ConditionalDynamicSlot,
+    pub else_if_slots: Vec<ConditionalDynamicSlot>,
+    pub else_slot: Option<DynamicSlotBuild>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConditionalDynamicSlot {
+    pub condition: Box<Expr>,
+    pub slot: DynamicSlotBuild,
+}
+
+#[derive(Debug, Clone)]
+pub struct DynamicSlotRenderList {
+    /// Index points to a `<template v-for v-slot>` carrier node in parent component children.
+    /// Codegen can read the `VForDirective` from that node and render `slot` for each item.
+    pub slot_template_index: usize,
+    pub slot: DynamicSlotBuild,
+}
+
+#[derive(Debug, Clone)]
+pub struct DynamicSlotBuild {
+    pub name: StrOrExpr,
+    pub props: Option<Box<Pat>>,
+    pub source: SlotSource,
+    pub key: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub enum SlotSource {
+    /// Indices point to parent component children that render directly as the default slot.
+    /// They are captured after child-shaping post transforms have run.
+    ImplicitDefaultSlot(SmallVec<[usize; 1]>),
+    /// Index points to a `<template v-slot>` carrier node in the parent component children.
+    /// Codegen must render that template node's children, not the template node itself.
+    TemplateSlotChildren(usize),
 }
 
 #[derive(Debug, Clone)]
