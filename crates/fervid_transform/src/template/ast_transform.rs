@@ -1,10 +1,15 @@
+#[cfg(not(feature = "new-pipeline"))]
 use fervid_core::{
-    AttributeOrBinding, BindingTypes, BuiltinType, Conditional, ConditionalNodeSequence,
-    ElementKind, ElementNode, FervidAtom, Interpolation, IntoIdent, Node, PatchFlags, PatchHints,
-    SfcTemplateBlock, StartingTag, StrOrExpr, TemplateGenerationMode, VBindDirective,
-    VSlotDirective, check_attribute_name, fervid_atom, is_from_default_slot,
+    AttributeOrBinding, BindingTypes, BuiltinType, FervidAtom, IntoIdent, TemplateGenerationMode,
+    VBindDirective,
+};
+use fervid_core::{
+    Conditional, ConditionalNodeSequence, ElementKind, ElementNode, Interpolation, Node,
+    PatchFlags, PatchHints, SfcTemplateBlock, StartingTag, StrOrExpr, VSlotDirective,
+    check_attribute_name, fervid_atom, is_from_default_slot,
 };
 use smallvec::SmallVec;
+#[cfg(not(feature = "new-pipeline"))]
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{Bool, Expr, Lit},
@@ -12,10 +17,9 @@ use swc_core::{
 
 use crate::{TemplateScope, TransformSfcContext, template::node_transforms::NodeTransforms};
 
-use super::{
-    asset_urls::transform_asset_urls, collect_vars::collect_variables,
-    expr_transform::BindingsHelperTransform,
-};
+#[cfg(not(feature = "new-pipeline"))]
+use super::asset_urls::transform_asset_urls;
+use super::{collect_vars::collect_variables, expr_transform::BindingsHelperTransform};
 
 pub struct TemplateVisitor<'s> {
     pub ctx: &'s mut TransformSfcContext,
@@ -33,6 +37,14 @@ pub fn transform_and_record_template(
     template: &mut SfcTemplateBlock,
     ctx: &mut TransformSfcContext,
 ) {
+    #[cfg(feature = "new-pipeline")]
+    if ctx.bindings_helper.template_scopes.is_empty() {
+        ctx.bindings_helper.template_scopes.push(TemplateScope {
+            variables: SmallVec::new(),
+            parent: 0,
+        });
+    }
+
     // Optimize conditional sequences within template root
     optimize_children(&mut template.roots, ElementKind::Element);
 
@@ -357,12 +369,102 @@ impl TemplateVisitor<'_> {
 
     #[allow(unused)]
     fn visit_element_node_new(&mut self, element_node: &mut ElementNode) {
+        let parent_scope = self.current_scope;
+        let old_ctx_scope = self.ctx.current_template_scope;
+        let old_v_for_scope = self.v_for_scope;
+        let old_directive_v_for = self.ctx.directive_scopes.v_for;
+        let old_directive_v_slot = self.ctx.directive_scopes.v_slot;
+
+        let mut scope_to_use = parent_scope;
+
+        // TODO(new-pipeline): move this scope tracking into Vue-aligned node transforms
+        // (`trackVForSlotScopes` / `trackSlotScopes`) once transform-local exit state exists.
+        if let Some(ref mut directives) = element_node.starting_tag.directives {
+            let v_for = directives.v_for.as_mut();
+            let v_slot = directives.v_slot.as_mut();
+
+            if v_for.is_some() || v_slot.is_some() {
+                scope_to_use = self.ctx.bindings_helper.template_scopes.len() as u32;
+                self.ctx
+                    .bindings_helper
+                    .template_scopes
+                    .push(TemplateScope {
+                        variables: SmallVec::new(),
+                        parent: parent_scope,
+                    });
+            }
+
+            if let Some(v_for) = v_for {
+                self.v_for_scope = true;
+                self.ctx.directive_scopes.v_for += 1;
+
+                let scope = &mut self.ctx.bindings_helper.template_scopes[scope_to_use as usize];
+                collect_variables(&v_for.itervar, scope);
+
+                let is_dynamic = self
+                    .ctx
+                    .bindings_helper
+                    .transform_expr(&mut v_for.iterable, scope_to_use);
+
+                if !is_dynamic {
+                    v_for.patch_flags |= PatchFlags::StableFragment;
+                } else {
+                    let has_key = element_node
+                        .starting_tag
+                        .attributes
+                        .iter()
+                        .any(|attr| check_attribute_name(attr, "key"));
+
+                    v_for.patch_flags |= if has_key {
+                        PatchFlags::KeyedFragment
+                    } else {
+                        PatchFlags::UnkeyedFragment
+                    };
+                }
+            }
+
+            if let Some(VSlotDirective {
+                slot_name, value, ..
+            }) = v_slot
+            {
+                self.ctx.directive_scopes.v_slot += 1;
+
+                if let Some(v_slot_value) = value {
+                    let scope =
+                        &mut self.ctx.bindings_helper.template_scopes[scope_to_use as usize];
+                    collect_variables(v_slot_value, scope);
+                }
+
+                if let Some(StrOrExpr::Expr(expr)) = slot_name {
+                    self.ctx.bindings_helper.transform_expr(expr, scope_to_use);
+                }
+            }
+        }
+
+        element_node.template_scope = scope_to_use;
+        self.current_scope = scope_to_use;
+        self.ctx.current_template_scope = scope_to_use;
+
         // Cloning transforms is fine here due to the structure being optimized for it
         let node_transforms = self.ctx.node_transforms.clone();
         node_transforms.pre_transform_element_node(self.ctx, element_node);
+
+        optimize_children(&mut element_node.children, element_node.tag_type);
+
+        for child in element_node.children.iter_mut() {
+            child.visit_mut_with(self);
+        }
+
         node_transforms.post_transform_element_node(self.ctx, element_node);
+
+        self.current_scope = parent_scope;
+        self.ctx.current_template_scope = old_ctx_scope;
+        self.v_for_scope = old_v_for_scope;
+        self.ctx.directive_scopes.v_for = old_directive_v_for;
+        self.ctx.directive_scopes.v_slot = old_directive_v_slot;
     }
 
+    #[cfg(not(feature = "new-pipeline"))]
     fn visit_element_node_old(&mut self, element_node: &mut ElementNode) {
         let parent_scope = self.current_scope;
         let mut scope_to_use = parent_scope;

@@ -49,10 +49,36 @@ impl CodegenContext {
         }
 
         // Generate the relevant render code depending on ElementKind
-        let mut result = match element_node.tag_type {
-            ElementKind::Builtin(builtin_type) => self.generate_builtin(element_node, builtin_type),
-            ElementKind::Element => self.generate_element_vnode(element_node, wrap_in_block),
-            ElementKind::Component => self.generate_component_vnode(element_node, wrap_in_block),
+        let mut result = {
+            #[cfg(feature = "new-pipeline")]
+            if let Some(codegen_node) = element_node.codegen_node.as_deref() {
+                self.generate_element_codegen_node(element_node, codegen_node, wrap_in_block)
+            } else {
+                match element_node.tag_type {
+                    ElementKind::Builtin(builtin_type) => {
+                        self.generate_builtin(element_node, builtin_type)
+                    }
+                    ElementKind::Element | ElementKind::Template => {
+                        self.generate_element_vnode(element_node, wrap_in_block)
+                    }
+                    ElementKind::Component => {
+                        self.generate_component_vnode(element_node, wrap_in_block)
+                    }
+                }
+            }
+
+            #[cfg(not(feature = "new-pipeline"))]
+            match element_node.tag_type {
+                ElementKind::Builtin(builtin_type) => {
+                    self.generate_builtin(element_node, builtin_type)
+                }
+                ElementKind::Element | ElementKind::Template => {
+                    self.generate_element_vnode(element_node, wrap_in_block)
+                }
+                ElementKind::Component => {
+                    self.generate_component_vnode(element_node, wrap_in_block)
+                }
+            }
         };
 
         // Generate directives operating on render code

@@ -19,7 +19,7 @@ pub trait DirectiveTransforms: Debug {
         _v_bind: &VBindDirective,
         _node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
-        todo!()
+        None
     }
 
     fn transform_v_on(
@@ -28,7 +28,7 @@ pub trait DirectiveTransforms: Debug {
         _v_on: &VOnDirective,
         _node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
-        todo!()
+        None
     }
 
     fn transform_v_model(
@@ -37,7 +37,7 @@ pub trait DirectiveTransforms: Debug {
         _v_model: &VModelDirective,
         _node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
-        todo!()
+        None
     }
 
     fn transform_v_html(

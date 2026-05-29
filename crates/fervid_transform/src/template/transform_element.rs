@@ -334,8 +334,11 @@ fn resolve_component_setup_reference(
     // because codegen will handle the runtime resolution.
     match ctx.bindings_helper.components.get(tag_name) {
         Some(ComponentBinding::Resolved(resolved)) => return Some(resolved.to_owned()),
+        Some(ComponentBinding::RuntimeResolved(resolved, _)) => {
+            return Some(Box::new(Expr::Ident(resolved.as_ref().to_owned())));
+        }
         Some(ComponentBinding::Unresolved) => return None,
-        Some(_) => unreachable!("Only ComponentBinding::Resolved and Unresolved are expected"),
+        Some(ComponentBinding::Builtin(_)) => return None,
         None => {}
     }
 
@@ -1054,7 +1057,11 @@ fn merge_as_array(existing: &mut Property, incoming: Property) {
 }
 
 fn build_directive_args(_dir: RuntimeDirective, _ctx: &mut TransformSfcContext) -> ArrayLit {
-    todo!()
+    // TODO(new-pipeline): lower runtime directives once directive transforms are ported.
+    ArrayLit {
+        span: DUMMY_SP,
+        elems: vec![],
+    }
 }
 
 fn is_component_tag(tag: &StartingTag) -> bool {

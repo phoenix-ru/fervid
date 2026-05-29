@@ -98,6 +98,7 @@ pub enum ElementKind {
     #[default]
     Element,
     Component,
+    Template,
 }
 
 #[derive(Debug, Clone)]

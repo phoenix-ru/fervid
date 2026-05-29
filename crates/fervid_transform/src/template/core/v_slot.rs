@@ -5,7 +5,10 @@ use fervid_core::{
 };
 use fxhash::FxHashSet;
 use smallvec::SmallVec;
-use swc_core::{common::{Span, Spanned}, ecma::ast::Pat};
+use swc_core::{
+    common::{Span, Spanned},
+    ecma::ast::Pat,
+};
 
 use crate::{
     TransformSfcContext,

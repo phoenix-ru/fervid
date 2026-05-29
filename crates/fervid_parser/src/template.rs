@@ -106,7 +106,7 @@ impl SfcParser<'_, '_, '_> {
             self.is_pre = true;
         }
 
-        let tag_type = recognize_element_kind(&tag_name, &attributes);
+        let tag_type = recognize_element_kind(&tag_name, &attributes, directives.as_deref());
 
         let starting_tag = StartingTag {
             tag_name,
@@ -280,7 +280,15 @@ impl SfcParser<'_, '_, '_> {
     }
 }
 
-fn recognize_element_kind(tag_name: &FervidAtom, attributes: &[AttributeOrBinding]) -> ElementKind {
+fn recognize_element_kind(
+    tag_name: &FervidAtom,
+    attributes: &[AttributeOrBinding],
+    directives: Option<&VueDirectives>,
+) -> ElementKind {
+    if tag_name == "template" && directives.is_some() {
+        return ElementKind::Template;
+    }
+
     // First, check for a built-in
     if let Some(builtin_type) = VUE_BUILTINS.get(tag_name) {
         // Special case for `<component>`. If it does not have `is`, this is not a built-in
@@ -315,9 +323,43 @@ mod tests {
     #[test]
     fn it_distinguishes_component_builtin_and_not() {
         assert!(matches!(
-            recognize_element_kind(&fervid_atom!("component"), &[]),
+            recognize_element_kind(&fervid_atom!("component"), &[], None),
             ElementKind::Component
         ));
+    }
+
+    // Adapted from https://github.com/vuejs/core/blob/5a8aa0b2ba575e098cbb63b396e9bcb751eb3a0f/packages/compiler-core/__tests__/parse.spec.ts#L557-L564
+    #[test]
+    fn it_marks_template_element_with_directives_as_template() {
+        let mut errors = Vec::new();
+        let mut parser = SfcParser::new(
+            r#"<template><template v-if="ok"></template></template>"#,
+            &mut errors,
+        );
+
+        let parsed = parser.parse_sfc().expect("Should parse");
+        let template = parsed.template.expect("Should have template");
+        let Node::Element(element) = template.roots.first().expect("Should have one root") else {
+            panic!("Root is not an element")
+        };
+
+        assert!(matches!(element.tag_type, ElementKind::Template));
+    }
+
+    // Adapted from https://github.com/vuejs/core/blob/5a8aa0b2ba575e098cbb63b396e9bcb751eb3a0f/packages/compiler-core/__tests__/parse.spec.ts#L566-L573
+    #[test]
+    fn it_marks_template_element_without_directives_as_element() {
+        let mut errors = Vec::new();
+        let mut parser =
+            SfcParser::new(r#"<template><template></template></template>"#, &mut errors);
+
+        let parsed = parser.parse_sfc().expect("Should parse");
+        let template = parsed.template.expect("Should have template");
+        let Node::Element(element) = template.roots.first().expect("Should have one root") else {
+            panic!("Root is not an element")
+        };
+
+        assert!(matches!(element.tag_type, ElementKind::Element));
     }
 
     #[test]
