@@ -4,9 +4,8 @@ use fervid_core::{
     VBindDirective,
 };
 use fervid_core::{
-    Conditional, ConditionalNodeSequence, ElementKind, ElementNode, Interpolation, Node,
-    PatchFlags, PatchHints, SfcTemplateBlock, StartingTag, StrOrExpr, VSlotDirective,
-    check_attribute_name, fervid_atom, is_from_default_slot,
+    ConditionalNodeSequence, ElementKind, ElementNode, Interpolation, Node, PatchFlags, PatchHints,
+    SfcTemplateBlock, StartingTag, StrOrExpr, VSlotDirective, check_attribute_name, fervid_atom,
 };
 use smallvec::SmallVec;
 #[cfg(not(feature = "new-pipeline"))]
@@ -46,7 +45,8 @@ pub fn transform_and_record_template(
     }
 
     // Optimize conditional sequences within template root
-    optimize_children(&mut template.roots, ElementKind::Element);
+    let node_transforms = ctx.node_transforms.clone();
+    node_transforms.pre_transform_children(ctx, &mut template.roots, ElementKind::Element);
 
     // Merge more than 1 child into a separate `<template>` element so that Fragment gets generated.
     // #11: Do this only when not all children are `TextNode`s.
@@ -93,214 +93,6 @@ pub fn transform_and_record_template(
     for node in template.roots.iter_mut() {
         node.visit_mut_with(&mut template_visitor);
     }
-}
-
-/// Optimizes the children by removing whitespace in between `ElementNode`s,
-/// as well as folding `v-if`/`v-else-if`/`v-else` sequences into a `ConditionalNodeSequence`
-fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
-    let children_len = children.len();
-
-    // Discard children mask, limited to 128 children. 0 means to preserve the node, 1 to discard
-    let mut discard_mask: u128 = 0;
-
-    // Filter out whitespace text nodes at the beginning and end of ElementNode
-    match children.first() {
-        Some(Node::Text(v, _)) if v.trim().is_empty() => {
-            discard_mask |= 1 << 0;
-        }
-        _ => {}
-    }
-    match children.last() {
-        Some(Node::Text(v, _)) if v.trim().is_empty() => {
-            discard_mask |= 1 << (children_len - 1);
-        }
-        _ => {}
-    }
-
-    // For removing the middle whitespace text nodes, we need sliding windows of three nodes
-    for (index, window) in children.windows(3).enumerate() {
-        match window {
-            [
-                Node::Element(_) | Node::Comment(_, _),
-                Node::Text(middle, _),
-                Node::Element(_) | Node::Comment(_, _),
-            ] if middle.trim().is_empty() => {
-                discard_mask |= 1 << (index + 1);
-            }
-            _ => {}
-        }
-    }
-
-    // Retain based on discard_mask. If a discard bit at `index` is set to 1, the node will be dropped
-    let mut index = 0;
-    children.retain(|_| {
-        let should_retain = discard_mask & (1 << index) == 0;
-        index += 1;
-        should_retain
-    });
-
-    // For components, reorder children so that named slots come first
-    if matches!(element_kind, ElementKind::Component) && !children.is_empty() {
-        children.sort_by(|a, b| {
-            let a_is_from_default = is_from_default_slot(a);
-            let b_is_from_default = is_from_default_slot(b);
-
-            a_is_from_default.cmp(&b_is_from_default)
-        });
-    }
-
-    // Merge multiple v-if/else-if/else nodes into a ConditionalNodeSequence
-    if !children.is_empty() {
-        let mut seq: Option<ConditionalNodeSequence> = None;
-        let mut new_children = Vec::with_capacity(children.len());
-
-        /// Finishes the sequence. Pass `child` to also push the current child
-        macro_rules! finish_seq {
-            () => {
-                if let Some(seq) = seq.take() {
-                    new_children.push(Node::ConditionalSeq(seq))
-                }
-            };
-            ($child: expr) => {
-                finish_seq!();
-                new_children.push($child);
-            };
-        }
-
-        // To move out of &ElementNode to ElementNode and avoid "partially moved variable" error
-        macro_rules! deref_element {
-            ($child: ident) => {{
-                let Node::Element(child_element) = $child else {
-                    unreachable!()
-                };
-
-                optimize_v_if_plus_v_for(child_element)
-            }};
-        }
-
-        for mut child in children.drain(..) {
-            // Only process `ElementNode`s.
-            // Otherwise, when we have an `if` node, ignore `Comment`s and finish sequence.
-            let Node::Element(child_element) = &mut child else {
-                if let (Node::Comment(_, _), Some(_)) = (&child, seq.as_ref()) {
-                    continue;
-                } else {
-                    finish_seq!(child);
-                    continue;
-                }
-            };
-
-            let Some(ref mut directives) = child_element.starting_tag.directives else {
-                finish_seq!(child);
-                continue;
-            };
-
-            // Check if we have a `v-if`.
-            // The already existing sequence should end, and the new sequence should start.
-            if let Some(v_if) = directives.v_if.take() {
-                finish_seq!();
-                let span = child_element.span;
-                seq = Some(ConditionalNodeSequence {
-                    if_node: Box::new(Conditional {
-                        condition: *v_if,
-                        node: deref_element!(child),
-                    }),
-                    else_if_nodes: vec![],
-                    else_node: None,
-                    span,
-                });
-                continue;
-            }
-
-            // Check for `v-else-if`
-            if let Some(v_else_if) = directives.v_else_if.take() {
-                let Some(ref mut seq) = seq else {
-                    // This must be a warning, v-else-if without v-if
-                    finish_seq!(child);
-                    continue;
-                };
-
-                seq.span.hi = child_element.span.hi;
-                seq.else_if_nodes.push(Conditional {
-                    condition: *v_else_if,
-                    node: deref_element!(child),
-                });
-                continue;
-            }
-
-            // Check for `v-else`
-            if directives.v_else.is_some() {
-                let Some(ref mut cond_seq) = seq else {
-                    // This must be a warning, v-else without v-if
-                    finish_seq!(child);
-                    continue;
-                };
-
-                cond_seq.span.hi = child_element.span.hi;
-                cond_seq.else_node = Some(Box::new(deref_element!(child)));
-
-                // `else` node always finishes the sequence
-                finish_seq!();
-                continue;
-            }
-
-            // No directives, just push the child
-            finish_seq!(child);
-        }
-
-        finish_seq!();
-
-        *children = new_children;
-    }
-}
-
-// Optimize combined usage of conditional directives and `v-for`
-// https://github.com/vuejs/core/blob/438a74aad840183286fbdb488178510f37218a73/packages/compiler-core/src/transforms/vIf.ts#L260
-fn optimize_v_if_plus_v_for(mut parent: ElementNode) -> ElementNode {
-    // Check that work is needed
-    // This must be a `<template>` element with exactly one Element child
-    if parent.children.len() != 1 || parent.starting_tag.tag_name != "template" {
-        return parent;
-    }
-
-    let Some(Node::Element(child)) = parent.children.first_mut() else {
-        return parent;
-    };
-
-    // There must be at most one `v-for` for both parent and child
-    let parent_has_v_for = parent
-        .starting_tag
-        .directives
-        .as_ref()
-        .is_some_and(|d| d.v_for.is_some());
-    let child_has_v_for = child
-        .starting_tag
-        .directives
-        .as_ref()
-        .is_some_and(|d| d.v_for.is_some());
-    if parent_has_v_for && child_has_v_for {
-        return parent;
-    }
-
-    // Take parent's `v-for` and give it to the child
-    if parent_has_v_for {
-        let Some(mut parent_directives) = parent.starting_tag.directives.take() else {
-            unreachable!()
-        };
-
-        let child_directives = child
-            .starting_tag
-            .directives
-            .get_or_insert_with(Default::default);
-        child_directives.v_for = parent_directives.v_for.take();
-    }
-
-    // Take the child and return it instead
-    let Some(Node::Element(child)) = parent.children.pop() else {
-        unreachable!()
-    };
-
-    child
 }
 
 trait Visitor {
@@ -464,7 +256,11 @@ impl TemplateVisitor<'_> {
         let node_transforms = self.ctx.node_transforms.clone();
         node_transforms.pre_transform_element_node(self.ctx, element_node);
 
-        optimize_children(&mut element_node.children, element_node.tag_type);
+        node_transforms.pre_transform_children(
+            self.ctx,
+            &mut element_node.children,
+            element_node.tag_type,
+        );
 
         for child in element_node.children.iter_mut() {
             child.visit_mut_with(self);
@@ -808,7 +604,8 @@ impl TemplateVisitor<'_> {
         }
 
         // Merge conditional nodes and clean up whitespace
-        optimize_children(&mut element_node.children, element_kind);
+        let node_transforms = self.ctx.node_transforms.clone();
+        node_transforms.pre_transform_children(self.ctx, &mut element_node.children, element_kind);
 
         // Patch flag for HTML elements which only contain interpolation and text,
         // e.g. `<p>{{ msg }}</p>`.
@@ -900,7 +697,7 @@ impl VisitMut for Node {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{ElementKind, Node, PatchHints, VForDirective, VueDirectives};
+    use fervid_core::{Conditional, ElementKind, Node, PatchHints, VForDirective, VueDirectives};
     use swc_core::common::DUMMY_SP;
 
     use crate::test_utils::{js, to_str};

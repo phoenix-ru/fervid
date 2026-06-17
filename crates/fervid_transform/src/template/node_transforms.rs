@@ -1,12 +1,24 @@
 use std::fmt::Debug;
 
 use enum_dispatch::enum_dispatch;
-use fervid_core::ElementNode;
+use fervid_core::{ElementKind, ElementNode, Node};
 
-use crate::{TransformSfcContext, template::transform_element::post_transform_element_node};
+use crate::{
+    TransformSfcContext,
+    template::{
+        core::{transform_if::transform_if, transform_whitespace::transform_whitespace},
+        transform_element::post_transform_element_node,
+    },
+};
 
 #[enum_dispatch]
 pub trait NodeTransforms: Debug {
+    fn pre_transform_children(
+        &self,
+        _ctx: &mut TransformSfcContext,
+        children: &mut Vec<Node>,
+        element_kind: ElementKind,
+    );
     fn pre_transform_element_node(&self, ctx: &mut TransformSfcContext, node: &mut ElementNode);
     fn post_transform_element_node(&self, ctx: &mut TransformSfcContext, node: &mut ElementNode);
 }
@@ -42,6 +54,18 @@ impl Default for NodeTransformsProvider {
 
 // Base transforms are provided as default trait implementations
 impl NodeTransforms for BaseNodeTransform {
+    fn pre_transform_children(
+        &self,
+        _ctx: &mut TransformSfcContext,
+        children: &mut Vec<Node>,
+        element_kind: ElementKind,
+    ) {
+        // Whitespace handling happens during parser/transform normalization in Vue.
+        transform_whitespace(children, element_kind);
+        // transformIf,
+        transform_if(children);
+    }
+
     fn pre_transform_element_node(&self, ctx: &mut TransformSfcContext, node: &mut ElementNode) {
         // transformOnce,
         pre_transform_once(ctx, node);
@@ -123,6 +147,15 @@ fn pre_transform_text(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {
 fn post_transform_text(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
 
 impl NodeTransforms for DomNodeTransform {
+    fn pre_transform_children(
+        &self,
+        ctx: &mut TransformSfcContext,
+        children: &mut Vec<Node>,
+        element_kind: ElementKind,
+    ) {
+        BaseNodeTransform.pre_transform_children(ctx, children, element_kind);
+    }
+
     fn pre_transform_element_node(&self, ctx: &mut TransformSfcContext, node: &mut ElementNode) {
         BaseNodeTransform.pre_transform_element_node(ctx, node);
         // Core node transforms;
@@ -144,6 +177,15 @@ impl NodeTransforms for DomNodeTransform {
 }
 
 impl NodeTransforms for SsrNodeTransform {
+    fn pre_transform_children(
+        &self,
+        ctx: &mut TransformSfcContext,
+        children: &mut Vec<Node>,
+        element_kind: ElementKind,
+    ) {
+        BaseNodeTransform.pre_transform_children(ctx, children, element_kind);
+    }
+
     fn pre_transform_element_node(&self, _ctx: &mut TransformSfcContext, _node: &mut ElementNode) {
         // ssrTransformIf
         // ssrTransformFor
