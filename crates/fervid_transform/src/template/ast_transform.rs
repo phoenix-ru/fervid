@@ -369,6 +369,7 @@ impl TemplateVisitor<'_> {
 
     #[allow(unused)]
     fn visit_element_node_new(&mut self, element_node: &mut ElementNode) {
+        // `v-for` has special behavior with `ref`
         let parent_scope = self.current_scope;
         let old_ctx_scope = self.ctx.current_template_scope;
         let old_v_for_scope = self.v_for_scope;
@@ -377,13 +378,18 @@ impl TemplateVisitor<'_> {
 
         let mut scope_to_use = parent_scope;
 
+        // Check if there is a scoping directive.
+        // Find a `v-for` or `v-slot` directive when in ElementNode
+        // and collect their variables into the new template scope
         // TODO(new-pipeline): move this scope tracking into Vue-aligned node transforms
         // (`trackVForSlotScopes` / `trackSlotScopes`) once transform-local exit state exists.
         if let Some(ref mut directives) = element_node.starting_tag.directives {
             let v_for = directives.v_for.as_mut();
             let v_slot = directives.v_slot.as_mut();
 
+            // Create a new scope
             if v_for.is_some() || v_slot.is_some() {
+                // New scope will have ID equal to length
                 scope_to_use = self.ctx.bindings_helper.template_scopes.len() as u32;
                 self.ctx
                     .bindings_helper
@@ -394,21 +400,28 @@ impl TemplateVisitor<'_> {
                     });
             }
 
+            // Collect `v-for` bindings
             if let Some(v_for) = v_for {
                 self.v_for_scope = true;
                 self.ctx.directive_scopes.v_for += 1;
 
+                // Get the iterator variable and collect its variables
                 let scope = &mut self.ctx.bindings_helper.template_scopes[scope_to_use as usize];
                 collect_variables(&v_for.itervar, scope);
 
+                // Transform the iterable
                 let is_dynamic = self
                     .ctx
                     .bindings_helper
                     .transform_expr(&mut v_for.iterable, scope_to_use);
 
+                // Add patch flags
                 if !is_dynamic {
+                    // This is `64 /* STABLE_FRAGMENT */`
+                    // when iterable is non-dynamic (number, string) (`v-for="i in 3"`)
                     v_for.patch_flags |= PatchFlags::StableFragment;
                 } else {
+                    // Look for `key`. Fragment is either keyed or unkeyed.
                     let has_key = element_node
                         .starting_tag
                         .attributes
@@ -423,6 +436,7 @@ impl TemplateVisitor<'_> {
                 }
             }
 
+            // Collect `v-slot` bindings
             if let Some(VSlotDirective {
                 slot_name, value, ..
             }) = v_slot
@@ -435,6 +449,7 @@ impl TemplateVisitor<'_> {
                     collect_variables(v_slot_value, scope);
                 }
 
+                // Transform `v-slot` argument if it is dynamic
                 if let Some(StrOrExpr::Expr(expr)) = slot_name {
                     self.ctx.bindings_helper.transform_expr(expr, scope_to_use);
                 }
