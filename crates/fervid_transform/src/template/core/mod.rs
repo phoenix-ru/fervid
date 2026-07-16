@@ -1,6 +1,8 @@
+pub mod scope_tracking;
 pub mod transform_if;
 pub mod transform_whitespace;
 pub mod v_bind;
+pub mod v_for;
 pub mod v_model;
 pub mod v_on;
 pub mod v_slot;

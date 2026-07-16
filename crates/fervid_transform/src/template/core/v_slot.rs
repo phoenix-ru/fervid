@@ -13,7 +13,70 @@ use swc_core::{
 use crate::{
     TransformSfcContext,
     error::{TemplateError, TemplateErrorKind, TransformError},
+    template::{collect_vars::collect_variables, expr_transform::BindingsHelperTransform},
 };
+
+pub fn track_slot_scopes(
+    ctx: &mut TransformSfcContext,
+    node: &mut ElementNode,
+    scope_to_use: u32,
+) -> bool {
+    // Only components and templates are processed in vuejs-core.
+    // Fervid separates built-ins as ElementKind::Builtin so Slots need to be ignored
+    let should_process = matches!(
+        node.tag_type,
+        ElementKind::Component | ElementKind::Template
+    ) || matches!(node.tag_type, ElementKind::Builtin(builtin) if !matches!(builtin, BuiltinType::Slot));
+
+    if !should_process {
+        return false;
+    }
+
+    let Some(v_slot) = node
+        .starting_tag
+        .directives
+        .as_mut()
+        .and_then(|v| v.v_slot.as_mut())
+    else {
+        return false;
+    };
+
+    ctx.directive_scopes.v_slot += 1;
+
+    if let Some(v_slot_value) = v_slot.value.as_mut() {
+        let scope = &mut ctx.bindings_helper.template_scopes[scope_to_use as usize];
+        collect_variables(v_slot_value, scope);
+    }
+
+    // Transform `v-slot` argument if it is dynamic
+    if let Some(StrOrExpr::Expr(expr)) = v_slot.slot_name.as_mut() {
+        ctx.bindings_helper.transform_expr(expr, scope_to_use);
+    }
+
+    true
+}
+
+pub fn track_v_for_slot_scopes(
+    _ctx: &mut TransformSfcContext,
+    node: &ElementNode,
+    _scope_to_use: u32,
+) -> bool {
+    if !matches!(node.tag_type, ElementKind::Template) {
+        return false;
+    }
+
+    let Some(directives) = &node.starting_tag.directives else {
+        return false;
+    };
+
+    let (Some(_v_for), Some(_)) = (&directives.v_for, &directives.v_slot) else {
+        return false;
+    };
+
+    // TODO collect identifiers, finalize parse result here (i.e. visit and transform v-for)
+
+    true
+}
 
 // Instead of being a DirectiveTransform, v-slot processing is called during
 // transformElement to build the slots object for a component.

@@ -14,7 +14,13 @@ use swc_core::{
     ecma::ast::{Bool, Expr, Lit},
 };
 
-use crate::{TemplateScope, TransformSfcContext, template::node_transforms::NodeTransforms};
+use crate::{
+    TemplateScope, TransformSfcContext,
+    template::{
+        core::scope_tracking::{enter_element_scope, restore_element_scope_snapshot},
+        node_transforms::NodeTransforms,
+    },
+};
 
 #[cfg(not(feature = "new-pipeline"))]
 use super::asset_urls::transform_asset_urls;
@@ -161,96 +167,16 @@ impl TemplateVisitor<'_> {
 
     #[allow(unused)]
     fn visit_element_node_new(&mut self, element_node: &mut ElementNode) {
+        // TODO: enter_element_scope does more than it should,
+        // move transform_for and track_slot_scopes out of it
+
         // `v-for` has special behavior with `ref`
-        let parent_scope = self.current_scope;
-        let old_ctx_scope = self.ctx.current_template_scope;
-        let old_v_for_scope = self.v_for_scope;
-        let old_directive_v_for = self.ctx.directive_scopes.v_for;
-        let old_directive_v_slot = self.ctx.directive_scopes.v_slot;
-
-        let mut scope_to_use = parent_scope;
-
-        // Check if there is a scoping directive.
-        // Find a `v-for` or `v-slot` directive when in ElementNode
-        // and collect their variables into the new template scope
-        // TODO(new-pipeline): move this scope tracking into Vue-aligned node transforms
-        // (`trackVForSlotScopes` / `trackSlotScopes`) once transform-local exit state exists.
-        if let Some(ref mut directives) = element_node.starting_tag.directives {
-            let v_for = directives.v_for.as_mut();
-            let v_slot = directives.v_slot.as_mut();
-
-            // Create a new scope
-            if v_for.is_some() || v_slot.is_some() {
-                // New scope will have ID equal to length
-                scope_to_use = self.ctx.bindings_helper.template_scopes.len() as u32;
-                self.ctx
-                    .bindings_helper
-                    .template_scopes
-                    .push(TemplateScope {
-                        variables: SmallVec::new(),
-                        parent: parent_scope,
-                    });
-            }
-
-            // Collect `v-for` bindings
-            if let Some(v_for) = v_for {
-                self.v_for_scope = true;
-                self.ctx.directive_scopes.v_for += 1;
-
-                // Get the iterator variable and collect its variables
-                let scope = &mut self.ctx.bindings_helper.template_scopes[scope_to_use as usize];
-                collect_variables(&v_for.itervar, scope);
-
-                // Transform the iterable
-                let is_dynamic = self
-                    .ctx
-                    .bindings_helper
-                    .transform_expr(&mut v_for.iterable, scope_to_use);
-
-                // Add patch flags
-                if !is_dynamic {
-                    // This is `64 /* STABLE_FRAGMENT */`
-                    // when iterable is non-dynamic (number, string) (`v-for="i in 3"`)
-                    v_for.patch_flags |= PatchFlags::StableFragment;
-                } else {
-                    // Look for `key`. Fragment is either keyed or unkeyed.
-                    let has_key = element_node
-                        .starting_tag
-                        .attributes
-                        .iter()
-                        .any(|attr| check_attribute_name(attr, "key"));
-
-                    v_for.patch_flags |= if has_key {
-                        PatchFlags::KeyedFragment
-                    } else {
-                        PatchFlags::UnkeyedFragment
-                    };
-                }
-            }
-
-            // Collect `v-slot` bindings
-            if let Some(VSlotDirective {
-                slot_name, value, ..
-            }) = v_slot
-            {
-                self.ctx.directive_scopes.v_slot += 1;
-
-                if let Some(v_slot_value) = value {
-                    let scope =
-                        &mut self.ctx.bindings_helper.template_scopes[scope_to_use as usize];
-                    collect_variables(v_slot_value, scope);
-                }
-
-                // Transform `v-slot` argument if it is dynamic
-                if let Some(StrOrExpr::Expr(expr)) = slot_name {
-                    self.ctx.bindings_helper.transform_expr(expr, scope_to_use);
-                }
-            }
-        }
-
-        element_node.template_scope = scope_to_use;
-        self.current_scope = scope_to_use;
-        self.ctx.current_template_scope = scope_to_use;
+        let scope_snapshot = enter_element_scope(
+            self.ctx,
+            element_node,
+            &mut self.current_scope,
+            &mut self.v_for_scope,
+        );
 
         // Cloning transforms is fine here due to the structure being optimized for it
         let node_transforms = self.ctx.node_transforms.clone();
@@ -268,11 +194,12 @@ impl TemplateVisitor<'_> {
 
         node_transforms.post_transform_element_node(self.ctx, element_node);
 
-        self.current_scope = parent_scope;
-        self.ctx.current_template_scope = old_ctx_scope;
-        self.v_for_scope = old_v_for_scope;
-        self.ctx.directive_scopes.v_for = old_directive_v_for;
-        self.ctx.directive_scopes.v_slot = old_directive_v_slot;
+        restore_element_scope_snapshot(
+            self.ctx,
+            scope_snapshot,
+            &mut self.current_scope,
+            &mut self.v_for_scope,
+        );
     }
 
     #[cfg(not(feature = "new-pipeline"))]
