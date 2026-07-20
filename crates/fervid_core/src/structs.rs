@@ -369,12 +369,23 @@ pub struct VueDirectives {
 /// `v-for`
 #[derive(Clone, Debug)]
 pub struct VForDirective {
-    /// `bar` in `v-for="foo in bar"`
-    pub iterable: Box<Expr>,
-    /// `foo` in `v-for="foo in bar"`
-    pub itervar: Box<Expr>,
+    pub parse_result: Box<ForParseResult>,
     pub patch_flags: PatchFlagsSet,
     pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct ForParseResult {
+    /// Iteration source: `bar` in `v-for="foo in bar"`
+    pub source: Box<Expr>,
+    /// Value alias: `foo` in `v-for="foo in bar"`
+    pub value: Box<Expr>,
+    /// Key alias: `bar` in `v-for="(foo, bar) in baz"`. This is not the vnode `key` prop
+    pub key: Option<Box<Expr>>,
+    /// Object index alias: `baz` in `v-for="(foo, bar, baz) in qux"`
+    pub index: Option<Box<Expr>>,
+    /// Whether expression transformation has already happened
+    pub finalized: bool,
 }
 
 /// `v-on` and its shorthand `@`

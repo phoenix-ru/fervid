@@ -5,8 +5,10 @@ use fervid_core::{
 };
 use fervid_core::{
     ConditionalNodeSequence, ElementKind, ElementNode, Interpolation, Node, PatchFlags, PatchHints,
-    SfcTemplateBlock, StartingTag, StrOrExpr, VSlotDirective, check_attribute_name, fervid_atom,
+    SfcTemplateBlock, StartingTag, fervid_atom,
 };
+#[cfg(not(feature = "new-pipeline"))]
+use fervid_core::{StrOrExpr, VSlotDirective, check_attribute_name};
 use smallvec::SmallVec;
 #[cfg(not(feature = "new-pipeline"))]
 use swc_core::{
@@ -24,7 +26,9 @@ use crate::{
 
 #[cfg(not(feature = "new-pipeline"))]
 use super::asset_urls::transform_asset_urls;
-use super::{collect_vars::collect_variables, expr_transform::BindingsHelperTransform};
+#[cfg(not(feature = "new-pipeline"))]
+use super::collect_vars::collect_variables;
+use super::expr_transform::BindingsHelperTransform;
 
 pub struct TemplateVisitor<'s> {
     pub ctx: &'s mut TransformSfcContext,
@@ -253,15 +257,21 @@ impl TemplateVisitor<'_> {
             if let Some(v_for) = v_for {
                 self.v_for_scope = true;
 
-                // Get the iterator variable and collect its variables
+                // Get the iterator variables and collect their variables
                 let scope = &mut self.ctx.bindings_helper.template_scopes[scope_to_use as usize];
-                collect_variables(&v_for.itervar, scope);
+                collect_variables(&v_for.parse_result.value, scope);
+                if let Some(key) = &v_for.parse_result.key {
+                    collect_variables(key, scope);
+                }
+                if let Some(index) = &v_for.parse_result.index {
+                    collect_variables(index, scope);
+                }
 
-                // Transform the iterable
+                // Transform the source expression
                 let is_dynamic = self
                     .ctx
                     .bindings_helper
-                    .transform_expr(&mut v_for.iterable, scope_to_use);
+                    .transform_expr(&mut v_for.parse_result.source, scope_to_use);
 
                 // Add patch flags
                 if !is_dynamic {
@@ -624,7 +634,9 @@ impl VisitMut for Node {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{Conditional, ElementKind, Node, PatchHints, VForDirective, VueDirectives};
+    use fervid_core::{
+        Conditional, ElementKind, ForParseResult, Node, PatchHints, VForDirective, VueDirectives,
+    };
     use swc_core::common::DUMMY_SP;
 
     use crate::test_utils::{js, to_str};
@@ -1077,8 +1089,13 @@ mod tests {
             let cond = prepare(
                 Some(
                     directives!(v_if: Some(js("val")), v_for: Some(VForDirective {
-                        iterable: js("3"),
-                        itervar: js("i"),
+                        parse_result: Box::new(ForParseResult {
+                            source: js("3"),
+                            value: js("i"),
+                            key: None,
+                            index: None,
+                            finalized: false,
+                        }),
                         patch_flags: Default::default(),
                         span: DUMMY_SP,
                     })),
@@ -1110,8 +1127,13 @@ mod tests {
             let cond = prepare(
                 Some(directives!(v_if: Some(js("val")))),
                 Some(directives!(v_for: Some(VForDirective {
-                    iterable: js("3"),
-                    itervar: js("j"),
+                    parse_result: Box::new(ForParseResult {
+                        source: js("3"),
+                        value: js("j"),
+                        key: None,
+                        index: None,
+                        finalized: false,
+                    }),
                     patch_flags: Default::default(),
                     span: DUMMY_SP,
                 }))),
@@ -1141,15 +1163,25 @@ mod tests {
             let cond = prepare(
                 Some(
                     directives!(v_if: Some(js("val")), v_for: Some(VForDirective {
-                        iterable: js("3"),
-                        itervar: js("i"),
+                        parse_result: Box::new(ForParseResult {
+                            source: js("3"),
+                            value: js("i"),
+                            key: None,
+                            index: None,
+                            finalized: false,
+                        }),
                         patch_flags: Default::default(),
                         span: DUMMY_SP,
                     })),
                 ),
                 Some(directives!(v_for: Some(VForDirective {
-                    iterable: js("3"),
-                    itervar: js("j"),
+                    parse_result: Box::new(ForParseResult {
+                        source: js("3"),
+                        value: js("j"),
+                        key: None,
+                        index: None,
+                        finalized: false,
+                    }),
                     patch_flags: Default::default(),
                     span: DUMMY_SP,
                 }))),

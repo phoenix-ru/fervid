@@ -33,14 +33,21 @@ pub fn process_for(
             *v_for_scope = true;
             ctx.directive_scopes.v_for += 1;
 
-            // Get the iterator variable and collect its variables
+            // Get the iterator variables and collect their variables
             let scope = &mut ctx.bindings_helper.template_scopes[scope_to_use as usize];
-            collect_variables(&v_for.itervar, scope);
+            collect_variables(&v_for.parse_result.value, scope);
+            if let Some(key) = &v_for.parse_result.key {
+                collect_variables(key, scope);
+            }
+            if let Some(index) = &v_for.parse_result.index {
+                collect_variables(index, scope);
+            }
 
-            // Transform the iterable
+            // TODO: Move this into finalize_for_parse_result together with parameter
+            // transformation, then set parse_result.finalized
             let is_dynamic = ctx
                 .bindings_helper
-                .transform_expr(&mut v_for.iterable, scope_to_use);
+                .transform_expr(&mut v_for.parse_result.source, scope_to_use);
 
             // Add patch flags
             if !is_dynamic {

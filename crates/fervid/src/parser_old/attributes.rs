@@ -337,8 +337,14 @@ fn parse_directive<'i>(
                 push_directive!(
                     v_for,
                     VForDirective {
-                        iterable,
-                        itervar,
+                        parse_result: Box::new(fervid_core::ForParseResult {
+                            source: iterable,
+                            // TODO: Legacy parser must split value, key, and index aliases
+                            value: itervar,
+                            key: None,
+                            index: None,
+                            finalized: false,
+                        }),
                         patch_flags: Default::default(),
                         span: DUMMY_SP
                     }

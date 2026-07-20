@@ -11,6 +11,44 @@ use swc_core::{
 
 use crate::CodegenContext;
 
+fn create_for_loop_params(v_for: &VForDirective, minimum_len: usize) -> Vec<Pat> {
+    let result = &v_for.parse_result;
+    let params_len = if result.index.is_some() {
+        3
+    } else if result.key.is_some() {
+        2
+    } else {
+        1
+    }
+    .max(minimum_len);
+
+    (0..params_len)
+        .map(|index| {
+            let param = match index {
+                0 => Some(&result.value),
+                1 => result.key.as_ref(),
+                2 => result.index.as_ref(),
+                _ => None,
+            };
+
+            param.map_or_else(
+                || {
+                    Pat::Ident(BindingIdent {
+                        id: Ident {
+                            span: DUMMY_SP,
+                            ctxt: Default::default(),
+                            sym: "_".repeat(index + 1).into(),
+                            optional: false,
+                        },
+                        type_ann: None,
+                    })
+                },
+                |param| Pat::Expr(param.to_owned()),
+            )
+        })
+        .collect()
+}
+
 impl CodegenContext {
     /// Generates `(openBlock(true), createElementBlock(Fragment, null, renderList(<list>, (<item>) => (<expr>)), <patch flag>))`
     pub fn generate_v_for(&mut self, v_for: &VForDirective, item_render_expr: Box<Expr>) -> Expr {
@@ -20,7 +58,7 @@ impl CodegenContext {
         let render_list_arrow = Expr::Arrow(ArrowExpr {
             span,
             ctxt: Default::default(),
-            params: vec![Pat::Expr(v_for.itervar.to_owned())],
+            params: create_for_loop_params(v_for, 1),
             body: Box::new(BlockStmtOrExpr::Expr(item_render_expr)),
             is_async: false,
             is_generator: false,
@@ -29,13 +67,13 @@ impl CodegenContext {
         });
 
         // `_renderList` args
-        // 1. List itself, which is `v_for.iterable`;
+        // 1. List itself, which is `v_for.parse_result.source`;
         // 2. Arrow function for each item, where argument is `v_for.iterator`
         //    and return is the passes `expr`;
         let render_list_args = vec![
             ExprOrSpread {
                 spread: None,
-                expr: v_for.iterable.to_owned(),
+                expr: v_for.parse_result.source.to_owned(),
             },
             ExprOrSpread {
                 spread: None,
@@ -134,14 +172,14 @@ impl CodegenContext {
         // 1.1. `_renderList` first argument - iterable
         let render_list_iterable = ExprOrSpread {
             spread: None,
-            expr: v_for.iterable.to_owned(),
+            expr: v_for.parse_result.source.to_owned(),
         };
 
         // 1.2. `_renderList` second argument - the memoized arrow function
         let render_list_arrow = ExprOrSpread {
             spread: None,
             expr: self.generate_memoized_render_arrow(
-                v_for.itervar.to_owned(),
+                create_for_loop_params(v_for, 3),
                 item_render_expr,
                 memo_expr,
             ),
@@ -254,7 +292,7 @@ impl CodegenContext {
     /// ```
     fn generate_memoized_render_arrow(
         &mut self,
-        itervar: Box<Expr>,
+        mut render_list_params: Vec<Pat>,
         item_render_expr: Box<Expr>,
         memo_expr: Box<Expr>,
     ) -> Box<Expr> {
@@ -265,23 +303,10 @@ impl CodegenContext {
         let memo_ident = fervid_atom!("_memo").into_ident();
 
         // Params for the function
-        macro_rules! param {
-            ($ident: literal) => {
-                Pat::Ident(BindingIdent {
-                    id: fervid_atom!($ident).into_ident(),
-                    type_ann: None,
-                })
-            };
-        }
-        let arrow_params = vec![
-            Pat::Expr(itervar),
-            param!("__"),
-            param!("___"),
-            Pat::Ident(BindingIdent {
-                id: cached_ident.to_owned(),
-                type_ann: None,
-            }),
-        ];
+        render_list_params.push(Pat::Ident(BindingIdent {
+            id: cached_ident.to_owned(),
+            type_ann: None,
+        }));
 
         // `const _memo = ([])`
         let const_memo = Stmt::Decl(Decl::Var(Box::new(VarDecl {
@@ -395,7 +420,7 @@ impl CodegenContext {
         Box::new(Expr::Arrow(ArrowExpr {
             span: DUMMY_SP,
             ctxt: Default::default(),
-            params: arrow_params,
+            params: render_list_params,
             body: Box::new(BlockStmtOrExpr::BlockStmt(BlockStmt {
                 span: DUMMY_SP,
                 ctxt: Default::default(),
@@ -411,11 +436,53 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::PatchFlags;
+    use fervid_core::{ForParseResult, PatchFlags};
 
     use crate::test_utils::js;
 
     use super::*;
+
+    #[test]
+    fn it_generates_all_v_for_params() {
+        let mut ctx = CodegenContext::default();
+        let v_for = VForDirective {
+            parse_result: Box::new(ForParseResult {
+                source: js("items"),
+                value: js("value"),
+                key: Some(js("key")),
+                index: Some(js("index")),
+                finalized: false,
+            }),
+            patch_flags: PatchFlags::UnkeyedFragment.into(),
+            span: DUMMY_SP,
+        };
+
+        let res = ctx.generate_v_for(&v_for, js("value"));
+
+        assert_eq!(
+            crate::test_utils::to_str(res),
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(items,(value,key,index)=>value),256))"
+        );
+
+        let v_for = VForDirective {
+            parse_result: Box::new(ForParseResult {
+                source: js("items"),
+                value: js("value"),
+                key: None,
+                index: Some(js("index")),
+                finalized: false,
+            }),
+            patch_flags: PatchFlags::UnkeyedFragment.into(),
+            span: DUMMY_SP,
+        };
+
+        let res = ctx.generate_v_for(&v_for, js("value"));
+
+        assert_eq!(
+            crate::test_utils::to_str(res),
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(items,(value,__,index)=>value),256))"
+        );
+    }
 
     #[test]
     fn it_generates_v_for_memoized() {
@@ -423,8 +490,13 @@ mod tests {
 
         // `<div v-for="item in 3" v-memo="[msg]"></div>`
         let v_for = VForDirective {
-            iterable: js("3"),
-            itervar: js("item"),
+            parse_result: Box::new(ForParseResult {
+                source: js("3"),
+                value: js("item"),
+                key: None,
+                index: None,
+                finalized: false,
+            }),
             patch_flags: PatchFlags::StableFragment.into(),
             span: DUMMY_SP,
         };
