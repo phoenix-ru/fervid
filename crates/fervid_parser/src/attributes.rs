@@ -1249,9 +1249,8 @@ mod tests {
                     hi: BytePos((input.len() + 1) as u32),
                 };
 
-                let Some((source, value, key, index)) = parse_v_for_value(input, span) else {
-                    panic!("Did not parse v-for value")
-                };
+                let (source, value, key, index) =
+                    parse_v_for_value(input, span).expect("Did not parse v-for value");
                 assert_eq!($source, source.0);
                 assert_eq!($value, value.0);
                 assert_eq!($key, key.map(|v| v.0));
