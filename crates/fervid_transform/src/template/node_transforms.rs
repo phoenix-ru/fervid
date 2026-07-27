@@ -1,12 +1,16 @@
 use std::fmt::Debug;
 
 use enum_dispatch::enum_dispatch;
-use fervid_core::{ElementKind, ElementNode, Node};
+use fervid_core::{ElementKind, Node};
 
 use crate::{
     TransformSfcContext,
     template::{
-        core::{transform_if::transform_if, transform_whitespace::transform_whitespace},
+        core::{
+            transform_if::transform_if,
+            transform_whitespace::transform_whitespace,
+            v_for::{post_transform_for, pre_transform_for},
+        },
         transform_element::post_transform_element_node,
     },
 };
@@ -19,8 +23,8 @@ pub trait NodeTransforms: Debug {
         children: &mut Vec<Node>,
         element_kind: ElementKind,
     );
-    fn pre_transform_element_node(&self, ctx: &mut TransformSfcContext, node: &mut ElementNode);
-    fn post_transform_element_node(&self, ctx: &mut TransformSfcContext, node: &mut ElementNode);
+    fn pre_transform_node(&self, ctx: &mut TransformSfcContext, node: &mut Node);
+    fn post_transform_node(&self, ctx: &mut TransformSfcContext, node: &mut Node);
 }
 
 // Transforms should not hold any data because they need to be copied,
@@ -66,7 +70,7 @@ impl NodeTransforms for BaseNodeTransform {
         transform_if(children);
     }
 
-    fn pre_transform_element_node(&self, ctx: &mut TransformSfcContext, node: &mut ElementNode) {
+    fn pre_transform_node(&self, ctx: &mut TransformSfcContext, node: &mut Node) {
         // transformOnce,
         pre_transform_once(ctx, node);
         // transformIf,
@@ -91,7 +95,7 @@ impl NodeTransforms for BaseNodeTransform {
         // TODO - User transforms in the separate implementation?
     }
 
-    fn post_transform_element_node(&self, ctx: &mut TransformSfcContext, node: &mut ElementNode) {
+    fn post_transform_node(&self, ctx: &mut TransformSfcContext, node: &mut Node) {
         // Post transforms run in reverse order.
         // transformText,
         post_transform_text(ctx, node);
@@ -119,32 +123,29 @@ impl NodeTransforms for BaseNodeTransform {
     }
 }
 
-fn pre_transform_once(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
-fn post_transform_once(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
+fn pre_transform_once(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
+fn post_transform_once(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
-fn pre_transform_if(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
-fn post_transform_if(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
+fn pre_transform_if(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
+fn post_transform_if(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
-fn pre_transform_memo(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
-fn post_transform_memo(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
+fn pre_transform_memo(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
+fn post_transform_memo(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
-fn pre_transform_for(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
-fn post_transform_for(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
+fn pre_track_v_for_slot_scopes(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
+fn post_track_v_for_slot_scopes(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
-fn pre_track_v_for_slot_scopes(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
-fn post_track_v_for_slot_scopes(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
+fn pre_transform_expression(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
+fn post_transform_expression(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
-fn pre_transform_expression(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
-fn post_transform_expression(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
+fn pre_transform_slot_outlet(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
+fn post_transform_slot_outlet(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
-fn pre_transform_slot_outlet(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
-fn post_transform_slot_outlet(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
+fn pre_track_slot_scopes(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
+fn post_track_slot_scopes(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
-fn pre_track_slot_scopes(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
-fn post_track_slot_scopes(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
-
-fn pre_transform_text(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
-fn post_transform_text(_ctx: &mut TransformSfcContext, _node: &mut ElementNode) {}
+fn pre_transform_text(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
+fn post_transform_text(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
 impl NodeTransforms for DomNodeTransform {
     fn pre_transform_children(
@@ -156,8 +157,8 @@ impl NodeTransforms for DomNodeTransform {
         BaseNodeTransform.pre_transform_children(ctx, children, element_kind);
     }
 
-    fn pre_transform_element_node(&self, ctx: &mut TransformSfcContext, node: &mut ElementNode) {
-        BaseNodeTransform.pre_transform_element_node(ctx, node);
+    fn pre_transform_node(&self, ctx: &mut TransformSfcContext, node: &mut Node) {
+        BaseNodeTransform.pre_transform_node(ctx, node);
         // Core node transforms;
         // ignoreSideEffectTags;
         // transformStyle;
@@ -165,9 +166,9 @@ impl NodeTransforms for DomNodeTransform {
         // DEV ? validateHtmlNesting;
     }
 
-    fn post_transform_element_node(&self, ctx: &mut TransformSfcContext, node: &mut ElementNode) {
+    fn post_transform_node(&self, ctx: &mut TransformSfcContext, node: &mut Node) {
         // TODO: Post transforms run in reverse order
-        BaseNodeTransform.post_transform_element_node(ctx, node);
+        BaseNodeTransform.post_transform_node(ctx, node);
         // Core node transforms;
         // ignoreSideEffectTags;
         // transformStyle;
@@ -186,7 +187,7 @@ impl NodeTransforms for SsrNodeTransform {
         BaseNodeTransform.pre_transform_children(ctx, children, element_kind);
     }
 
-    fn pre_transform_element_node(&self, _ctx: &mut TransformSfcContext, _node: &mut ElementNode) {
+    fn pre_transform_node(&self, _ctx: &mut TransformSfcContext, _node: &mut Node) {
         // ssrTransformIf
         // ssrTransformFor
         // trackVForSlotScopes
@@ -200,7 +201,7 @@ impl NodeTransforms for SsrNodeTransform {
         // transformStyle
     }
 
-    fn post_transform_element_node(&self, _ctx: &mut TransformSfcContext, _node: &mut ElementNode) {
+    fn post_transform_node(&self, _ctx: &mut TransformSfcContext, _node: &mut Node) {
         // TODO: Post transforms run in reverse order
         // ssrTransformIf
         // ssrTransformFor

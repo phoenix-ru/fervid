@@ -13,7 +13,10 @@ use swc_core::{
 use crate::{
     TransformSfcContext,
     error::{TemplateError, TemplateErrorKind, TransformError},
-    template::{collect_vars::collect_variables, expr_transform::BindingsHelperTransform},
+    template::{
+        collect_vars::collect_variables, core::v_for::finalize_for_parse_result,
+        expr_transform::BindingsHelperTransform,
+    },
 };
 
 pub fn track_slot_scopes(
@@ -57,23 +60,37 @@ pub fn track_slot_scopes(
 }
 
 pub fn track_v_for_slot_scopes(
-    _ctx: &mut TransformSfcContext,
-    node: &ElementNode,
-    _scope_to_use: u32,
+    ctx: &mut TransformSfcContext,
+    node: &mut ElementNode,
+    parent_scope: u32,
+    scope_to_use: u32,
 ) -> bool {
     if !matches!(node.tag_type, ElementKind::Template) {
         return false;
     }
 
-    let Some(directives) = &node.starting_tag.directives else {
+    let Some(directives) = node.starting_tag.directives.as_mut() else {
         return false;
     };
 
-    let (Some(_v_for), Some(_)) = (&directives.v_for, &directives.v_slot) else {
+    if directives.v_slot.is_none() {
+        return false;
+    }
+
+    let Some(v_for) = directives.v_for.as_mut() else {
         return false;
     };
 
-    // TODO collect identifiers, finalize parse result here (i.e. visit and transform v-for)
+    finalize_for_parse_result(ctx, &mut v_for.parse_result, parent_scope);
+
+    let scope = &mut ctx.bindings_helper.template_scopes[scope_to_use as usize];
+    collect_variables(&v_for.parse_result.value, scope);
+    if let Some(key) = &v_for.parse_result.key {
+        collect_variables(key, scope);
+    }
+    if let Some(index) = &v_for.parse_result.index {
+        collect_variables(index, scope);
+    }
 
     true
 }
@@ -403,31 +420,27 @@ fn get_static_exp(arg: &StrOrExpr) -> Option<FervidAtom> {
 }
 
 fn has_forwarded_slots(children: &[Node]) -> bool {
-    for child in children {
-        match child {
-            Node::Element(element) => {
-                if matches!(element.tag_type, ElementKind::Builtin(BuiltinType::Slot))
-                    || has_forwarded_slots(&element.children)
-                {
-                    return true;
-                }
-            }
-            Node::ConditionalSeq(conditional)
-                if (has_forwarded_slots(&conditional.if_node.node.children)
-                    || conditional
-                        .else_if_nodes
-                        .iter()
-                        .any(|branch| has_forwarded_slots(&branch.node.children))
-                    || conditional
-                        .else_node
-                        .as_ref()
-                        .is_some_and(|node| has_forwarded_slots(&node.children))) =>
-            {
-                return true;
-            }
-            _ => {}
-        }
-    }
+    children.iter().any(has_forwarded_slots_in_node)
+}
 
-    false
+fn has_forwarded_slots_in_node(node: &Node) -> bool {
+    match node {
+        Node::Element(element) => {
+            matches!(element.tag_type, ElementKind::Builtin(BuiltinType::Slot))
+                || has_forwarded_slots(&element.children)
+        }
+        Node::For(for_node) => has_forwarded_slots(&for_node.children),
+        Node::ConditionalSeq(conditional) => {
+            has_forwarded_slots_in_node(&conditional.if_node.node)
+                || conditional
+                    .else_if_nodes
+                    .iter()
+                    .any(|branch| has_forwarded_slots_in_node(&branch.node))
+                || conditional
+                    .else_node
+                    .as_deref()
+                    .is_some_and(has_forwarded_slots_in_node)
+        }
+        Node::Text(_, _) | Node::Interpolation(_) | Node::Comment(_, _) => false,
+    }
 }

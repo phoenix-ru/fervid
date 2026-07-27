@@ -26,7 +26,7 @@ pub fn transform_if(children: &mut Vec<Node>) {
                     unreachable!()
                 };
 
-                optimize_v_if_plus_v_for(child_element)
+                Node::Element(optimize_v_if_plus_v_for(child_element))
             }};
         }
 

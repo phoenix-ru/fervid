@@ -1,9 +1,8 @@
 use fervid_core::{ElementKind, ElementNode, IntoIdent, Node, VueImports};
 use smallvec::SmallVec;
 use swc_core::{
-    common::{BytePos, Span},
-    ecma::ast::{
-        BinExpr, BinaryOp, CallExpr, Callee, Expr, ExprOrSpread, Lit, Number, ParenExpr, SeqExpr,
+    common::{BytePos, Span}, ecma::ast::{
+        BinExpr, BinaryOp, Bool, CallExpr, Callee, Expr, ExprOrSpread, Lit, Number, ParenExpr, SeqExpr,
     },
 };
 
@@ -23,6 +22,8 @@ impl CodegenContext {
             }
 
             Node::Comment(comment, span) => self.generate_comment_vnode(comment, span.to_owned()),
+
+            Node::For(for_node) => self.generate_for_node(for_node),
 
             Node::ConditionalSeq(conditional_seq) => self.generate_conditional_seq(conditional_seq),
         }
@@ -194,12 +195,29 @@ impl CodegenContext {
     /// Wraps the expression in openBlock construction,
     /// e.g. `(openBlock(), expr)`
     pub fn wrap_in_open_block(&mut self, expr: Expr, span: Span) -> Expr {
+        self.wrap_in_open_block_with_tracking(expr, span, false)
+    }
+
+    pub fn wrap_in_open_block_with_tracking(
+        &mut self,
+        expr: Expr,
+        span: Span,
+        disable_tracking: bool,
+    ) -> Expr {
+        let args = disable_tracking.then(|| ExprOrSpread {
+            spread: None,
+            expr: Box::new(Expr::Lit(Lit::Bool(Bool {
+                span,
+                value: true,
+            }))),
+        });
+
         Expr::Paren(ParenExpr {
             span,
             expr: Box::new(Expr::Seq(SeqExpr {
                 span,
                 exprs: vec![
-                    // openBlock()
+                    // openBlock() or openBlock(true)
                     Box::new(Expr::Call(CallExpr {
                         span,
                         ctxt: Default::default(),
@@ -207,7 +225,7 @@ impl CodegenContext {
                             self.get_and_add_import_ident(VueImports::OpenBlock)
                                 .into_ident_spanned(span),
                         ))),
-                        args: Vec::new(),
+                        args: args.into_iter().collect(),
                         type_args: None,
                     })),
                     Box::new(expr),

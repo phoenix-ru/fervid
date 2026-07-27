@@ -6,7 +6,7 @@ use swc_core::{
     },
 };
 
-use crate::VNodeCall;
+use crate::{ForCodegenNode, VNodeCall};
 
 pub type FervidAtom = Atom;
 
@@ -66,13 +66,14 @@ pub enum Node {
     /// `Comment` is the vanilla HTML comment, which looks like this: `<-- this is comment -->`
     Comment(FervidAtom, Span),
 
+    /// `ForNode` is a representation of a `v-for` node.
+    /// This type is for ergonomics,
+    /// i.e. to handle the wrapping of single/multiple iterable children
+    For(ForNode),
+
     /// `ConditionalSeq` is a representation of `v-if`/`v-else-if`/`v-else` node sequence.
     /// Its children are the other `Node`s, this node is just a wrapper.
     ConditionalSeq(ConditionalNodeSequence),
-    // /// `ForFragment` is a representation of a `v-for` node.
-    // /// This type is for ergonomics,
-    // /// i.e. to separate patch flags and `key` of the repeater from the repeatable.
-    // ForFragment(ForFragment<'a>)
 }
 
 /// Element node is a classic HTML node with some added functionality:
@@ -145,27 +146,68 @@ pub enum BuiltinType {
     TransitionGroup,
 }
 
+#[derive(Debug, Clone)]
+pub struct ForNode {
+    /// Vue stores source/value/key/index both directly and in parseResult, referring to
+    /// the same expression objects. Rust keeps one owned representation instead
+    pub parse_result: Box<ForParseResult>,
+    /// Original element for normal v-for, original template children for template v-for
+    pub children: Vec<Node>,
+    /// Template scope containing value/key/index aliases
+    pub template_scope: u32,
+    /// Outer Fragment VNodeCall containing renderList
+    pub codegen_node: Option<Box<ForCodegenNode>>,
+    pub span: Span,
+}
+
+impl ForNode {
+    #[inline]
+    pub fn source(&self) -> &Expr {
+        &self.parse_result.source
+    }
+
+    #[inline]
+    pub fn source_mut(&mut self) -> &mut Expr {
+        &mut self.parse_result.source
+    }
+
+    #[inline]
+    pub fn value_alias(&self) -> &Expr {
+        &self.parse_result.value
+    }
+
+    #[inline]
+    pub fn key_alias(&self) -> Option<&Expr> {
+        self.parse_result.key.as_deref()
+    }
+
+    #[inline]
+    pub fn object_index_alias(&self) -> Option<&Expr> {
+        self.parse_result.index.as_deref()
+    }
+}
+
 /// This is a synthetic node type only available after AST optimizations.
-/// Its purpose is to make conditional code generation trivial.
+/// Its purpose is to make conditional code generation trivial
 ///
 /// The `ConditionalNodeSequence` consists of:
-/// - exactly one `v-if` `ElementNode`;
-/// - 0 or more `v-else-if` `ElementNode`s;
-/// - 0 or 1 `v-else` `ElementNode`.
+/// - exactly one `v-if` `Node`;
+/// - 0 or more `v-else-if` `Node`s;
+/// - 0 or 1 `v-else` `Node`
 #[derive(Debug, Clone)]
 pub struct ConditionalNodeSequence {
     pub if_node: Box<Conditional>,
     pub else_if_nodes: Vec<Conditional>,
-    pub else_node: Option<Box<ElementNode>>,
+    pub else_node: Option<Box<Node>>,
     pub span: Span,
 }
 
-/// A wrapper around an `ElementNode` with a condition attached to it.
-/// This is used in `v-if` and `v-else-if` nodes.
+/// A wrapper around a `Node` with a condition attached to it.
+/// This is used in `v-if` and `v-else-if` nodes
 #[derive(Debug, Clone)]
 pub struct Conditional {
     pub condition: Expr,
-    pub node: ElementNode,
+    pub node: Node,
 }
 
 /// A special Vue `{{ expression }}`,
@@ -386,6 +428,8 @@ pub struct ForParseResult {
     pub index: Option<Box<Expr>>,
     /// Whether expression transformation has already happened
     pub finalized: bool,
+    /// Whether the finalized result was dynamic (i.e. used scope variables)
+    pub finalized_is_dynamic: bool,
 }
 
 /// `v-on` and its shorthand `@`
@@ -526,6 +570,7 @@ impl Spanned for Node {
             Node::Text(_atom, span) => *span,
             Node::Interpolation(interpolation) => interpolation.span,
             Node::Comment(_atom, span) => *span,
+            Node::For(for_node) => for_node.span,
             Node::ConditionalSeq(conditional_node_sequence) => conditional_node_sequence.span,
         }
     }

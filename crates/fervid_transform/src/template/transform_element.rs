@@ -65,7 +65,11 @@ pub struct PatchMarkers {
     pub should_use_block: bool,
 }
 
-pub fn post_transform_element_node(node: &mut ElementNode, ctx: &mut TransformSfcContext) {
+pub fn post_transform_element_node(node: &mut Node, ctx: &mut TransformSfcContext) {
+    let Node::Element(node) = node else {
+        return;
+    };
+
     // TODO: This filter might discard built-in components which seem to be handled here
     // The official compiler only handles elements and components (no SLOT or TEMPLATE),
     // and implicitly considers built-in components here as well

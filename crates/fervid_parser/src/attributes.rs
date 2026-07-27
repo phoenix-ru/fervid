@@ -466,6 +466,7 @@ impl SfcParser<'_, '_, '_> {
                                     key,
                                     index,
                                     finalized: false,
+                                    finalized_is_dynamic: false,
                                 }),
                                 patch_flags: Default::default(),
                                 span,

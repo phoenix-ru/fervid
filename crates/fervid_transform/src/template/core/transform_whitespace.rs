@@ -7,30 +7,27 @@ pub fn transform_whitespace(children: &mut Vec<Node>, element_kind: ElementKind)
     let mut discard_mask: u128 = 0;
 
     // Filter out whitespace text nodes at the beginning and end of ElementNode
-    match children.first() {
-        Some(Node::Text(v, _)) if v.trim().is_empty() => {
-            discard_mask |= 1 << 0;
-        }
-        _ => {}
+    if let Some(Node::Text(v, _)) = children.first()
+        && v.trim().is_empty()
+    {
+        discard_mask |= 1 << 0;
     }
-    match children.last() {
-        Some(Node::Text(v, _)) if v.trim().is_empty() => {
-            discard_mask |= 1 << (children_len - 1);
-        }
-        _ => {}
+    if let Some(Node::Text(v, _)) = children.last()
+        && v.trim().is_empty()
+    {
+        discard_mask |= 1 << (children_len - 1);
     }
 
     // For removing the middle whitespace text nodes, we need sliding windows of three nodes
     for (index, window) in children.windows(3).enumerate() {
-        match window {
-            [
-                Node::Element(_) | Node::Comment(_, _),
-                Node::Text(middle, _),
-                Node::Element(_) | Node::Comment(_, _),
-            ] if middle.trim().is_empty() => {
-                discard_mask |= 1 << (index + 1);
-            }
-            _ => {}
+        if let [
+            Node::Element(_) | Node::Comment(_, _),
+            Node::Text(middle, _),
+            Node::Element(_) | Node::Comment(_, _),
+        ] = window
+            && middle.trim().is_empty()
+        {
+            discard_mask |= 1 << (index + 1);
         }
     }
 

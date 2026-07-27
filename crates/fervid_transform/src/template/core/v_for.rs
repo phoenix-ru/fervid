@@ -1,73 +1,198 @@
-use fervid_core::{ElementNode, PatchFlags, check_attribute_name};
+use fervid_core::{
+    AttributeOrBinding, ElementKind, ForCodegenNode, ForNode, ForParseResult, Node, PatchFlags,
+    StrOrExpr, VForDirective,
+};
+use smallvec::SmallVec;
+use swc_core::ecma::ast::{Expr, Lit, Str};
 
 use crate::{
     TransformSfcContext,
     template::{collect_vars::collect_variables, expr_transform::BindingsHelperTransform},
 };
 
-pub fn transform_for(
-    ctx: &mut TransformSfcContext,
-    node: &mut ElementNode,
-    scope_to_use: u32,
-    v_for_scope: &mut bool,
-) {
-    process_for(ctx, node, scope_to_use, v_for_scope);
+pub fn pre_transform_for(ctx: &mut TransformSfcContext, node: &mut Node) {
+    let Node::Element(element_node) = node else {
+        return;
+    };
+
+    let Some(directives) = element_node.starting_tag.directives.as_mut() else {
+        return;
+    };
+
+    // Structural directive transforms are not concerned with slots
+    // as they are handled separately in vSlot.ts
+    // https://github.com/vuejs/core/blob/b5f8518379b77c3b62a7a9d2b52f6c76cda09bd5/packages/compiler-core/src/transform.ts#L499-L503
+    if matches!(element_node.tag_type, ElementKind::Template) && directives.v_slot.is_some() {
+        return;
+    }
+
+    let Some(v_for) = directives.v_for.take() else {
+        return;
+    };
+
+    process_for(ctx, node, v_for);
 }
 
-pub fn process_for(
-    ctx: &mut TransformSfcContext,
-    node: &mut ElementNode,
-    scope_to_use: u32,
-    v_for_scope: &mut bool,
-) {
-    // Check if there is a scoping directive.
-    // Find a `v-for` or `v-slot` directive when in ElementNode
-    // and collect their variables into the new template scope
-    // TODO(new-pipeline): move this scope tracking into Vue-aligned node transforms
-    // (`trackVForSlotScopes` / `trackSlotScopes`) once transform-local exit state exists.
-    if let Some(ref mut directives) = node.starting_tag.directives {
-        let v_for = directives.v_for.as_mut();
+pub fn post_transform_for(ctx: &mut TransformSfcContext, node: &mut Node) {
+    let Node::For(_for_node) = node else {
+        return;
+    };
 
-        // Collect `v-for` bindings
-        if let Some(v_for) = v_for {
-            *v_for_scope = true;
-            ctx.directive_scopes.v_for += 1;
+    ctx.directive_scopes.v_for -= 1;
 
-            // Get the iterator variables and collect their variables
-            let scope = &mut ctx.bindings_helper.template_scopes[scope_to_use as usize];
-            collect_variables(&v_for.parse_result.value, scope);
-            if let Some(key) = &v_for.parse_result.key {
-                collect_variables(key, scope);
+    // TODO: Finish renderList codegen
+    // finish_for_codegen(ctx, for_node);
+}
+
+pub fn process_for(ctx: &mut TransformSfcContext, node: &mut Node, mut v_for: VForDirective) {
+    let parent_scope = ctx.current_template_scope;
+
+    let Node::Element(element_node) = node else {
+        return;
+    };
+    let is_template = matches!(element_node.tag_type, ElementKind::Template);
+    
+    // TODO: Move to codegen
+    let (has_key, mut key) = find_for_key(element_node);
+
+    finalize_for_parse_result(ctx, &mut v_for.parse_result, parent_scope);
+
+    let is_stable = matches!(v_for.parse_result.source.as_ref(), Expr::Lit(_));
+    let patch_flags = if is_stable {
+        PatchFlags::StableFragment.into()
+    } else if has_key {
+        PatchFlags::KeyedFragment.into()
+    } else {
+        PatchFlags::UnkeyedFragment.into()
+    };
+    // END TODO
+
+    // Create new template scope
+    let scope_to_use = ctx.bindings_helper.template_scopes.len() as u32;
+    ctx.bindings_helper
+        .template_scopes
+        .push(crate::TemplateScope {
+            variables: SmallVec::new(),
+            parent: parent_scope,
+        });
+
+    // Replace original node with ForNode
+    let mut original_node = std::mem::replace(
+        node,
+        Node::For(ForNode {
+            parse_result: v_for.parse_result,
+            children: vec![],
+            template_scope: scope_to_use,
+            // TODO Assign during codegen phase instead
+            codegen_node: Some(Box::new(ForCodegenNode {
+                patch_flags,
+                disable_tracking: !is_stable,
+                is_template,
+                key: None,
+            })),
+            span: v_for.span,
+        }),
+    );
+
+    let Node::For(for_node) = node else {
+        // SAFETY - We just replaced the node above with ForNode
+        unreachable!()
+    };
+
+    // Push either children when it is `<template v-for>` or the original Node itself
+    if let Node::Element(ref mut element_node) = original_node
+        && matches!(element_node.tag_type, ElementKind::Template)
+    {
+        let children = std::mem::take(&mut element_node.children);
+        for_node.children = children;
+    } else {
+        for_node.children.push(original_node);
+    }
+
+    ctx.directive_scopes.v_for += 1;
+
+    // Get the iterator variables and collect their variables
+    let scope = &mut ctx.bindings_helper.template_scopes[scope_to_use as usize];
+    collect_variables(&for_node.parse_result.value, scope);
+    if let Some(key) = &for_node.parse_result.key {
+        collect_variables(key, scope);
+    }
+    if let Some(index) = &for_node.parse_result.index {
+        collect_variables(index, scope);
+    }
+
+    // TODO: Move to codegen
+    if is_template && let Some(key) = key.as_mut() {
+        ctx.bindings_helper.transform_expr(key, scope_to_use);
+    }
+    for_node
+        .codegen_node
+        .as_mut()
+        .expect("process_for should initialize ForNode codegenNode")
+        .key = key;
+
+    // TODO: Re-check if this is implemented during codegen
+    // // Add patch flags
+    // if !is_dynamic {
+    //     // This is `64 /* STABLE_FRAGMENT */`
+    //     // when iterable is non-dynamic (number, string) (`v-for="i in 3"`)
+    //     v_for.patch_flags |= PatchFlags::StableFragment;
+    // } else {
+    //     // Look for `key`. Fragment is either keyed or unkeyed.
+    //     let has_key = element_node
+    //         .starting_tag
+    //         .attributes
+    //         .iter()
+    //         .any(|attr| check_attribute_name(attr, "key"));
+
+    //     v_for.patch_flags |= if has_key {
+    //         PatchFlags::KeyedFragment
+    //     } else {
+    //         PatchFlags::UnkeyedFragment
+    //     };
+    // }
+}
+
+fn find_for_key(node: &fervid_core::ElementNode) -> (bool, Option<Box<Expr>>) {
+    for attribute in &node.starting_tag.attributes {
+        match attribute {
+            AttributeOrBinding::RegularAttribute { name, value, span } if name == "key" => {
+                let key = (!value.is_empty()).then(|| {
+                    Box::new(Expr::Lit(Lit::Str(Str {
+                        span: *span,
+                        value: value.clone(),
+                        raw: None,
+                    })))
+                });
+                return (true, key);
             }
-            if let Some(index) = &v_for.parse_result.index {
-                collect_variables(index, scope);
+            AttributeOrBinding::VBind(v_bind) if matches!(v_bind.argument.as_ref(), Some(StrOrExpr::Str(name)) if name == "key") =>
+            {
+                return (true, Some(v_bind.value.clone()));
             }
-
-            // TODO: Move this into finalize_for_parse_result together with parameter
-            // transformation, then set parse_result.finalized
-            let is_dynamic = ctx
-                .bindings_helper
-                .transform_expr(&mut v_for.parse_result.source, scope_to_use);
-
-            // Add patch flags
-            if !is_dynamic {
-                // This is `64 /* STABLE_FRAGMENT */`
-                // when iterable is non-dynamic (number, string) (`v-for="i in 3"`)
-                v_for.patch_flags |= PatchFlags::StableFragment;
-            } else {
-                // Look for `key`. Fragment is either keyed or unkeyed.
-                let has_key = node
-                    .starting_tag
-                    .attributes
-                    .iter()
-                    .any(|attr| check_attribute_name(attr, "key"));
-
-                v_for.patch_flags |= if has_key {
-                    PatchFlags::KeyedFragment
-                } else {
-                    PatchFlags::UnkeyedFragment
-                };
+            AttributeOrBinding::VBind(v_bind) if matches!(v_bind.argument.as_ref(), Some(StrOrExpr::Expr(expr)) if matches!(expr.as_ref(), Expr::Lit(Lit::Str(name)) if name.value == "key")) =>
+            {
+                return (true, Some(v_bind.value.clone()));
             }
+            _ => {}
         }
     }
+
+    (false, None)
+}
+
+pub fn finalize_for_parse_result(
+    ctx: &mut TransformSfcContext,
+    result: &mut ForParseResult,
+    scope_to_use: u32,
+) {
+    if result.finalized {
+        return;
+    }
+
+    result.finalized_is_dynamic = ctx
+        .bindings_helper
+        .transform_expr(&mut result.source, scope_to_use);
+
+    result.finalized = true;
 }

@@ -3,7 +3,7 @@ use smallvec::SmallVec;
 
 use crate::{
     TemplateScope, TransformSfcContext,
-    template::core::{v_for::transform_for, v_slot::track_slot_scopes},
+    template::core::v_slot::{track_slot_scopes, track_v_for_slot_scopes},
 };
 
 pub struct ElementScopeSnapshot {
@@ -24,15 +24,13 @@ pub fn enter_element_scope(
     let snapshot = save_element_scope_snapshot(ctx, parent_scope, v_for_scope);
     let mut scope_to_use = parent_scope;
 
-    let mut has_v_for = false;
     let mut has_v_slot = false;
     if let Some(directives) = &element_node.starting_tag.directives {
-        has_v_for = directives.v_for.is_some();
         has_v_slot = directives.v_slot.is_some();
     }
 
     // Create a new scope
-    if has_v_for || has_v_slot {
+    if has_v_slot {
         // New scope will have ID equal to length
         scope_to_use = ctx.bindings_helper.template_scopes.len() as u32;
         ctx.bindings_helper.template_scopes.push(TemplateScope {
@@ -41,7 +39,8 @@ pub fn enter_element_scope(
         });
     }
 
-    transform_for(ctx, element_node, scope_to_use, v_for_scope);
+    // Collect `<template v-for v-slot>` iterator bindings without entering v-for depth
+    track_v_for_slot_scopes(ctx, element_node, parent_scope, scope_to_use);
 
     // Collect `v-slot` bindings
     track_slot_scopes(ctx, element_node, scope_to_use);

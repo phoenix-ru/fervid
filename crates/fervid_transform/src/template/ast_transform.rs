@@ -4,8 +4,8 @@ use fervid_core::{
     VBindDirective,
 };
 use fervid_core::{
-    ConditionalNodeSequence, ElementKind, ElementNode, Interpolation, Node, PatchFlags, PatchHints,
-    SfcTemplateBlock, StartingTag, fervid_atom,
+    ConditionalNodeSequence, ElementKind, ElementNode, ForNode, Interpolation, Node, PatchFlags,
+    PatchHints, SfcTemplateBlock, StartingTag, fervid_atom,
 };
 #[cfg(not(feature = "new-pipeline"))]
 use fervid_core::{StrOrExpr, VSlotDirective, check_attribute_name};
@@ -106,7 +106,9 @@ pub fn transform_and_record_template(
 }
 
 trait Visitor {
+    fn visit_node(&mut self, node: &mut Node);
     fn visit_element_node(&mut self, element_node: &mut ElementNode);
+    fn visit_for_node(&mut self, for_node: &mut ForNode);
     fn visit_conditional_node(&mut self, conditional_node: &mut ConditionalNodeSequence);
     fn visit_interpolation(&mut self, interpolation: &mut Interpolation);
 }
@@ -116,6 +118,34 @@ trait VisitMut {
 }
 
 impl Visitor for TemplateVisitor<'_> {
+    fn visit_node(&mut self, node: &mut Node) {
+        #[cfg(feature = "new-pipeline")]
+        {
+            let node_transforms = self.ctx.node_transforms.clone();
+            node_transforms.pre_transform_node(self.ctx, node);
+
+            match node {
+                Node::Element(element) => self.visit_element_node(element),
+                Node::For(for_node) => self.visit_for_node(for_node),
+                Node::ConditionalSeq(conditional) => self.visit_conditional_node(conditional),
+                Node::Interpolation(interpolation) => self.visit_interpolation(interpolation),
+                Node::Text(_, _) | Node::Comment(_, _) => {}
+            }
+
+            node_transforms.post_transform_node(self.ctx, node);
+            return;
+        }
+
+        #[cfg(not(feature = "new-pipeline"))]
+        match node {
+            Node::Element(el) => self.visit_element_node(el),
+            Node::For(for_node) => self.visit_for_node(for_node),
+            Node::ConditionalSeq(cond) => self.visit_conditional_node(cond),
+            Node::Interpolation(interpolation) => self.visit_interpolation(interpolation),
+            _ => {}
+        }
+    }
+
     fn visit_element_node(&mut self, element_node: &mut ElementNode) {
         #[cfg(feature = "new-pipeline")]
         return self.visit_element_node_new(element_node);
@@ -134,18 +164,46 @@ impl Visitor for TemplateVisitor<'_> {
         self.ctx
             .bindings_helper
             .transform_expr(&mut conditional_node.if_node.condition, self.current_scope);
-        self.visit_element_node(&mut conditional_node.if_node.node);
+        conditional_node.if_node.node.visit_mut_with(self);
 
         for else_if_node in conditional_node.else_if_nodes.iter_mut() {
             self.ctx
                 .bindings_helper
                 .transform_expr(&mut else_if_node.condition, self.current_scope);
-            self.visit_element_node(&mut else_if_node.node);
+            else_if_node.node.visit_mut_with(self);
         }
 
         if let Some(ref mut else_node) = conditional_node.else_node {
-            self.visit_element_node(else_node);
+            else_node.visit_mut_with(self);
         }
+    }
+
+    fn visit_for_node(&mut self, for_node: &mut ForNode) {
+        // TODO: Refactor this to re-use existing scope logic
+        let old_scope = self.current_scope;
+        let old_ctx_scope = self.ctx.current_template_scope;
+        let old_v_for_scope = self.v_for_scope;
+
+        self.current_scope = for_node.template_scope;
+        self.ctx.current_template_scope = for_node.template_scope;
+
+        // TODO: Remove this after all code is migrated to directive_scopes
+        self.v_for_scope = true;
+
+        let node_transforms = self.ctx.node_transforms.clone();
+        node_transforms.pre_transform_children(
+            self.ctx,
+            &mut for_node.children,
+            ElementKind::Template,
+        );
+
+        for child in for_node.children.iter_mut() {
+            child.visit_mut_with(self);
+        }
+
+        self.current_scope = old_scope;
+        self.ctx.current_template_scope = old_ctx_scope;
+        self.v_for_scope = old_v_for_scope;
     }
 
     fn visit_interpolation(&mut self, interpolation: &mut Interpolation) {
@@ -184,8 +242,6 @@ impl TemplateVisitor<'_> {
 
         // Cloning transforms is fine here due to the structure being optimized for it
         let node_transforms = self.ctx.node_transforms.clone();
-        node_transforms.pre_transform_element_node(self.ctx, element_node);
-
         node_transforms.pre_transform_children(
             self.ctx,
             &mut element_node.children,
@@ -195,8 +251,6 @@ impl TemplateVisitor<'_> {
         for child in element_node.children.iter_mut() {
             child.visit_mut_with(self);
         }
-
-        node_transforms.post_transform_element_node(self.ctx, element_node);
 
         restore_element_scope_snapshot(
             self.ctx,
@@ -557,7 +611,7 @@ impl TemplateVisitor<'_> {
 
             match child {
                 // When Elements are present, TEXT patch flag does not apply
-                Node::Element(_) | Node::ConditionalSeq(_) => {
+                Node::Element(_) | Node::For(_) | Node::ConditionalSeq(_) => {
                     is_children_text_only = false;
                 }
 
@@ -623,12 +677,7 @@ impl TemplateVisitor<'_> {
 
 impl VisitMut for Node {
     fn visit_mut_with(&mut self, visitor: &mut impl Visitor) {
-        match self {
-            Node::Element(el) => visitor.visit_element_node(el),
-            Node::ConditionalSeq(cond) => visitor.visit_conditional_node(cond),
-            Node::Interpolation(interpolation) => visitor.visit_interpolation(interpolation),
-            _ => {}
-        }
+        visitor.visit_node(self);
     }
 }
 
@@ -980,6 +1029,87 @@ mod tests {
         assert_eq!(2, root.children.len());
     }
 
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_tracks_v_for_aliases_on_template_slots() {
+        let swc_core::ecma::ast::Expr::Ident(slot_prop) = *js("row") else {
+            unreachable!()
+        };
+
+        let mut sfc_template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "template".into(),
+                    attributes: vec![],
+                    directives: Some(Box::new(VueDirectives {
+                        v_for: Some(VForDirective {
+                            parse_result: Box::new(ForParseResult {
+                                source: js("item.items"),
+                                value: js("item"),
+                                key: Some(js("key")),
+                                index: Some(js("index")),
+                                finalized: false,
+                                finalized_is_dynamic: false,
+                            }),
+                            patch_flags: Default::default(),
+                            span: DUMMY_SP,
+                        }),
+                        v_slot: Some(fervid_core::VSlotDirective {
+                            slot_name: None,
+                            value: Some(Box::new(swc_core::ecma::ast::Pat::Ident(
+                                slot_prop.into(),
+                            ))),
+                        }),
+                        ..Default::default()
+                    })),
+                },
+                children: vec![Node::Interpolation(Interpolation {
+                    value: js("item + key + index + row + outside"),
+                    template_scope: 0,
+                    patch_flag: false,
+                    span: DUMMY_SP,
+                })],
+                template_scope: 0,
+                tag_type: ElementKind::Template,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
+                codegen_node: None,
+            })],
+            span: DUMMY_SP,
+        };
+        let mut ctx = TransformSfcContext::anonymous();
+
+        transform_and_record_template(&mut sfc_template, &mut ctx);
+
+        let Node::Element(template) = &sfc_template.roots[0] else {
+            panic!("Template v-for slot should remain an element")
+        };
+        let directives = template
+            .starting_tag
+            .directives
+            .as_ref()
+            .expect("template v-for slot should retain its directives");
+        let v_for = directives
+            .v_for
+            .as_ref()
+            .expect("template v-for slot should retain its v-for directive");
+        assert!(v_for.parse_result.finalized);
+        assert_eq!("_ctx.item.items", to_str(&v_for.parse_result.source));
+        assert!(template.template_scope > 0);
+
+        let [Node::Interpolation(interpolation)] = template.children.as_slice() else {
+            panic!("Expected one interpolation")
+        };
+        assert_eq!(template.template_scope, interpolation.template_scope);
+        assert_eq!(
+            "item+key+index+row+_ctx.outside",
+            to_str(&interpolation.value)
+        );
+        assert_eq!(0, ctx.directive_scopes.v_for);
+        assert_eq!(0, ctx.directive_scopes.v_slot);
+    }
+
     #[test]
     fn it_optimizes_nested_fragments() {
         // For cloning
@@ -1042,6 +1172,9 @@ mod tests {
             p.starting_tag.directives = p_directives;
 
             let mut template = tmpl.clone();
+            if template_directives.is_some() {
+                template.tag_type = ElementKind::Template;
+            }
             template.starting_tag.directives = template_directives;
             template.children.push(Node::Element(p));
 
@@ -1074,10 +1207,10 @@ mod tests {
             let cond = prepare(Some(directives!(v_if: Some(js("val")))), None, false);
 
             // Folded to `<p v-if="val">text</p>`
-            assert!(cond.if_node.node.starting_tag.tag_name == "p");
+            let cond_node = expect_element(&cond.if_node.node);
+            assert!(cond_node.starting_tag.tag_name == "p");
             assert!(
-                cond.if_node
-                    .node
+                cond_node
                     .children
                     .first()
                     .is_some_and(|v| matches!(v, Node::Text(_, _)))
@@ -1095,6 +1228,7 @@ mod tests {
                             key: None,
                             index: None,
                             finalized: false,
+                            finalized_is_dynamic: false,
                         }),
                         patch_flags: Default::default(),
                         span: DUMMY_SP,
@@ -1105,7 +1239,11 @@ mod tests {
             );
 
             // Folded to `<p v-if="val" v-for="i in 3">text</p>`
-            let cond_node = &cond.if_node.node;
+            #[cfg(feature = "new-pipeline")]
+            let cond_node = expect_for_element(&cond.if_node.node);
+            #[cfg(not(feature = "new-pipeline"))]
+            let cond_node = expect_element(&cond.if_node.node);
+
             assert!(cond_node.starting_tag.tag_name == "p");
             assert!(
                 cond_node
@@ -1113,13 +1251,11 @@ mod tests {
                     .first()
                     .is_some_and(|v| matches!(v, Node::Text(_, _)))
             );
-            assert!(
-                cond_node
-                    .starting_tag
-                    .directives
-                    .as_ref()
-                    .is_some_and(|d| d.v_for.is_some())
-            );
+            let directives = cond_node.starting_tag.directives.as_ref();
+            #[cfg(feature = "new-pipeline")]
+            assert!(directives.is_some_and(|d| d.v_for.is_none()));
+            #[cfg(not(feature = "new-pipeline"))]
+            assert!(directives.is_some_and(|d| d.v_for.is_some()));
         };
 
         // <template v-if="val"><p v-for="j in 3">text</p></template>
@@ -1133,6 +1269,7 @@ mod tests {
                         key: None,
                         index: None,
                         finalized: false,
+                        finalized_is_dynamic: false,
                     }),
                     patch_flags: Default::default(),
                     span: DUMMY_SP,
@@ -1141,7 +1278,10 @@ mod tests {
             );
 
             // Folded to `<p v-if="val" v-for="i in 3">text</p>`
-            let cond_node = &cond.if_node.node;
+            #[cfg(feature = "new-pipeline")]
+            let cond_node = expect_for_element(&cond.if_node.node);
+            #[cfg(not(feature = "new-pipeline"))]
+            let cond_node = expect_element(&cond.if_node.node);
             assert!(cond_node.starting_tag.tag_name == "p");
             assert!(
                 cond_node
@@ -1149,13 +1289,11 @@ mod tests {
                     .first()
                     .is_some_and(|v| matches!(v, Node::Text(_, _)))
             );
-            assert!(
-                cond_node
-                    .starting_tag
-                    .directives
-                    .as_ref()
-                    .is_some_and(|d| d.v_for.is_some())
-            );
+            let directives = cond_node.starting_tag.directives.as_ref();
+            #[cfg(feature = "new-pipeline")]
+            assert!(directives.is_some_and(|d| d.v_for.is_none()));
+            #[cfg(not(feature = "new-pipeline"))]
+            assert!(directives.is_some_and(|d| d.v_for.is_some()));
         };
 
         // <template v-if="val" v-for="i in 3"><p v-for="j in 3">text</p></template>
@@ -1169,6 +1307,7 @@ mod tests {
                             key: None,
                             index: None,
                             finalized: false,
+                            finalized_is_dynamic: false,
                         }),
                         patch_flags: Default::default(),
                         span: DUMMY_SP,
@@ -1181,6 +1320,7 @@ mod tests {
                         key: None,
                         index: None,
                         finalized: false,
+                        finalized_is_dynamic: false,
                     }),
                     patch_flags: Default::default(),
                     span: DUMMY_SP,
@@ -1189,27 +1329,52 @@ mod tests {
             );
 
             // Not folded
-            let cond_node = &cond.if_node.node;
-            assert!(cond_node.starting_tag.tag_name == "template");
-            assert!(
-                cond_node
-                    .starting_tag
-                    .directives
-                    .as_ref()
-                    .is_some_and(|d| d.v_for.is_some())
-            );
+            #[cfg(not(feature = "new-pipeline"))]
+            {
+                let cond_node = expect_element(&cond.if_node.node);
+                assert!(cond_node.starting_tag.tag_name == "template");
+                assert!(
+                    cond_node
+                        .starting_tag
+                        .directives
+                        .as_ref()
+                        .is_some_and(|d| d.v_for.is_some())
+                );
 
-            let Some(Node::Element(first_child)) = cond_node.children.first() else {
-                panic!("First child should be an element")
-            };
-            assert!(first_child.starting_tag.tag_name == "p");
-            assert!(
-                first_child
-                    .starting_tag
-                    .directives
-                    .as_ref()
-                    .is_some_and(|d| d.v_for.is_some())
-            );
+                let Some(Node::Element(first_child)) = cond_node.children.first() else {
+                    panic!("First child should be an element")
+                };
+                assert!(first_child.starting_tag.tag_name == "p");
+                assert!(
+                    first_child
+                        .starting_tag
+                        .directives
+                        .as_ref()
+                        .is_some_and(|d| d.v_for.is_some())
+                );
+            }
+
+            #[cfg(feature = "new-pipeline")]
+            {
+                let Node::For(outer_for) = &cond.if_node.node else {
+                    panic!("Expected outer ForNode")
+                };
+                let [Node::For(inner_for)] = outer_for.children.as_slice() else {
+                    panic!("Expected inner ForNode")
+                };
+                let [Node::Element(first_child)] = inner_for.children.as_slice() else {
+                    panic!("Expected one Element child")
+                };
+
+                assert!(first_child.starting_tag.tag_name == "p");
+                assert!(
+                    first_child
+                        .starting_tag
+                        .directives
+                        .as_ref()
+                        .is_some_and(|d| d.v_for.is_none())
+                );
+            }
         };
 
         // <div v-if="false"></div>
@@ -1218,8 +1383,9 @@ mod tests {
             let cond = prepare(Some(directives!(v_else_if: Some(js("val")))), None, true);
 
             // Folded to `<div v-if="false"></div><p v-else-if="val">text</p>`
-            assert!(cond.if_node.node.starting_tag.tag_name == "div");
-            let else_if_node = &cond.else_if_nodes.first().expect("Should exist").node;
+            assert!(expect_element(&cond.if_node.node).starting_tag.tag_name == "div");
+            let else_if_node =
+                expect_element(&cond.else_if_nodes.first().expect("Should exist").node);
             assert!(else_if_node.starting_tag.tag_name == "p");
             assert!(
                 else_if_node
@@ -1235,8 +1401,9 @@ mod tests {
             let cond = prepare(Some(directives!(v_else: Some(()))), None, true);
 
             // Folded to `<div v-if="false"></div><p v-else-if="val">text</p>`
-            assert!(cond.if_node.node.starting_tag.tag_name == "div");
+            assert!(expect_element(&cond.if_node.node).starting_tag.tag_name == "div");
             let else_node = cond.else_node.as_ref().expect("Should exist");
+            let else_node = expect_element(else_node);
             assert!(else_node.starting_tag.tag_name == "p");
             assert!(
                 else_node
@@ -1254,6 +1421,24 @@ mod tests {
 
     fn check_text_node(node: &Node) {
         assert!(matches!(node, Node::Text(text, span) if text == "text" && *span == DUMMY_SP));
+    }
+
+    fn expect_element(node: &Node) -> &ElementNode {
+        let Node::Element(element) = node else {
+            panic!("Expected element")
+        };
+        element
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn expect_for_element(node: &Node) -> &ElementNode {
+        let Node::For(for_node) = node else {
+            panic!("Expected ForNode")
+        };
+        let [Node::Element(element)] = for_node.children.as_slice() else {
+            panic!("Expected one Element child")
+        };
+        element
     }
 
     // <h1 v-if="true">if</h1>
@@ -1280,13 +1465,13 @@ mod tests {
         assert_eq!("true", to_str(&if_node.condition));
         assert!(matches!(
             &if_node.node,
-            ElementNode {
+            Node::Element(ElementNode {
                 starting_tag: StartingTag {
                     tag_name,
                     ..
                 },
                 ..
-            } if tag_name == "h1"
+            }) if tag_name == "h1"
         ));
     }
 
@@ -1315,13 +1500,13 @@ mod tests {
         assert_eq!("_ctx.foo", to_str(&else_if_node.condition));
         assert!(matches!(
             &else_if_node.node,
-            ElementNode {
+            Node::Element(ElementNode {
                 starting_tag: StartingTag {
                     tag_name,
                     ..
                 },
                 ..
-            } if tag_name == "h2"
+            }) if tag_name == "h2"
         ));
     }
 
@@ -1345,17 +1530,17 @@ mod tests {
         })
     }
 
-    fn check_else_node(else_node: Option<&ElementNode>) {
+    fn check_else_node(else_node: Option<&Node>) {
         let else_node = else_node.expect("Must have else node");
         assert!(matches!(
             else_node,
-            ElementNode {
+            Node::Element(ElementNode {
                 starting_tag: StartingTag {
                     tag_name,
                     ..
                 },
                 ..
-            } if tag_name == "h3"
+            }) if tag_name == "h3"
         ));
     }
 }

@@ -6,7 +6,7 @@ use swc_core::{
     ecma::ast::{ArrayLit, Bool, CallExpr, Expr, IdentName, Lit, Pat, PropName, PropOrSpread, Str},
 };
 
-use crate::{BuiltinType, FervidAtom, PatchHints, StrOrExpr, VueImports};
+use crate::{BuiltinType, FervidAtom, PatchFlagsSet, PatchHints, StrOrExpr, VueImports};
 
 #[derive(Debug, Clone, Default)]
 pub enum ConstantTypes {
@@ -158,6 +158,15 @@ pub struct VNodeCall {
     pub is_block: bool,
     pub disable_tracking: bool,
     pub is_component: bool,
+}
+
+/// Outer Fragment VNodeCall generated for v-for
+#[derive(Debug, Clone)]
+pub struct ForCodegenNode {
+    pub patch_flags: PatchFlagsSet,
+    pub disable_tracking: bool,
+    pub is_template: bool,
+    pub key: Option<Box<Expr>>,
 }
 
 // JS Node Types
