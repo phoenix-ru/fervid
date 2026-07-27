@@ -412,8 +412,8 @@ fn has_forwarded_slots(children: &[Node]) -> bool {
                     return true;
                 }
             }
-            Node::ConditionalSeq(conditional) => {
-                if has_forwarded_slots(&conditional.if_node.node.children)
+            Node::ConditionalSeq(conditional)
+                if (has_forwarded_slots(&conditional.if_node.node.children)
                     || conditional
                         .else_if_nodes
                         .iter()
@@ -421,10 +421,9 @@ fn has_forwarded_slots(children: &[Node]) -> bool {
                     || conditional
                         .else_node
                         .as_ref()
-                        .is_some_and(|node| has_forwarded_slots(&node.children))
-                {
-                    return true;
-                }
+                        .is_some_and(|node| has_forwarded_slots(&node.children))) =>
+            {
+                return true;
             }
             _ => {}
         }

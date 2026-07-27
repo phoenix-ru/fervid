@@ -118,12 +118,8 @@ fn resolve_type_elements_impl_type(
             let mut resolved_elements =
                 Vec::<ResolvedElements>::with_capacity(union_type.types.len());
             for t in union_type.types.iter() {
-                match resolve_type_elements_impl_type(ctx, t, scope, type_parameters) {
-                    Ok(v) => {
-                        resolved_elements.push(v);
-                    }
-                    Err(e) => return Err(e),
-                }
+                let v = resolve_type_elements_impl_type(ctx, t, scope, type_parameters)?;
+                resolved_elements.push(v);
             }
             Ok(merge_elements(resolved_elements, MergeElementsAs::Union))
         }
@@ -136,12 +132,8 @@ fn resolve_type_elements_impl_type(
                 Vec::<ResolvedElements>::with_capacity(intersection_type.types.len());
 
             for t in intersection_type.types.iter() {
-                match resolve_type_elements_impl_type(ctx, t, scope, type_parameters) {
-                    Ok(v) => {
-                        resolved_elements.push(v);
-                    }
-                    Err(e) => return Err(e),
-                }
+                let v = resolve_type_elements_impl_type(ctx, t, scope, type_parameters)?;
+                resolved_elements.push(v);
             }
 
             Ok(merge_elements(

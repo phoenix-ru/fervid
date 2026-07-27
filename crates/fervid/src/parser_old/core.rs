@@ -337,7 +337,7 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
     if !starting_tag.tag_name.eq(end_tag) {
         println!(
             "End tag does not match start tag: <{}> </{}>",
-            &starting_tag.tag_name, &end_tag
+            starting_tag.tag_name, end_tag
         );
     }
 

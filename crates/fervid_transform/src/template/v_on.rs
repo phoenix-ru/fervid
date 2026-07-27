@@ -33,7 +33,7 @@ impl TemplateVisitor<'_> {
 
                 // Wrap in `_toHandlerKey`
                 let value = std::mem::take(dynamic_event);
-                *dynamic_event = Box::new(Expr::Call(CallExpr {
+                **dynamic_event = Expr::Call(CallExpr {
                     span: DUMMY_SP,
                     ctxt: Default::default(),
                     callee: Callee::Expr(Box::new(Expr::Ident(Ident {
@@ -45,7 +45,7 @@ impl TemplateVisitor<'_> {
                         expr: value,
                     }],
                     type_args: None,
-                }));
+                });
             }
 
             None => {}
