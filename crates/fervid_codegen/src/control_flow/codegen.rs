@@ -1,8 +1,10 @@
 use fervid_core::{ElementKind, ElementNode, IntoIdent, Node, VueImports};
 use smallvec::SmallVec;
 use swc_core::{
-    common::{BytePos, Span}, ecma::ast::{
-        BinExpr, BinaryOp, Bool, CallExpr, Callee, Expr, ExprOrSpread, Lit, Number, ParenExpr, SeqExpr,
+    common::{BytePos, Span},
+    ecma::ast::{
+        BinExpr, BinaryOp, Bool, CallExpr, Callee, Expr, ExprOrSpread, Lit, Number, ParenExpr,
+        SeqExpr,
     },
 };
 
@@ -206,10 +208,7 @@ impl CodegenContext {
     ) -> Expr {
         let args = disable_tracking.then(|| ExprOrSpread {
             spread: None,
-            expr: Box::new(Expr::Lit(Lit::Bool(Bool {
-                span,
-                value: true,
-            }))),
+            expr: Box::new(Expr::Lit(Lit::Bool(Bool { span, value: true }))),
         });
 
         Expr::Paren(ParenExpr {

@@ -7,6 +7,8 @@ flags! {
     pub enum VueImports: u64 {
         #[strum(serialize = "_BaseTransition")]
         BaseTransition,
+        #[strum(serialize = "_camelize")]
+        Camelize,
         #[strum(serialize = "_createBlock")]
         CreateBlock,
         #[strum(serialize = "_createCommentVNode")]

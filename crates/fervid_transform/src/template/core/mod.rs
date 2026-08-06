@@ -1,4 +1,5 @@
 pub mod scope_tracking;
+pub mod transform_expression;
 pub mod transform_if;
 pub mod transform_whitespace;
 pub mod v_bind;

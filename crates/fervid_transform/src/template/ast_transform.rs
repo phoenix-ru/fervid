@@ -128,12 +128,13 @@ impl Visitor for TemplateVisitor<'_> {
                 Node::Element(element) => self.visit_element_node(element),
                 Node::For(for_node) => self.visit_for_node(for_node),
                 Node::ConditionalSeq(conditional) => self.visit_conditional_node(conditional),
-                Node::Interpolation(interpolation) => self.visit_interpolation(interpolation),
+                Node::Interpolation(_interpolation) => {
+                    // self.visit_interpolation(interpolation)
+                }
                 Node::Text(_, _) | Node::Comment(_, _) => {}
             }
 
             node_transforms.post_transform_node(self.ctx, node);
-            return;
         }
 
         #[cfg(not(feature = "new-pipeline"))]
@@ -1108,6 +1109,55 @@ mod tests {
         );
         assert_eq!(0, ctx.directive_scopes.v_for);
         assert_eq!(0, ctx.directive_scopes.v_slot);
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_builds_props_for_directive_only_elements() {
+        let mut sfc_template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "div".into(),
+                    attributes: vec![],
+                    directives: Some(Box::new(VueDirectives {
+                        custom: vec![fervid_core::VCustomDirective {
+                            name: "focus".into(),
+                            argument: None,
+                            modifiers: vec![],
+                            value: None,
+                        }],
+                        ..Default::default()
+                    })),
+                },
+                children: vec![],
+                template_scope: 0,
+                tag_type: ElementKind::Element,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
+                codegen_node: None,
+            })],
+            span: DUMMY_SP,
+        };
+
+        transform_and_record_template(&mut sfc_template, &mut TransformSfcContext::anonymous());
+
+        let Node::Element(element) = &sfc_template.roots[0] else {
+            panic!("Expected directive-only element")
+        };
+        let fervid_core::ElementNodeCodegenNode::VNodeCall(vnode_call) = element
+            .codegen_node
+            .as_deref()
+            .expect("directive-only element should have a VNodeCall");
+        assert_eq!(
+            1,
+            vnode_call
+                .directives
+                .as_ref()
+                .expect("custom directive should produce runtime directive arguments")
+                .elems
+                .len()
+        );
     }
 
     #[test]

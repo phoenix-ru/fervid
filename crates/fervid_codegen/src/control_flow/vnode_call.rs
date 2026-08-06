@@ -2,7 +2,7 @@ use fervid_core::{
     ArrayExpression, CallExpression as FervidCallExpression, ElementNode, ElementNodeCodegenNode,
     ExpressionNode, ExpressionPropNameNode, IntoIdent, JsChildNode, ObjectExpression,
     PropsExpression, SlotBuild, SlotFlag, SlotSource, StrOrExpr, VNodeCall, VNodeCallTag,
-    VNodeChildren, VueImports,
+    VNodeChildren, VueImports, is_valid_propname,
 };
 use swc_core::{
     common::{DUMMY_SP, Span},
@@ -58,6 +58,7 @@ impl CodegenContext {
             .as_ref()
             .map(|children| self.generate_vnode_children(element_node, children));
         let patch_flags = vnode_call.patch_hints.flags.bits();
+        let dynamic_prop_names = &vnode_call.patch_hints.props;
 
         let mut args = vec![expr_arg(tag)];
         let needs_props = props.is_some() || children.is_some() || patch_flags != 0;
@@ -77,6 +78,25 @@ impl CodegenContext {
                 value: patch_flags.into(),
                 raw: None,
             }))));
+        }
+
+        if !dynamic_prop_names.is_empty() {
+            args.push(expr_arg(Expr::Array(ArrayLit {
+                span: DUMMY_SP,
+                elems: dynamic_prop_names
+                    .iter()
+                    .map(|dynamic_prop_name| {
+                        Some(ExprOrSpread {
+                            expr: Box::new(Expr::Lit(Lit::Str(Str {
+                                span: DUMMY_SP,
+                                value: dynamic_prop_name.to_owned(),
+                                raw: None,
+                            }))),
+                            spread: None,
+                        })
+                    })
+                    .collect(),
+            })))
         }
 
         let callee = if vnode_call.is_component {
@@ -349,7 +369,17 @@ fn str_or_expr_to_prop_name(value: &StrOrExpr) -> PropName {
 
 fn expression_prop_name_to_prop_name(value: &ExpressionPropNameNode) -> PropName {
     match value {
-        ExpressionPropNameNode::SimpleExpression(expr) => PropName::Ident(expr.ast.to_owned()),
+        ExpressionPropNameNode::SimpleExpression(expr) => {
+            if is_valid_propname(&expr.ast.sym) {
+                PropName::Ident(expr.ast.to_owned())
+            } else {
+                PropName::Str(Str {
+                    span: expr.ast.span,
+                    value: expr.ast.sym.to_owned(),
+                    raw: None,
+                })
+            }
+        }
         ExpressionPropNameNode::CompoundExpression(expr) => expr.ast.to_owned(),
     }
 }

@@ -103,8 +103,24 @@ pub fn post_transform_element_node(node: &mut Node, ctx: &mut TransformSfcContex
     let mut vnode_children: Option<VNodeChildren> = None;
     let mut patch_hints = PatchHints::default();
 
+    // v-bind/v-on live in attributes, while other directives live in VueDirectives.
+    // Both can produce vnode props, patch flags, or runtime directive arrays.
+    let has_props_or_directives = !node.starting_tag.attributes.is_empty()
+        || node
+            .starting_tag
+            .directives
+            .as_deref()
+            .is_some_and(|directives| {
+                directives.v_html.is_some()
+                    || directives.v_text.is_some()
+                    || directives.v_show.is_some()
+                    || !directives.v_model.is_empty()
+                    || directives.v_slot.is_some()
+                    || !directives.custom.is_empty()
+            });
+
     // Props
-    if !node.starting_tag.attributes.is_empty() {
+    if has_props_or_directives {
         let props_build_result = build_props(
             node,
             ctx,
@@ -601,7 +617,10 @@ pub fn build_props(
 
                     // https://github.com/vuejs/core/issues/10696 in case a v-bind object contains ref
                     push_ref_v_for_marker!();
+                    // TODO(new-pipeline): Keep arbitrary user expressions as ExpressionNode instead
+                    // of converting them to PropsExpression based on their SWC expression variant.
                     push_merge_arg!(v_bind_directive.value.as_ref().into());
+                    continue;
                 }
 
                 // Force hydration for v-bind with .prop modifier
@@ -673,6 +692,7 @@ pub fn build_props(
                         }));
 
                     push_merge_arg!(to_handlers_expr);
+                    continue;
                 }
 
                 let Some(directive_transform_result) =

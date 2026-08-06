@@ -2,7 +2,8 @@ use fervid_core::{
     ForNode, ForParseResult, IntoIdent, Node, PatchFlags, VForDirective, VueImports, fervid_atom,
 };
 use swc_core::{
-    common::{DUMMY_SP, Span}, ecma::ast::{
+    common::{DUMMY_SP, Span},
+    ecma::ast::{
         ArrowExpr, AssignExpr, AssignOp, AssignTarget, BinExpr, BinaryOp, BindingIdent, BlockStmt,
         BlockStmtOrExpr, CallExpr, Callee, Decl, Expr, ExprOrSpread, ExprStmt, Ident, IdentName,
         IfStmt, Lit, MemberExpr, MemberProp, Null, Number, ObjectLit, Pat, Prop, PropName,
@@ -123,12 +124,7 @@ impl CodegenContext {
         self.wrap_in_open_block_with_tracking(fragment, span, codegen_node.disable_tracking)
     }
 
-    fn generate_for_fragment(
-        &mut self,
-        children: &[Node],
-        key: Option<&Expr>,
-        span: Span,
-    ) -> Expr {
+    fn generate_for_fragment(&mut self, children: &[Node], key: Option<&Expr>, span: Span) -> Expr {
         let mut generated_children = Vec::new();
         self.generate_node_sequence(
             &mut children.iter(),

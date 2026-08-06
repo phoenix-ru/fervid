@@ -4,7 +4,7 @@ use enum_dispatch::enum_dispatch;
 use fervid_core::{ElementNode, Property, VBindDirective, VModelDirective, VOnDirective};
 use swc_core::ecma::ast::Expr;
 
-use crate::TransformSfcContext;
+use crate::{TransformSfcContext, template::core::v_bind::transform_v_bind};
 
 pub struct DirectiveTransformResult {
     pub need_runtime: bool,
@@ -15,11 +15,12 @@ pub struct DirectiveTransformResult {
 pub trait DirectiveTransforms: Debug {
     fn transform_v_bind(
         &self,
-        _ctx: &mut TransformSfcContext,
-        _v_bind: &VBindDirective,
-        _node: &ElementNode,
+        ctx: &mut TransformSfcContext,
+        v_bind: &VBindDirective,
+        node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
-        None
+        // TODO: Use ctx.in_ssr inside the transform when implemented
+        transform_v_bind(ctx, v_bind, node, false)
     }
 
     fn transform_v_on(

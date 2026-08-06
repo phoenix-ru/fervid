@@ -243,7 +243,11 @@ pub fn create_simple_expression_propname(
     SimpleExpressionPropNameNode {
         ast: IdentName { sym: content, span },
         is_static,
-        const_type: Default::default(),
+        const_type: if is_static {
+            ConstantTypes::CanStringify
+        } else {
+            ConstantTypes::NotConstant
+        },
         is_handler_key: false,
     }
 }
