@@ -49,6 +49,8 @@ pub struct BuildPropsResult {
     pub directives: Vec<RuntimeDirective>,
     // Patch `flags`, `dynamicPropNames` and `shouldUseBlock` are all inside PatchHints
     pub patch_hints: PatchHints,
+    pub needs_patch: bool,
+    pub is_block_required: bool,
 }
 
 #[derive(Default)]
@@ -63,6 +65,7 @@ pub struct PatchMarkers {
     pub has_style_binding: bool,
     pub has_vnode_hook: bool,
     pub should_use_block: bool,
+    pub is_block_required: bool,
 }
 
 pub fn post_transform_element_node(node: &mut Node, ctx: &mut TransformSfcContext) {
@@ -102,6 +105,8 @@ pub fn post_transform_element_node(node: &mut Node, ctx: &mut TransformSfcContex
     let mut vnode_directives: Option<ArrayLit> = None;
     let mut vnode_children: Option<VNodeChildren> = None;
     let mut patch_hints = PatchHints::default();
+    let mut needs_patch = false;
+    let mut is_block_required = false;
 
     // v-bind/v-on live in attributes, while other directives live in VueDirectives.
     // Both can produce vnode props, patch flags, or runtime directive arrays.
@@ -134,6 +139,8 @@ pub fn post_transform_element_node(node: &mut Node, ctx: &mut TransformSfcContex
         vnode_props = props_build_result.props;
         should_use_block |= props_build_result.patch_hints.should_use_block;
         patch_hints = props_build_result.patch_hints;
+        needs_patch = props_build_result.needs_patch;
+        is_block_required = props_build_result.is_block_required;
 
         if !props_build_result.directives.is_empty() {
             // Convert runtime directives into array-of-arrays
@@ -232,6 +239,8 @@ pub fn post_transform_element_node(node: &mut Node, ctx: &mut TransformSfcContex
 
     // PatchFlag & dynamicPropNames
     // Note: stringification is not done here
+    needs_patch = needs_patch
+        && (patch_hints.flags.is_empty() || patch_hints.flags == PatchFlags::NeedHydration);
 
     node.codegen_node = Some(Box::new(ElementNodeCodegenNode::VNodeCall(VNodeCall {
         tag: vnode_tag,
@@ -239,6 +248,8 @@ pub fn post_transform_element_node(node: &mut Node, ctx: &mut TransformSfcContex
         children: vnode_children,
         patch_hints,
         directives: vnode_directives,
+        needs_patch,
+        is_block_required,
         is_block: should_use_block,
         disable_tracking: false,
         is_component,
@@ -653,9 +664,11 @@ pub fn build_props(
                 // Inline before-update hooks need to force block so that it is invoked
                 // before children
                 if has_children
-                    && is_static_arg_of(v_on_directive.event.as_ref(), "vue:before-update")
+                    && (is_static_arg_of(v_on_directive.event.as_ref(), "vue:before-update")
+                        || is_static_arg_of(v_on_directive.event.as_ref(), "vue:beforeUpdate"))
                 {
                     patch_markers.should_use_block = true;
+                    patch_markers.is_block_required = true;
                 }
 
                 // Special case for v-on with no argument
@@ -769,6 +782,7 @@ pub fn build_props(
             // to ensure before-update gets called before children update
             if has_children {
                 patch_markers.should_use_block = true;
+                patch_markers.is_block_required = true;
             }
         }
     }
@@ -817,10 +831,12 @@ pub fn build_props(
             patch_markers.flags |= PatchFlags::NeedHydration;
         }
     }
-    if !patch_markers.should_use_block
-        && (patch_markers.flags.is_empty() || patch_markers.flags == PatchFlags::NeedHydration)
-        && (patch_markers.has_ref || patch_markers.has_vnode_hook || !runtime_directives.is_empty())
-    {
+    let needs_patch = (patch_markers.flags.is_empty()
+        || patch_markers.flags == PatchFlags::NeedHydration)
+        && (patch_markers.has_ref
+            || patch_markers.has_vnode_hook
+            || !runtime_directives.is_empty());
+    if !patch_markers.should_use_block && needs_patch {
         patch_markers.flags |= PatchFlags::NeedPatch;
     }
 
@@ -953,6 +969,8 @@ pub fn build_props(
         },
         props: props_expression,
         directives: runtime_directives,
+        needs_patch,
+        is_block_required: patch_markers.is_block_required,
     }
 }
 

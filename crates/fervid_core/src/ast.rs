@@ -155,6 +155,10 @@ pub struct VNodeCall {
     pub children: Option<VNodeChildren>,
     pub patch_hints: PatchHints,
     pub directives: Option<ArrayLit>,
+    /// Whether this vnode must be patched if a later transform makes it non-block
+    pub needs_patch: bool,
+    /// Whether a later transform must preserve this vnode as a block
+    pub is_block_required: bool,
     pub is_block: bool,
     pub disable_tracking: bool,
     pub is_component: bool,

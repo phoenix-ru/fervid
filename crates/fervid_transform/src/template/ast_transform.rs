@@ -110,6 +110,7 @@ trait Visitor {
     fn visit_element_node(&mut self, element_node: &mut ElementNode);
     fn visit_for_node(&mut self, for_node: &mut ForNode);
     fn visit_conditional_node(&mut self, conditional_node: &mut ConditionalNodeSequence);
+    #[cfg_attr(feature = "new-pipeline", allow(dead_code))]
     fn visit_interpolation(&mut self, interpolation: &mut Interpolation);
 }
 
@@ -684,6 +685,11 @@ impl VisitMut for Node {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "new-pipeline")]
+    use fervid_core::{
+        AttributeOrBinding, ElementNodeCodegenNode, StrOrExpr, VBindDirective, VCustomDirective,
+        VOnDirective,
+    };
     use fervid_core::{
         Conditional, ElementKind, ForParseResult, Node, PatchHints, VForDirective, VueDirectives,
     };
@@ -1160,6 +1166,128 @@ mod tests {
         );
     }
 
+    // https://github.com/vuejs/core/blob/02421cdbc4da5dd2eaf39e6c51aa790f9310db62/packages/compiler-core/__tests__/transforms/transformElement.spec.ts#L1037-L1134
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_preserves_lifecycle_requirements_in_stable_v_for() {
+        let mut static_ref = for_element(
+            js("3"),
+            vec![
+                AttributeOrBinding::VBind(VBindDirective {
+                    argument: Some(StrOrExpr::Str(fervid_atom!("key"))),
+                    value: js("i"),
+                    is_camel: false,
+                    is_prop: false,
+                    is_attr: false,
+                    span: DUMMY_SP,
+                }),
+                AttributeOrBinding::RegularAttribute {
+                    name: fervid_atom!("ref"),
+                    value: fervid_atom!("items"),
+                    span: DUMMY_SP,
+                },
+            ],
+            vec![],
+            vec![],
+        );
+        transform_and_record_template(&mut static_ref, &mut TransformSfcContext::anonymous());
+
+        let vnode_call = expect_for_vnode(&static_ref.roots[0]);
+        assert!(!vnode_call.is_block);
+        assert!(vnode_call.needs_patch);
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::NeedPatch));
+
+        let mut childless_custom_directive = for_element(
+            js("3"),
+            vec![AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(StrOrExpr::Str(fervid_atom!("key"))),
+                value: js("i"),
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                span: DUMMY_SP,
+            })],
+            vec![VCustomDirective {
+                name: fervid_atom!("dir"),
+                ..Default::default()
+            }],
+            vec![],
+        );
+        transform_and_record_template(
+            &mut childless_custom_directive,
+            &mut TransformSfcContext::anonymous(),
+        );
+
+        let vnode_call = expect_for_vnode(&childless_custom_directive.roots[0]);
+        assert!(!vnode_call.is_block);
+        assert!(vnode_call.needs_patch);
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::NeedPatch));
+
+        let mut custom_directive = for_element(
+            js("3"),
+            vec![],
+            vec![VCustomDirective {
+                name: fervid_atom!("dir"),
+                ..Default::default()
+            }],
+            vec![Node::Interpolation(Interpolation {
+                value: js("i"),
+                template_scope: 0,
+                patch_flag: false,
+                span: DUMMY_SP,
+            })],
+        );
+        transform_and_record_template(&mut custom_directive, &mut TransformSfcContext::anonymous());
+
+        let vnode_call = expect_for_vnode(&custom_directive.roots[0]);
+        assert!(vnode_call.is_block);
+        assert!(vnode_call.is_block_required);
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::Text));
+        assert!(!vnode_call.needs_patch);
+        assert!(!vnode_call.patch_hints.flags.contains(PatchFlags::NeedPatch));
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_preserves_before_update_blocks_in_stable_v_for() {
+        for event in ["vue:before-update", "vue:beforeUpdate"] {
+            let mut template = for_element(
+                js("3"),
+                vec![AttributeOrBinding::VOn(VOnDirective {
+                    event: Some(StrOrExpr::Str(event.into())),
+                    handler: Some(js("handler")),
+                    modifiers: vec![],
+                    span: DUMMY_SP,
+                })],
+                vec![],
+                vec![Node::Element(ElementNode::new(StartingTag {
+                    tag_name: fervid_atom!("span"),
+                    attributes: vec![],
+                    directives: None,
+                }))],
+            );
+            transform_and_record_template(&mut template, &mut TransformSfcContext::anonymous());
+
+            let vnode_call = expect_for_vnode(&template.roots[0]);
+            assert!(vnode_call.is_block, "{event} should preserve the block");
+            assert!(
+                vnode_call.is_block_required,
+                "{event} should require the block"
+            );
+        }
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_keeps_dynamic_v_for_children_as_blocks() {
+        let mut template = for_element(js("items"), vec![], vec![], vec![]);
+        transform_and_record_template(&mut template, &mut TransformSfcContext::anonymous());
+
+        let vnode_call = expect_for_vnode(&template.roots[0]);
+        assert!(vnode_call.is_block);
+        assert!(!vnode_call.is_block_required);
+    }
+
     #[test]
     fn it_optimizes_nested_fragments() {
         // For cloning
@@ -1489,6 +1617,57 @@ mod tests {
             panic!("Expected one Element child")
         };
         element
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn expect_for_vnode(node: &Node) -> &fervid_core::VNodeCall {
+        let element = expect_for_element(node);
+        let Some(ElementNodeCodegenNode::VNodeCall(vnode_call)) = element.codegen_node.as_deref()
+        else {
+            panic!("Expected v-for child VNodeCall")
+        };
+        vnode_call
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn for_element(
+        source: Box<swc_core::ecma::ast::Expr>,
+        attributes: Vec<AttributeOrBinding>,
+        custom_directives: Vec<VCustomDirective>,
+        children: Vec<Node>,
+    ) -> SfcTemplateBlock {
+        SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: fervid_atom!("div"),
+                    attributes,
+                    directives: Some(Box::new(VueDirectives {
+                        v_for: Some(VForDirective {
+                            parse_result: Box::new(ForParseResult {
+                                source,
+                                value: js("i"),
+                                key: None,
+                                index: None,
+                                finalized: false,
+                                finalized_is_dynamic: false,
+                            }),
+                            patch_flags: Default::default(),
+                            span: DUMMY_SP,
+                        }),
+                        custom: custom_directives,
+                        ..Default::default()
+                    })),
+                },
+                children,
+                template_scope: 0,
+                tag_type: ElementKind::Element,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
+                codegen_node: None,
+            })],
+            span: DUMMY_SP,
+        }
     }
 
     // <h1 v-if="true">if</h1>

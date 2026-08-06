@@ -1,6 +1,6 @@
 use fervid_core::{
-    AttributeOrBinding, ElementKind, ForCodegenNode, ForNode, ForParseResult, Node, PatchFlags,
-    StrOrExpr, VForDirective,
+    AttributeOrBinding, ElementKind, ElementNodeCodegenNode, ForCodegenNode, ForNode,
+    ForParseResult, Node, PatchFlags, StrOrExpr, VForDirective,
 };
 use smallvec::SmallVec;
 use swc_core::ecma::ast::{Expr, Lit, Str};
@@ -34,14 +34,35 @@ pub fn pre_transform_for(ctx: &mut TransformSfcContext, node: &mut Node) {
 }
 
 pub fn post_transform_for(ctx: &mut TransformSfcContext, node: &mut Node) {
-    let Node::For(_for_node) = node else {
+    let Node::For(for_node) = node else {
         return;
     };
 
     ctx.directive_scopes.v_for -= 1;
 
-    // TODO: Finish renderList codegen
-    // finish_for_codegen(ctx, for_node);
+    // TODO: Finish renderList codegen finalization. This currently only reconciles the child
+    // vnode's block and patch requirements after its element transform has run
+    let is_stable = for_node
+        .codegen_node
+        .as_deref()
+        .expect("process_for should initialize ForNode codegen metadata")
+        .patch_flags
+        .contains(PatchFlags::StableFragment);
+
+    let [Node::Element(element)] = for_node.children.as_mut_slice() else {
+        return;
+    };
+    let Some(ElementNodeCodegenNode::VNodeCall(vnode_call)) = element.codegen_node.as_deref_mut()
+    else {
+        return;
+    };
+
+    let should_use_block = !is_stable || vnode_call.is_block_required;
+    vnode_call.is_block = should_use_block;
+
+    if !should_use_block && vnode_call.needs_patch {
+        vnode_call.patch_hints.flags |= PatchFlags::NeedPatch;
+    }
 }
 
 pub fn process_for(ctx: &mut TransformSfcContext, node: &mut Node, mut v_for: VForDirective) {
@@ -51,7 +72,7 @@ pub fn process_for(ctx: &mut TransformSfcContext, node: &mut Node, mut v_for: VF
         return;
     };
     let is_template = matches!(element_node.tag_type, ElementKind::Template);
-    
+
     // TODO: Move to codegen
     let (has_key, mut key) = find_for_key(element_node);
 

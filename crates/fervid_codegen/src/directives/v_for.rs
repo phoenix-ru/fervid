@@ -786,6 +786,73 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_generates_need_patch_for_stable_v_for_child() {
+        let Node::Element(mut root) = element("div") else {
+            unreachable!()
+        };
+        root.starting_tag.attributes = vec![
+            fervid_core::AttributeOrBinding::VBind(fervid_core::VBindDirective {
+                argument: Some(fervid_core::StrOrExpr::Str(fervid_atom!("key"))),
+                value: js("i"),
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                span: DUMMY_SP,
+            }),
+            fervid_core::AttributeOrBinding::RegularAttribute {
+                name: fervid_atom!("ref"),
+                value: fervid_atom!("items"),
+                span: DUMMY_SP,
+            },
+        ];
+        root.starting_tag.directives = Some(Box::new(fervid_core::VueDirectives {
+            v_for: Some(VForDirective {
+                parse_result: Box::new(ForParseResult {
+                    source: js("3"),
+                    value: js("i"),
+                    key: None,
+                    index: None,
+                    finalized: false,
+                    finalized_is_dynamic: false,
+                }),
+                patch_flags: Default::default(),
+                span: DUMMY_SP,
+            }),
+            ..Default::default()
+        }));
+        let mut template = fervid_core::SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(root)],
+            span: DUMMY_SP,
+        };
+        let descriptor = fervid_core::SfcDescriptor::default();
+        let options = fervid_transform::TransformSfcOptions {
+            is_prod: false,
+            is_ce: false,
+            props_destructure: Default::default(),
+            scope_id: "",
+            filename: "anonymous.vue",
+            transform_asset_urls: Default::default(),
+            directive_transforms: Default::default(),
+            node_transforms: Default::default(),
+        };
+        let mut transform_ctx = fervid_transform::TransformSfcContext::new(&descriptor, &options);
+        fervid_transform::template::transform_and_record_template(
+            &mut template,
+            &mut transform_ctx,
+        );
+
+        let mut codegen_ctx = CodegenContext::default();
+        let result = codegen_ctx.generate_node(&template.roots[0], true);
+
+        assert_eq!(
+            crate::test_utils::to_str(result),
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(3,(i)=>_createElementVNode(\"div\",{key:i,ref_for:true,ref:\"items\"},null,512)),64))"
+        );
+    }
+
     #[test]
     fn it_generates_v_for_memoized() {
         let mut ctx = CodegenContext::default();
