@@ -1,21 +1,24 @@
 use std::borrow::Cow;
 
 use fervid_core::{
-    AttributeOrBinding, BindingTypes, BuiltinType, CallExpression, ComponentBinding, ElementKind,
-    ElementNode, ElementNodeCodegenNode, ExpressionNode, ExpressionPropNameNode, FervidAtom,
-    IntoIdent, JsChildNode, Node, PatchFlags, PatchHints, Property, PropsExpression,
-    SimpleExpressionNode, SimpleExpressionPropNameNode, StartingTag, StrOrExpr, VCustomDirective,
-    VModelDirective, VNodeCall, VNodeCallTag, VNodeChildren, VueDirectives, VueImports,
+    AttributeOrBinding, BindingTypes, BuiltinType, CallExpression, ComponentBinding,
+    CustomDirectiveBinding, ElementKind, ElementNode, ElementNodeCodegenNode, ExpressionNode,
+    ExpressionPropNameNode, FervidAtom, IntoIdent, JsChildNode, Node, PatchFlags, PatchHints,
+    Property, PropsExpression, SimpleExpressionNode, SimpleExpressionPropNameNode, StartingTag,
+    StrOrExpr, VCustomDirective, VNodeCall, VNodeCallTag, VNodeChildren, VueDirectives, VueImports,
     create_array_expression, create_call_expression, create_object_expression,
     create_object_property, create_simple_expression_bool, create_simple_expression_propname,
-    create_simple_expression_str, fervid_atom,
+    create_simple_expression_str, fervid_atom, str_to_propname,
 };
 use flagset::FlagSet;
 use fxhash::FxHashMap;
 use phf::phf_set;
 use swc_core::{
     common::{DUMMY_SP, Span, Spanned, util::take::Take},
-    ecma::ast::{ArrayLit, Expr, ExprOrSpread, IdentName, Lit, MemberExpr, MemberProp, Str},
+    ecma::ast::{
+        ArrayLit, Bool, Expr, ExprOrSpread, Ident, IdentName, KeyValueProp, Lit, MemberExpr,
+        MemberProp, Number, ObjectLit, Prop, PropOrSpread, Str, UnaryExpr, UnaryOp,
+    },
 };
 
 use crate::{
@@ -23,7 +26,7 @@ use crate::{
     error::{TemplateError, TemplateErrorKind, TransformError},
     template::{
         core::v_slot::build_slots,
-        directive_transforms::DirectiveTransforms,
+        directive_transforms::{BuiltinRuntimeDirective, DirectiveTransforms},
         expr_transform::BindingsHelperTransform,
         utils::{
             find_prop, is_core_component, is_static_arg_of, to_camel_case, to_pascal_case,
@@ -38,8 +41,7 @@ pub struct Props<'a> {
 }
 
 pub enum RuntimeDirective {
-    VShow(Box<Expr>),
-    VModel(VModelDirective),
+    Builtin(BuiltinRuntimeDirective),
     Custom(VCustomDirective),
 }
 
@@ -442,7 +444,7 @@ fn find_binding<'a>(
 }
 
 pub fn build_props(
-    node: &ElementNode,
+    node: &mut ElementNode,
     ctx: &mut TransformSfcContext,
     scope_to_use: u32,
     props: Option<Props>,
@@ -511,26 +513,13 @@ pub fn build_props(
                 }
 
                 properties.extend(directive_transform_result.props);
-            }
-        };
-        ($transform_name: ident, $value: expr, $runtime_variant: ident) => {
-            if let Some(directive_transform_result) = transforms.$transform_name(ctx, $value, node)
-            {
-                if !ssr {
-                    for prop in directive_transform_result.props.iter() {
-                        analyze_patch_flag(
-                            &prop,
-                            &mut patch_markers,
-                            is_component,
-                            is_dynamic_component,
-                        );
-                    }
+
+                if let Some(runtime_directive) = directive_transform_result.runtime_directive {
+                    runtime_directives.push(RuntimeDirective::Builtin(runtime_directive));
                 }
 
-                properties.extend(directive_transform_result.props);
-
-                if directive_transform_result.need_runtime {
-                    runtime_directives.push(RuntimeDirective::$runtime_variant($value.to_owned()));
+                if directive_transform_result.remove_children {
+                    node.children.clear();
                 }
             }
         };
@@ -753,11 +742,11 @@ pub fn build_props(
         }
 
         if let Some(ref v_show) = directives.v_show {
-            transform_directive!(transform_v_show, v_show, VShow);
+            transform_directive!(transform_v_show, v_show);
         }
 
         for v_model in directives.v_model.iter() {
-            transform_directive!(transform_v_model, v_model, VModel);
+            transform_directive!(transform_v_model, v_model);
         }
 
         // Skip v-slot - it is handled by its dedicated transform.
@@ -1098,12 +1087,172 @@ fn merge_as_array(existing: &mut Property, incoming: Property) {
     }
 }
 
-fn build_directive_args(_dir: RuntimeDirective, _ctx: &mut TransformSfcContext) -> ArrayLit {
-    // TODO(new-pipeline): lower runtime directives once directive transforms are ported.
-    ArrayLit {
-        span: DUMMY_SP,
-        elems: vec![],
+fn build_directive_args(dir: RuntimeDirective, ctx: &mut TransformSfcContext) -> ArrayLit {
+    match dir {
+        RuntimeDirective::Builtin(builtin_runtime_dir) => generate_directive_from_parts(
+            ctx.bindings_helper
+                .helper(builtin_runtime_dir.import)
+                .as_atom()
+                .into_ident()
+                .into(),
+            builtin_runtime_dir.value,
+            builtin_runtime_dir.arg,
+            builtin_runtime_dir.modifiers,
+            DUMMY_SP,
+        ),
+        RuntimeDirective::Custom(custom_directive) => generate_directive_from_parts(
+            get_custom_directive_ident(ctx, &custom_directive.name, DUMMY_SP),
+            custom_directive.value,
+            custom_directive.argument,
+            custom_directive.modifiers,
+            DUMMY_SP,
+        ),
     }
+}
+
+/// Generates a generalized directive in form
+/// `[
+///   directive_ident,
+///   directive_expression?,
+///   directive_arg?,
+///   { modifier1: true, modifier2: true }?
+/// ]`.
+///
+/// This typically applies to custom directives, `v-show` and element `v-model`
+fn generate_directive_from_parts(
+    identifier: Expr,
+    value: Option<Box<Expr>>,
+    argument: Option<StrOrExpr>,
+    modifiers: Vec<FervidAtom>,
+    span: Span,
+) -> ArrayLit {
+    let has_argument = argument.is_some();
+    let has_modifiers = !modifiers.is_empty();
+
+    // Array and size hint
+    let directive_arr_len_hint = if has_modifiers {
+        4
+    } else if has_argument {
+        3
+    } else if value.is_some() {
+        2
+    } else {
+        1
+    };
+    let mut directive_arr = ArrayLit {
+        span,
+        elems: Vec::with_capacity(directive_arr_len_hint),
+    };
+
+    // Directive name
+    // let directive_ident = self.get_custom_directive_ident(custom_directive.name, DUMMY_SP);
+    directive_arr.elems.push(Some(ExprOrSpread {
+        spread: None,
+        expr: Box::new(identifier),
+    }));
+
+    // Tries to early exit if we reached the desired array length
+    macro_rules! early_exit {
+        ($desired: expr) => {
+            if directive_arr_len_hint == $desired {
+                return directive_arr;
+            }
+        };
+    }
+
+    early_exit!(1);
+
+    // Write the value or `void 0`
+    directive_arr.elems.push(Some(ExprOrSpread {
+        spread: None,
+        expr: if let Some(directive_value) = value {
+            directive_value
+        } else {
+            Box::new(void0())
+        },
+    }));
+
+    early_exit!(2);
+
+    // Write the argument or `void 0`
+    let directive_arg_expr = match argument {
+        Some(StrOrExpr::Str(s)) => Box::new(Expr::Lit(Lit::Str(Str {
+            span: DUMMY_SP,
+            value: s,
+            raw: None,
+        }))),
+        Some(StrOrExpr::Expr(expr)) => expr.to_owned(),
+        None => Box::new(void0()),
+    };
+    directive_arr.elems.push(Some(ExprOrSpread {
+        spread: None,
+        expr: directive_arg_expr,
+    }));
+
+    early_exit!(3);
+
+    // Write the modifiers object in form `{ mod1: true, mod2: true }`
+    let mut modifiers_obj = ObjectLit {
+        span: DUMMY_SP,
+        props: Vec::with_capacity(modifiers.len()),
+    };
+    for modifier in modifiers.iter() {
+        modifiers_obj
+            .props
+            .push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                key: str_to_propname(modifier, DUMMY_SP),
+                value: Box::new(Expr::Lit(Lit::Bool(Bool {
+                    span: DUMMY_SP,
+                    value: true,
+                }))),
+            }))))
+    }
+    directive_arr.elems.push(Some(ExprOrSpread {
+        spread: None,
+        expr: Box::new(Expr::Object(modifiers_obj)),
+    }));
+
+    directive_arr
+}
+
+fn get_custom_directive_ident(
+    ctx: &mut TransformSfcContext,
+    directive_name: &FervidAtom,
+    span: Span,
+) -> Expr {
+    // Check directive existence and early exit
+    let existing_directive_binding = ctx.bindings_helper.custom_directives.get(directive_name);
+    match existing_directive_binding {
+        Some(CustomDirectiveBinding::Resolved(directive_binding)) => {
+            return (**directive_binding).to_owned();
+        }
+        Some(CustomDirectiveBinding::RuntimeResolved(directive_ident)) => {
+            return Expr::Ident((**directive_ident).to_owned());
+        }
+        _ => {}
+    }
+
+    // _directive_ prefix plus directive name
+    let directive_ident_raw = to_valid_asset_id(directive_name, "directive");
+    let directive_ident_atom = FervidAtom::from(directive_ident_raw);
+
+    // Directive will be resolved during runtime, this provides a variable name,
+    // e.g. `const _directive_custom = resolveDirective('custom')`
+    // and later `withDirectives(/*component*/, [[_directive_custom]])`
+    let resolve_identifier = Ident {
+        span,
+        ctxt: Default::default(),
+        sym: directive_ident_atom,
+        optional: false,
+    };
+
+    // Add as a runtime resolution
+    ctx.bindings_helper.custom_directives.insert(
+        directive_name.to_owned(),
+        CustomDirectiveBinding::RuntimeResolved(Box::new(resolve_identifier.to_owned())),
+    );
+
+    Expr::Ident(resolve_identifier)
 }
 
 fn is_component_tag(tag: &StartingTag) -> bool {
@@ -1147,4 +1296,17 @@ static RESERVED_PROPS: phf::Set<&'static str> = phf_set! {
 };
 fn is_reserved_prop(key: &str) -> bool {
     RESERVED_PROPS.contains(key)
+}
+
+/// Generates `void 0` expression
+fn void0() -> Expr {
+    Expr::Unary(UnaryExpr {
+        span: DUMMY_SP,
+        op: UnaryOp::Void,
+        arg: Box::new(Expr::Lit(Lit::Num(Number {
+            raw: None,
+            span: DUMMY_SP,
+            value: 0.0,
+        }))),
+    })
 }

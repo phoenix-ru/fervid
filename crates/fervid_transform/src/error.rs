@@ -110,6 +110,8 @@ pub enum TemplateErrorKind {
     TransformAssetUrlsBaseUrlParseFailed,
     /// Failed parsing the configured base URL when doing asset URL transform
     TransformAssetUrlsUrlParseFailed,
+    /// v-html will override element children.
+    VHtmlWithChildren,
     /// v-model value must be a valid JavaScript member expression
     VModelMalformedExpression,
     /// v-model cannot be used on a prop, because local prop bindings are not writable. Use a v-bind binding combined with a v-on listener that emits update:x event instead
@@ -128,6 +130,8 @@ pub enum TemplateErrorKind {
     VSlotExtraneousDefaultSlotChildren,
     /// v-slot can only be used on components or <template> tags.
     VSlotMisplaced,
+    /// v-text will override element children.
+    VTextWithChildren,
 }
 
 impl From<CssError> for TransformError {

@@ -97,8 +97,9 @@ pub fn transform_v_bind(
     };
 
     Some(DirectiveTransformResult {
-        need_runtime: false,
+        runtime_directive: None,
         props: vec![prop],
+        remove_children: false,
     })
 }
 

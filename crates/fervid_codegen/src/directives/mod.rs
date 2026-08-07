@@ -89,7 +89,7 @@ impl CodegenContext {
         }
 
         Expr::Call(CallExpr {
-            span: DUMMY_SP, // TODO Span
+            span: DUMMY_SP,
             ctxt: Default::default(),
             callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                 span: DUMMY_SP,

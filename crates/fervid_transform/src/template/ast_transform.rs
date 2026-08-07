@@ -582,6 +582,8 @@ impl TemplateVisitor<'_> {
 
             // Transform custom directives
             for custom_directive in directives.custom.iter_mut() {
+                use crate::template::resolutions::maybe_resolve_directive;
+
                 if let Some(ref mut value) = custom_directive.value {
                     self.ctx.bindings_helper.transform_expr(value, scope_to_use);
                 }
@@ -592,7 +594,7 @@ impl TemplateVisitor<'_> {
                 }
 
                 // Try resolving it
-                self.maybe_resolve_directive(&custom_directive.name);
+                maybe_resolve_directive(self.ctx, &custom_directive.name, scope_to_use);
             }
         }
 
@@ -687,8 +689,8 @@ impl VisitMut for Node {
 mod tests {
     #[cfg(feature = "new-pipeline")]
     use fervid_core::{
-        AttributeOrBinding, ElementNodeCodegenNode, StrOrExpr, VBindDirective, VCustomDirective,
-        VOnDirective,
+        AttributeOrBinding, ElementNodeCodegenNode, ExpressionNode, JsChildNode, PropsExpression,
+        StrOrExpr, VBindDirective, VCustomDirective, VOnDirective, VueImports,
     };
     use fervid_core::{
         Conditional, ElementKind, ForParseResult, Node, PatchHints, VForDirective, VueDirectives,
@@ -1166,6 +1168,130 @@ mod tests {
         );
     }
 
+    // https://github.com/vuejs/core/tree/d2c458be2542a628878cbfbdfebcb53b65d3e9f3/packages/compiler-dom/__tests__/transforms
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_transforms_v_html_and_removes_children() {
+        let mut template = directive_element(
+            VueDirectives {
+                v_html: Some(js("html")),
+                ..Default::default()
+            },
+            vec![Node::Text(fervid_atom!("ignored"), DUMMY_SP)],
+        );
+        let mut ctx = TransformSfcContext::anonymous();
+
+        transform_and_record_template(&mut template, &mut ctx);
+
+        let (element, vnode_call) = expect_element_vnode(&template.roots[0]);
+        assert!(element.children.is_empty());
+        assert!(vnode_call.directives.is_none());
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::Props));
+        assert_eq!(vnode_call.patch_hints.props.as_slice(), ["innerHTML"]);
+        let prop = expect_object_prop(vnode_call, "innerHTML");
+        let JsChildNode::ExpressionNode(value) = &prop.value else {
+            panic!("innerHTML should use the directive expression")
+        };
+        let ExpressionNode::SimpleExpression(value) = value.as_ref() else {
+            panic!("v-html value should be a simple expression")
+        };
+        assert_eq!(to_str(value.ast.as_ref()), "_ctx.html");
+        assert!(matches!(
+            ctx.errors.as_slice(),
+            [crate::error::TransformError::TemplateError(error)]
+                if matches!(error.kind, crate::error::TemplateErrorKind::VHtmlWithChildren)
+        ));
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_transforms_v_text_and_removes_children() {
+        let mut template = directive_element(
+            VueDirectives {
+                v_text: Some(js("text")),
+                ..Default::default()
+            },
+            vec![Node::Text(fervid_atom!("ignored"), DUMMY_SP)],
+        );
+        let mut ctx = TransformSfcContext::anonymous();
+
+        transform_and_record_template(&mut template, &mut ctx);
+
+        let (element, vnode_call) = expect_element_vnode(&template.roots[0]);
+        assert!(element.children.is_empty());
+        assert!(vnode_call.directives.is_none());
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::Props));
+        assert_eq!(vnode_call.patch_hints.props.as_slice(), ["textContent"]);
+        let prop = expect_object_prop(vnode_call, "textContent");
+        let JsChildNode::CallExpression(value) = &prop.value else {
+            panic!("dynamic v-text should call toDisplayString")
+        };
+        assert!(matches!(value.callee, VueImports::ToDisplayString));
+        let [JsChildNode::ExpressionNode(argument)] = value.arguments.as_slice() else {
+            panic!("toDisplayString should receive the directive expression")
+        };
+        let ExpressionNode::SimpleExpression(argument) = argument.as_ref() else {
+            panic!("v-text value should be a simple expression")
+        };
+        assert_eq!(to_str(argument.ast.as_ref()), "_ctx.text");
+        assert!(matches!(
+            ctx.errors.as_slice(),
+            [crate::error::TransformError::TemplateError(error)]
+                if matches!(error.kind, crate::error::TemplateErrorKind::VTextWithChildren)
+        ));
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_transforms_v_show_to_runtime_directive() {
+        let mut template = directive_element(
+            VueDirectives {
+                v_show: Some(js("visible")),
+                ..Default::default()
+            },
+            vec![Node::Text(fervid_atom!("content"), DUMMY_SP)],
+        );
+        let mut ctx = TransformSfcContext::anonymous();
+
+        transform_and_record_template(&mut template, &mut ctx);
+
+        let (element, vnode_call) = expect_element_vnode(&template.roots[0]);
+        assert_eq!(element.children.len(), 1);
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::NeedPatch));
+        assert_eq!(
+            to_str(
+                vnode_call
+                    .directives
+                    .as_ref()
+                    .expect("v-show should produce runtime directive arguments")
+            ),
+            "[[_vShow,_ctx.visible]]"
+        );
+        assert!(ctx.bindings_helper.vue_imports.contains(VueImports::VShow));
+        assert!(ctx.errors.is_empty());
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_erases_v_cloak_without_affecting_children() {
+        let mut template = directive_element(
+            VueDirectives {
+                v_cloak: Some(()),
+                ..Default::default()
+            },
+            vec![Node::Text(fervid_atom!("content"), DUMMY_SP)],
+        );
+
+        transform_and_record_template(&mut template, &mut TransformSfcContext::anonymous());
+
+        let (element, vnode_call) = expect_element_vnode(&template.roots[0]);
+        assert_eq!(element.children.len(), 1);
+        assert!(vnode_call.props.is_none());
+        assert!(vnode_call.directives.is_none());
+        assert!(vnode_call.patch_hints.flags.is_empty());
+        assert!(vnode_call.patch_hints.props.is_empty());
+    }
+
     // https://github.com/vuejs/core/blob/02421cdbc4da5dd2eaf39e6c51aa790f9310db62/packages/compiler-core/__tests__/transforms/transformElement.spec.ts#L1037-L1134
     #[cfg(feature = "new-pipeline")]
     #[test]
@@ -1627,6 +1753,55 @@ mod tests {
             panic!("Expected v-for child VNodeCall")
         };
         vnode_call
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn expect_element_vnode(node: &Node) -> (&ElementNode, &fervid_core::VNodeCall) {
+        let element = expect_element(node);
+        let Some(ElementNodeCodegenNode::VNodeCall(vnode_call)) = element.codegen_node.as_deref()
+        else {
+            panic!("Expected element VNodeCall")
+        };
+        (element, vnode_call)
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn expect_object_prop<'a>(
+        vnode_call: &'a fervid_core::VNodeCall,
+        expected_name: &str,
+    ) -> &'a fervid_core::Property {
+        let Some(PropsExpression::ObjectExpression(props)) = vnode_call.props.as_ref() else {
+            panic!("Expected object props")
+        };
+        let [prop] = props.properties.as_slice() else {
+            panic!("Expected one property")
+        };
+        let fervid_core::ExpressionPropNameNode::SimpleExpression(name) = &prop.key else {
+            panic!("Expected static property name")
+        };
+        assert_eq!(name.ast.sym, expected_name);
+        prop
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn directive_element(directives: VueDirectives, children: Vec<Node>) -> SfcTemplateBlock {
+        SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: fervid_atom!("div"),
+                    attributes: vec![],
+                    directives: Some(Box::new(directives)),
+                },
+                children,
+                template_scope: 0,
+                tag_type: ElementKind::Element,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
+                codegen_node: None,
+            })],
+            span: DUMMY_SP,
+        }
     }
 
     #[cfg(feature = "new-pipeline")]

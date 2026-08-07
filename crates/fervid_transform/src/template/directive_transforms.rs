@@ -1,14 +1,25 @@
 use std::fmt::Debug;
 
 use enum_dispatch::enum_dispatch;
-use fervid_core::{ElementNode, Property, VBindDirective, VModelDirective, VOnDirective};
+use fervid_core::{
+    ElementNode, FervidAtom, Property, StrOrExpr, VBindDirective, VModelDirective, VOnDirective,
+    VueImports,
+};
 use swc_core::ecma::ast::Expr;
 
 use crate::{TransformSfcContext, template::core::v_bind::transform_v_bind};
 
 pub struct DirectiveTransformResult {
-    pub need_runtime: bool,
+    pub runtime_directive: Option<BuiltinRuntimeDirective>,
     pub props: Vec<Property>,
+    pub remove_children: bool,
+}
+
+pub struct BuiltinRuntimeDirective {
+    pub import: VueImports,
+    pub value: Option<Box<Expr>>,
+    pub arg: Option<StrOrExpr>,
+    pub modifiers: Vec<FervidAtom>,
 }
 
 #[enum_dispatch]
@@ -91,11 +102,38 @@ pub enum DirectiveTransformsProvider {
 
 impl Default for DirectiveTransformsProvider {
     fn default() -> Self {
-        Self::Base(BaseDirectiveTransform)
+        Self::Dom(DomDirectiveTransform)
     }
 }
 
 // Base transforms are provided as default trait implementations
 impl DirectiveTransforms for BaseDirectiveTransform {}
 
-impl DirectiveTransforms for DomDirectiveTransform {}
+impl DirectiveTransforms for DomDirectiveTransform {
+    fn transform_v_html(
+        &self,
+        ctx: &mut TransformSfcContext,
+        v_html: &Expr,
+        node: &ElementNode,
+    ) -> Option<DirectiveTransformResult> {
+        super::dom::v_html::transform_v_html(ctx, v_html, node)
+    }
+
+    fn transform_v_text(
+        &self,
+        ctx: &mut TransformSfcContext,
+        v_text: &Expr,
+        node: &ElementNode,
+    ) -> Option<DirectiveTransformResult> {
+        super::dom::v_text::transform_v_text(ctx, v_text, node)
+    }
+
+    fn transform_v_show(
+        &self,
+        ctx: &mut TransformSfcContext,
+        v_show: &Expr,
+        _node: &ElementNode,
+    ) -> Option<DirectiveTransformResult> {
+        super::dom::v_show::transform_v_show(ctx, v_show)
+    }
+}
