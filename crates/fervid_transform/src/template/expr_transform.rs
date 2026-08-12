@@ -459,7 +459,11 @@ impl<'s> VisitMut for TransformVisitor<'s> {
 
     fn visit_mut_member_expr(&mut self, n: &mut MemberExpr) {
         if n.obj.is_ident() {
-            n.obj.visit_mut_with(self)
+            n.obj.visit_mut_with(self);
+
+            if let MemberProp::Computed(ref mut computed) = n.prop {
+                computed.expr.visit_mut_with(self);
+            }
         } else {
             n.visit_mut_children_with(self);
         }
@@ -1139,6 +1143,22 @@ mod tests {
             "(x => doSmth(x), () => doSmth(x))",
             "(x=>_ctx.doSmth(x),()=>_ctx.doSmth(_ctx.x))"
         );
+    }
+
+    #[test]
+    fn it_transforms_computed_member_keys() {
+        let mut helper = BindingsHelper::default();
+
+        for (input, expected) in [
+            ("foo[bar]", "_ctx.foo[_ctx.bar]"),
+            ("foo[bar][baz]", "_ctx.foo[_ctx.bar][_ctx.baz]"),
+            ("foo.bar", "_ctx.foo.bar"),
+        ] {
+            let mut expr = js(input);
+            helper.transform_expr(&mut expr, 0);
+
+            assert_eq!(to_str(&expr), expected);
+        }
     }
 
     #[test]
