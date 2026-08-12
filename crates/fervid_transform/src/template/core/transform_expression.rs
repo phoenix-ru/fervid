@@ -33,10 +33,16 @@ fn transform_element_expressions(ctx: &mut TransformSfcContext, element: &mut El
                 }
             }
 
-            // Do not process exp if this is v-on:arg - we need special handling
-            // for wrapping inline statements.
-            AttributeOrBinding::VOn(dir) if dir.event.is_none() => {
-                if let Some(handler) = &mut dir.handler {
+            AttributeOrBinding::VOn(dir) => {
+                if let Some(StrOrExpr::Expr(event_expr)) = dir.event.as_mut() {
+                    ctx.bindings_helper.transform_expr(event_expr, scope_to_use);
+                }
+
+                // Do not process exp if this is v-on:arg - we need special handling
+                // for wrapping inline statements.
+                if dir.event.is_none()
+                    && let Some(handler) = &mut dir.handler
+                {
                     ctx.bindings_helper.transform_expr(handler, scope_to_use);
                 }
             }

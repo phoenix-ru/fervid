@@ -3,7 +3,7 @@ use fervid_core::{
 };
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{ArrowExpr, BindingIdent, BlockStmtOrExpr, Expr, Ident, Lit, Pat},
+    ecma::ast::{ArrowExpr, BindingIdent, BlockStmtOrExpr, Expr, Ident, Lit, ParenExpr, Pat},
 };
 
 /// Note: the original implementation only handles Teleport, Suspense, KeepAlive and BaseTransition
@@ -63,7 +63,6 @@ pub fn is_static_arg_of(arg: Option<&StrOrExpr>, name: &str) -> bool {
 }
 
 /// `foo-bar-baz` -> `FooBarBaz`
-#[inline]
 pub(crate) fn to_pascal_case(raw: &str, out: &mut String) {
     for word in raw.split('-') {
         let first_char = word.chars().next();
@@ -80,7 +79,6 @@ pub(crate) fn to_pascal_case(raw: &str, out: &mut String) {
 }
 
 /// `foo-bar-baz` -> `fooBarBaz`
-#[inline]
 pub(crate) fn to_camel_case(raw: &str, out: &mut String) {
     for (idx, word) in raw.split('-').enumerate() {
         if idx == 0 {
@@ -98,6 +96,20 @@ pub(crate) fn to_camel_case(raw: &str, out: &mut String) {
             // Push the rest of the word
             out.push_str(&word[ch.len_utf8()..]);
         }
+    }
+}
+
+/// `word` -> `Word`
+pub(crate) fn capitalize(raw: &str, out: &mut String) {
+    let first_char = raw.chars().next();
+    if let Some(ch) = first_char {
+        // Uppercase the first char and append to buf
+        for ch_component in ch.to_uppercase() {
+            out.push(ch_component);
+        }
+
+        // Push the rest of the word
+        out.push_str(&raw[ch.len_utf8()..]);
     }
 }
 
@@ -146,5 +158,31 @@ pub fn wrap_in_event_arrow(expr: Box<Expr>) -> Box<Expr> {
         is_generator: false,
         type_params: None,
         return_type: None,
+    }))
+}
+
+pub fn maybe_parenthesize(expr: Box<Expr>) -> Box<Expr> {
+    // Whitelist some expressions which don't need extra `()`
+    if matches!(
+        expr.as_ref(),
+        Expr::Array(_)
+            // Binary expressions are generally fine to use as-is
+            | Expr::Bin(_)
+            | Expr::Call(_)
+            | Expr::Ident(_)
+            | Expr::Lit(_)
+            | Expr::Member(_)
+            | Expr::OptChain(_)
+            | Expr::TaggedTpl(_)
+            | Expr::This(_)
+            | Expr::TsNonNull(_)
+            | Expr::Unary(_)
+    ) {
+        return expr;
+    }
+
+    Box::new(Expr::Paren(ParenExpr {
+        span: DUMMY_SP,
+        expr,
     }))
 }

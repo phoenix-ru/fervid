@@ -1292,6 +1292,148 @@ mod tests {
         assert!(vnode_call.patch_hints.props.is_empty());
     }
 
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn dynamic_v_on_uses_full_props_without_normalizing_handler_key() {
+        let mut template = v_on_element(
+            "div",
+            ElementKind::Element,
+            vec![VOnDirective {
+                event: Some(StrOrExpr::Expr(js("event"))),
+                handler: Some(js("handler")),
+                modifiers: vec![],
+                span: DUMMY_SP,
+            }],
+        );
+        let mut ctx = TransformSfcContext::anonymous();
+
+        transform_and_record_template(&mut template, &mut ctx);
+
+        let (_, vnode_call) = expect_element_vnode(&template.roots[0]);
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::FullProps));
+        let Some(PropsExpression::ObjectExpression(props)) = vnode_call.props.as_ref() else {
+            panic!("Dynamic handler key should remain object props")
+        };
+        let [prop] = props.properties.as_slice() else {
+            panic!("Expected one dynamic handler property")
+        };
+        assert!(prop.key.is_handler_key());
+        let fervid_core::ExpressionPropNameNode::CompoundExpression(key) = &prop.key else {
+            panic!("Dynamic handler should use a compound property key")
+        };
+        let swc_core::ecma::ast::PropName::Computed(key) = &key.ast else {
+            panic!("Dynamic handler should use a computed property key")
+        };
+        assert_eq!(to_str(key.expr.as_ref()), "_toHandlerKey(_ctx.event)");
+        assert!(
+            !ctx.bindings_helper
+                .vue_imports
+                .contains(VueImports::NormalizeProps)
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn vnode_hook_uses_need_patch() {
+        let mut template = v_on_element(
+            "div",
+            ElementKind::Element,
+            vec![VOnDirective {
+                event: Some(StrOrExpr::Str(fervid_atom!("vue:mounted"))),
+                handler: Some(js("handler")),
+                modifiers: vec![],
+                span: DUMMY_SP,
+            }],
+        );
+
+        transform_and_record_template(&mut template, &mut TransformSfcContext::anonymous());
+
+        let (_, vnode_call) = expect_element_vnode(&template.roots[0]);
+        assert!(!vnode_call.needs_patch);
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::NeedPatch));
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn duplicate_static_v_on_handlers_are_deduped_into_array() {
+        let mut template = v_on_element(
+            "div",
+            ElementKind::Element,
+            vec![
+                VOnDirective {
+                    event: Some(StrOrExpr::Str(fervid_atom!("click"))),
+                    handler: Some(js("first")),
+                    modifiers: vec![],
+                    span: DUMMY_SP,
+                },
+                VOnDirective {
+                    event: Some(StrOrExpr::Str(fervid_atom!("click"))),
+                    handler: Some(js("second")),
+                    modifiers: vec![],
+                    span: DUMMY_SP,
+                },
+            ],
+        );
+
+        transform_and_record_template(&mut template, &mut TransformSfcContext::anonymous());
+
+        let (_, vnode_call) = expect_element_vnode(&template.roots[0]);
+        let prop = expect_object_prop(vnode_call, "onClick");
+        let JsChildNode::ArrayExpression(handlers) = &prop.value else {
+            panic!("Duplicate handlers should produce an array")
+        };
+        let [_, _] = handlers.elements.as_slice() else {
+            panic!("Expected both duplicate handlers")
+        };
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn argumentless_v_on_marks_element_handlers_only() {
+        for (tag_name, tag_type, expected_arg_count) in [
+            ("div", ElementKind::Element, 2),
+            ("Comp", ElementKind::Component, 1),
+        ] {
+            let mut template = v_on_element(
+                tag_name,
+                tag_type,
+                vec![VOnDirective {
+                    event: None,
+                    handler: Some(js("listeners")),
+                    modifiers: vec![],
+                    span: DUMMY_SP,
+                }],
+            );
+
+            transform_and_record_template(&mut template, &mut TransformSfcContext::anonymous());
+
+            let (_, vnode_call) = expect_element_vnode(&template.roots[0]);
+            let Some(PropsExpression::CallExpression(call)) = vnode_call.props.as_ref() else {
+                panic!("Argumentless v-on should produce a helper call")
+            };
+            assert!(matches!(call.callee, VueImports::ToHandlers));
+            assert_eq!(call.arguments.len(), expected_arg_count);
+            let JsChildNode::ExpressionNode(listeners) = &call.arguments[0] else {
+                panic!("toHandlers should receive listener expression")
+            };
+            dbg!(&listeners);
+            let ExpressionNode::SimpleExpression(listeners) = listeners.as_ref() else {
+                panic!("Listener should be a simple expression")
+            };
+            assert_eq!(to_str(listeners.ast.as_ref()), "_ctx.listeners");
+
+            if expected_arg_count == 2 {
+                let JsChildNode::ExpressionNode(is_element) = &call.arguments[1] else {
+                    panic!("Element toHandlers should receive true")
+                };
+                let ExpressionNode::SimpleExpression(is_element) = is_element.as_ref() else {
+                    panic!("Element marker should be a simple expression")
+                };
+                assert_eq!(to_str(is_element.ast.as_ref()), "true");
+            }
+        }
+    }
+
     // https://github.com/vuejs/core/blob/02421cdbc4da5dd2eaf39e6c51aa790f9310db62/packages/compiler-core/__tests__/transforms/transformElement.spec.ts#L1037-L1134
     #[cfg(feature = "new-pipeline")]
     #[test]
@@ -1800,6 +1942,26 @@ mod tests {
                 span: DUMMY_SP,
                 codegen_node: None,
             })],
+            span: DUMMY_SP,
+        }
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn v_on_element(
+        tag_name: &str,
+        tag_type: ElementKind,
+        directives: Vec<VOnDirective>,
+    ) -> SfcTemplateBlock {
+        let mut element = element_from_tag(tag_name);
+        element.tag_type = tag_type;
+        element.starting_tag.attributes = directives
+            .into_iter()
+            .map(AttributeOrBinding::VOn)
+            .collect();
+
+        SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(element)],
             span: DUMMY_SP,
         }
     }

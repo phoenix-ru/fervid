@@ -30,17 +30,16 @@ pub trait DirectiveTransforms: Debug {
         v_bind: &VBindDirective,
         node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
-        // TODO: Use ctx.in_ssr inside the transform when implemented
-        transform_v_bind(ctx, v_bind, node, false)
+        transform_v_bind(ctx, v_bind, node)
     }
 
     fn transform_v_on(
         &self,
-        _ctx: &mut TransformSfcContext,
-        _v_on: &VOnDirective,
-        _node: &ElementNode,
+        ctx: &mut TransformSfcContext,
+        v_on: &VOnDirective,
+        node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
-        None
+        super::core::v_on::transform_v_on(ctx, v_on, node)
     }
 
     fn transform_v_model(
@@ -110,6 +109,15 @@ impl Default for DirectiveTransformsProvider {
 impl DirectiveTransforms for BaseDirectiveTransform {}
 
 impl DirectiveTransforms for DomDirectiveTransform {
+    fn transform_v_on(
+        &self,
+        ctx: &mut TransformSfcContext,
+        v_on: &VOnDirective,
+        node: &ElementNode,
+    ) -> Option<DirectiveTransformResult> {
+        super::dom::v_on::transform_v_on(ctx, v_on, node)
+    }
+
     fn transform_v_html(
         &self,
         ctx: &mut TransformSfcContext,

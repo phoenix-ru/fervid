@@ -45,6 +45,8 @@ pub struct TransformSfcContext {
     pub warnings: Vec<TransformError>,
     pub directive_transforms: DirectiveTransformsProvider,
     pub node_transforms: NodeTransformsProvider,
+    pub cache_handlers: bool,
+    pub in_ssr: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -324,6 +326,8 @@ impl TransformSfcContext {
             self_name: None,
             bindings_helper: BindingsHelper::default(),
             is_ce: false,
+            cache_handlers: true,
+            in_ssr: false,
             props_destructure: PropsDestructureConfig::default(),
             deps: HashSet::default(),
             scopes: vec![],

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use fervid_core::{
-    AttributeOrBinding, BindingTypes, BuiltinType, CallExpression, ComponentBinding,
+    AttributeOrBinding, BindingTypes, BuiltinType, CallExpression, ComponentBinding, ConstantTypes,
     CustomDirectiveBinding, ElementKind, ElementNode, ElementNodeCodegenNode, ExpressionNode,
     ExpressionPropNameNode, FervidAtom, IntoIdent, JsChildNode, Node, PatchFlags, PatchHints,
     Property, PropsExpression, SimpleExpressionNode, SimpleExpressionPropNameNode, StartingTag,
@@ -281,7 +281,7 @@ fn resolve_component_type(
                 exp = Some(ExpressionNode::SimpleExpression(SimpleExpressionNode {
                     ast: v_bind_directive.value.clone(),
                     is_static: false,
-                    const_type: fervid_core::ConstantTypes::NotConstant,
+                    const_type: ConstantTypes::NotConstant,
                     is_handler_key: false,
                 }));
                 // Note: the official transform handles `:is` shorthand expansion (`:is` -> `:is="is"`)
@@ -676,10 +676,15 @@ pub fn build_props(
                     // Args
                     let mut to_handlers_args = Vec::with_capacity(2);
                     to_handlers_args.push(JsChildNode::ExpressionNode(Box::new(
-                        (**exp).to_owned().into(),
+                        ExpressionNode::SimpleExpression(SimpleExpressionNode {
+                            ast: exp.to_owned(),
+                            is_static: false,
+                            const_type: ConstantTypes::NotConstant,
+                            is_handler_key: false,
+                        }),
                     )));
 
-                    if is_component {
+                    if !is_component {
                         to_handlers_args.push(JsChildNode::ExpressionNode(Box::new(
                             ExpressionNode::SimpleExpression(create_simple_expression_bool(true)),
                         )));

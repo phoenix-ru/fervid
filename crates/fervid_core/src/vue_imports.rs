@@ -91,6 +91,10 @@ flags! {
         VModelSelect,
         #[strum(serialize = "_vModelText")]
         VModelText,
+        #[strum(serialize = "_withKeys")]
+        VOnWithKeys,
+        #[strum(serialize = "_withModifiers")]
+        VOnWithModifiers,
         #[strum(serialize = "_vShow")]
         VShow,
         #[strum(serialize = "_withCtx")]
@@ -99,8 +103,6 @@ flags! {
         WithDirectives,
         #[strum(serialize = "_withMemo")]
         WithMemo,
-        #[strum(serialize = "_withModifiers")]
-        WithModifiers,
     }
 }
 

@@ -323,17 +323,6 @@ impl From<CallExpr> for CallExpression {
     }
 }
 
-// ExpressionNode
-
-impl From<Expr> for ExpressionNode {
-    fn from(value: Expr) -> Self {
-        Self::CompoundExpression(CompoundExpressionNode {
-            ast: Box::new(value),
-            is_handler_key: false,
-        })
-    }
-}
-
 // ExpressionPropNameNode
 
 impl ExpressionPropNameNode {
@@ -341,6 +330,24 @@ impl ExpressionPropNameNode {
         match self {
             ExpressionPropNameNode::SimpleExpression(s) => s.is_handler_key,
             ExpressionPropNameNode::CompoundExpression(c) => c.is_handler_key,
+        }
+    }
+
+    pub fn set_handler_key(&mut self, value: bool) {
+        match self {
+            Self::SimpleExpression(expression) => {
+                expression.is_handler_key = value;
+            }
+            Self::CompoundExpression(expression) => {
+                expression.is_handler_key = value;
+            }
+        }
+    }
+
+    pub fn is_static(&self) -> bool {
+        match self {
+            ExpressionPropNameNode::SimpleExpression(simple) => simple.is_static,
+            _ => false,
         }
     }
 }
@@ -360,6 +367,18 @@ impl From<SimpleExpressionPropNameNode> for ExpressionPropNameNode {
     }
 }
 
+impl From<CompoundExpressionPropNameNode> for Box<Expr> {
+    fn from(value: CompoundExpressionPropNameNode) -> Self {
+        match value.ast {
+            PropName::Ident(ident_name) => Box::new(Expr::Lit(ident_name.sym.into())),
+            PropName::Str(s) => Box::new(s.into()),
+            PropName::Num(number) => Box::new(number.into()),
+            PropName::Computed(computed_prop_name) => computed_prop_name.expr,
+            PropName::BigInt(big_int) => Box::new(big_int.into()),
+        }
+    }
+}
+
 // PropsExpression
 
 impl From<&Expr> for PropsExpression {
@@ -374,7 +393,15 @@ impl From<&Expr> for PropsExpression {
                     span: obj_expr.span,
                 }))
             }
-            _ => PropsExpression::ExpressionNode(Box::new(value.to_owned().into())),
+            // TODO: This conversion isn't fully correct, PropsExpression shouldn't be built from Expr
+            _ => PropsExpression::ExpressionNode(Box::new(ExpressionNode::SimpleExpression(
+                SimpleExpressionNode {
+                    ast: Box::new(value.to_owned()),
+                    is_static: false,
+                    const_type: ConstantTypes::NotConstant,
+                    is_handler_key: false,
+                },
+            ))),
         }
     }
 }

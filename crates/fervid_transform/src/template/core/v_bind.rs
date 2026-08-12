@@ -1,7 +1,7 @@
 use fervid_core::{
-    CompoundExpressionPropNameNode, ElementNode, ExpressionNode, ExpressionPropNameNode,
-    FervidAtom, JsChildNode, Property, SimpleExpressionPropNameNode, StrOrExpr, VBindDirective,
-    VueImports, fervid_atom,
+    CompoundExpressionPropNameNode, ConstantTypes, ElementNode, ExpressionNode,
+    ExpressionPropNameNode, FervidAtom, JsChildNode, Property, SimpleExpressionNode,
+    SimpleExpressionPropNameNode, StrOrExpr, VBindDirective, VueImports, fervid_atom,
 };
 use swc_core::{
     common::DUMMY_SP,
@@ -24,9 +24,9 @@ pub fn transform_v_bind(
     ctx: &mut TransformSfcContext,
     v_bind: &VBindDirective,
     _node: &ElementNode,
-    ssr: bool,
 ) -> Option<DirectiveTransformResult> {
     let span = v_bind.span;
+    let ssr = ctx.in_ssr;
 
     // Note: Empty value expressions are already handled by parser
 
@@ -66,7 +66,7 @@ pub fn transform_v_bind(
             ExpressionPropNameNode::SimpleExpression(SimpleExpressionPropNameNode {
                 ast: IdentName { sym: arg, span },
                 is_static: true,
-                const_type: fervid_core::ConstantTypes::CanStringify,
+                const_type: ConstantTypes::CanStringify,
                 is_handler_key: false,
             })
         }
@@ -92,7 +92,14 @@ pub fn transform_v_bind(
 
     let prop = Property {
         key,
-        value: JsChildNode::ExpressionNode(Box::new(ExpressionNode::from(*(v_bind.value).clone()))),
+        value: JsChildNode::ExpressionNode(Box::new(ExpressionNode::SimpleExpression(
+            SimpleExpressionNode {
+                ast: v_bind.value.to_owned(),
+                is_static: false,
+                const_type: ConstantTypes::NotConstant,
+                is_handler_key: false,
+            },
+        ))),
         span: DUMMY_SP,
     };
 

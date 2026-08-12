@@ -1,6 +1,8 @@
 pub mod parser;
 
-use fervid_core::{ElementNode, Node, StartingTag, fervid_atom};
+use fervid_core::{
+    ElementNode, ExpressionPropNameNode, JsChildNode, Node, Property, StartingTag, fervid_atom,
+};
 use parser::parse_typescript_module;
 use swc_core::common::{SourceMap, sync::Lrc};
 use swc_core::ecma::ast::{Expr, Module};
@@ -39,6 +41,70 @@ pub fn element_with_children(children: Vec<Node>) -> ElementNode {
         },
         children,
     )
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum AssertType {
+    CallExpression,
+    ExpressionNode,
+}
+
+pub fn property_to_str(property: &Property, assert_type: AssertType) -> String {
+    match (assert_type, &property.value) {
+        (AssertType::CallExpression, JsChildNode::CallExpression(_))
+        | (AssertType::ExpressionNode, JsChildNode::ExpressionNode(_)) => {}
+        (expected, actual) => {
+            panic!("Expected {expected:?}, got {actual:?}")
+        }
+    }
+
+    js_child_node_to_str(&property.value)
+}
+
+pub fn js_child_node_to_str(node: &JsChildNode) -> String {
+    match node {
+        JsChildNode::CallExpression(call) => {
+            let arguments = call
+                .arguments
+                .iter()
+                .map(js_child_node_to_str)
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("{}({arguments})", call.callee.as_str())
+        }
+        JsChildNode::ObjectExpression(object) => {
+            let properties = object
+                .properties
+                .iter()
+                .map(|property| {
+                    let key = match &property.key {
+                        ExpressionPropNameNode::SimpleExpression(key) => key.ast.sym.to_string(),
+                        ExpressionPropNameNode::CompoundExpression(key) => to_str(&key.ast),
+                    };
+                    format!("{key}:{}", js_child_node_to_str(&property.value))
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("{{{properties}}}")
+        }
+        JsChildNode::ExpressionNode(expression) => match expression.as_ref() {
+            fervid_core::ExpressionNode::SimpleExpression(expression) => {
+                to_str(expression.ast.as_ref())
+            }
+            fervid_core::ExpressionNode::CompoundExpression(expression) => {
+                to_str(expression.ast.as_ref())
+            }
+        },
+        JsChildNode::ArrayExpression(array) => {
+            let elements = array
+                .elements
+                .iter()
+                .map(js_child_node_to_str)
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("[{elements}]")
+        }
+    }
 }
 
 pub fn to_str(swc_node: &impl CodegenNode) -> String {

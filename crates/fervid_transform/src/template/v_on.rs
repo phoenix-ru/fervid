@@ -211,7 +211,7 @@ fn camelcase_with_word_groups(mut from: &str) -> String {
 /// Wraps in `(...args) => _ctx.smth && _ctx.smth(...args)`.
 ///
 /// `needs_check` signifies if `&&` check is needed
-fn wrap_in_args_arrow(mut expr: Box<Expr>, needs_check: bool) -> Box<Expr> {
+pub fn wrap_in_args_arrow(mut expr: Box<Expr>, needs_check: bool) -> Box<Expr> {
     let check = if needs_check {
         Some(expr.to_owned())
     } else {

@@ -218,7 +218,7 @@ impl CodegenContext {
 
                     let handler_expr = if !modifiers.is_empty() {
                         let with_modifiers_import =
-                            self.get_and_add_import_ident(VueImports::WithModifiers);
+                            self.get_and_add_import_ident(VueImports::VOnWithModifiers);
 
                         // `_withModifiers(transformed, ["modifier"]))`
                         Box::new(Expr::Call(CallExpr {

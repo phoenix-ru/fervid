@@ -118,6 +118,8 @@ pub enum TemplateErrorKind {
     VModelOnProps,
     /// v-model cannot be used on v-for or v-slot scope variables because they are not writable
     VModelOnScopeVariable,
+    /// @vnode-* hooks in templates are no longer supported. Use the vue: prefix instead. For example, @vnode-mounted should be changed to @vue:mounted. @vnode-* hooks support has been removed in 3.4.
+    VNodeHooks,
     /// v-on is missing expression
     VOnNoExpression,
     /// v-else/v-else-if has no adjacent v-if or v-else-if.
