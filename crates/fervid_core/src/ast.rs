@@ -181,6 +181,7 @@ pub enum JsChildNode {
     ObjectExpression(Box<ObjectExpression>),
     ExpressionNode(Box<ExpressionNode>),
     ArrayExpression(Box<ArrayExpression>),
+    CacheExpression(Box<CacheExpression>),
     // Unused?
     // OriginalValueMarker,
 }
@@ -209,6 +210,11 @@ pub struct Property {
 pub struct ArrayExpression {
     pub elements: Vec<JsChildNode>,
     pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct CacheExpression {
+    pub value: JsChildNode,
 }
 
 pub fn create_call_expression(

@@ -1,9 +1,10 @@
 use std::borrow::Cow;
 
 use fervid_core::{
-    BindingTypes, CompoundExpressionNode, CompoundExpressionPropNameNode, ConstantTypes,
-    ElementKind, ElementNode, ExpressionNode, ExpressionPropNameNode, FervidAtom, IntoIdent,
-    Property, SimpleExpressionPropNameNode, StrOrExpr, VOnDirective, VueImports,
+    BindingTypes, CacheExpression, CompoundExpressionNode, CompoundExpressionPropNameNode,
+    ConstantTypes, ElementKind, ElementNode, ExpressionNode, ExpressionPropNameNode, FervidAtom,
+    IntoIdent, JsChildNode, Property, SimpleExpressionPropNameNode, StrOrExpr, VOnDirective,
+    VueImports,
 };
 use swc_core::{
     common::{DUMMY_SP, Span},
@@ -69,12 +70,12 @@ pub fn transform_v_on_base(
 
     let property = Property {
         key: event_name,
-        value: fervid_core::JsChildNode::ExpressionNode(Box::new(
-            ExpressionNode::CompoundExpression(CompoundExpressionNode {
+        value: JsChildNode::ExpressionNode(Box::new(ExpressionNode::CompoundExpression(
+            CompoundExpressionNode {
                 ast: handler,
                 is_handler_key: false,
-            }),
-        )),
+            },
+        ))),
         span: v_on.span,
     };
 
@@ -89,11 +90,21 @@ pub fn transform_v_on_base(
 }
 
 pub fn finish_v_on(mut state: VOnTransformState) -> DirectiveTransformResult {
-    // TODO Caching
+    let should_cache = state.should_cache;
 
-    for property in state.result.props.iter_mut() {
-        property.key.set_handler_key(true);
-    }
+    state.result.props = state
+        .result
+        .props
+        .into_iter()
+        .map(|mut property| {
+            property.key.set_handler_key(true);
+
+            if should_cache {
+                property.value = wrap_with_cache_expr(property.value);
+            }
+            property
+        })
+        .collect();
 
     state.result
 }
@@ -296,6 +307,10 @@ fn empty_handler() -> Box<Expr> {
         type_params: None,
         return_type: None,
     }))
+}
+
+fn wrap_with_cache_expr(value: JsChildNode) -> JsChildNode {
+    JsChildNode::CacheExpression(Box::new(CacheExpression { value }))
 }
 
 #[cfg(test)]

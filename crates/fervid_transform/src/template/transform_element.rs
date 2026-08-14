@@ -24,6 +24,7 @@ use swc_core::{
 use crate::{
     BindingsHelper, SetupBinding, TransformSfcContext,
     error::{TemplateError, TemplateErrorKind, TransformError},
+    script::utils::is_static,
     template::{
         core::v_slot::build_slots,
         directive_transforms::{BuiltinRuntimeDirective, DirectiveTransforms},
@@ -1001,23 +1002,31 @@ fn analyze_patch_flag(
         patch_markers.has_vnode_hook = true;
     }
 
-    // TODO
-    // if is_event_handler {
-    //     if let Some(call_expr) = value.and_then(|v| v.as_call()) {
-    //         value = call_expr.args.first().map(|v| &v.expr);
-    //     }
-    // }
+    let mut value = Some(&prop.value);
 
-    // if (
-    //     value.type === NodeTypes.JS_CACHE_EXPRESSION ||
-    //     ((value.type === NodeTypes.SIMPLE_EXPRESSION ||
-    //       value.type === NodeTypes.COMPOUND_EXPRESSION) &&
-    //       getConstantType(value, context) > 0)
-    // ) {
-    //     // skip if the prop is a cached handler or has constant value
-    //     return
-    // }
+    if is_event_handler && let JsChildNode::CallExpression(ref call_expr) = prop.value {
+        // Handler wrapped with internal helper e.g. withModifiers(fn)
+        // extract the actual expression
+        value = call_expr.arguments.first();
+    }
 
+    // Skip if the prop is a cached handler or has constant value
+    let can_return = match value {
+        Some(JsChildNode::CacheExpression(_)) => true,
+        // TODO: Move this to get_constant_type and use get_constant_type(...) > 0
+        Some(JsChildNode::ExpressionNode(expr_node)) => match expr_node.as_ref() {
+            ExpressionNode::SimpleExpression(simple) => {
+                !matches!(simple.const_type, ConstantTypes::NotConstant)
+            }
+            ExpressionNode::CompoundExpression(compound) => is_static(&compound.ast),
+        },
+        Some(_) => false,
+        None => true,
+    };
+
+    if can_return {
+        return;
+    }
     match name.as_str() {
         "ref" => patch_markers.has_ref = true,
         "class" => patch_markers.has_class_binding = true,

@@ -697,6 +697,8 @@ mod tests {
     };
     use swc_core::common::DUMMY_SP;
 
+    #[cfg(feature = "new-pipeline")]
+    use crate::test_utils::element_from_tag;
     use crate::test_utils::{js, to_str};
 
     use super::*;

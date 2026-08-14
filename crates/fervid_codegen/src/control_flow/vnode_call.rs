@@ -1,15 +1,16 @@
 use fervid_core::{
-    ArrayExpression, CallExpression as FervidCallExpression, ElementNode, ElementNodeCodegenNode,
-    ExpressionNode, ExpressionPropNameNode, IntoIdent, JsChildNode, ObjectExpression,
-    PropsExpression, SlotBuild, SlotFlag, SlotSource, StrOrExpr, VNodeCall, VNodeCallTag,
-    VNodeChildren, VueImports, is_valid_propname,
+    ArrayExpression, CacheExpression, CallExpression as FervidCallExpression, ElementNode,
+    ElementNodeCodegenNode, ExpressionNode, ExpressionPropNameNode, IntoIdent, JsChildNode,
+    ObjectExpression, PropsExpression, SlotBuild, SlotFlag, SlotSource, StrOrExpr, VNodeCall,
+    VNodeCallTag, VNodeChildren, VueImports, fervid_atom, is_valid_propname,
 };
 use swc_core::{
     common::{DUMMY_SP, Span},
     ecma::ast::{
-        ArrayLit, ArrowExpr, BlockStmtOrExpr, CallExpr, Callee, ComputedPropName, Expr,
-        ExprOrSpread, IdentName, KeyValueProp, Lit, Null, Number, ObjectLit, Prop, PropName,
-        PropOrSpread, Str,
+        ArrayLit, ArrowExpr, AssignExpr, AssignOp, AssignTarget, BinExpr, BinaryOp,
+        BlockStmtOrExpr, CallExpr, Callee, ComputedPropName, Expr, ExprOrSpread, IdentName,
+        KeyValueProp, Lit, MemberExpr, MemberProp, Null, Number, ObjectLit, ParenExpr, Prop,
+        PropName, PropOrSpread, SimpleAssignTarget, Str,
     },
 };
 
@@ -287,6 +288,7 @@ impl CodegenContext {
             JsChildNode::ObjectExpression(object) => self.generate_object_expression(object),
             JsChildNode::ExpressionNode(expr) => self.generate_expression_node(expr),
             JsChildNode::ArrayExpression(array) => self.generate_array_expression(array),
+            JsChildNode::CacheExpression(cache) => self.generate_cache_expression(cache),
         }
     }
 
@@ -331,6 +333,39 @@ impl CodegenContext {
                 .iter()
                 .map(|elem| Some(expr_arg(self.generate_js_child_node(elem))))
                 .collect(),
+        })
+    }
+
+    fn generate_cache_expression(&mut self, cache: &CacheExpression) -> Expr {
+        let index = self.allocate_next_cache_entry();
+        let value = self.generate_js_child_node(&cache.value);
+
+        let cache_member = MemberExpr {
+            span: DUMMY_SP,
+            obj: Box::new(Expr::Ident(fervid_atom!("_cache").into_ident())),
+            prop: MemberProp::Computed(ComputedPropName {
+                span: DUMMY_SP,
+                expr: Box::new(Expr::Lit(Lit::Num(Number {
+                    span: DUMMY_SP,
+                    value: index as f64,
+                    raw: None,
+                }))),
+            }),
+        };
+
+        Expr::Bin(BinExpr {
+            span: DUMMY_SP,
+            op: BinaryOp::LogicalOr,
+            left: Box::new(Expr::Member(cache_member.clone())),
+            right: Box::new(Expr::Paren(ParenExpr {
+                span: DUMMY_SP,
+                expr: Box::new(Expr::Assign(AssignExpr {
+                    span: DUMMY_SP,
+                    op: AssignOp::Assign,
+                    left: AssignTarget::Simple(SimpleAssignTarget::Member(cache_member)),
+                    right: Box::new(value),
+                })),
+            })),
         })
     }
 
@@ -381,5 +416,36 @@ fn expression_prop_name_to_prop_name(value: &ExpressionPropNameNode) -> PropName
             }
         }
         ExpressionPropNameNode::CompoundExpression(expr) => expr.ast.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fervid_core::{CompoundExpressionNode, ExpressionNode};
+
+    use crate::test_utils::{js, to_str};
+
+    use super::*;
+
+    #[test]
+    fn it_generates_cache_expressions() {
+        let cache = CacheExpression {
+            value: JsChildNode::ExpressionNode(Box::new(ExpressionNode::CompoundExpression(
+                CompoundExpressionNode {
+                    ast: js("(...args) => handler(...args)"),
+                    is_handler_key: false,
+                },
+            ))),
+        };
+        let mut ctx = CodegenContext::default();
+
+        assert_eq!(
+            to_str(ctx.generate_cache_expression(&cache)),
+            "_cache[0]||(_cache[0]=(...args)=>handler(...args))"
+        );
+        assert_eq!(
+            to_str(ctx.generate_cache_expression(&cache)),
+            "_cache[1]||(_cache[1]=(...args)=>handler(...args))"
+        );
     }
 }

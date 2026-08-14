@@ -104,6 +104,9 @@ pub fn js_child_node_to_str(node: &JsChildNode) -> String {
                 .join(",");
             format!("[{elements}]")
         }
+        JsChildNode::CacheExpression(cache) => {
+            format!("cache({})", js_child_node_to_str(&cache.value))
+        }
     }
 }
 
