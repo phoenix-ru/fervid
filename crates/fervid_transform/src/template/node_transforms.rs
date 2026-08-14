@@ -11,6 +11,7 @@ use crate::{
             transform_if::transform_if,
             transform_whitespace::transform_whitespace,
             v_for::{post_transform_for, pre_transform_for},
+            v_once::{post_transform_once, pre_transform_once},
         },
         transform_element::post_transform_element_node,
     },
@@ -123,9 +124,6 @@ impl NodeTransforms for BaseNodeTransform {
         // TODO - User transforms in the separate implementation?
     }
 }
-
-fn pre_transform_once(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
-fn post_transform_once(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
 fn pre_transform_if(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 fn post_transform_if(_ctx: &mut TransformSfcContext, _node: &mut Node) {}

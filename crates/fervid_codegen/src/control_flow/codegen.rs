@@ -1,10 +1,13 @@
-use fervid_core::{ElementKind, ElementNode, IntoIdent, Node, VueImports};
+use fervid_core::{
+    CacheMarker, CacheMarkers, ElementKind, ElementNode, IntoIdent, Node, VueImports, fervid_atom,
+};
 use smallvec::SmallVec;
 use swc_core::{
-    common::{BytePos, Span},
+    common::{BytePos, DUMMY_SP, Span},
     ecma::ast::{
-        BinExpr, BinaryOp, Bool, CallExpr, Callee, Expr, ExprOrSpread, Lit, Number, ParenExpr,
-        SeqExpr,
+        ArrayLit, AssignExpr, AssignOp, AssignTarget, BinExpr, BinaryOp, Bool, CallExpr, Callee,
+        ComputedPropName, Expr, ExprOrSpread, IdentName, Lit, MemberExpr, MemberProp, Number,
+        ParenExpr, SeqExpr, SimpleAssignTarget,
     },
 };
 
@@ -13,6 +16,130 @@ use crate::context::CodegenContext;
 type TextNodesConcatenationVec = SmallVec<[Expr; 3]>;
 
 impl CodegenContext {
+    pub(crate) fn wrap_cache_expression(
+        &mut self,
+        index: u8,
+        value: Expr,
+        markers: CacheMarkers,
+    ) -> Expr {
+        // _cache[index]
+        let cache_member = MemberExpr {
+            span: DUMMY_SP,
+            obj: Box::new(Expr::Ident(fervid_atom!("_cache").into_ident())),
+            prop: MemberProp::Computed(ComputedPropName {
+                span: DUMMY_SP,
+                expr: Box::new(Expr::Lit(Lit::Num(Number {
+                    span: DUMMY_SP,
+                    value: index as f64,
+                    raw: None,
+                }))),
+            }),
+        };
+        let cache_expr = Expr::Member(cache_member.clone());
+        // _cache[index] = value
+        let cache_assign = Expr::Assign(AssignExpr {
+            span: DUMMY_SP,
+            op: AssignOp::Assign,
+            left: AssignTarget::Simple(SimpleAssignTarget::Member(cache_member)),
+            right: Box::new(value),
+        });
+
+        let right = if markers.contains(CacheMarker::NeedPauseTracking) {
+            let set_block_tracking = self
+                .get_and_add_import_ident(VueImports::SetBlockTracking)
+                .into_ident();
+            // _setBlockTracking(value) or _setBlockTracking(value, true)
+            let set_tracking = |value: f64, in_v_once: bool| {
+                let mut args = vec![ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(Expr::Lit(Lit::Num(Number {
+                        span: DUMMY_SP,
+                        value,
+                        raw: None,
+                    }))),
+                }];
+                if in_v_once {
+                    args.push(ExprOrSpread {
+                        spread: None,
+                        expr: Box::new(Expr::Lit(Lit::Bool(Bool {
+                            span: DUMMY_SP,
+                            value: true,
+                        }))),
+                    });
+                }
+                Box::new(Expr::Call(CallExpr {
+                    span: DUMMY_SP,
+                    ctxt: Default::default(),
+                    callee: Callee::Expr(Box::new(Expr::Ident(set_block_tracking.clone()))),
+                    args,
+                    type_args: None,
+                }))
+            };
+            // (_cache[index] = value).cacheIndex = index
+            let assign_cache_index = Box::new(Expr::Assign(AssignExpr {
+                span: DUMMY_SP,
+                op: AssignOp::Assign,
+                left: AssignTarget::Simple(SimpleAssignTarget::Member(MemberExpr {
+                    span: DUMMY_SP,
+                    obj: Box::new(Expr::Paren(ParenExpr {
+                        span: DUMMY_SP,
+                        expr: Box::new(cache_assign),
+                    })),
+                    prop: MemberProp::Ident(IdentName {
+                        span: DUMMY_SP,
+                        sym: fervid_atom!("cacheIndex"),
+                    }),
+                })),
+                right: Box::new(Expr::Lit(Lit::Num(Number {
+                    span: DUMMY_SP,
+                    value: index as f64,
+                    raw: None,
+                }))),
+            }));
+
+            Box::new(Expr::Paren(ParenExpr {
+                span: DUMMY_SP,
+                expr: Box::new(Expr::Seq(SeqExpr {
+                    span: DUMMY_SP,
+                    exprs: vec![
+                        set_tracking(-1.0, markers.contains(CacheMarker::InVOnce)),
+                        assign_cache_index,
+                        set_tracking(1.0, false),
+                        Box::new(cache_expr.clone()),
+                    ],
+                })),
+            }))
+        } else {
+            Box::new(Expr::Paren(ParenExpr {
+                span: DUMMY_SP,
+                expr: Box::new(cache_assign),
+            }))
+        };
+
+        let cached = Expr::Bin(BinExpr {
+            span: DUMMY_SP,
+            op: BinaryOp::LogicalOr,
+            left: Box::new(cache_expr),
+            right,
+        });
+
+        if markers.contains(CacheMarker::NeedArraySpread) {
+            // [...(_cache[index] || (_cache[index] = value))]
+            Expr::Array(ArrayLit {
+                span: DUMMY_SP,
+                elems: vec![Some(ExprOrSpread {
+                    spread: Some(DUMMY_SP),
+                    expr: Box::new(Expr::Paren(ParenExpr {
+                        span: DUMMY_SP,
+                        expr: Box::new(cached),
+                    })),
+                })],
+            })
+        } else {
+            cached
+        }
+    }
+
     pub fn generate_node(&mut self, node: &Node, wrap_in_block: bool) -> Expr {
         match node {
             Node::Text(contents, span) => self.generate_text_node(contents, span.to_owned()),
@@ -38,12 +165,21 @@ impl CodegenContext {
         wrap_in_block: bool,
     ) -> Expr {
         // `v-once` logic is common for all
+        #[cfg(not(feature = "new-pipeline"))]
         let has_v_once = element_node
             .starting_tag
             .directives
             .as_ref()
             .and_then(|directives| directives.v_once)
             .is_some();
+        #[cfg(feature = "new-pipeline")]
+        let has_v_once = element_node.codegen_node.is_none()
+            && element_node
+                .starting_tag
+                .directives
+                .as_ref()
+                .and_then(|directives| directives.v_once)
+                .is_some();
 
         // Disable caching if `v-once` is present
         let old_is_cache_disabled = self.is_cache_disabled;
@@ -105,7 +241,7 @@ impl CodegenContext {
 
         // Generate `v-once` if needed (also operates on render code)
         if has_v_once {
-            result = self.generate_v_once(Box::new(result));
+            result = self.generate_v_once(result);
 
             // Restore caching
             self.is_cache_disabled = old_is_cache_disabled;

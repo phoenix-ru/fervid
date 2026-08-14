@@ -689,7 +689,7 @@ impl VisitMut for Node {
 mod tests {
     #[cfg(feature = "new-pipeline")]
     use fervid_core::{
-        AttributeOrBinding, ElementNodeCodegenNode, ExpressionNode, JsChildNode, PropsExpression,
+        AttributeOrBinding, ElementCodegenValue, ExpressionNode, JsChildNode, PropsExpression,
         StrOrExpr, VBindDirective, VCustomDirective, VOnDirective, VueImports,
     };
     use fervid_core::{
@@ -1155,10 +1155,11 @@ mod tests {
         let Node::Element(element) = &sfc_template.roots[0] else {
             panic!("Expected directive-only element")
         };
-        let fervid_core::ElementNodeCodegenNode::VNodeCall(vnode_call) = element
+        let fervid_core::ElementCodegenValue::VNodeCall(vnode_call) = &element
             .codegen_node
             .as_deref()
-            .expect("directive-only element should have a VNodeCall");
+            .expect("directive-only element should have a VNodeCall")
+            .value;
         assert_eq!(
             1,
             vnode_call
@@ -1892,20 +1893,20 @@ mod tests {
     #[cfg(feature = "new-pipeline")]
     fn expect_for_vnode(node: &Node) -> &fervid_core::VNodeCall {
         let element = expect_for_element(node);
-        let Some(ElementNodeCodegenNode::VNodeCall(vnode_call)) = element.codegen_node.as_deref()
-        else {
+        let Some(codegen_node) = element.codegen_node.as_deref() else {
             panic!("Expected v-for child VNodeCall")
         };
+        let ElementCodegenValue::VNodeCall(vnode_call) = &codegen_node.value;
         vnode_call
     }
 
     #[cfg(feature = "new-pipeline")]
     fn expect_element_vnode(node: &Node) -> (&ElementNode, &fervid_core::VNodeCall) {
         let element = expect_element(node);
-        let Some(ElementNodeCodegenNode::VNodeCall(vnode_call)) = element.codegen_node.as_deref()
-        else {
+        let Some(codegen_node) = element.codegen_node.as_deref() else {
             panic!("Expected element VNodeCall")
         };
+        let ElementCodegenValue::VNodeCall(vnode_call) = &codegen_node.value;
         (element, vnode_call)
     }
 

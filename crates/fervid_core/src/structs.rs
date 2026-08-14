@@ -6,7 +6,7 @@ use swc_core::{
     },
 };
 
-use crate::{ForCodegenNode, VNodeCall};
+use crate::{ElementCodegenNode, ForCodegenNode};
 
 pub type FervidAtom = Atom;
 
@@ -90,7 +90,7 @@ pub struct ElementNode {
     pub template_scope: u32,
     pub patch_hints: PatchHints,
     pub span: Span,
-    pub codegen_node: Option<Box<ElementNodeCodegenNode>>,
+    pub codegen_node: Option<Box<ElementCodegenNode>>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -100,11 +100,6 @@ pub enum ElementKind {
     Element,
     Component,
     Template,
-}
-
-#[derive(Debug, Clone)]
-pub enum ElementNodeCodegenNode {
-    VNodeCall(VNodeCall),
 }
 
 impl ElementNode {

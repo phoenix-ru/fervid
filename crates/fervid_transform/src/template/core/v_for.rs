@@ -1,5 +1,5 @@
 use fervid_core::{
-    AttributeOrBinding, ElementKind, ElementNodeCodegenNode, ForCodegenNode, ForNode,
+    AttributeOrBinding, CacheMarker, ElementCodegenValue, ElementKind, ForCodegenNode, ForNode,
     ForParseResult, Node, PatchFlags, StrOrExpr, VForDirective,
 };
 use smallvec::SmallVec;
@@ -52,10 +52,10 @@ pub fn post_transform_for(ctx: &mut TransformSfcContext, node: &mut Node) {
     let [Node::Element(element)] = for_node.children.as_mut_slice() else {
         return;
     };
-    let Some(ElementNodeCodegenNode::VNodeCall(vnode_call)) = element.codegen_node.as_deref_mut()
-    else {
+    let Some(codegen_node) = element.codegen_node.as_mut() else {
         return;
     };
+    let ElementCodegenValue::VNodeCall(vnode_call) = &mut codegen_node.value;
 
     let should_use_block = !is_stable || vnode_call.is_block_required;
     vnode_call.is_block = should_use_block;
@@ -72,6 +72,13 @@ pub fn process_for(ctx: &mut TransformSfcContext, node: &mut Node, mut v_for: VF
         return;
     };
     let is_template = matches!(element_node.tag_type, ElementKind::Template);
+    // transformOnce already entered its scope before transformFor replaces this element
+    let has_v_once = element_node
+        .starting_tag
+        .directives
+        .as_mut()
+        .and_then(|directives| directives.v_once.take())
+        .is_some();
 
     // TODO: Move to codegen
     let (has_key, mut key) = find_for_key(element_node);
@@ -110,6 +117,11 @@ pub fn process_for(ctx: &mut TransformSfcContext, node: &mut Node, mut v_for: VF
                 disable_tracking: !is_stable,
                 is_template,
                 key: None,
+                cache: if has_v_once {
+                    CacheMarker::InVOnce.into()
+                } else {
+                    Default::default()
+                },
             })),
             span: v_for.span,
         }),

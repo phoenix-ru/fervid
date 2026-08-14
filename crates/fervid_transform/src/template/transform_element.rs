@@ -2,13 +2,13 @@ use std::borrow::Cow;
 
 use fervid_core::{
     AttributeOrBinding, BindingTypes, BuiltinType, CallExpression, ComponentBinding, ConstantTypes,
-    CustomDirectiveBinding, ElementKind, ElementNode, ElementNodeCodegenNode, ExpressionNode,
-    ExpressionPropNameNode, FervidAtom, IntoIdent, JsChildNode, Node, PatchFlags, PatchHints,
-    Property, PropsExpression, SimpleExpressionNode, SimpleExpressionPropNameNode, StartingTag,
-    StrOrExpr, VCustomDirective, VNodeCall, VNodeCallTag, VNodeChildren, VueDirectives, VueImports,
-    create_array_expression, create_call_expression, create_object_expression,
-    create_object_property, create_simple_expression_bool, create_simple_expression_propname,
-    create_simple_expression_str, fervid_atom, str_to_propname,
+    CustomDirectiveBinding, ElementCodegenNode, ElementCodegenValue, ElementKind, ElementNode,
+    ExpressionNode, ExpressionPropNameNode, FervidAtom, IntoIdent, JsChildNode, Node, PatchFlags,
+    PatchHints, Property, PropsExpression, SimpleExpressionNode, SimpleExpressionPropNameNode,
+    StartingTag, StrOrExpr, VCustomDirective, VNodeCall, VNodeCallTag, VNodeChildren,
+    VueDirectives, VueImports, create_array_expression, create_call_expression,
+    create_object_expression, create_object_property, create_simple_expression_bool,
+    create_simple_expression_propname, create_simple_expression_str, fervid_atom, str_to_propname,
 };
 use flagset::FlagSet;
 use fxhash::FxHashMap;
@@ -245,18 +245,21 @@ pub fn post_transform_element_node(node: &mut Node, ctx: &mut TransformSfcContex
     needs_patch = needs_patch
         && (patch_hints.flags.is_empty() || patch_hints.flags == PatchFlags::NeedHydration);
 
-    node.codegen_node = Some(Box::new(ElementNodeCodegenNode::VNodeCall(VNodeCall {
-        tag: vnode_tag,
-        props: vnode_props,
-        children: vnode_children,
-        patch_hints,
-        directives: vnode_directives,
-        needs_patch,
-        is_block_required,
-        is_block: should_use_block,
-        disable_tracking: false,
-        is_component,
-    })));
+    node.codegen_node = Some(Box::new(ElementCodegenNode {
+        value: ElementCodegenValue::VNodeCall(Box::new(VNodeCall {
+            tag: vnode_tag,
+            props: vnode_props,
+            children: vnode_children,
+            patch_hints,
+            directives: vnode_directives,
+            needs_patch,
+            is_block_required,
+            is_block: should_use_block,
+            disable_tracking: false,
+            is_component,
+        })),
+        cache: Default::default(),
+    }));
 }
 
 /// https://github.com/vuejs/core/blob/aac7e1898907445c8f89b22047a9bfcf0a6e91b8/packages/compiler-core/src/transforms/transformElement.ts#L227-L320

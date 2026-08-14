@@ -164,6 +164,27 @@ pub struct VNodeCall {
     pub is_component: bool,
 }
 
+flagset::flags! {
+    pub enum CacheMarker: u8 {
+        NeedPauseTracking = 1 << 0,
+        InVOnce = 1 << 1,
+        NeedArraySpread = 1 << 2,
+    }
+}
+
+pub type CacheMarkers = flagset::FlagSet<CacheMarker>;
+
+#[derive(Debug, Clone)]
+pub struct ElementCodegenNode {
+    pub value: ElementCodegenValue,
+    pub cache: CacheMarkers,
+}
+
+#[derive(Debug, Clone)]
+pub enum ElementCodegenValue {
+    VNodeCall(Box<VNodeCall>),
+}
+
 /// Outer Fragment VNodeCall generated for v-for
 #[derive(Debug, Clone)]
 pub struct ForCodegenNode {
@@ -171,6 +192,7 @@ pub struct ForCodegenNode {
     pub disable_tracking: bool,
     pub is_template: bool,
     pub key: Option<Box<Expr>>,
+    pub cache: CacheMarkers,
 }
 
 // JS Node Types
@@ -215,6 +237,7 @@ pub struct ArrayExpression {
 #[derive(Debug, Clone)]
 pub struct CacheExpression {
     pub value: JsChildNode,
+    pub markers: CacheMarkers,
 }
 
 pub fn create_call_expression(
@@ -293,6 +316,10 @@ pub fn create_simple_expression_str(
         },
         is_handler_key: false,
     }
+}
+
+pub fn create_cache_expression(value: JsChildNode, markers: CacheMarkers) -> CacheExpression {
+    CacheExpression { value, markers }
 }
 
 // Property

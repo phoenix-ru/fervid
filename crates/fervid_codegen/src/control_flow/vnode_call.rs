@@ -1,16 +1,15 @@
 use fervid_core::{
-    ArrayExpression, CacheExpression, CallExpression as FervidCallExpression, ElementNode,
-    ElementNodeCodegenNode, ExpressionNode, ExpressionPropNameNode, IntoIdent, JsChildNode,
-    ObjectExpression, PropsExpression, SlotBuild, SlotFlag, SlotSource, StrOrExpr, VNodeCall,
-    VNodeCallTag, VNodeChildren, VueImports, fervid_atom, is_valid_propname,
+    ArrayExpression, CacheExpression, CallExpression as FervidCallExpression, ElementCodegenNode,
+    ElementCodegenValue, ElementNode, ExpressionNode, ExpressionPropNameNode, IntoIdent,
+    JsChildNode, ObjectExpression, PropsExpression, SlotBuild, SlotFlag, SlotSource, StrOrExpr,
+    VNodeCall, VNodeCallTag, VNodeChildren, VueImports, is_valid_propname,
 };
 use swc_core::{
     common::{DUMMY_SP, Span},
     ecma::ast::{
-        ArrayLit, ArrowExpr, AssignExpr, AssignOp, AssignTarget, BinExpr, BinaryOp,
-        BlockStmtOrExpr, CallExpr, Callee, ComputedPropName, Expr, ExprOrSpread, IdentName,
-        KeyValueProp, Lit, MemberExpr, MemberProp, Null, Number, ObjectLit, ParenExpr, Prop,
-        PropName, PropOrSpread, SimpleAssignTarget, Str,
+        ArrayLit, ArrowExpr, BlockStmtOrExpr, CallExpr, Callee, ComputedPropName, Expr,
+        ExprOrSpread, IdentName, KeyValueProp, Lit, Null, Number, ObjectLit, Prop, PropName,
+        PropOrSpread, Str,
     },
 };
 
@@ -19,14 +18,21 @@ use crate::context::CodegenContext;
 impl CodegenContext {
     pub(crate) fn generate_element_codegen_node(
         &mut self,
-        element_node: &ElementNode,
-        codegen_node: &ElementNodeCodegenNode,
+        element: &ElementNode,
+        codegen_node: &ElementCodegenNode,
         wrap_in_block: bool,
     ) -> Expr {
-        match codegen_node {
-            ElementNodeCodegenNode::VNodeCall(vnode_call) => {
-                self.generate_vnode_call(element_node, vnode_call, wrap_in_block)
+        let value = match &codegen_node.value {
+            ElementCodegenValue::VNodeCall(vnode) => {
+                self.generate_vnode_call(element, vnode, wrap_in_block)
             }
+        };
+
+        if codegen_node.cache.is_empty() {
+            value
+        } else {
+            let index = self.allocate_next_cache_entry();
+            self.wrap_cache_expression(index, value, codegen_node.cache)
         }
     }
 
@@ -339,34 +345,7 @@ impl CodegenContext {
     fn generate_cache_expression(&mut self, cache: &CacheExpression) -> Expr {
         let index = self.allocate_next_cache_entry();
         let value = self.generate_js_child_node(&cache.value);
-
-        let cache_member = MemberExpr {
-            span: DUMMY_SP,
-            obj: Box::new(Expr::Ident(fervid_atom!("_cache").into_ident())),
-            prop: MemberProp::Computed(ComputedPropName {
-                span: DUMMY_SP,
-                expr: Box::new(Expr::Lit(Lit::Num(Number {
-                    span: DUMMY_SP,
-                    value: index as f64,
-                    raw: None,
-                }))),
-            }),
-        };
-
-        Expr::Bin(BinExpr {
-            span: DUMMY_SP,
-            op: BinaryOp::LogicalOr,
-            left: Box::new(Expr::Member(cache_member.clone())),
-            right: Box::new(Expr::Paren(ParenExpr {
-                span: DUMMY_SP,
-                expr: Box::new(Expr::Assign(AssignExpr {
-                    span: DUMMY_SP,
-                    op: AssignOp::Assign,
-                    left: AssignTarget::Simple(SimpleAssignTarget::Member(cache_member)),
-                    right: Box::new(value),
-                })),
-            })),
-        })
+        self.wrap_cache_expression(index, value, cache.markers)
     }
 
     fn generate_expression_node(&mut self, expr: &ExpressionNode) -> Expr {
@@ -436,6 +415,7 @@ mod tests {
                     is_handler_key: false,
                 },
             ))),
+            cache: Default::default(),
         };
         let mut ctx = CodegenContext::default();
 

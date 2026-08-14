@@ -121,7 +121,15 @@ impl CodegenContext {
             type_args: None,
         });
 
-        self.wrap_in_open_block_with_tracking(fragment, span, codegen_node.disable_tracking)
+        let value =
+            self.wrap_in_open_block_with_tracking(fragment, span, codegen_node.disable_tracking);
+
+        if codegen_node.cache.is_empty() {
+            value
+        } else {
+            let index = self.allocate_next_cache_entry();
+            self.wrap_cache_expression(index, value, codegen_node.cache)
+        }
     }
 
     fn generate_for_fragment(&mut self, children: &[Node], key: Option<&Expr>, span: Span) -> Expr {
@@ -630,8 +638,8 @@ fn inject_key(ctx: &mut CodegenContext, expr: &mut Expr, key: Expr, span: Span) 
 #[cfg(test)]
 mod tests {
     use fervid_core::{
-        ElementKind, ElementNode, ForCodegenNode, ForNode, ForParseResult, Node, PatchFlags,
-        PatchHints, StartingTag,
+        CacheMarker, ElementKind, ElementNode, ForCodegenNode, ForNode, ForParseResult, Node,
+        PatchFlags, PatchHints, StartingTag,
     };
 
     use crate::test_utils::js;
@@ -712,6 +720,31 @@ mod tests {
         assert_eq!(
             crate::test_utils::to_str(result),
             "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(10,(item)=>_createElementVNode(\"p\")),64))"
+        );
+    }
+
+    #[test]
+    fn it_generates_cached_for_node() {
+        let mut cached_for = for_node(
+            js("10"),
+            vec![element("p")],
+            PatchFlags::StableFragment,
+            false,
+            false,
+            None,
+        );
+        cached_for
+            .codegen_node
+            .as_mut()
+            .expect("for node should have codegen metadata")
+            .cache |= CacheMarker::NeedPauseTracking;
+        let mut ctx = CodegenContext::default();
+
+        let result = ctx.generate_for_node(&cached_for);
+
+        assert_eq!(
+            crate::test_utils::to_str(result),
+            "_cache[0]||(_setBlockTracking(-1),(_cache[0]=(_openBlock(),_createElementBlock(_Fragment,null,_renderList(10,(item)=>_createElementVNode(\"p\")),64))).cacheIndex=0,_setBlockTracking(1),_cache[0])"
         );
     }
 
@@ -907,6 +940,7 @@ mod tests {
                 disable_tracking,
                 is_template,
                 key,
+                cache: Default::default(),
             })),
             span: DUMMY_SP,
         }

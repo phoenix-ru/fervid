@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 
 use fervid_core::{
-    BindingTypes, CacheExpression, CompoundExpressionNode, CompoundExpressionPropNameNode,
-    ConstantTypes, ElementKind, ElementNode, ExpressionNode, ExpressionPropNameNode, FervidAtom,
-    IntoIdent, JsChildNode, Property, SimpleExpressionPropNameNode, StrOrExpr, VOnDirective,
-    VueImports,
+    BindingTypes, CompoundExpressionNode, CompoundExpressionPropNameNode, ConstantTypes,
+    ElementKind, ElementNode, ExpressionNode, ExpressionPropNameNode, FervidAtom, IntoIdent,
+    JsChildNode, Property, SimpleExpressionPropNameNode, StrOrExpr, VOnDirective, VueImports,
+    create_cache_expression,
 };
 use swc_core::{
     common::{DUMMY_SP, Span},
@@ -310,7 +310,7 @@ fn empty_handler() -> Box<Expr> {
 }
 
 fn wrap_with_cache_expr(value: JsChildNode) -> JsChildNode {
-    JsChildNode::CacheExpression(Box::new(CacheExpression { value }))
+    JsChildNode::CacheExpression(Box::new(create_cache_expression(value, Default::default())))
 }
 
 #[cfg(test)]
