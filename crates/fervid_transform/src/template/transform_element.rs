@@ -671,7 +671,7 @@ pub fn build_props(
                     let Some(ref exp) = v_on_directive.handler else {
                         ctx.errors
                             .push(TransformError::TemplateError(TemplateError {
-                                kind: TemplateErrorKind::VModelOnProps,
+                                kind: TemplateErrorKind::VOnNoExpression,
                                 span: v_on_directive.span,
                             }));
                         continue;
