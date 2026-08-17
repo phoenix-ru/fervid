@@ -136,15 +136,10 @@ fn transform_handler(
         handler.to_owned()
     };
 
-    let had_js = ctx
+    let has_scope_ref = ctx
         .bindings_helper
-        .transform_expr(&mut handler, scope_to_use);
-
-    // TODO: let `transform_expr` return more metadata about which scope variables
-    // were used during transform and rework the code below.
-    // vuejs-core uses `hasScopeRef` here
-    let captures_template_scope =
-        had_js && (ctx.directive_scopes.v_for > 0 || ctx.directive_scopes.v_slot > 0);
+        .transform_expr(&mut handler, scope_to_use)
+        .has_template_scope_ref;
 
     let should_cache = ctx.cache_handlers &&
         // unnecessary to cache inside v-once
@@ -160,7 +155,7 @@ fn transform_handler(
         !(is_member_expr && matches!(node.tag_type, ElementKind::Component)) &&
         // bail if the function references closure variables (v-for, v-slot)
         // it must be passed fresh to avoid stale values.
-        !captures_template_scope;
+        !has_scope_ref;
 
     if should_cache && is_member_expr {
         handler = wrap_in_args_arrow(handler, true);

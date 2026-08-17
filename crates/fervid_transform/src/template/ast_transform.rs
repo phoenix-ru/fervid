@@ -214,7 +214,8 @@ impl Visitor for TemplateVisitor<'_> {
         let has_js = self
             .ctx
             .bindings_helper
-            .transform_expr(&mut interpolation.value, self.current_scope);
+            .transform_expr(&mut interpolation.value, self.current_scope)
+            .has_js_bindings;
 
         interpolation.patch_flag = has_js;
     }
@@ -327,7 +328,8 @@ impl TemplateVisitor<'_> {
                 let is_dynamic = self
                     .ctx
                     .bindings_helper
-                    .transform_expr(&mut v_for.parse_result.source, scope_to_use);
+                    .transform_expr(&mut v_for.parse_result.source, scope_to_use)
+                    .has_js_bindings;
 
                 // Add patch flags
                 if !is_dynamic {
@@ -389,7 +391,8 @@ impl TemplateVisitor<'_> {
                     let has_bindings = self
                         .ctx
                         .bindings_helper
-                        .transform_expr(&mut v_bind.value, scope_to_use);
+                        .transform_expr(&mut v_bind.value, scope_to_use)
+                        .has_js_bindings;
 
                     // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L676
                     // Force hydration for v-bind with .prop modifier
@@ -559,7 +562,12 @@ impl TemplateVisitor<'_> {
             macro_rules! maybe_transform {
                 ($key: ident) => {
                     match directives.$key.as_mut() {
-                        Some(expr) => self.ctx.bindings_helper.transform_expr(expr, scope_to_use),
+                        Some(expr) => {
+                            self.ctx
+                                .bindings_helper
+                                .transform_expr(expr, scope_to_use)
+                                .has_js_bindings
+                        }
                         None => false,
                     }
                 };

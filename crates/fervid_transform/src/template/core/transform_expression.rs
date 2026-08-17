@@ -12,7 +12,8 @@ pub fn pre_transform_expression(ctx: &mut TransformSfcContext, node: &mut Node) 
             interpolation.template_scope = ctx.current_template_scope;
             interpolation.patch_flag = ctx
                 .bindings_helper
-                .transform_expr(&mut interpolation.value, ctx.current_template_scope);
+                .transform_expr(&mut interpolation.value, ctx.current_template_scope)
+                .has_js_bindings;
         }
         _ => {}
     }

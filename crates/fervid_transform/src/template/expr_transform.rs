@@ -1,16 +1,17 @@
 use fervid_core::{
-    BindingTypes, FervidAtom, IntoIdent, PatchFlags, PatchHints, StrOrExpr, TemplateGenerationMode,
-    VModelDirective, VueImports, fervid_atom, is_valid_propname,
+    BindingTypes, FervidAtom, IntoIdent, PatchFlags, PatchHints, StrOrExpr, VModelDirective,
+    VueImports, fervid_atom, is_valid_propname,
 };
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
         ast::{
-            ArrayLit, ArrayPat, AssignExpr, AssignOp, AssignTarget, AssignTargetPat, BindingIdent,
-            BlockStmt, CallExpr, Callee, ComputedPropName, CondExpr, Decl, Expr, ExprOrSpread,
-            Ident, IdentName, KeyValuePatProp, KeyValueProp, Lit, MemberExpr, MemberProp, Null,
-            ObjectLit, ObjectPat, ObjectPatProp, Pat, Prop, PropName, PropOrSpread,
-            SimpleAssignTarget, Stmt, Str, UpdateExpr, UpdateOp,
+            ArrayPat, ArrowExpr, AssignExpr, AssignOp, AssignTarget, AssignTargetPat, BindingIdent,
+            BlockStmt, BlockStmtOrExpr, CallExpr, Callee, ComputedPropName, CondExpr, Decl, Expr,
+            ExprOrSpread, Ident, IdentName, KeyValuePatProp, KeyValueProp, Lit, MemberExpr,
+            MemberProp, Null, ObjectLit, ObjectPat, ObjectPatProp, OptChainBase, Pat, Prop,
+            PropName, PropOrSpread, SimpleAssignTarget, Stmt, Str, TsKeywordType,
+            TsKeywordTypeKind, TsType, TsTypeAnn, UpdateExpr, UpdateOp,
         },
         visit::{VisitMut, VisitMutWith},
     },
@@ -21,12 +22,11 @@ use crate::{
     template::js_builtins::JS_BUILTINS,
 };
 
-use super::utils::wrap_in_event_arrow;
-
 struct TransformVisitor<'s> {
     current_scope: u32,
     bindings_helper: &'s mut BindingsHelper,
     has_js_bindings: bool,
+    has_template_scope_ref: bool,
     is_inline: bool,
 
     /// In ({ x } = y)
@@ -65,8 +65,21 @@ pub enum IdentTransformStrategy {
     RewriteWithMemberExpr(MemberExpr),
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TransformExpressionMetadata {
+    pub has_js_bindings: bool,
+    pub has_template_scope_ref: bool,
+}
+
+pub struct VModelExpressionTransformResult {
+    pub value: Box<Expr>,
+    pub update_handler: Box<Expr>,
+    pub has_template_scope_ref: bool,
+}
+
 pub trait BindingsHelperTransform {
-    fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> bool;
+    fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32)
+    -> TransformExpressionMetadata;
     fn transform_v_model(
         &mut self,
         v_model: &mut VModelDirective,
@@ -78,26 +91,12 @@ pub trait BindingsHelperTransform {
 
 impl BindingsHelperTransform for BindingsHelper {
     /// Transforms the template expression
-    fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> bool {
-        let is_inline = matches!(
-            self.template_generation_mode,
-            TemplateGenerationMode::Inline
-        );
-        let mut visitor = TransformVisitor {
-            current_scope: scope_to_use,
-            bindings_helper: self,
-            has_js_bindings: false,
-            is_inline,
-            is_in_assign_target: false,
-            is_in_destructure_assign: false,
-            is_v_model_transform: false,
-            local_vars: Vec::new(),
-            update_expr_helper: None,
-            should_consume_update_expr: false,
-        };
-        expr.visit_mut_with(&mut visitor);
-
-        visitor.has_js_bindings
+    fn transform_expr(
+        &mut self,
+        expr: &mut Expr,
+        scope_to_use: u32,
+    ) -> TransformExpressionMetadata {
+        transform_expr_with_mode(self, expr, scope_to_use, false)
     }
 
     /// Transforms `v-model` directive by producing
@@ -109,48 +108,15 @@ impl BindingsHelperTransform for BindingsHelper {
         scope_to_use: u32,
         patch_hints: &mut PatchHints,
     ) {
-        // 0. Ensure that `v-model` value is a valid AssignTarget
-        let Some(assign_target) = convert_expr_to_assign_target((*v_model.value).to_owned()) else {
-            // TODO Error
+        let Some(transformed) = transform_v_model_expression(self, &v_model.value, scope_to_use)
+        else {
+            // TODO Report malformed v-model expression
             return;
         };
 
-        // 1. Create handler: wrap in `$event => value = $event`
-        let event_expr = Box::new(Expr::Ident(FervidAtom::from("$event").into_ident()));
-        let mut handler = wrap_in_event_arrow(wrap_in_assignment(
-            assign_target,
-            event_expr,
-            AssignOp::Assign,
-        ));
+        v_model.value = transformed.value;
+        v_model.update_handler = Some(transformed.update_handler);
 
-        // 2. Transform handler
-        {
-            let is_inline = matches!(
-                self.template_generation_mode,
-                TemplateGenerationMode::Inline
-            );
-            let mut visitor = TransformVisitor {
-                current_scope: scope_to_use,
-                bindings_helper: self,
-                has_js_bindings: false,
-                is_inline,
-                is_in_assign_target: false,
-                is_in_destructure_assign: false,
-                is_v_model_transform: true,
-                local_vars: Vec::new(),
-                update_expr_helper: None,
-                should_consume_update_expr: false,
-            };
-            handler.visit_mut_with(&mut visitor);
-        }
-
-        // 3. Assign handler
-        v_model.update_handler = Some(handler);
-
-        // 4. Transform value
-        self.transform_expr(&mut v_model.value, scope_to_use);
-
-        // 5. (Optional) Transform dynamic argument and set patch hints
         match v_model.argument {
             Some(StrOrExpr::Expr(ref mut expr)) => {
                 self.transform_expr(expr, scope_to_use);
@@ -191,11 +157,12 @@ impl BindingsHelperTransform for BindingsHelper {
             return binding_type.to_owned();
         }
 
-        // Check setup bindings (both `<script setup>` and `setup()`)
-        let setup_bindings = self.setup_bindings.iter().chain(
+        // Check setup bindings (both `<script setup>` and `setup()`).
+        // Reverse iterators so that later bindings can shadow earlier ones
+        let setup_bindings = self.setup_bindings.iter().rev().chain(
             self.options_api_bindings
                 .as_ref()
-                .map_or_else(|| [].iter(), |v| v.setup.iter()),
+                .map_or_else(|| [].iter().rev(), |v| v.setup.iter().rev()),
         );
         for binding in setup_bindings {
             if binding.sym == variable_atom {
@@ -236,6 +203,63 @@ impl BindingsHelperTransform for BindingsHelper {
 
         BindingTypes::Unresolved
     }
+}
+
+fn transform_expr_with_mode(
+    bindings_helper: &mut BindingsHelper,
+    expr: &mut Expr,
+    scope_to_use: u32,
+    is_v_model_transform: bool,
+) -> TransformExpressionMetadata {
+    let is_inline = bindings_helper.template_generation_mode.is_inline();
+
+    let mut visitor = TransformVisitor {
+        current_scope: scope_to_use,
+        bindings_helper,
+        has_js_bindings: false,
+        has_template_scope_ref: false,
+        is_inline,
+        is_in_assign_target: false,
+        is_in_destructure_assign: false,
+        is_v_model_transform,
+        local_vars: Vec::new(),
+        update_expr_helper: None,
+        should_consume_update_expr: false,
+    };
+    expr.visit_mut_with(&mut visitor);
+
+    TransformExpressionMetadata {
+        has_js_bindings: visitor.has_js_bindings,
+        has_template_scope_ref: visitor.has_template_scope_ref,
+    }
+}
+
+pub fn transform_v_model_expression(
+    bindings_helper: &mut BindingsHelper,
+    value: &Expr,
+    scope_to_use: u32,
+) -> Option<VModelExpressionTransformResult> {
+    // 0. Ensure that `v-model` value is a valid AssignTarget
+    let assign_target = convert_expr_to_assign_target(value.to_owned())?;
+
+    // 1. Create handler. Wrap in `$event => value = $event`
+    let event_expr = Box::new(Expr::Ident(fervid_atom!("$event").into_ident()));
+    let mut update_handler = wrap_in_model_event_arrow(
+        wrap_in_assignment(assign_target, event_expr, AssignOp::Assign),
+        bindings_helper.is_ts,
+    );
+
+    transform_expr_with_mode(bindings_helper, &mut update_handler, scope_to_use, true);
+
+    let mut transformed_value = value.to_owned();
+    let metadata =
+        transform_expr_with_mode(bindings_helper, &mut transformed_value, scope_to_use, false);
+
+    Some(VModelExpressionTransformResult {
+        value: Box::new(transformed_value),
+        update_handler,
+        has_template_scope_ref: metadata.has_template_scope_ref,
+    })
 }
 
 impl BindingsHelper {
@@ -288,7 +312,10 @@ impl<'s> VisitMut for TransformVisitor<'s> {
 
                         if matches!(binding_type, BindingTypes::SetupLet)
                             || self.is_v_model_transform
-                                && matches!(binding_type, BindingTypes::SetupMaybeRef)
+                                && matches!(
+                                    binding_type,
+                                    BindingTypes::SetupMaybeRef | BindingTypes::Imported
+                                )
                         {
                             Some((ident, binding_type))
                         } else {
@@ -765,6 +792,7 @@ impl TransformVisitor<'_> {
         // Template local binding doesn't need any processing
         if let BindingTypes::TemplateLocal = binding_type {
             self.has_js_bindings = true;
+            self.has_template_scope_ref = true;
             return IdentTransformStrategy::LeaveUnchanged;
         }
 
@@ -1028,17 +1056,61 @@ fn wrap_in_assignment(lhs: AssignTarget, rhs_expr: Box<Expr>, op: AssignOp) -> B
     }))
 }
 
+fn wrap_in_model_event_arrow(expr: Box<Expr>, is_ts: bool) -> Box<Expr> {
+    let type_ann = is_ts.then(|| {
+        Box::new(TsTypeAnn {
+            span: DUMMY_SP,
+            type_ann: Box::new(TsType::TsKeywordType(TsKeywordType {
+                span: DUMMY_SP,
+                kind: TsKeywordTypeKind::TsAnyKeyword,
+            })),
+        })
+    });
+
+    // $event or $event: any
+    let event = Pat::Ident(BindingIdent {
+        id: FervidAtom::from("$event").into_ident(),
+        type_ann,
+    });
+
+    Box::new(Expr::Arrow(ArrowExpr {
+        span: DUMMY_SP,
+        ctxt: Default::default(),
+        params: vec![event],
+        body: Box::new(BlockStmtOrExpr::Expr(expr)),
+        is_async: false,
+        is_generator: false,
+        type_params: None,
+        return_type: None,
+    }))
+}
+
+pub fn is_model_member_expression(expr: &Expr) -> bool {
+    match expr {
+        Expr::Ident(ident) => ident.sym != "undefined",
+        Expr::Member(_) => true,
+        Expr::OptChain(chain) => {
+            // Member check is to match vuejs-core
+            // https://github.com/vuejs/core/blob/a2b40db9a83b36ed9da3a16403cf8f040262d73f/packages/compiler-core/src/utils.ts#L179
+            matches!(chain.base.as_ref(), OptChainBase::Member(_))
+        }
+        Expr::Paren(paren) => is_model_member_expression(&paren.expr),
+        Expr::TsNonNull(non_null) => is_model_member_expression(&non_null.expr),
+        Expr::TsAs(ts_as) => is_model_member_expression(&ts_as.expr),
+        Expr::TsInstantiation(instantiation) => is_model_member_expression(&instantiation.expr),
+        Expr::TsSatisfies(satisfies) => is_model_member_expression(&satisfies.expr),
+        Expr::TsTypeAssertion(assertion) => is_model_member_expression(&assertion.expr),
+        _ => false,
+    }
+}
+
 fn convert_expr_to_assign_target(expr: Expr) -> Option<AssignTarget> {
+    if !is_model_member_expression(&expr) {
+        return None;
+    }
+
     // Because AssignTarget is strongly typed, we have to map from `Expr` to `AssignTarget`
     match expr {
-        Expr::Array(arr) => Some(AssignTarget::Pat(AssignTargetPat::Array(
-            convert_arr_lit_to_pat(arr),
-        ))),
-
-        Expr::Object(obj) => Some(AssignTarget::Pat(AssignTargetPat::Object(
-            convert_obj_lit_to_pat(obj),
-        ))),
-
         Expr::Ident(ident) => Some(AssignTarget::Simple(SimpleAssignTarget::Ident(
             BindingIdent {
                 id: ident,
@@ -1069,14 +1141,6 @@ fn convert_expr_to_assign_target(expr: Expr) -> Option<AssignTarget> {
         // Maybe some other expressions can be a valid assignment target, but I trust SWC here
         _ => None,
     }
-}
-
-fn convert_arr_lit_to_pat(_arr_lit: ArrayLit) -> ArrayPat {
-    todo!()
-}
-
-fn convert_obj_lit_to_pat(_obj_lit: ObjectLit) -> ObjectPat {
-    todo!()
 }
 
 #[cfg(test)]

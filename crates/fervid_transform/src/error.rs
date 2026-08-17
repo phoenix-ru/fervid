@@ -112,12 +112,22 @@ pub enum TemplateErrorKind {
     TransformAssetUrlsUrlParseFailed,
     /// v-html will override element children.
     VHtmlWithChildren,
+    /// v-model argument is not supported on plain elements
+    VModelArgOnElement,
     /// v-model value must be a valid JavaScript member expression
     VModelMalformedExpression,
+    /// v-model cannot be used on a const binding because it is not writable
+    VModelOnConst,
+    /// v-model cannot be used on file inputs since they are read-only. Use a v-on:change listener instead
+    VModelOnFileInputElement,
+    /// v-model can only be used on <input>, <textarea> and <select> elements
+    VModelOnInvalidElement,
     /// v-model cannot be used on a prop, because local prop bindings are not writable. Use a v-bind binding combined with a v-on listener that emits update:x event instead
     VModelOnProps,
     /// v-model cannot be used on v-for or v-slot scope variables because they are not writable
     VModelOnScopeVariable,
+    /// Unnecessary value binding used alongside v-model. It will interfere with v-model's behavior
+    VModelUnnecessaryValue,
     /// @vnode-* hooks in templates are no longer supported. Use the vue: prefix instead. For example, @vnode-mounted should be changed to @vue:mounted. @vnode-* hooks support has been removed in 3.4.
     VNodeHooks,
     /// v-on is missing expression

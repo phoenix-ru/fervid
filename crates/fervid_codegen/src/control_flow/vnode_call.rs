@@ -411,7 +411,7 @@ mod tests {
                     is_handler_key: false,
                 },
             ))),
-            cache: Default::default(),
+            markers: Default::default(),
         };
         let mut ctx = CodegenContext::default();
 

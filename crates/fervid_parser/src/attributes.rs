@@ -507,12 +507,6 @@ impl SfcParser<'_, '_, '_> {
                 let value = expect_value!();
 
                 if let Ok(model_binding) = self.parse_expr(value, ts!(), span) {
-                    // v-model value must be a valid JavaScript member expression
-                    if !matches!(*model_binding, Expr::Member(_) | Expr::Ident(_)) {
-                        // TODO Report an error
-                        bail!();
-                    }
-
                     let directives = get_directives!();
                     directives.v_model.push(VModelDirective {
                         argument,

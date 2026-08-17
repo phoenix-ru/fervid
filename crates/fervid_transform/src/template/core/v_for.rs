@@ -199,7 +199,7 @@ fn find_for_key(node: &fervid_core::ElementNode) -> (bool, Option<Box<Expr>>) {
                 });
                 return (true, key);
             }
-            AttributeOrBinding::VBind(v_bind) if matches!(v_bind.argument.as_ref(), Some(StrOrExpr::Str(name)) if name == "key") =>
+            AttributeOrBinding::VBind(v_bind) if matches!(v_bind.argument.as_ref(), Some(StrOrExpr::Str(name)) if name.value == "key") =>
             {
                 return (true, Some(v_bind.value.clone()));
             }
@@ -223,9 +223,11 @@ pub fn finalize_for_parse_result(
         return;
     }
 
+    // TODO What is better here - has_scope_ref or just has_js_bindings
     result.finalized_is_dynamic = ctx
         .bindings_helper
-        .transform_expr(&mut result.source, scope_to_use);
+        .transform_expr(&mut result.source, scope_to_use)
+        .has_js_bindings;
 
     result.finalized = true;
 }

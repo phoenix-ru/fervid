@@ -15,6 +15,7 @@ pub struct DirectiveTransformResult {
     pub remove_children: bool,
 }
 
+#[derive(Debug)]
 pub struct BuiltinRuntimeDirective {
     pub import: VueImports,
     pub value: Option<Box<Expr>>,
@@ -44,11 +45,11 @@ pub trait DirectiveTransforms: Debug {
 
     fn transform_v_model(
         &self,
-        _ctx: &mut TransformSfcContext,
-        _v_model: &VModelDirective,
-        _node: &ElementNode,
+        ctx: &mut TransformSfcContext,
+        v_model: &VModelDirective,
+        node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
-        None
+        super::core::v_model::transform_v_model(ctx, v_model, node)
     }
 
     fn transform_v_html(
@@ -143,5 +144,14 @@ impl DirectiveTransforms for DomDirectiveTransform {
         _node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
         super::dom::v_show::transform_v_show(ctx, v_show)
+    }
+
+    fn transform_v_model(
+        &self,
+        ctx: &mut TransformSfcContext,
+        v_model: &VModelDirective,
+        node: &ElementNode,
+    ) -> Option<DirectiveTransformResult> {
+        super::dom::v_model::transform_v_model(ctx, v_model, node)
     }
 }
