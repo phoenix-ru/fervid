@@ -1193,11 +1193,7 @@ fn generate_directive_from_parts(
 
     // Write the argument or `void 0`
     let directive_arg_expr = match argument {
-        Some(StrOrExpr::Str(s)) => Box::new(Expr::Lit(Lit::Str(Str {
-            span: DUMMY_SP,
-            value: s,
-            raw: None,
-        }))),
+        Some(StrOrExpr::Str(s)) => Box::new(Expr::Lit(Lit::Str(s))),
         Some(StrOrExpr::Expr(expr)) => expr.to_owned(),
         None => Box::new(void0()),
     };

@@ -827,7 +827,7 @@ mod tests {
         };
         root.starting_tag.attributes = vec![
             fervid_core::AttributeOrBinding::VBind(fervid_core::VBindDirective {
-                argument: Some(fervid_core::StrOrExpr::Str(fervid_atom!("key"))),
+                argument: Some(fervid_atom!("key").into()),
                 value: js("i"),
                 is_camel: false,
                 is_prop: false,

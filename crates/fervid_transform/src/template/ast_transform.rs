@@ -413,7 +413,7 @@ impl TemplateVisitor<'_> {
                     };
 
                     // Skip `key` prop
-                    if argument == "key" {
+                    if argument.value == "key" {
                         // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L585
                         // #938: elements with dynamic keys should be forced into blocks
                         should_use_block = true;
@@ -421,14 +421,14 @@ impl TemplateVisitor<'_> {
                     }
 
                     // Skip `is` on `<component>`
-                    if argument == "is"
+                    if argument.value == "is"
                         && matches!(element_kind, ElementKind::Builtin(BuiltinType::Component))
                     {
                         continue;
                     }
 
                     // For `ref_for`
-                    if self.v_for_scope && argument == "ref" {
+                    if self.v_for_scope && argument.value == "ref" {
                         has_ref = true;
                     }
 
@@ -442,17 +442,17 @@ impl TemplateVisitor<'_> {
                     // They are added to PROPS for the components.
                     if is_component {
                         patch_hints.flags |= PatchFlags::Props;
-                        patch_hints.props.push(argument.to_owned());
+                        patch_hints.props.push(argument.value.to_owned());
                         continue;
                     }
 
-                    if argument == "class" {
+                    if argument.value == "class" {
                         patch_hints.flags |= PatchFlags::Class;
-                    } else if argument == "style" {
+                    } else if argument.value == "style" {
                         patch_hints.flags |= PatchFlags::Style;
                     } else {
                         patch_hints.flags |= PatchFlags::Props;
-                        patch_hints.props.push(argument.to_owned());
+                        patch_hints.props.push(argument.value.to_owned());
                     }
                 }
 
@@ -461,7 +461,7 @@ impl TemplateVisitor<'_> {
                     // inline before-update hooks need to force block so that it is invoked
                     // before children
                     if has_children
-                        && matches!(&v_on.event, Some(StrOrExpr::Str(s)) if s == "vue:before-update")
+                        && matches!(&v_on.event, Some(StrOrExpr::Str(s)) if s.value == "vue:before-update")
                     {
                         should_use_block = true;
                     }
@@ -471,14 +471,14 @@ impl TemplateVisitor<'_> {
                     // TODO Transform the event name beforehand (?) and make sure the condition is 100% the same
                     // https://github.com/vuejs/core/blob/f1068fc60ca511f68ff0aaedcc18b39124791d29/packages/compiler-core/src/transforms/transformElement.ts#L430
                     if let Some(StrOrExpr::Str(evt_name)) = v_on.event.as_ref() {
-                        let has_v_node = evt_name.starts_with("vue:");
+                        let has_v_node = evt_name.value.starts_with("vue:");
 
                         // TODO Adjust condition due to the latest transformation changes
                         if (!is_component
                             || matches!(element_kind, ElementKind::Builtin(BuiltinType::Component)))
-                            && evt_name != "click"
-                            && evt_name != "update:modelValue"
-                            && evt_name != "update:model-value"
+                            && evt_name.value != "click"
+                            && evt_name.value != "update:modelValue"
+                            && evt_name.value != "update:model-value"
                             && !has_v_node
                         {
                             has_hydration_event_binding = true;
@@ -522,6 +522,8 @@ impl TemplateVisitor<'_> {
                                 | BindingTypes::Imported
                         )
                     {
+                        use swc_core::ecma::ast::Str;
+
                         let span = span.to_owned();
                         let value = value.to_owned();
                         ref_key = Some(value.to_owned());
@@ -529,7 +531,11 @@ impl TemplateVisitor<'_> {
                         let _ = std::mem::replace(
                             attr,
                             AttributeOrBinding::VBind(VBindDirective {
-                                argument: Some(StrOrExpr::Str(fervid_atom!("ref"))),
+                                argument: Some(StrOrExpr::Str(Str {
+                                    span,
+                                    value: fervid_atom!("ref"),
+                                    raw: None,
+                                })),
                                 value: Box::new(Expr::Ident(value.into_ident_spanned(span))),
                                 is_camel: false,
                                 is_prop: false,
@@ -634,7 +640,7 @@ impl TemplateVisitor<'_> {
                 .starting_tag
                 .attributes
                 .push(AttributeOrBinding::VBind(VBindDirective {
-                    argument: Some(StrOrExpr::Str(fervid_atom!("ref_for"))),
+                    argument: Some(fervid_atom!("ref_for").into()),
                     value: Box::new(Expr::Lit(Lit::Bool(Bool {
                         span: DUMMY_SP,
                         value: true,
@@ -1342,7 +1348,7 @@ mod tests {
             "div",
             ElementKind::Element,
             vec![VOnDirective {
-                event: Some(StrOrExpr::Str(fervid_atom!("vue:mounted"))),
+                event: Some(fervid_atom!("vue:mounted").into()),
                 handler: Some(js("handler")),
                 modifiers: vec![],
                 span: DUMMY_SP,
@@ -1364,13 +1370,13 @@ mod tests {
             ElementKind::Element,
             vec![
                 VOnDirective {
-                    event: Some(StrOrExpr::Str(fervid_atom!("click"))),
+                    event: Some(fervid_atom!("click").into()),
                     handler: Some(js("first")),
                     modifiers: vec![],
                     span: DUMMY_SP,
                 },
                 VOnDirective {
-                    event: Some(StrOrExpr::Str(fervid_atom!("click"))),
+                    event: Some(fervid_atom!("click").into()),
                     handler: Some(js("second")),
                     modifiers: vec![],
                     span: DUMMY_SP,
@@ -1445,7 +1451,7 @@ mod tests {
             js("3"),
             vec![
                 AttributeOrBinding::VBind(VBindDirective {
-                    argument: Some(StrOrExpr::Str(fervid_atom!("key"))),
+                    argument: Some(fervid_atom!("key").into()),
                     value: js("i"),
                     is_camel: false,
                     is_prop: false,
@@ -1471,7 +1477,7 @@ mod tests {
         let mut childless_custom_directive = for_element(
             js("3"),
             vec![AttributeOrBinding::VBind(VBindDirective {
-                argument: Some(StrOrExpr::Str(fervid_atom!("key"))),
+                argument: Some(fervid_atom!("key").into()),
                 value: js("i"),
                 is_camel: false,
                 is_prop: false,

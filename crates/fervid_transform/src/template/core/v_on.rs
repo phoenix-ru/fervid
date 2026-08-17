@@ -61,8 +61,7 @@ pub fn transform_v_on_base(
     }
 
     let event_name = match v_on_arg {
-        // TODO: Use span of Str
-        StrOrExpr::Str(atom) => static_event_key(ctx, node, atom, v_on.span),
+        StrOrExpr::Str(s) => static_event_key(ctx, node, &s.value, s.span),
         StrOrExpr::Expr(expr) => dynamic_event_key(ctx, expr, v_on.span),
     };
 

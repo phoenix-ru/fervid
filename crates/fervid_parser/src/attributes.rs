@@ -6,7 +6,7 @@ use fervid_core::{
 };
 use swc_core::{
     common::{BytePos, Span},
-    ecma::ast::Expr,
+    ecma::ast::Str,
 };
 use swc_ecma_parser::Syntax;
 use swc_html_ast::Attribute;
@@ -299,7 +299,20 @@ impl SfcParser<'_, '_, '_> {
         let argument = match (argument_name, is_argument_dynamic) {
             ("", _) => None,
 
-            (static_name, false) => Some(StrOrExpr::Str(FervidAtom::from(static_name))),
+            (static_name, false) => {
+                let argument_start = static_name.as_ptr() as usize - raw_name.as_ptr() as usize;
+                let span_lo = raw_attribute.span.lo.0 + argument_start as u32;
+                let span = Span {
+                    lo: BytePos(span_lo),
+                    hi: BytePos(span_lo + static_name.len() as u32),
+                };
+
+                Some(StrOrExpr::Str(Str {
+                    span,
+                    value: static_name.into(),
+                    raw: None,
+                }))
+            }
 
             (dynamic_name, true) => {
                 let attr_lo = raw_attribute.span.lo.0;
@@ -381,7 +394,7 @@ impl SfcParser<'_, '_, '_> {
                         // This only works for static arguments
                         if let Some(StrOrExpr::Str(ref s)) = argument {
                             let mut out = String::with_capacity(raw_name.len());
-                            to_camel_case(s, &mut out);
+                            to_camel_case(&s.value, &mut out);
                             Cow::Owned(out)
                         } else {
                             bail!(ParseErrorKind::DirectiveSyntax);
@@ -721,6 +734,8 @@ fn to_camel_case(raw: &str, out: &mut String) {
 
 #[cfg(test)]
 mod tests {
+    use swc_core::ecma::ast::Expr;
+
     use super::*;
 
     #[test]
@@ -751,7 +766,7 @@ mod tests {
                 handler: Some(_),
                 modifiers,
                 ..
-            })) if s == "click" && modifiers.is_empty()
+            })) if s.value == "click" && modifiers.is_empty()
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding("@click", "handle"),
@@ -760,7 +775,7 @@ mod tests {
                 handler: Some(_),
                 modifiers,
                 ..
-            })) if s == "click" && modifiers.is_empty()
+            })) if s.value == "click" && modifiers.is_empty()
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding("@click.mod1.mod2", "handle"),
@@ -769,7 +784,7 @@ mod tests {
                 handler: Some(_),
                 modifiers,
                 ..
-            })) if s == "click" && modifiers.len() == 2
+            })) if s.value == "click" && modifiers.len() == 2
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding("@[click]", "handle"),
@@ -831,7 +846,7 @@ mod tests {
                 is_prop: false,
                 is_attr: false,
                 ..
-            })) if value.is_ident() && arg == "arg-name"
+            })) if value.is_ident() && arg.value == "arg-name"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(":arg-name", "value"),
@@ -842,7 +857,7 @@ mod tests {
                 is_prop: false,
                 is_attr: false,
                 ..
-            })) if value.is_ident() && arg == "arg-name"
+            })) if value.is_ident() && arg.value == "arg-name"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(":arg.mod1", "value"),
@@ -853,7 +868,7 @@ mod tests {
                 is_prop: false,
                 is_attr: false,
                 ..
-            })) if value.is_ident() && arg == "arg"
+            })) if value.is_ident() && arg.value == "arg"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(":arg.camel", "value"),
@@ -864,7 +879,7 @@ mod tests {
                 is_prop: false,
                 is_attr: false,
                 ..
-            })) if value.is_ident() && arg == "arg"
+            })) if value.is_ident() && arg.value == "arg"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(":arg.prop", "value"),
@@ -875,7 +890,7 @@ mod tests {
                 is_prop: true,
                 is_attr: false,
                 ..
-            })) if value.is_ident() && arg == "arg"
+            })) if value.is_ident() && arg.value == "arg"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(":arg.attr", "value"),
@@ -886,7 +901,7 @@ mod tests {
                 is_prop: false,
                 is_attr: true,
                 ..
-            })) if value.is_ident() && arg == "arg"
+            })) if value.is_ident() && arg.value == "arg"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(":arg.camel.attr.prop.mod", "value"),
@@ -897,7 +912,7 @@ mod tests {
                 is_prop: true,
                 is_attr: true,
                 ..
-            })) if value.is_ident() && arg == "arg"
+            })) if value.is_ident() && arg.value == "arg"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(".foo", "value"),
@@ -908,7 +923,7 @@ mod tests {
                 is_prop: true,
                 is_attr: false,
                 ..
-            })) if value.is_ident() && arg == "foo"
+            })) if value.is_ident() && arg.value == "foo"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(":[arg]", "value"),
@@ -963,7 +978,7 @@ mod tests {
                 is_prop: false,
                 is_attr: false,
                 ..
-            })) if value.is_ident() && arg == "arg[name]"
+            })) if value.is_ident() && arg.value == "arg[name]"
         ));
     }
 
@@ -1008,7 +1023,7 @@ mod tests {
                 is_prop: false,
                 is_attr: false,
                 ..
-            })) if arg == "msg" && value.as_ident().is_some_and(|v| v.sym == "msg")
+            })) if arg.value == "msg" && value.as_ident().is_some_and(|v| v.sym == "msg")
         ));
         assert!(matches!(
             test_parse_into_bind(":foo-bar"),
@@ -1019,8 +1034,56 @@ mod tests {
                 is_prop: false,
                 is_attr: false,
                 ..
-            })) if arg == "foo-bar" && value.as_ident().is_some_and(|v| v.sym == "fooBar")
+            })) if arg.value == "foo-bar" && value.as_ident().is_some_and(|v| v.sym == "fooBar")
         ));
+    }
+
+    #[test]
+    fn it_tracks_static_argument_span() {
+        const SOURCE: &str = r#"<div v-bind:argument="value"></div>"#;
+
+        let mut errors = Vec::new();
+        let mut parser = SfcParser::new(SOURCE, &mut errors);
+        let mut attrs_or_bindings = Vec::new();
+        let mut vue_directives = None;
+
+        let result = parser.try_parse_directive(
+            Attribute {
+                span: Span {
+                    lo: BytePos(6),
+                    hi: BytePos(29),
+                },
+                namespace: None,
+                prefix: None,
+                name: FervidAtom::from("v-bind:argument"),
+                raw_name: None,
+                value: Some(FervidAtom::from("value")),
+                raw_value: None,
+            },
+            &mut attrs_or_bindings,
+            &mut vue_directives,
+        );
+
+        assert!(result.is_ok());
+        let Some(AttributeOrBinding::VBind(VBindDirective {
+            argument: Some(StrOrExpr::Str(argument)),
+            ..
+        })) = attrs_or_bindings.pop()
+        else {
+            panic!("Expected v-bind with a static argument")
+        };
+
+        assert_eq!(
+            argument.span,
+            Span {
+                lo: BytePos(13),
+                hi: BytePos(21),
+            }
+        );
+        assert_eq!(
+            &SOURCE[argument.span.lo.0 as usize - 1..argument.span.hi.0 as usize - 1],
+            "argument"
+        );
     }
 
     #[test]
@@ -1049,7 +1112,7 @@ mod tests {
             VSlotDirective {
                 slot_name: Some(StrOrExpr::Str(name)),
                 value: Some(value)
-            } if value.is_ident() && name == "default"
+            } if value.is_ident() && name.value == "default"
         ));
         assert!(matches!(
             test_parse_into_slot("v-slot:[slot]", "value"),
@@ -1077,7 +1140,7 @@ mod tests {
             VSlotDirective {
                 slot_name: Some(StrOrExpr::Str(name)),
                 value: Some(value)
-            } if value.is_ident() && name == "default"
+            } if value.is_ident() && name.value == "default"
         ));
         assert!(matches!(
             test_parse_into_slot("#[slot]", "value"),
@@ -1164,7 +1227,7 @@ mod tests {
                 argument: Some(StrOrExpr::Str(arg)),
                 modifiers,
                 value: Some(v)
-            } if name == "custom" && arg == "arg-name" && v.is_ident() && modifiers.is_empty()
+            } if name == "custom" && arg.value == "arg-name" && v.is_ident() && modifiers.is_empty()
         ));
         assert!(matches!(
             test_parse_into_custom("v-custom:[arg-name]", "value"),
@@ -1200,7 +1263,7 @@ mod tests {
                 argument: Some(StrOrExpr::Str(arg)),
                 modifiers,
                 value: Some(v)
-            } if name == "custom" && arg == "arg[name]" && v.is_ident() && modifiers.is_empty()
+            } if name == "custom" && arg.value == "arg[name]" && v.is_ident() && modifiers.is_empty()
         ));
         assert!(matches!(
             test_parse_into_custom("v-custom.mod1.mod2", "value"),
@@ -1227,7 +1290,7 @@ mod tests {
                 argument: Some(StrOrExpr::Str(arg)),
                 modifiers,
                 value: Some(v)
-            } if name == "custom" && arg == "arg" && v.is_ident() && modifiers.len() == 1
+            } if name == "custom" && arg.value == "arg" && v.is_ident() && modifiers.len() == 1
         ));
         assert!(matches!(
             test_parse_into_custom("v-custom:[arg].mod1", "value"),

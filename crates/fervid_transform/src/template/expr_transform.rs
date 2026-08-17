@@ -159,7 +159,7 @@ impl BindingsHelperTransform for BindingsHelper {
 
             Some(StrOrExpr::Str(ref argument)) => {
                 patch_hints.flags |= PatchFlags::Props;
-                patch_hints.props.push(argument.to_owned());
+                patch_hints.props.push(argument.value.to_owned());
             }
 
             None => {

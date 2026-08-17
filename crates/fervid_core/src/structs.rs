@@ -1,7 +1,7 @@
 use swc_core::{
     common::{DUMMY_SP, Span, Spanned},
     ecma::{
-        ast::{Expr, Ident, Pat},
+        ast::{Expr, Ident, Pat, Str},
         atoms::Atom,
     },
 };
@@ -244,17 +244,36 @@ pub enum AttributeOrBinding {
 /// Describes a type which can be either a static &str or a js Expr.
 /// This is mostly usable for dynamic binding scenarios.
 /// ## Example
-/// - `:foo="bar"` yields `StrOrExpr::Str("foo")`;
+/// - `:foo="bar"` yields `StrOrExpr::Str(Str { value: "foo".into(), .. })`;
 /// - `:[baz]="qux"` yields `StrOrExpr::Expr(Box::new(Expr::Lit(Lit::Str(Str { value: "baz".into(), .. }))))`
 #[derive(Debug, Clone)]
 pub enum StrOrExpr {
-    Str(FervidAtom),
+    Str(Str),
     Expr(Box<Expr>),
 }
 
 impl<'s> From<&'s str> for StrOrExpr {
     fn from(value: &'s str) -> StrOrExpr {
-        StrOrExpr::Str(FervidAtom::from(value))
+        StrOrExpr::Str(value.into())
+    }
+}
+
+impl From<FervidAtom> for StrOrExpr {
+    fn from(value: FervidAtom) -> StrOrExpr {
+        StrOrExpr::Str(Str {
+            value,
+            span: DUMMY_SP,
+            raw: None,
+        })
+    }
+}
+
+impl Spanned for StrOrExpr {
+    fn span(&self) -> Span {
+        match self {
+            StrOrExpr::Str(s) => s.span,
+            StrOrExpr::Expr(expr) => expr.span(),
+        }
     }
 }
 

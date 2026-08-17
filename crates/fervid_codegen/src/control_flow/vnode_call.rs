@@ -369,11 +369,7 @@ fn null_expr() -> Expr {
 
 fn str_or_expr_to_prop_name(value: &StrOrExpr) -> PropName {
     match value {
-        StrOrExpr::Str(value) => PropName::Str(Str {
-            span: DUMMY_SP,
-            value: value.to_owned(),
-            raw: None,
-        }),
+        StrOrExpr::Str(value) => PropName::Str(value.to_owned()),
         StrOrExpr::Expr(expr) => PropName::Computed(ComputedPropName {
             span: DUMMY_SP,
             expr: expr.to_owned(),

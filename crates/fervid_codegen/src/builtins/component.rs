@@ -40,7 +40,7 @@ impl CodegenContext {
                 argument: Some(StrOrExpr::Str(name)),
                 value,
                 ..
-            }) if name == "is" => (**value).to_owned(),
+            }) if name.value == "is" => (**value).to_owned(),
 
             _ => unreachable!(),
         };

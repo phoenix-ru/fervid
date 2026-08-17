@@ -19,7 +19,7 @@ impl TemplateVisitor<'_> {
     pub fn transform_v_on(&mut self, v_on: &mut VOnDirective, scope_to_use: u32) {
         match v_on.event.as_mut() {
             Some(StrOrExpr::Str(static_event)) => {
-                transform_v_on_static_event(static_event);
+                transform_v_on_static_event(&mut static_event.value);
             }
 
             Some(StrOrExpr::Expr(dynamic_event)) => {

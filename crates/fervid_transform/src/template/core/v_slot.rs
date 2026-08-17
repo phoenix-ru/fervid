@@ -127,7 +127,7 @@ pub fn build_slots(node: &ElementNode, ctx: &mut TransformSfcContext) -> Slots {
         slots_properties.push(SlotBuild {
             name: slot_name
                 .cloned()
-                .unwrap_or_else(|| StrOrExpr::Str(fervid_atom!("default"))),
+                .unwrap_or_else(|| fervid_atom!("default").into()),
             props: on_component_slot.value.clone(),
             source: SlotSource::ImplicitDefaultSlot((0..children.len()).collect()),
         });
@@ -168,7 +168,7 @@ pub fn build_slots(node: &ElementNode, ctx: &mut TransformSfcContext) -> Slots {
         let slot_name = slot_dir
             .slot_name
             .clone()
-            .unwrap_or_else(|| StrOrExpr::Str(fervid_atom!("default")));
+            .unwrap_or_else(|| fervid_atom!("default").into());
         let slot_props = slot_dir.value.clone();
 
         // check if name is dynamic.
@@ -349,7 +349,7 @@ fn build_default_slot_property(
     children: SmallVec<[usize; 1]>,
 ) {
     slots_properties.push(SlotBuild {
-        name: StrOrExpr::Str(fervid_atom!("default")),
+        name: fervid_atom!("default").into(),
         // This function is called for implicit default slot
         props: None,
         source: SlotSource::ImplicitDefaultSlot(children),
@@ -411,7 +411,7 @@ fn is_static_exp(arg: &StrOrExpr) -> bool {
 }
 fn get_static_exp(arg: &StrOrExpr) -> Option<FervidAtom> {
     match arg {
-        StrOrExpr::Str(s) => Some(s.to_owned()),
+        StrOrExpr::Str(s) => Some(s.value.to_owned()),
         StrOrExpr::Expr(expr) => expr
             .as_lit()
             .and_then(|v| v.as_str())

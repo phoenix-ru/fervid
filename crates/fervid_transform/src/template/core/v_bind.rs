@@ -44,7 +44,7 @@ pub fn transform_v_bind(
             let has_modifiers = v_bind.is_camel || needs_prop_or_attr_modifiers;
 
             let arg = if has_modifiers {
-                let mut out = String::with_capacity(str_arg.len() + 2);
+                let mut out = String::with_capacity(str_arg.value.len() + 2);
 
                 if v_bind.is_attr && !ssr {
                     out.push(ATTR_MARKER);
@@ -53,18 +53,21 @@ pub fn transform_v_bind(
                     out.push(PROP_MARKER);
                 }
                 if v_bind.is_camel {
-                    to_camel_case(str_arg, &mut out);
+                    to_camel_case(&str_arg.value, &mut out);
                 } else {
-                    out.push_str(str_arg);
+                    out.push_str(&str_arg.value);
                 }
 
                 FervidAtom::from(out)
             } else {
-                str_arg.clone()
+                str_arg.value.clone()
             };
 
             ExpressionPropNameNode::SimpleExpression(SimpleExpressionPropNameNode {
-                ast: IdentName { sym: arg, span },
+                ast: IdentName {
+                    sym: arg,
+                    span: str_arg.span,
+                },
                 is_static: true,
                 const_type: ConstantTypes::CanStringify,
                 is_handler_key: false,

@@ -436,7 +436,7 @@ impl CodegenContext {
         if !default_slot_children.is_empty() {
             // withCtx(() => [child1, child2, child3])
             result_static_slots.push(self.generate_slot_shell(
-                StrOrExpr::Str(fervid_atom!("default")),
+                fervid_atom!("default").into(),
                 default_slot_children,
                 None, // todo get the binding for `<template v-slot="binding"`
                 component_span,
@@ -501,7 +501,7 @@ impl CodegenContext {
             let slot_name = v_slot
                 .slot_name
                 .to_owned()
-                .unwrap_or_else(|| StrOrExpr::Str(fervid_atom!("default")));
+                .unwrap_or_else(|| fervid_atom!("default").into());
             let span = DUMMY_SP; // todo?
 
             out_static_slots.push(self.generate_slot_shell(

@@ -344,7 +344,7 @@ impl CodegenContext {
                         AttributeOrBinding::VBind(VBindDirective {
                             argument: Some(StrOrExpr::Str(s)),
                             ..
-                        }) if s == "type" => {
+                        }) if s.value == "type" => {
                             return self.get_and_add_import_ident(VueImports::VModelDynamic);
                         }
 

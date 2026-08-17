@@ -465,7 +465,7 @@ fn convert_argument(
 
                 Ok(Some(StrOrExpr::Expr(dynamic_argument)))
             } else {
-                Ok(Some(StrOrExpr::Str(raw_arg)))
+                Ok(Some(raw_arg.into()))
             }
         }
         None => Ok(None),
