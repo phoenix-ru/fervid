@@ -621,9 +621,15 @@ pub fn build_props(
 
                     // https://github.com/vuejs/core/issues/10696 in case a v-bind object contains ref
                     push_ref_v_for_marker!();
-                    // TODO(new-pipeline): Keep arbitrary user expressions as ExpressionNode instead
-                    // of converting them to PropsExpression based on their SWC expression variant.
-                    push_merge_arg!(v_bind_directive.value.as_ref().into());
+
+                    push_merge_arg!(PropsExpression::ExpressionNode(Box::new(
+                        ExpressionNode::SimpleExpression(SimpleExpressionNode {
+                            ast: v_bind_directive.value.to_owned(),
+                            is_static: false,
+                            const_type: ConstantTypes::NotConstant,
+                            is_handler_key: false
+                        })
+                    )));
                     continue;
                 }
 

@@ -3,7 +3,7 @@
 use smallvec::SmallVec;
 use swc_core::{
     common::{DUMMY_SP, Span},
-    ecma::ast::{ArrayLit, Bool, CallExpr, Expr, IdentName, Lit, Pat, PropName, PropOrSpread, Str},
+    ecma::ast::{ArrayLit, Bool, Expr, IdentName, Lit, Pat, PropName, Str},
 };
 
 use crate::{BuiltinType, FervidAtom, PatchFlagsSet, PatchHints, StrOrExpr, VueImports};
@@ -333,29 +333,6 @@ pub fn create_cache_expression(value: JsChildNode, markers: CacheMarkers) -> Cac
 //     }
 // }
 
-impl From<PropOrSpread> for Property {
-    fn from(_value: PropOrSpread) -> Self {
-        todo!()
-        // Property {
-        //     key: todo!(),
-        //     value: todo!(),
-        // }
-    }
-}
-
-// CallExpression
-
-impl From<CallExpr> for CallExpression {
-    fn from(_value: CallExpr) -> Self {
-        todo!()
-        // Self {
-        //     callee: (),
-        //     span: (),
-        //     arguments: (),
-        // }
-    }
-}
-
 // ExpressionPropNameNode
 
 impl ExpressionPropNameNode {
@@ -416,26 +393,14 @@ impl From<CompoundExpressionPropNameNode> for Box<Expr> {
 
 impl From<&Expr> for PropsExpression {
     fn from(value: &Expr) -> Self {
-        match value {
-            Expr::Call(call_expr) => {
-                PropsExpression::CallExpression(Box::new(call_expr.to_owned().into()))
-            }
-            Expr::Object(obj_expr) => {
-                PropsExpression::ObjectExpression(Box::new(ObjectExpression {
-                    properties: obj_expr.props.iter().cloned().map(Into::into).collect(),
-                    span: obj_expr.span,
-                }))
-            }
-            // TODO: This conversion isn't fully correct, PropsExpression shouldn't be built from Expr
-            _ => PropsExpression::ExpressionNode(Box::new(ExpressionNode::SimpleExpression(
-                SimpleExpressionNode {
-                    ast: Box::new(value.to_owned()),
-                    is_static: false,
-                    const_type: ConstantTypes::NotConstant,
-                    is_handler_key: false,
-                },
-            ))),
-        }
+        PropsExpression::ExpressionNode(Box::new(ExpressionNode::SimpleExpression(
+            SimpleExpressionNode {
+                ast: Box::new(value.to_owned()),
+                is_static: false,
+                const_type: ConstantTypes::NotConstant,
+                is_handler_key: false,
+            },
+        )))
     }
 }
 
