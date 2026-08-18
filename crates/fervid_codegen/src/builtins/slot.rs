@@ -2,7 +2,8 @@ use fervid_core::{
     AttributeOrBinding, ElementNode, IntoIdent, VueImports, check_attribute_name, fervid_atom,
 };
 use swc_core::ecma::ast::{
-    ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Lit, MemberExpr, MemberProp, ObjectLit, Str,
+    ArrayLit, ArrowExpr, BlockStmtOrExpr, CallExpr, Callee, Expr, ExprOrSpread, Lit, MemberExpr,
+    MemberProp, ObjectLit, Str,
 };
 
 use crate::CodegenContext;
@@ -122,7 +123,7 @@ impl CodegenContext {
             })
         }
 
-        // Fourth arg (optional): children
+        // Fourth arg (optional): slot children (fallback)
         if has_children {
             let slot_children = self
                 .generate_element_children(element_node, false)
@@ -136,12 +137,24 @@ impl CodegenContext {
                 })
                 .collect();
 
-            render_slot_args.push(ExprOrSpread {
-                spread: None,
-                expr: Box::new(Expr::Array(ArrayLit {
+            // () => [child1, child2]
+            let fallback = Box::new(Expr::Arrow(ArrowExpr {
+                span,
+                ctxt: Default::default(),
+                params: vec![],
+                body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::Array(ArrayLit {
                     span,
                     elems: slot_children,
-                })),
+                })))),
+                is_async: false,
+                is_generator: false,
+                type_params: None,
+                return_type: None,
+            }));
+
+            render_slot_args.push(ExprOrSpread {
+                spread: None,
+                expr: fallback,
             });
         }
 
