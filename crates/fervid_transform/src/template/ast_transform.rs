@@ -125,6 +125,11 @@ impl Visitor for TemplateVisitor<'_> {
             let node_transforms = self.ctx.node_transforms.clone();
             node_transforms.pre_transform_node(self.ctx, node);
 
+            // SFC asset transforms run after compiler node transforms
+            if let Node::Element(element_node) = node {
+                super::asset_urls::transform_asset_urls(element_node, self.ctx);
+            }
+
             match node {
                 Node::Element(element) => self.visit_element_node(element),
                 Node::For(for_node) => self.visit_for_node(for_node),
