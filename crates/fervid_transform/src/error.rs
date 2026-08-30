@@ -103,10 +103,47 @@ pub enum ScriptErrorKind {
 
 #[derive(Debug)]
 pub enum TemplateErrorKind {
+    // <KeepAlive> expects exactly one child component.
+    // https://vuejs.org/error-reference/#compiler-46
+    KeepAliveInvalidChildren,
     /// Failed parsing the URL when doing asset URL transform
     TransformAssetUrlsBaseUrlParseFailed,
     /// Failed parsing the configured base URL when doing asset URL transform
     TransformAssetUrlsUrlParseFailed,
+    /// v-html will override element children.
+    VHtmlWithChildren,
+    /// v-model argument is not supported on plain elements
+    VModelArgOnElement,
+    /// v-model value must be a valid JavaScript member expression
+    VModelMalformedExpression,
+    /// v-model cannot be used on a const binding because it is not writable
+    VModelOnConst,
+    /// v-model cannot be used on file inputs since they are read-only. Use a v-on:change listener instead
+    VModelOnFileInputElement,
+    /// v-model can only be used on <input>, <textarea> and <select> elements
+    VModelOnInvalidElement,
+    /// v-model cannot be used on a prop, because local prop bindings are not writable. Use a v-bind binding combined with a v-on listener that emits update:x event instead
+    VModelOnProps,
+    /// v-model cannot be used on v-for or v-slot scope variables because they are not writable
+    VModelOnScopeVariable,
+    /// Unnecessary value binding used alongside v-model. It will interfere with v-model's behavior
+    VModelUnnecessaryValue,
+    /// @vnode-* hooks in templates are no longer supported. Use the vue: prefix instead. For example, @vnode-mounted should be changed to @vue:mounted. @vnode-* hooks support has been removed in 3.4.
+    VNodeHooks,
+    /// v-on is missing expression
+    VOnNoExpression,
+    /// v-else/v-else-if has no adjacent v-if or v-else-if.
+    VElseNoAdjacentIf,
+    /// Mixed v-slot usage on both the component and nested <template>. When there are multiple named slots, all slots should use <template> syntax to avoid scope ambiguity.
+    VSlotMixedSlotUsage,
+    /// Duplicate slot names found.
+    VSlotDuplicateSlotNames,
+    /// Extraneous children found when component already has explicitly named default slot. These children will be ignored.
+    VSlotExtraneousDefaultSlotChildren,
+    /// v-slot can only be used on components or <template> tags.
+    VSlotMisplaced,
+    /// v-text will override element children.
+    VTextWithChildren,
 }
 
 impl From<CssError> for TransformError {

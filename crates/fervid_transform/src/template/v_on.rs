@@ -19,7 +19,7 @@ impl TemplateVisitor<'_> {
     pub fn transform_v_on(&mut self, v_on: &mut VOnDirective, scope_to_use: u32) {
         match v_on.event.as_mut() {
             Some(StrOrExpr::Str(static_event)) => {
-                transform_v_on_static_event(static_event);
+                transform_v_on_static_event(&mut static_event.value);
             }
 
             Some(StrOrExpr::Expr(dynamic_event)) => {
@@ -33,7 +33,7 @@ impl TemplateVisitor<'_> {
 
                 // Wrap in `_toHandlerKey`
                 let value = std::mem::take(dynamic_event);
-                *dynamic_event = Box::new(Expr::Call(CallExpr {
+                **dynamic_event = Expr::Call(CallExpr {
                     span: DUMMY_SP,
                     ctxt: Default::default(),
                     callee: Callee::Expr(Box::new(Expr::Ident(Ident {
@@ -45,7 +45,7 @@ impl TemplateVisitor<'_> {
                         expr: value,
                     }],
                     type_args: None,
-                }));
+                });
             }
 
             None => {}
@@ -211,7 +211,7 @@ fn camelcase_with_word_groups(mut from: &str) -> String {
 /// Wraps in `(...args) => _ctx.smth && _ctx.smth(...args)`.
 ///
 /// `needs_check` signifies if `&&` check is needed
-fn wrap_in_args_arrow(mut expr: Box<Expr>, needs_check: bool) -> Box<Expr> {
+pub fn wrap_in_args_arrow(mut expr: Box<Expr>, needs_check: bool) -> Box<Expr> {
     let check = if needs_check {
         Some(expr.to_owned())
     } else {

@@ -2,22 +2,22 @@ use std::{cell::RefCell, rc::Rc};
 
 use error::TransformError;
 use fervid_core::{SfcDescriptor, SfcScriptBlock, SfcScriptLang, TemplateGenerationMode};
-use misc::infer_name;
 use script::transform_and_record_scripts;
 use style::{attach_scope_id, create_style_scope, transform_style_blocks};
 use swc_core::ecma::ast::{ModuleDecl, ModuleItem};
 use template::transform_and_record_template;
+use utils::infer_name;
 
 #[macro_use]
 extern crate lazy_static;
 
 pub mod atoms;
 pub mod error;
-pub mod misc;
 pub mod script;
 pub mod structs;
 pub mod style;
 pub mod template;
+pub mod utils;
 
 #[cfg(test)]
 mod test_utils;
@@ -118,14 +118,25 @@ impl TransformSfcContext {
 
         TransformSfcContext {
             filename: options.filename.to_string(),
+            // Explicitly not defined as a tiny performance optimization
+            // for it to be computed during `is_self_name` call.
+            // TODO: Implement `is_self_name` call
+            // const nameMatch = filename.replace(/\?.*$/, '').match(/([^/\\]+)\.\w+$/)
+            // selfName: nameMatch && capitalize(camelize(nameMatch[1])),
+            self_name: None,
             is_ce: options.is_ce,
+            cache_handlers: true,
+            in_ssr: false,
             props_destructure: options.props_destructure,
             bindings_helper,
             deps: Default::default(),
             scopes: vec![],
+            directive_scopes: Default::default(),
             transform_asset_urls: options.transform_asset_urls.clone(),
             errors: vec![],
             warnings: vec![],
+            directive_transforms: options.directive_transforms.to_owned(),
+            node_transforms: options.node_transforms.to_owned(),
         }
     }
 

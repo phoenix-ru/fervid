@@ -1,6 +1,7 @@
 use fervid_core::{
-    AttributeOrBinding, ElementNode, FervidAtom, Interpolation, Node, PatchHints, SfcTemplateBlock,
-    StartingTag, VueDirectives, fervid_atom, is_html_tag,
+    AttributeOrBinding, ElementKind, ElementNode, FervidAtom, Interpolation, Node, PatchHints,
+    SfcTemplateBlock, StartingTag, VUE_BUILTINS, VueDirectives, check_attribute_name, fervid_atom,
+    is_html_tag,
 };
 use swc_core::common::{BytePos, Span};
 use swc_ecma_parser::{Syntax, TsSyntax};
@@ -105,6 +106,8 @@ impl SfcParser<'_, '_, '_> {
             self.is_pre = true;
         }
 
+        let tag_type = recognize_element_kind(&tag_name, &attributes, directives.as_deref());
+
         let starting_tag = StartingTag {
             tag_name,
             attributes,
@@ -112,12 +115,13 @@ impl SfcParser<'_, '_, '_> {
         };
 
         let result = Node::Element(ElementNode {
-            kind: fervid_core::ElementKind::Element,
+            tag_type,
             starting_tag,
             children: self.process_element_children(children),
             template_scope: 0,
             patch_hints: PatchHints::default(),
             span: element.span,
+            codegen_node: None,
         });
 
         self.is_pre = old_is_pre;
@@ -276,11 +280,87 @@ impl SfcParser<'_, '_, '_> {
     }
 }
 
+fn recognize_element_kind(
+    tag_name: &FervidAtom,
+    attributes: &[AttributeOrBinding],
+    directives: Option<&VueDirectives>,
+) -> ElementKind {
+    if tag_name == "template" && directives.is_some() {
+        return ElementKind::Template;
+    }
+
+    // First, check for a built-in
+    if let Some(builtin_type) = VUE_BUILTINS.get(tag_name) {
+        // Special case for `<component>`. If it does not have `is`, this is not a built-in
+        if tag_name.eq("component") {
+            let has_is = attributes
+                .iter()
+                .any(|attr| check_attribute_name(attr, "is"));
+
+            if !has_is {
+                return ElementKind::Component;
+            }
+        }
+
+        return ElementKind::Builtin(*builtin_type);
+    }
+
+    // Then check if this is an HTML tag
+    if is_html_tag(tag_name) {
+        ElementKind::Element
+    } else {
+        ElementKind::Component
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use swc_core::ecma::ast::Expr;
 
     use super::*;
+
+    /// Special case: `<component>` without `is` attribute is not a builtin
+    #[test]
+    fn it_distinguishes_component_builtin_and_not() {
+        assert!(matches!(
+            recognize_element_kind(&fervid_atom!("component"), &[], None),
+            ElementKind::Component
+        ));
+    }
+
+    // Adapted from https://github.com/vuejs/core/blob/5a8aa0b2ba575e098cbb63b396e9bcb751eb3a0f/packages/compiler-core/__tests__/parse.spec.ts#L557-L564
+    #[test]
+    fn it_marks_template_element_with_directives_as_template() {
+        let mut errors = Vec::new();
+        let mut parser = SfcParser::new(
+            r#"<template><template v-if="ok"></template></template>"#,
+            &mut errors,
+        );
+
+        let parsed = parser.parse_sfc().expect("Should parse");
+        let template = parsed.template.expect("Should have template");
+        let Node::Element(element) = template.roots.first().expect("Should have one root") else {
+            panic!("Root is not an element")
+        };
+
+        assert!(matches!(element.tag_type, ElementKind::Template));
+    }
+
+    // Adapted from https://github.com/vuejs/core/blob/5a8aa0b2ba575e098cbb63b396e9bcb751eb3a0f/packages/compiler-core/__tests__/parse.spec.ts#L566-L573
+    #[test]
+    fn it_marks_template_element_without_directives_as_element() {
+        let mut errors = Vec::new();
+        let mut parser =
+            SfcParser::new(r#"<template><template></template></template>"#, &mut errors);
+
+        let parsed = parser.parse_sfc().expect("Should parse");
+        let template = parsed.template.expect("Should have template");
+        let Node::Element(element) = template.roots.first().expect("Should have one root") else {
+            panic!("Root is not an element")
+        };
+
+        assert!(matches!(element.tag_type, ElementKind::Element));
+    }
 
     #[test]
     fn it_acknowledges_v_pre() {

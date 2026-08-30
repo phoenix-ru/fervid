@@ -319,9 +319,10 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
                 starting_tag,
                 children: vec![],
                 template_scope: 0,
-                kind: ElementKind::Element,
+                tag_type: ElementKind::Element,
                 patch_hints: Default::default(),
                 span: DUMMY_SP, // TODO
+                codegen_node: None,
             }),
         ));
     }
@@ -336,7 +337,7 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
     if !starting_tag.tag_name.eq(end_tag) {
         println!(
             "End tag does not match start tag: <{}> </{}>",
-            &starting_tag.tag_name, &end_tag
+            starting_tag.tag_name, end_tag
         );
     }
 
@@ -346,9 +347,10 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
             starting_tag,
             children,
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP, // TODO
+            codegen_node: None,
         }),
     ))
 }

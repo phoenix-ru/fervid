@@ -1,6 +1,6 @@
 use fervid_core::{
     AttributeOrBinding, FervidAtom, IntoIdent, StrOrExpr, VBindDirective, VOnDirective, VueImports,
-    fervid_atom, str_to_propname,
+    atom_to_propname, fervid_atom, str_to_propname,
 };
 use regex::Regex;
 use swc_core::{
@@ -104,7 +104,7 @@ impl CodegenContext {
                     value,
                     span,
                     ..
-                }) if argument == "class" => {
+                }) if argument.value == "class" => {
                     class_bound = Some((value.to_owned(), *span));
                 }
 
@@ -114,7 +114,7 @@ impl CodegenContext {
                     value,
                     span,
                     ..
-                }) if argument == "style" => {
+                }) if argument.value == "style" => {
                     style_bound = Some((value.to_owned(), *span));
                 }
 
@@ -153,7 +153,7 @@ impl CodegenContext {
                         result_hints.props_patch_flag || was_transformed;
 
                     let key = match argument {
-                        StrOrExpr::Str(s) => str_to_propname(s, span),
+                        StrOrExpr::Str(s) => atom_to_propname(s.value.to_owned(), s.span),
                         StrOrExpr::Expr(expr) => {
                             // Dynamic prop needs a `_normalizeProps` call
                             // TODO Take from patch flags?
@@ -218,7 +218,7 @@ impl CodegenContext {
 
                     let handler_expr = if !modifiers.is_empty() {
                         let with_modifiers_import =
-                            self.get_and_add_import_ident(VueImports::WithModifiers);
+                            self.get_and_add_import_ident(VueImports::VOnWithModifiers);
 
                         // `_withModifiers(transformed, ["modifier"]))`
                         Box::new(Expr::Call(CallExpr {
@@ -270,7 +270,10 @@ impl CodegenContext {
                             // e.g. `onClick: _ctx.handleClick` or `onClick: _withModifiers(() => {}, ["stop"])
                             out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                                 KeyValueProp {
-                                    key: str_to_propname(event_name_str, span),
+                                    key: atom_to_propname(
+                                        event_name_str.value.to_owned(),
+                                        event_name_str.span,
+                                    ),
                                     value: handler_expr,
                                 },
                             ))));

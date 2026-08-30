@@ -1,4 +1,4 @@
-use fervid_core::{ConditionalNodeSequence, ElementNode};
+use fervid_core::{ConditionalNodeSequence, Node};
 use swc_core::{
     common::{DUMMY_SP, Spanned},
     ecma::ast::{CondExpr, Expr},
@@ -13,13 +13,12 @@ impl CodegenContext {
         // First, push the `if` node
         let if_conditional = &conditional_seq.if_node;
         let if_expr = &if_conditional.condition;
-        let if_element_node = &if_conditional.node;
-        // let _has_js = transform_scoped(&mut if_expr, &self.scope_helper, if_element_node.template_scope);
+        let if_node = &if_conditional.node;
+        // let _has_js = transform_scoped(&mut if_expr, &self.scope_helper, if_node.template_scope);
         conditional_exprs.push(Box::new(if_expr.to_owned()));
-        conditional_exprs.push(Box::new(self.generate_element_or_component(
-            if_element_node,
-            should_wrap_in_block(if_element_node),
-        )));
+        conditional_exprs.push(Box::new(
+            self.generate_node(if_node, should_wrap_in_block(if_node)),
+        ));
 
         // Then, push all the `else-if` nodes
         for else_if_conditional in conditional_seq.else_if_nodes.iter() {
@@ -28,15 +27,14 @@ impl CodegenContext {
 
             // let _has_js = transform_scoped(&mut else_if_expr, &self.scope_helper, else_if_node.template_scope);
             conditional_exprs.push(Box::new(else_if_expr.to_owned()));
-            conditional_exprs.push(Box::new(self.generate_element_or_component(
-                else_if_node,
-                should_wrap_in_block(else_if_node),
-            )));
+            conditional_exprs.push(Box::new(
+                self.generate_node(else_if_node, should_wrap_in_block(else_if_node)),
+            ));
         }
 
         // Push either `else` or a comment node
         let else_expr = if let Some(ref else_node) = conditional_seq.else_node {
-            self.generate_element_or_component(else_node, should_wrap_in_block(else_node))
+            self.generate_node(else_node, should_wrap_in_block(else_node))
         } else {
             self.generate_comment_vnode("v-if", DUMMY_SP)
         };
@@ -79,12 +77,16 @@ impl CodegenContext {
 }
 
 /// Omits wrapping conditional node in block when `v-for` directive is present (it will create its own block)
-fn should_wrap_in_block(element_node: &ElementNode) -> bool {
-    element_node
-        .starting_tag
-        .directives
-        .as_ref()
-        .is_none_or(|d| d.v_for.is_none())
+fn should_wrap_in_block(node: &Node) -> bool {
+    match node {
+        Node::Element(element_node) => element_node
+            .starting_tag
+            .directives
+            .as_ref()
+            .is_none_or(|d| d.v_for.is_none()),
+        Node::For(_) => false,
+        _ => true,
+    }
 }
 
 #[cfg(test)]
@@ -102,7 +104,7 @@ mod tests {
             ConditionalNodeSequence {
                 if_node: Box::new(Conditional {
                     condition: *js("foo || true"),
-                    node: ElementNode {
+                    node: Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "h1".into(),
                             attributes: vec![],
@@ -110,13 +112,15 @@ mod tests {
                         },
                         children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
-                    },
+                        codegen_node: None,
+                    }),
                 }),
                 else_if_nodes: vec![],
                 else_node: None,
+                span: DUMMY_SP,
             },
             r#"foo||true?(_openBlock(),_createElementBlock("h1",null,"hello")):_createCommentVNode("v-if")"#,
         )
@@ -130,7 +134,7 @@ mod tests {
             ConditionalNodeSequence {
                 if_node: Box::new(Conditional {
                     condition: *js("foo || true"),
-                    node: ElementNode {
+                    node: Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "h1".into(),
                             attributes: vec![],
@@ -138,13 +142,14 @@ mod tests {
                         },
                         children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
-                    },
+                        codegen_node: None,
+                    }),
                 }),
                 else_if_nodes: vec![],
-                else_node: Some(Box::new(ElementNode {
+                else_node: Some(Box::new(Node::Element(ElementNode {
                     starting_tag: StartingTag {
                         tag_name: "h2".into(),
                         attributes: vec![],
@@ -152,10 +157,12 @@ mod tests {
                     },
                     children: vec![Node::Text("bye".into(), DUMMY_SP)],
                     template_scope: 0,
-                    kind: ElementKind::Element,
+                    tag_type: ElementKind::Element,
                     patch_hints: Default::default(),
                     span: DUMMY_SP,
-                })),
+                    codegen_node: None,
+                }))),
+                span: DUMMY_SP,
             },
             r#"foo||true?(_openBlock(),_createElementBlock("h1",null,"hello")):(_openBlock(),_createElementBlock("h2",null,"bye"))"#,
         )
@@ -170,7 +177,7 @@ mod tests {
             ConditionalNodeSequence {
                 if_node: Box::new(Conditional {
                     condition: *js("foo"),
-                    node: ElementNode {
+                    node: Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "h1".into(),
                             attributes: vec![],
@@ -178,15 +185,16 @@ mod tests {
                         },
                         children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
-                    },
+                        codegen_node: None,
+                    }),
                 }),
                 else_if_nodes: vec![
                     Conditional {
                         condition: *js("true"),
-                        node: ElementNode {
+                        node: Node::Element(ElementNode {
                             starting_tag: StartingTag {
                                 tag_name: "h2".into(),
                                 attributes: vec![],
@@ -194,14 +202,15 @@ mod tests {
                             },
                             children: vec![Node::Text("hi".into(), DUMMY_SP)],
                             template_scope: 0,
-                            kind: ElementKind::Element,
+                            tag_type: ElementKind::Element,
                             patch_hints: Default::default(),
                             span: DUMMY_SP,
-                        },
+                            codegen_node: None,
+                        }),
                     },
                     Conditional {
                         condition: *js("undefined"),
-                        node: ElementNode {
+                        node: Node::Element(ElementNode {
                             starting_tag: StartingTag {
                                 tag_name: "h3".into(),
                                 attributes: vec![],
@@ -209,13 +218,15 @@ mod tests {
                             },
                             children: vec![Node::Text("bye".into(), DUMMY_SP)],
                             template_scope: 0,
-                            kind: ElementKind::Element,
+                            tag_type: ElementKind::Element,
                             patch_hints: Default::default(),
                             span: DUMMY_SP,
-                        },
+                            codegen_node: None,
+                        }),
                     },
                 ],
                 else_node: None,
+                span: DUMMY_SP,
             },
             r#"foo?(_openBlock(),_createElementBlock("h1",null,"hello")):true?(_openBlock(),_createElementBlock("h2",null,"hi")):undefined?(_openBlock(),_createElementBlock("h3",null,"bye")):_createCommentVNode("v-if")"#,
         )
@@ -231,7 +242,7 @@ mod tests {
             ConditionalNodeSequence {
                 if_node: Box::new(Conditional {
                     condition: *js("foo"),
-                    node: ElementNode {
+                    node: Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "h1".into(),
                             attributes: vec![],
@@ -239,15 +250,16 @@ mod tests {
                         },
                         children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
-                    },
+                        codegen_node: None,
+                    }),
                 }),
                 else_if_nodes: vec![
                     Conditional {
                         condition: *js("true"),
-                        node: ElementNode {
+                        node: Node::Element(ElementNode {
                             starting_tag: StartingTag {
                                 tag_name: "h2".into(),
                                 attributes: vec![],
@@ -255,14 +267,15 @@ mod tests {
                             },
                             children: vec![Node::Text("hi".into(), DUMMY_SP)],
                             template_scope: 0,
-                            kind: ElementKind::Element,
+                            tag_type: ElementKind::Element,
                             patch_hints: Default::default(),
                             span: DUMMY_SP,
-                        },
+                            codegen_node: None,
+                        }),
                     },
                     Conditional {
                         condition: *js("undefined"),
-                        node: ElementNode {
+                        node: Node::Element(ElementNode {
                             starting_tag: StartingTag {
                                 tag_name: "h3".into(),
                                 attributes: vec![],
@@ -270,13 +283,14 @@ mod tests {
                             },
                             children: vec![Node::Text("good morning".into(), DUMMY_SP)],
                             template_scope: 0,
-                            kind: ElementKind::Element,
+                            tag_type: ElementKind::Element,
                             patch_hints: Default::default(),
                             span: DUMMY_SP,
-                        },
+                            codegen_node: None,
+                        }),
                     },
                 ],
-                else_node: Some(Box::new(ElementNode {
+                else_node: Some(Box::new(Node::Element(ElementNode {
                     starting_tag: StartingTag {
                         tag_name: "h4".into(),
                         attributes: vec![],
@@ -284,10 +298,12 @@ mod tests {
                     },
                     children: vec![Node::Text("bye".into(), DUMMY_SP)],
                     template_scope: 0,
-                    kind: ElementKind::Element,
+                    tag_type: ElementKind::Element,
                     patch_hints: Default::default(),
                     span: DUMMY_SP,
-                })),
+                    codegen_node: None,
+                }))),
+                span: DUMMY_SP,
             },
             r#"foo?(_openBlock(),_createElementBlock("h1",null,"hello")):true?(_openBlock(),_createElementBlock("h2",null,"hi")):undefined?(_openBlock(),_createElementBlock("h3",null,"good morning")):(_openBlock(),_createElementBlock("h4",null,"bye"))"#,
         )

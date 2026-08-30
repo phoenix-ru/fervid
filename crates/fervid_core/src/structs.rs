@@ -1,10 +1,12 @@
 use swc_core::{
-    common::{DUMMY_SP, Span},
+    common::{DUMMY_SP, Span, Spanned},
     ecma::{
-        ast::{Expr, Ident, Pat},
+        ast::{Expr, Ident, Pat, Str},
         atoms::Atom,
     },
 };
+
+use crate::{ElementCodegenNode, ForCodegenNode};
 
 pub type FervidAtom = Atom;
 
@@ -64,13 +66,14 @@ pub enum Node {
     /// `Comment` is the vanilla HTML comment, which looks like this: `<-- this is comment -->`
     Comment(FervidAtom, Span),
 
+    /// `ForNode` is a representation of a `v-for` node.
+    /// This type is for ergonomics,
+    /// i.e. to handle the wrapping of single/multiple iterable children
+    For(ForNode),
+
     /// `ConditionalSeq` is a representation of `v-if`/`v-else-if`/`v-else` node sequence.
     /// Its children are the other `Node`s, this node is just a wrapper.
     ConditionalSeq(ConditionalNodeSequence),
-    // /// `ForFragment` is a representation of a `v-for` node.
-    // /// This type is for ergonomics,
-    // /// i.e. to separate patch flags and `key` of the repeater from the repeatable.
-    // ForFragment(ForFragment<'a>)
 }
 
 /// Element node is a classic HTML node with some added functionality:
@@ -81,12 +84,13 @@ pub enum Node {
 #[derive(Debug, Clone)]
 pub struct ElementNode {
     /// Marks the node as either an Element (HTML tag), Builtin (Vue) or Component
-    pub kind: ElementKind,
+    pub tag_type: ElementKind,
     pub starting_tag: StartingTag,
     pub children: Vec<Node>,
     pub template_scope: u32,
     pub patch_hints: PatchHints,
     pub span: Span,
+    pub codegen_node: Option<Box<ElementCodegenNode>>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -95,10 +99,39 @@ pub enum ElementKind {
     #[default]
     Element,
     Component,
+    Template,
+}
+
+impl ElementNode {
+    /// Helper function for creating a minimal version of ElementNode. The type is `Element`
+    pub fn new(starting_tag: StartingTag) -> Self {
+        Self::new_with_children(starting_tag, vec![])
+    }
+    /// Helper function for creating a minimal version of ElementNode with children. The type is `Element`
+    pub fn new_with_children(starting_tag: StartingTag, children: Vec<Node>) -> Self {
+        Self::new_with_children_and_type(starting_tag, children, ElementKind::Element)
+    }
+    /// Helper function for creating an ElementNode with children and tag type
+    pub fn new_with_children_and_type(
+        starting_tag: StartingTag,
+        children: Vec<Node>,
+        tag_type: ElementKind,
+    ) -> Self {
+        ElementNode {
+            tag_type,
+            starting_tag,
+            children,
+            template_scope: 0,
+            patch_hints: Default::default(),
+            span: DUMMY_SP,
+            codegen_node: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum BuiltinType {
+    BaseTransition,
     Component,
     KeepAlive,
     Slot,
@@ -108,26 +141,68 @@ pub enum BuiltinType {
     TransitionGroup,
 }
 
+#[derive(Debug, Clone)]
+pub struct ForNode {
+    /// Vue stores source/value/key/index both directly and in parseResult, referring to
+    /// the same expression objects. Rust keeps one owned representation instead
+    pub parse_result: Box<ForParseResult>,
+    /// Original element for normal v-for, original template children for template v-for
+    pub children: Vec<Node>,
+    /// Template scope containing value/key/index aliases
+    pub template_scope: u32,
+    /// Outer Fragment VNodeCall containing renderList
+    pub codegen_node: Option<Box<ForCodegenNode>>,
+    pub span: Span,
+}
+
+impl ForNode {
+    #[inline]
+    pub fn source(&self) -> &Expr {
+        &self.parse_result.source
+    }
+
+    #[inline]
+    pub fn source_mut(&mut self) -> &mut Expr {
+        &mut self.parse_result.source
+    }
+
+    #[inline]
+    pub fn value_alias(&self) -> &Expr {
+        &self.parse_result.value
+    }
+
+    #[inline]
+    pub fn key_alias(&self) -> Option<&Expr> {
+        self.parse_result.key.as_deref()
+    }
+
+    #[inline]
+    pub fn object_index_alias(&self) -> Option<&Expr> {
+        self.parse_result.index.as_deref()
+    }
+}
+
 /// This is a synthetic node type only available after AST optimizations.
-/// Its purpose is to make conditional code generation trivial.
+/// Its purpose is to make conditional code generation trivial
 ///
 /// The `ConditionalNodeSequence` consists of:
-/// - exactly one `v-if` `ElementNode`;
-/// - 0 or more `v-else-if` `ElementNode`s;
-/// - 0 or 1 `v-else` `ElementNode`.
+/// - exactly one `v-if` `Node`;
+/// - 0 or more `v-else-if` `Node`s;
+/// - 0 or 1 `v-else` `Node`
 #[derive(Debug, Clone)]
 pub struct ConditionalNodeSequence {
     pub if_node: Box<Conditional>,
     pub else_if_nodes: Vec<Conditional>,
-    pub else_node: Option<Box<ElementNode>>,
+    pub else_node: Option<Box<Node>>,
+    pub span: Span,
 }
 
-/// A wrapper around an `ElementNode` with a condition attached to it.
-/// This is used in `v-if` and `v-else-if` nodes.
+/// A wrapper around a `Node` with a condition attached to it.
+/// This is used in `v-if` and `v-else-if` nodes
 #[derive(Debug, Clone)]
 pub struct Conditional {
     pub condition: Expr,
-    pub node: ElementNode,
+    pub node: Node,
 }
 
 /// A special Vue `{{ expression }}`,
@@ -169,17 +244,36 @@ pub enum AttributeOrBinding {
 /// Describes a type which can be either a static &str or a js Expr.
 /// This is mostly usable for dynamic binding scenarios.
 /// ## Example
-/// - `:foo="bar"` yields `StrOrExpr::Str("foo")`;
+/// - `:foo="bar"` yields `StrOrExpr::Str(Str { value: "foo".into(), .. })`;
 /// - `:[baz]="qux"` yields `StrOrExpr::Expr(Box::new(Expr::Lit(Lit::Str(Str { value: "baz".into(), .. }))))`
 #[derive(Debug, Clone)]
 pub enum StrOrExpr {
-    Str(FervidAtom),
+    Str(Str),
     Expr(Box<Expr>),
 }
 
 impl<'s> From<&'s str> for StrOrExpr {
     fn from(value: &'s str) -> StrOrExpr {
-        StrOrExpr::Str(FervidAtom::from(value))
+        StrOrExpr::Str(value.into())
+    }
+}
+
+impl From<FervidAtom> for StrOrExpr {
+    fn from(value: FervidAtom) -> StrOrExpr {
+        StrOrExpr::Str(Str {
+            value,
+            span: DUMMY_SP,
+            raw: None,
+        })
+    }
+}
+
+impl Spanned for StrOrExpr {
+    fn span(&self) -> Span {
+        match self {
+            StrOrExpr::Str(s) => s.span,
+            StrOrExpr::Expr(expr) => expr.span(),
+        }
     }
 }
 
@@ -331,12 +425,25 @@ pub struct VueDirectives {
 /// `v-for`
 #[derive(Clone, Debug)]
 pub struct VForDirective {
-    /// `bar` in `v-for="foo in bar"`
-    pub iterable: Box<Expr>,
-    /// `foo` in `v-for="foo in bar"`
-    pub itervar: Box<Expr>,
+    pub parse_result: Box<ForParseResult>,
     pub patch_flags: PatchFlagsSet,
     pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct ForParseResult {
+    /// Iteration source: `bar` in `v-for="foo in bar"`
+    pub source: Box<Expr>,
+    /// Value alias: `foo` in `v-for="foo in bar"`
+    pub value: Box<Expr>,
+    /// Key alias: `bar` in `v-for="(foo, bar) in baz"`. This is not the vnode `key` prop
+    pub key: Option<Box<Expr>>,
+    /// Object index alias: `baz` in `v-for="(foo, bar, baz) in qux"`
+    pub index: Option<Box<Expr>>,
+    /// Whether expression transformation has already happened
+    pub finalized: bool,
+    /// Whether the finalized result was dynamic (i.e. used scope variables)
+    pub finalized_is_dynamic: bool,
 }
 
 /// `v-on` and its shorthand `@`
@@ -462,4 +569,23 @@ pub enum TemplateGenerationMode {
     /// e.g. `const foo = ref(0)` and `foo.bar` -> `$setup.foo.bar`.
     #[default]
     RenderFn,
+}
+
+impl TemplateGenerationMode {
+    pub fn is_inline(&self) -> bool {
+        matches!(self, TemplateGenerationMode::Inline)
+    }
+}
+
+impl Spanned for Node {
+    fn span(&self) -> Span {
+        match self {
+            Node::Element(element_node) => element_node.span,
+            Node::Text(_atom, span) => *span,
+            Node::Interpolation(interpolation) => interpolation.span,
+            Node::Comment(_atom, span) => *span,
+            Node::For(for_node) => for_node.span,
+            Node::ConditionalSeq(conditional_node_sequence) => conditional_node_sequence.span,
+        }
+    }
 }

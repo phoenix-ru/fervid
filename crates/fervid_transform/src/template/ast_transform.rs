@@ -1,22 +1,34 @@
+#[cfg(not(feature = "new-pipeline"))]
 use fervid_core::{
-    AttributeOrBinding, BindingTypes, BuiltinType, Conditional, ConditionalNodeSequence,
-    ElementKind, ElementNode, FervidAtom, Interpolation, IntoIdent, Node, PatchFlags, PatchHints,
-    SfcTemplateBlock, StartingTag, StrOrExpr, TemplateGenerationMode, VBindDirective,
-    VSlotDirective, VUE_BUILTINS, check_attribute_name, fervid_atom, is_from_default_slot,
-    is_html_tag,
+    AttributeOrBinding, BindingTypes, BuiltinType, FervidAtom, IntoIdent, TemplateGenerationMode,
+    VBindDirective,
 };
+use fervid_core::{
+    ConditionalNodeSequence, ElementKind, ElementNode, ForNode, Interpolation, Node, PatchFlags,
+    PatchHints, SfcTemplateBlock, StartingTag, fervid_atom,
+};
+#[cfg(not(feature = "new-pipeline"))]
+use fervid_core::{StrOrExpr, VSlotDirective, check_attribute_name};
 use smallvec::SmallVec;
+#[cfg(not(feature = "new-pipeline"))]
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{Bool, Expr, Lit},
 };
 
-use crate::{TemplateScope, TransformSfcContext};
-
-use super::{
-    asset_urls::transform_asset_urls, collect_vars::collect_variables,
-    expr_transform::BindingsHelperTransform,
+use crate::{
+    TemplateScope, TransformSfcContext,
+    template::{
+        core::scope_tracking::{enter_element_scope, restore_element_scope_snapshot},
+        node_transforms::NodeTransforms,
+    },
 };
+
+#[cfg(not(feature = "new-pipeline"))]
+use super::asset_urls::transform_asset_urls;
+#[cfg(not(feature = "new-pipeline"))]
+use super::collect_vars::collect_variables;
+use super::expr_transform::BindingsHelperTransform;
 
 pub struct TemplateVisitor<'s> {
     pub ctx: &'s mut TransformSfcContext,
@@ -34,8 +46,17 @@ pub fn transform_and_record_template(
     template: &mut SfcTemplateBlock,
     ctx: &mut TransformSfcContext,
 ) {
+    #[cfg(feature = "new-pipeline")]
+    if ctx.bindings_helper.template_scopes.is_empty() {
+        ctx.bindings_helper.template_scopes.push(TemplateScope {
+            variables: SmallVec::new(),
+            parent: 0,
+        });
+    }
+
     // Optimize conditional sequences within template root
-    optimize_children(&mut template.roots, ElementKind::Element);
+    let node_transforms = ctx.node_transforms.clone();
+    node_transforms.pre_transform_children(ctx, &mut template.roots, ElementKind::Element, 0);
 
     // Merge more than 1 child into a separate `<template>` element so that Fragment gets generated.
     // #11: Do this only when not all children are `TextNode`s.
@@ -62,7 +83,7 @@ pub fn transform_and_record_template(
         }
 
         let new_root = Node::Element(ElementNode {
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             starting_tag: StartingTag {
                 tag_name: fervid_atom!("template"),
                 attributes: vec![],
@@ -72,6 +93,7 @@ pub fn transform_and_record_template(
             template_scope: 0,
             patch_hints,
             span: template.span,
+            codegen_node: None,
         });
         template.roots.push(new_root);
     }
@@ -83,213 +105,12 @@ pub fn transform_and_record_template(
     }
 }
 
-/// Optimizes the children by removing whitespace in between `ElementNode`s,
-/// as well as folding `v-if`/`v-else-if`/`v-else` sequences into a `ConditionalNodeSequence`
-fn optimize_children(children: &mut Vec<Node>, element_kind: ElementKind) {
-    let children_len = children.len();
-
-    // Discard children mask, limited to 128 children. 0 means to preserve the node, 1 to discard
-    let mut discard_mask: u128 = 0;
-
-    // Filter out whitespace text nodes at the beginning and end of ElementNode
-    match children.first() {
-        Some(Node::Text(v, _)) if v.trim().is_empty() => {
-            discard_mask |= 1 << 0;
-        }
-        _ => {}
-    }
-    match children.last() {
-        Some(Node::Text(v, _)) if v.trim().is_empty() => {
-            discard_mask |= 1 << (children_len - 1);
-        }
-        _ => {}
-    }
-
-    // For removing the middle whitespace text nodes, we need sliding windows of three nodes
-    for (index, window) in children.windows(3).enumerate() {
-        match window {
-            [
-                Node::Element(_) | Node::Comment(_, _),
-                Node::Text(middle, _),
-                Node::Element(_) | Node::Comment(_, _),
-            ] if middle.trim().is_empty() => {
-                discard_mask |= 1 << (index + 1);
-            }
-            _ => {}
-        }
-    }
-
-    // Retain based on discard_mask. If a discard bit at `index` is set to 1, the node will be dropped
-    let mut index = 0;
-    children.retain(|_| {
-        let should_retain = discard_mask & (1 << index) == 0;
-        index += 1;
-        should_retain
-    });
-
-    // For components, reorder children so that named slots come first
-    if matches!(element_kind, ElementKind::Component) && !children.is_empty() {
-        children.sort_by(|a, b| {
-            let a_is_from_default = is_from_default_slot(a);
-            let b_is_from_default = is_from_default_slot(b);
-
-            a_is_from_default.cmp(&b_is_from_default)
-        });
-    }
-
-    // Merge multiple v-if/else-if/else nodes into a ConditionalNodeSequence
-    if !children.is_empty() {
-        let mut seq: Option<ConditionalNodeSequence> = None;
-        let mut new_children = Vec::with_capacity(children.len());
-
-        /// Finishes the sequence. Pass `child` to also push the current child
-        macro_rules! finish_seq {
-            () => {
-                if let Some(seq) = seq.take() {
-                    new_children.push(Node::ConditionalSeq(seq))
-                }
-            };
-            ($child: expr) => {
-                finish_seq!();
-                new_children.push($child);
-            };
-        }
-
-        // To move out of &ElementNode to ElementNode and avoid "partially moved variable" error
-        macro_rules! deref_element {
-            ($child: ident) => {{
-                let Node::Element(child_element) = $child else {
-                    unreachable!()
-                };
-
-                optimize_v_if_plus_v_for(child_element)
-            }};
-        }
-
-        for mut child in children.drain(..) {
-            // Only process `ElementNode`s.
-            // Otherwise, when we have an `if` node, ignore `Comment`s and finish sequence.
-            let Node::Element(child_element) = &mut child else {
-                if let (Node::Comment(_, _), Some(_)) = (&child, seq.as_ref()) {
-                    continue;
-                } else {
-                    finish_seq!(child);
-                    continue;
-                }
-            };
-
-            let Some(ref mut directives) = child_element.starting_tag.directives else {
-                finish_seq!(child);
-                continue;
-            };
-
-            // Check if we have a `v-if`.
-            // The already existing sequence should end, and the new sequence should start.
-            if let Some(v_if) = directives.v_if.take() {
-                finish_seq!();
-                seq = Some(ConditionalNodeSequence {
-                    if_node: Box::new(Conditional {
-                        condition: *v_if,
-                        node: deref_element!(child),
-                    }),
-                    else_if_nodes: vec![],
-                    else_node: None,
-                });
-                continue;
-            }
-
-            // Check for `v-else-if`
-            if let Some(v_else_if) = directives.v_else_if.take() {
-                let Some(ref mut seq) = seq else {
-                    // This must be a warning, v-else-if without v-if
-                    finish_seq!(child);
-                    continue;
-                };
-
-                seq.else_if_nodes.push(Conditional {
-                    condition: *v_else_if,
-                    node: deref_element!(child),
-                });
-                continue;
-            }
-
-            // Check for `v-else`
-            if directives.v_else.is_some() {
-                let Some(ref mut cond_seq) = seq else {
-                    // This must be a warning, v-else without v-if
-                    finish_seq!(child);
-                    continue;
-                };
-
-                cond_seq.else_node = Some(Box::new(deref_element!(child)));
-
-                // `else` node always finishes the sequence
-                finish_seq!();
-                continue;
-            }
-
-            // No directives, just push the child
-            finish_seq!(child);
-        }
-
-        finish_seq!();
-
-        *children = new_children;
-    }
-}
-
-// Optimize combined usage of conditional directives and `v-for`
-// https://github.com/vuejs/core/blob/438a74aad840183286fbdb488178510f37218a73/packages/compiler-core/src/transforms/vIf.ts#L260
-fn optimize_v_if_plus_v_for(mut parent: ElementNode) -> ElementNode {
-    // Check that work is needed
-    // This must be a `<template>` element with exactly one Element child
-    if parent.children.len() != 1 || parent.starting_tag.tag_name != "template" {
-        return parent;
-    }
-
-    let Some(Node::Element(child)) = parent.children.first_mut() else {
-        return parent;
-    };
-
-    // There must be at most one `v-for` for both parent and child
-    let parent_has_v_for = parent
-        .starting_tag
-        .directives
-        .as_ref()
-        .is_some_and(|d| d.v_for.is_some());
-    let child_has_v_for = child
-        .starting_tag
-        .directives
-        .as_ref()
-        .is_some_and(|d| d.v_for.is_some());
-    if parent_has_v_for && child_has_v_for {
-        return parent;
-    }
-
-    // Take parent's `v-for` and give it to the child
-    if parent_has_v_for {
-        let Some(mut parent_directives) = parent.starting_tag.directives.take() else {
-            unreachable!()
-        };
-
-        let child_directives = child
-            .starting_tag
-            .directives
-            .get_or_insert_with(Default::default);
-        child_directives.v_for = parent_directives.v_for.take();
-    }
-
-    // Take the child and return it instead
-    let Some(Node::Element(child)) = parent.children.pop() else {
-        unreachable!()
-    };
-
-    child
-}
-
 trait Visitor {
+    fn visit_node(&mut self, node: &mut Node);
     fn visit_element_node(&mut self, element_node: &mut ElementNode);
+    fn visit_for_node(&mut self, for_node: &mut ForNode);
     fn visit_conditional_node(&mut self, conditional_node: &mut ConditionalNodeSequence);
+    #[cfg_attr(feature = "new-pipeline", allow(dead_code))]
     fn visit_interpolation(&mut self, interpolation: &mut Interpolation);
 }
 
@@ -298,14 +119,166 @@ trait VisitMut {
 }
 
 impl Visitor for TemplateVisitor<'_> {
+    fn visit_node(&mut self, node: &mut Node) {
+        #[cfg(feature = "new-pipeline")]
+        {
+            let parent_scope = self.current_scope;
+            let node_transforms = self.ctx.node_transforms.clone();
+            let mut state = node_transforms.pre_transform_node(self.ctx, node, parent_scope);
+            self.current_scope = state.current_scope;
+
+            // SFC asset transforms run after compiler node transforms
+            if let Node::Element(element_node) = node {
+                super::asset_urls::transform_asset_urls(element_node, self.ctx);
+            }
+
+            match node {
+                Node::Element(element) => self.visit_element_node(element),
+                Node::For(for_node) => self.visit_for_node(for_node),
+                Node::ConditionalSeq(conditional) => self.visit_conditional_node(conditional),
+                Node::Interpolation(_interpolation) => {
+                    // self.visit_interpolation(interpolation)
+                }
+                Node::Text(_, _) | Node::Comment(_, _) => {}
+            }
+
+            node_transforms.post_transform_node(self.ctx, node, &mut state);
+
+            // Reset scope
+            self.current_scope = parent_scope;
+        }
+
+        #[cfg(not(feature = "new-pipeline"))]
+        match node {
+            Node::Element(el) => self.visit_element_node(el),
+            Node::For(for_node) => self.visit_for_node(for_node),
+            Node::ConditionalSeq(cond) => self.visit_conditional_node(cond),
+            Node::Interpolation(interpolation) => self.visit_interpolation(interpolation),
+            _ => {}
+        }
+    }
+
     fn visit_element_node(&mut self, element_node: &mut ElementNode) {
+        #[cfg(feature = "new-pipeline")]
+        return self.visit_element_node_new(element_node);
+
+        #[cfg(not(feature = "new-pipeline"))]
+        return self.visit_element_node_old(element_node);
+    }
+
+    fn visit_conditional_node(&mut self, conditional_node: &mut ConditionalNodeSequence) {
+        // In this function, conditions are transformed first
+        // without updating the template scope and collecting its variables.
+        // I believe this is a correct way of doing it, because in VDOM the condition
+        // wraps around the node (`condition ? if_node : else_node`).
+        // However, I am not too sure about the `v-if` & `v-slot` combined usage.
+
+        self.ctx
+            .bindings_helper
+            .transform_expr(&mut conditional_node.if_node.condition, self.current_scope);
+        conditional_node.if_node.node.visit_mut_with(self);
+
+        for else_if_node in conditional_node.else_if_nodes.iter_mut() {
+            self.ctx
+                .bindings_helper
+                .transform_expr(&mut else_if_node.condition, self.current_scope);
+            else_if_node.node.visit_mut_with(self);
+        }
+
+        if let Some(ref mut else_node) = conditional_node.else_node {
+            else_node.visit_mut_with(self);
+        }
+    }
+
+    fn visit_for_node(&mut self, for_node: &mut ForNode) {
+        let old_scope = self.current_scope;
+        let old_v_for_scope = self.v_for_scope;
+
+        self.current_scope = for_node.template_scope;
+
+        // TODO: Remove this after all code is migrated to directive_scopes
+        self.v_for_scope = true;
+
+        let node_transforms = self.ctx.node_transforms.clone();
+        node_transforms.pre_transform_children(
+            self.ctx,
+            &mut for_node.children,
+            ElementKind::Template,
+            self.current_scope,
+        );
+
+        for child in for_node.children.iter_mut() {
+            child.visit_mut_with(self);
+        }
+
+        self.current_scope = old_scope;
+        self.v_for_scope = old_v_for_scope;
+    }
+
+    fn visit_interpolation(&mut self, interpolation: &mut Interpolation) {
+        interpolation.template_scope = self.current_scope;
+
+        let has_js = self
+            .ctx
+            .bindings_helper
+            .transform_expr(&mut interpolation.value, self.current_scope)
+            .has_js_bindings;
+
+        interpolation.patch_flag = has_js;
+    }
+}
+
+impl TemplateVisitor<'_> {
+    pub fn new(ctx: &'_ mut TransformSfcContext) -> TemplateVisitor<'_> {
+        TemplateVisitor {
+            ctx,
+            current_scope: 0,
+            v_for_scope: false,
+        }
+    }
+
+    #[allow(unused)]
+    fn visit_element_node_new(&mut self, element_node: &mut ElementNode) {
+        // TODO: enter_element_scope does more than it should,
+        // move transform_for and track_slot_scopes out of it
+
+        // `v-for` has special behavior with `ref`
+        let scope_snapshot = enter_element_scope(
+            self.ctx,
+            element_node,
+            &mut self.current_scope,
+            &mut self.v_for_scope,
+        );
+
+        // Cloning transforms is fine here due to the structure being optimized for it
+        let node_transforms = self.ctx.node_transforms.clone();
+        node_transforms.pre_transform_children(
+            self.ctx,
+            &mut element_node.children,
+            element_node.tag_type,
+            self.current_scope,
+        );
+
+        for child in element_node.children.iter_mut() {
+            child.visit_mut_with(self);
+        }
+
+        restore_element_scope_snapshot(
+            self.ctx,
+            scope_snapshot,
+            &mut self.current_scope,
+            &mut self.v_for_scope,
+        );
+    }
+
+    #[cfg(not(feature = "new-pipeline"))]
+    fn visit_element_node_old(&mut self, element_node: &mut ElementNode) {
         let parent_scope = self.current_scope;
         let mut scope_to_use = parent_scope;
 
         // Mark the node with a correct type (element, component or built-in)
-        let element_kind = self.recognize_element_kind(&element_node.starting_tag);
+        let element_kind = element_node.tag_type;
         let is_component = matches!(element_kind, ElementKind::Component);
-        element_node.kind = element_kind;
 
         if is_component {
             self.maybe_resolve_component(&element_node.starting_tag.tag_name);
@@ -349,15 +322,22 @@ impl Visitor for TemplateVisitor<'_> {
             if let Some(v_for) = v_for {
                 self.v_for_scope = true;
 
-                // Get the iterator variable and collect its variables
+                // Get the iterator variables and collect their variables
                 let scope = &mut self.ctx.bindings_helper.template_scopes[scope_to_use as usize];
-                collect_variables(&v_for.itervar, scope);
+                collect_variables(&v_for.parse_result.value, scope);
+                if let Some(key) = &v_for.parse_result.key {
+                    collect_variables(key, scope);
+                }
+                if let Some(index) = &v_for.parse_result.index {
+                    collect_variables(index, scope);
+                }
 
-                // Transform the iterable
+                // Transform the source expression
                 let is_dynamic = self
                     .ctx
                     .bindings_helper
-                    .transform_expr(&mut v_for.iterable, scope_to_use);
+                    .transform_expr(&mut v_for.parse_result.source, scope_to_use)
+                    .has_js_bindings;
 
                 // Add patch flags
                 if !is_dynamic {
@@ -419,7 +399,8 @@ impl Visitor for TemplateVisitor<'_> {
                     let has_bindings = self
                         .ctx
                         .bindings_helper
-                        .transform_expr(&mut v_bind.value, scope_to_use);
+                        .transform_expr(&mut v_bind.value, scope_to_use)
+                        .has_js_bindings;
 
                     // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L676
                     // Force hydration for v-bind with .prop modifier
@@ -443,7 +424,7 @@ impl Visitor for TemplateVisitor<'_> {
                     };
 
                     // Skip `key` prop
-                    if argument == "key" {
+                    if argument.value == "key" {
                         // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L585
                         // #938: elements with dynamic keys should be forced into blocks
                         should_use_block = true;
@@ -451,14 +432,14 @@ impl Visitor for TemplateVisitor<'_> {
                     }
 
                     // Skip `is` on `<component>`
-                    if argument == "is"
+                    if argument.value == "is"
                         && matches!(element_kind, ElementKind::Builtin(BuiltinType::Component))
                     {
                         continue;
                     }
 
                     // For `ref_for`
-                    if self.v_for_scope && argument == "ref" {
+                    if self.v_for_scope && argument.value == "ref" {
                         has_ref = true;
                     }
 
@@ -472,17 +453,17 @@ impl Visitor for TemplateVisitor<'_> {
                     // They are added to PROPS for the components.
                     if is_component {
                         patch_hints.flags |= PatchFlags::Props;
-                        patch_hints.props.push(argument.to_owned());
+                        patch_hints.props.push(argument.value.to_owned());
                         continue;
                     }
 
-                    if argument == "class" {
+                    if argument.value == "class" {
                         patch_hints.flags |= PatchFlags::Class;
-                    } else if argument == "style" {
+                    } else if argument.value == "style" {
                         patch_hints.flags |= PatchFlags::Style;
                     } else {
                         patch_hints.flags |= PatchFlags::Props;
-                        patch_hints.props.push(argument.to_owned());
+                        patch_hints.props.push(argument.value.to_owned());
                     }
                 }
 
@@ -491,7 +472,7 @@ impl Visitor for TemplateVisitor<'_> {
                     // inline before-update hooks need to force block so that it is invoked
                     // before children
                     if has_children
-                        && matches!(&v_on.event, Some(StrOrExpr::Str(s)) if s == "vue:before-update")
+                        && matches!(&v_on.event, Some(StrOrExpr::Str(s)) if s.value == "vue:before-update")
                     {
                         should_use_block = true;
                     }
@@ -501,14 +482,14 @@ impl Visitor for TemplateVisitor<'_> {
                     // TODO Transform the event name beforehand (?) and make sure the condition is 100% the same
                     // https://github.com/vuejs/core/blob/f1068fc60ca511f68ff0aaedcc18b39124791d29/packages/compiler-core/src/transforms/transformElement.ts#L430
                     if let Some(StrOrExpr::Str(evt_name)) = v_on.event.as_ref() {
-                        let has_v_node = evt_name.starts_with("vue:");
+                        let has_v_node = evt_name.value.starts_with("vue:");
 
                         // TODO Adjust condition due to the latest transformation changes
                         if (!is_component
                             || matches!(element_kind, ElementKind::Builtin(BuiltinType::Component)))
-                            && evt_name != "click"
-                            && evt_name != "update:modelValue"
-                            && evt_name != "update:model-value"
+                            && evt_name.value != "click"
+                            && evt_name.value != "update:modelValue"
+                            && evt_name.value != "update:model-value"
                             && !has_v_node
                         {
                             has_hydration_event_binding = true;
@@ -552,6 +533,8 @@ impl Visitor for TemplateVisitor<'_> {
                                 | BindingTypes::Imported
                         )
                     {
+                        use swc_core::ecma::ast::Str;
+
                         let span = span.to_owned();
                         let value = value.to_owned();
                         ref_key = Some(value.to_owned());
@@ -559,7 +542,11 @@ impl Visitor for TemplateVisitor<'_> {
                         let _ = std::mem::replace(
                             attr,
                             AttributeOrBinding::VBind(VBindDirective {
-                                argument: Some(StrOrExpr::Str(fervid_atom!("ref"))),
+                                argument: Some(StrOrExpr::Str(Str {
+                                    span,
+                                    value: fervid_atom!("ref"),
+                                    raw: None,
+                                })),
                                 value: Box::new(Expr::Ident(value.into_ident_spanned(span))),
                                 is_camel: false,
                                 is_prop: false,
@@ -583,7 +570,12 @@ impl Visitor for TemplateVisitor<'_> {
             macro_rules! maybe_transform {
                 ($key: ident) => {
                     match directives.$key.as_mut() {
-                        Some(expr) => self.ctx.bindings_helper.transform_expr(expr, scope_to_use),
+                        Some(expr) => {
+                            self.ctx
+                                .bindings_helper
+                                .transform_expr(expr, scope_to_use)
+                                .has_js_bindings
+                        }
                         None => false,
                     }
                 };
@@ -612,6 +604,8 @@ impl Visitor for TemplateVisitor<'_> {
 
             // Transform custom directives
             for custom_directive in directives.custom.iter_mut() {
+                use crate::template::resolutions::maybe_resolve_directive;
+
                 if let Some(ref mut value) = custom_directive.value {
                     self.ctx.bindings_helper.transform_expr(value, scope_to_use);
                 }
@@ -622,12 +616,18 @@ impl Visitor for TemplateVisitor<'_> {
                 }
 
                 // Try resolving it
-                self.maybe_resolve_directive(&custom_directive.name);
+                maybe_resolve_directive(self.ctx, &custom_directive.name, scope_to_use);
             }
         }
 
         // Merge conditional nodes and clean up whitespace
-        optimize_children(&mut element_node.children, element_kind);
+        let node_transforms = self.ctx.node_transforms.clone();
+        node_transforms.pre_transform_children(
+            self.ctx,
+            &mut element_node.children,
+            element_kind,
+            scope_to_use,
+        );
 
         // Patch flag for HTML elements which only contain interpolation and text,
         // e.g. `<p>{{ msg }}</p>`.
@@ -642,7 +642,7 @@ impl Visitor for TemplateVisitor<'_> {
 
             match child {
                 // When Elements are present, TEXT patch flag does not apply
-                Node::Element(_) | Node::ConditionalSeq(_) => {
+                Node::Element(_) | Node::For(_) | Node::ConditionalSeq(_) => {
                     is_children_text_only = false;
                 }
 
@@ -661,7 +661,7 @@ impl Visitor for TemplateVisitor<'_> {
                 .starting_tag
                 .attributes
                 .push(AttributeOrBinding::VBind(VBindDirective {
-                    argument: Some(StrOrExpr::Str(fervid_atom!("ref_for"))),
+                    argument: Some(fervid_atom!("ref_for").into()),
                     value: Box::new(Expr::Lit(Lit::Bool(Bool {
                         span: DUMMY_SP,
                         value: true,
@@ -704,118 +704,38 @@ impl Visitor for TemplateVisitor<'_> {
         // Restore the parent scope
         self.current_scope = parent_scope;
     }
-
-    fn visit_conditional_node(&mut self, conditional_node: &mut ConditionalNodeSequence) {
-        // In this function, conditions are transformed first
-        // without updating the template scope and collecting its variables.
-        // I believe this is a correct way of doing it, because in VDOM the condition
-        // wraps around the node (`condition ? if_node : else_node`).
-        // However, I am not too sure about the `v-if` & `v-slot` combined usage.
-
-        self.ctx
-            .bindings_helper
-            .transform_expr(&mut conditional_node.if_node.condition, self.current_scope);
-        self.visit_element_node(&mut conditional_node.if_node.node);
-
-        for else_if_node in conditional_node.else_if_nodes.iter_mut() {
-            self.ctx
-                .bindings_helper
-                .transform_expr(&mut else_if_node.condition, self.current_scope);
-            self.visit_element_node(&mut else_if_node.node);
-        }
-
-        if let Some(ref mut else_node) = conditional_node.else_node {
-            self.visit_element_node(else_node);
-        }
-    }
-
-    fn visit_interpolation(&mut self, interpolation: &mut Interpolation) {
-        interpolation.template_scope = self.current_scope;
-
-        let has_js = self
-            .ctx
-            .bindings_helper
-            .transform_expr(&mut interpolation.value, self.current_scope);
-
-        interpolation.patch_flag = has_js;
-    }
-}
-
-impl TemplateVisitor<'_> {
-    pub fn new(ctx: &mut TransformSfcContext) -> TemplateVisitor<'_> {
-        TemplateVisitor {
-            ctx,
-            current_scope: 0,
-            v_for_scope: false,
-        }
-    }
-
-    // TODO Maybe do this in parser instead, because it sometimes needs this info
-    fn recognize_element_kind(&self, starting_tag: &StartingTag) -> ElementKind {
-        let tag_name = &starting_tag.tag_name;
-
-        // First, check for a built-in
-        if let Some(builtin_type) = VUE_BUILTINS.get(tag_name) {
-            // Special case for `<component>`. If it does not have `is`, this is not a built-in
-            if tag_name.eq("component") {
-                let has_is = starting_tag
-                    .attributes
-                    .iter()
-                    .any(|attr| check_attribute_name(attr, "is"));
-
-                if !has_is {
-                    return ElementKind::Component;
-                }
-            }
-
-            return ElementKind::Builtin(*builtin_type);
-        }
-
-        // Then check if this is an HTML tag
-        if is_html_tag(&starting_tag.tag_name) {
-            ElementKind::Element
-        } else {
-            ElementKind::Component
-        }
-    }
 }
 
 impl VisitMut for Node {
     fn visit_mut_with(&mut self, visitor: &mut impl Visitor) {
-        match self {
-            Node::Element(el) => visitor.visit_element_node(el),
-            Node::ConditionalSeq(cond) => visitor.visit_conditional_node(cond),
-            Node::Interpolation(interpolation) => visitor.visit_interpolation(interpolation),
-            _ => {}
-        }
+        visitor.visit_node(self);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{ElementKind, Node, PatchHints, VForDirective, VueDirectives};
+    #[cfg(feature = "new-pipeline")]
+    use fervid_core::{
+        AttributeOrBinding, ElementCodegenValue, ExpressionNode, JsChildNode, PropsExpression,
+        StrOrExpr, VBindDirective, VCustomDirective, VOnDirective, VueImports,
+    };
+    use fervid_core::{
+        Conditional, ElementKind, ForParseResult, Node, PatchHints, VForDirective, VueDirectives,
+    };
     use swc_core::common::DUMMY_SP;
+    #[cfg(feature = "new-pipeline")]
+    use swc_core::{
+        common::{BytePos, Span},
+        ecma::ast::{EsVersion, Pat},
+    };
+    #[cfg(feature = "new-pipeline")]
+    use swc_ecma_parser::{Lexer, Parser, StringInput, Syntax, TsSyntax};
 
+    #[cfg(feature = "new-pipeline")]
+    use crate::test_utils::element_from_tag;
     use crate::test_utils::{js, to_str};
 
     use super::*;
-
-    /// Special case: `<component>` without `is` attribute is not a builtin
-    #[test]
-    fn it_distinguishes_component_builtin_and_not() {
-        let starting_tag = StartingTag {
-            tag_name: "component".into(),
-            attributes: vec![],
-            directives: None,
-        };
-
-        let mut ctx = TransformSfcContext::anonymous();
-        let template_visitor = TemplateVisitor::new(&mut ctx);
-        assert!(matches!(
-            template_visitor.recognize_element_kind(&starting_tag),
-            ElementKind::Component
-        ));
-    }
 
     #[test]
     fn it_folds_basic_seq() {
@@ -835,9 +755,10 @@ mod tests {
                 },
                 children: vec![text_node(), if_node(), else_if_node(), else_node()],
                 template_scope: 0,
-                kind: ElementKind::Element,
+                tag_type: ElementKind::Element,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
+                codegen_node: None,
             })],
             span: DUMMY_SP,
         };
@@ -1027,7 +948,7 @@ mod tests {
                     span: DUMMY_SP,
                 }),
                 Node::Element(ElementNode {
-                    kind: ElementKind::Element,
+                    tag_type: ElementKind::Element,
                     starting_tag: StartingTag {
                         tag_name: "div".into(),
                         attributes: vec![],
@@ -1037,6 +958,7 @@ mod tests {
                     template_scope: 0,
                     patch_hints: PatchHints::default(),
                     span: DUMMY_SP,
+                    codegen_node: None,
                 }),
             ],
             span: DUMMY_SP,
@@ -1076,9 +998,10 @@ mod tests {
                     else_node(),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Element,
+                tag_type: ElementKind::Element,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
+                codegen_node: None,
             })],
             span: DUMMY_SP,
         };
@@ -1113,9 +1036,10 @@ mod tests {
             },
             children: vec![],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         });
 
         let no_directives2 = Node::Element(ElementNode {
@@ -1128,9 +1052,10 @@ mod tests {
             },
             children: vec![Node::Text("hello".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         });
 
         let mut sfc_template = SfcTemplateBlock {
@@ -1149,12 +1074,568 @@ mod tests {
         assert_eq!(2, root.children.len());
     }
 
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_tracks_v_for_aliases_on_template_slots() {
+        let swc_core::ecma::ast::Expr::Ident(slot_prop) = *js("row") else {
+            unreachable!()
+        };
+
+        let mut sfc_template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "template".into(),
+                    attributes: vec![],
+                    directives: Some(Box::new(VueDirectives {
+                        v_for: Some(VForDirective {
+                            parse_result: Box::new(ForParseResult {
+                                source: js("item.items"),
+                                value: js("item"),
+                                key: Some(js("key")),
+                                index: Some(js("index")),
+                                finalized: false,
+                                finalized_is_dynamic: false,
+                            }),
+                            patch_flags: Default::default(),
+                            span: DUMMY_SP,
+                        }),
+                        v_slot: Some(fervid_core::VSlotDirective {
+                            slot_name: None,
+                            value: Some(Box::new(swc_core::ecma::ast::Pat::Ident(
+                                slot_prop.into(),
+                            ))),
+                        }),
+                        ..Default::default()
+                    })),
+                },
+                children: vec![Node::Interpolation(Interpolation {
+                    value: js("item + key + index + row + outside"),
+                    template_scope: 0,
+                    patch_flag: false,
+                    span: DUMMY_SP,
+                })],
+                template_scope: 0,
+                tag_type: ElementKind::Template,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
+                codegen_node: None,
+            })],
+            span: DUMMY_SP,
+        };
+        let mut ctx = TransformSfcContext::anonymous();
+
+        transform_and_record_template(&mut sfc_template, &mut ctx);
+
+        let Node::Element(template) = &sfc_template.roots[0] else {
+            panic!("Template v-for slot should remain an element")
+        };
+        let directives = template
+            .starting_tag
+            .directives
+            .as_ref()
+            .expect("template v-for slot should retain its directives");
+        let v_for = directives
+            .v_for
+            .as_ref()
+            .expect("template v-for slot should retain its v-for directive");
+        assert!(v_for.parse_result.finalized);
+        assert_eq!("_ctx.item.items", to_str(&v_for.parse_result.source));
+        assert!(template.template_scope > 0);
+
+        let [Node::Interpolation(interpolation)] = template.children.as_slice() else {
+            panic!("Expected one interpolation")
+        };
+        assert_eq!(template.template_scope, interpolation.template_scope);
+        assert_eq!(
+            "item+key+index+row+_ctx.outside",
+            to_str(&interpolation.value)
+        );
+        assert_eq!(0, ctx.directive_scopes.v_for);
+        assert_eq!(0, ctx.directive_scopes.v_slot);
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_transforms_v_slot_pattern_default_expressions_in_parent_scope() {
+        let (slot_props, body) = transform_component_slot("{ value = outer }", "value + outer");
+
+        assert_eq!("{value=_ctx.outer}", slot_props);
+        assert_eq!("value+_ctx.outer", body);
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_transforms_v_slot_pattern_computed_keys_in_parent_scope() {
+        let (slot_props, body) = transform_component_slot("{ [key]: value }", "value + key");
+
+        assert_eq!("{[_ctx.key]:value}", slot_props);
+        assert_eq!("value+_ctx.key", body);
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_transforms_nested_v_slot_pattern_defaults_in_parent_scope() {
+        let (slot_props, body) =
+            transform_component_slot("{ foo: { bar = baz }, ...rest }", "bar + rest + baz");
+
+        assert_eq!("{foo:{bar=_ctx.baz},...rest}", slot_props);
+        assert_eq!("bar+rest+_ctx.baz", body);
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_transforms_array_v_slot_pattern_defaults_in_parent_scope() {
+        let (slot_props, body) = transform_component_slot("[item = fallback]", "item + fallback");
+
+        assert_eq!("[item=_ctx.fallback]", slot_props);
+        assert_eq!("item+_ctx.fallback", body);
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_builds_props_for_directive_only_elements() {
+        let mut sfc_template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "div".into(),
+                    attributes: vec![],
+                    directives: Some(Box::new(VueDirectives {
+                        custom: vec![fervid_core::VCustomDirective {
+                            name: "focus".into(),
+                            argument: None,
+                            modifiers: vec![],
+                            value: None,
+                        }],
+                        ..Default::default()
+                    })),
+                },
+                children: vec![],
+                template_scope: 0,
+                tag_type: ElementKind::Element,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
+                codegen_node: None,
+            })],
+            span: DUMMY_SP,
+        };
+
+        transform_and_record_template(&mut sfc_template, &mut TransformSfcContext::anonymous());
+
+        let Node::Element(element) = &sfc_template.roots[0] else {
+            panic!("Expected directive-only element")
+        };
+        let fervid_core::ElementCodegenValue::VNodeCall(vnode_call) = &element
+            .codegen_node
+            .as_deref()
+            .expect("directive-only element should have a VNodeCall")
+            .value;
+        assert_eq!(
+            1,
+            vnode_call
+                .directives
+                .as_ref()
+                .expect("custom directive should produce runtime directive arguments")
+                .elems
+                .len()
+        );
+    }
+
+    // https://github.com/vuejs/core/tree/d2c458be2542a628878cbfbdfebcb53b65d3e9f3/packages/compiler-dom/__tests__/transforms
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_transforms_v_html_and_removes_children() {
+        let mut template = directive_element(
+            VueDirectives {
+                v_html: Some(js("html")),
+                ..Default::default()
+            },
+            vec![Node::Text(fervid_atom!("ignored"), DUMMY_SP)],
+        );
+        let mut ctx = TransformSfcContext::anonymous();
+
+        transform_and_record_template(&mut template, &mut ctx);
+
+        let (element, vnode_call) = expect_element_vnode(&template.roots[0]);
+        assert!(element.children.is_empty());
+        assert!(vnode_call.directives.is_none());
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::Props));
+        assert_eq!(vnode_call.patch_hints.props.as_slice(), ["innerHTML"]);
+        let prop = expect_object_prop(vnode_call, "innerHTML");
+        let JsChildNode::ExpressionNode(value) = &prop.value else {
+            panic!("innerHTML should use the directive expression")
+        };
+        let ExpressionNode::SimpleExpression(value) = value.as_ref() else {
+            panic!("v-html value should be a simple expression")
+        };
+        assert_eq!(to_str(value.ast.as_ref()), "_ctx.html");
+        assert!(matches!(
+            ctx.errors.as_slice(),
+            [crate::error::TransformError::TemplateError(error)]
+                if matches!(error.kind, crate::error::TemplateErrorKind::VHtmlWithChildren)
+        ));
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_transforms_v_text_and_removes_children() {
+        let mut template = directive_element(
+            VueDirectives {
+                v_text: Some(js("text")),
+                ..Default::default()
+            },
+            vec![Node::Text(fervid_atom!("ignored"), DUMMY_SP)],
+        );
+        let mut ctx = TransformSfcContext::anonymous();
+
+        transform_and_record_template(&mut template, &mut ctx);
+
+        let (element, vnode_call) = expect_element_vnode(&template.roots[0]);
+        assert!(element.children.is_empty());
+        assert!(vnode_call.directives.is_none());
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::Props));
+        assert_eq!(vnode_call.patch_hints.props.as_slice(), ["textContent"]);
+        let prop = expect_object_prop(vnode_call, "textContent");
+        let JsChildNode::CallExpression(value) = &prop.value else {
+            panic!("dynamic v-text should call toDisplayString")
+        };
+        assert!(matches!(value.callee, VueImports::ToDisplayString));
+        let [JsChildNode::ExpressionNode(argument)] = value.arguments.as_slice() else {
+            panic!("toDisplayString should receive the directive expression")
+        };
+        let ExpressionNode::SimpleExpression(argument) = argument.as_ref() else {
+            panic!("v-text value should be a simple expression")
+        };
+        assert_eq!(to_str(argument.ast.as_ref()), "_ctx.text");
+        assert!(matches!(
+            ctx.errors.as_slice(),
+            [crate::error::TransformError::TemplateError(error)]
+                if matches!(error.kind, crate::error::TemplateErrorKind::VTextWithChildren)
+        ));
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_transforms_v_show_to_runtime_directive() {
+        let mut template = directive_element(
+            VueDirectives {
+                v_show: Some(js("visible")),
+                ..Default::default()
+            },
+            vec![Node::Text(fervid_atom!("content"), DUMMY_SP)],
+        );
+        let mut ctx = TransformSfcContext::anonymous();
+
+        transform_and_record_template(&mut template, &mut ctx);
+
+        let (element, vnode_call) = expect_element_vnode(&template.roots[0]);
+        assert_eq!(element.children.len(), 1);
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::NeedPatch));
+        assert_eq!(
+            to_str(
+                vnode_call
+                    .directives
+                    .as_ref()
+                    .expect("v-show should produce runtime directive arguments")
+            ),
+            "[[_vShow,_ctx.visible]]"
+        );
+        assert!(ctx.bindings_helper.vue_imports.contains(VueImports::VShow));
+        assert!(ctx.errors.is_empty());
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_erases_v_cloak_without_affecting_children() {
+        let mut template = directive_element(
+            VueDirectives {
+                v_cloak: Some(()),
+                ..Default::default()
+            },
+            vec![Node::Text(fervid_atom!("content"), DUMMY_SP)],
+        );
+
+        transform_and_record_template(&mut template, &mut TransformSfcContext::anonymous());
+
+        let (element, vnode_call) = expect_element_vnode(&template.roots[0]);
+        assert_eq!(element.children.len(), 1);
+        assert!(vnode_call.props.is_none());
+        assert!(vnode_call.directives.is_none());
+        assert!(vnode_call.patch_hints.flags.is_empty());
+        assert!(vnode_call.patch_hints.props.is_empty());
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn dynamic_v_on_uses_full_props_without_normalizing_handler_key() {
+        let mut template = v_on_element(
+            "div",
+            ElementKind::Element,
+            vec![VOnDirective {
+                event: Some(StrOrExpr::Expr(js("event"))),
+                handler: Some(js("handler")),
+                modifiers: vec![],
+                span: DUMMY_SP,
+            }],
+        );
+        let mut ctx = TransformSfcContext::anonymous();
+
+        transform_and_record_template(&mut template, &mut ctx);
+
+        let (_, vnode_call) = expect_element_vnode(&template.roots[0]);
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::FullProps));
+        let Some(PropsExpression::ObjectExpression(props)) = vnode_call.props.as_ref() else {
+            panic!("Dynamic handler key should remain object props")
+        };
+        let [prop] = props.properties.as_slice() else {
+            panic!("Expected one dynamic handler property")
+        };
+        assert!(prop.key.is_handler_key());
+        let fervid_core::ExpressionPropNameNode::CompoundExpression(key) = &prop.key else {
+            panic!("Dynamic handler should use a compound property key")
+        };
+        let swc_core::ecma::ast::PropName::Computed(key) = &key.ast else {
+            panic!("Dynamic handler should use a computed property key")
+        };
+        assert_eq!(to_str(key.expr.as_ref()), "_toHandlerKey(_ctx.event)");
+        assert!(
+            !ctx.bindings_helper
+                .vue_imports
+                .contains(VueImports::NormalizeProps)
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn vnode_hook_uses_need_patch() {
+        let mut template = v_on_element(
+            "div",
+            ElementKind::Element,
+            vec![VOnDirective {
+                event: Some(fervid_atom!("vue:mounted").into()),
+                handler: Some(js("handler")),
+                modifiers: vec![],
+                span: DUMMY_SP,
+            }],
+        );
+
+        transform_and_record_template(&mut template, &mut TransformSfcContext::anonymous());
+
+        let (_, vnode_call) = expect_element_vnode(&template.roots[0]);
+        assert!(!vnode_call.needs_patch);
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::NeedPatch));
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn duplicate_static_v_on_handlers_are_deduped_into_array() {
+        let mut template = v_on_element(
+            "div",
+            ElementKind::Element,
+            vec![
+                VOnDirective {
+                    event: Some(fervid_atom!("click").into()),
+                    handler: Some(js("first")),
+                    modifiers: vec![],
+                    span: DUMMY_SP,
+                },
+                VOnDirective {
+                    event: Some(fervid_atom!("click").into()),
+                    handler: Some(js("second")),
+                    modifiers: vec![],
+                    span: DUMMY_SP,
+                },
+            ],
+        );
+
+        transform_and_record_template(&mut template, &mut TransformSfcContext::anonymous());
+
+        let (_, vnode_call) = expect_element_vnode(&template.roots[0]);
+        let prop = expect_object_prop(vnode_call, "onClick");
+        let JsChildNode::ArrayExpression(handlers) = &prop.value else {
+            panic!("Duplicate handlers should produce an array")
+        };
+        let [_, _] = handlers.elements.as_slice() else {
+            panic!("Expected both duplicate handlers")
+        };
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn argumentless_v_on_marks_element_handlers_only() {
+        for (tag_name, tag_type, expected_arg_count) in [
+            ("div", ElementKind::Element, 2),
+            ("Comp", ElementKind::Component, 1),
+        ] {
+            let mut template = v_on_element(
+                tag_name,
+                tag_type,
+                vec![VOnDirective {
+                    event: None,
+                    handler: Some(js("listeners")),
+                    modifiers: vec![],
+                    span: DUMMY_SP,
+                }],
+            );
+
+            transform_and_record_template(&mut template, &mut TransformSfcContext::anonymous());
+
+            let (_, vnode_call) = expect_element_vnode(&template.roots[0]);
+            let Some(PropsExpression::CallExpression(call)) = vnode_call.props.as_ref() else {
+                panic!("Argumentless v-on should produce a helper call")
+            };
+            assert!(matches!(call.callee, VueImports::ToHandlers));
+            assert_eq!(call.arguments.len(), expected_arg_count);
+            let JsChildNode::ExpressionNode(listeners) = &call.arguments[0] else {
+                panic!("toHandlers should receive listener expression")
+            };
+            dbg!(&listeners);
+            let ExpressionNode::SimpleExpression(listeners) = listeners.as_ref() else {
+                panic!("Listener should be a simple expression")
+            };
+            assert_eq!(to_str(listeners.ast.as_ref()), "_ctx.listeners");
+
+            if expected_arg_count == 2 {
+                let JsChildNode::ExpressionNode(is_element) = &call.arguments[1] else {
+                    panic!("Element toHandlers should receive true")
+                };
+                let ExpressionNode::SimpleExpression(is_element) = is_element.as_ref() else {
+                    panic!("Element marker should be a simple expression")
+                };
+                assert_eq!(to_str(is_element.ast.as_ref()), "true");
+            }
+        }
+    }
+
+    // https://github.com/vuejs/core/blob/02421cdbc4da5dd2eaf39e6c51aa790f9310db62/packages/compiler-core/__tests__/transforms/transformElement.spec.ts#L1037-L1134
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_preserves_lifecycle_requirements_in_stable_v_for() {
+        let mut static_ref = for_element(
+            js("3"),
+            vec![
+                AttributeOrBinding::VBind(VBindDirective {
+                    argument: Some(fervid_atom!("key").into()),
+                    value: js("i"),
+                    is_camel: false,
+                    is_prop: false,
+                    is_attr: false,
+                    span: DUMMY_SP,
+                }),
+                AttributeOrBinding::RegularAttribute {
+                    name: fervid_atom!("ref"),
+                    value: fervid_atom!("items"),
+                    span: DUMMY_SP,
+                },
+            ],
+            vec![],
+            vec![],
+        );
+        transform_and_record_template(&mut static_ref, &mut TransformSfcContext::anonymous());
+
+        let vnode_call = expect_for_vnode(&static_ref.roots[0]);
+        assert!(!vnode_call.is_block);
+        assert!(vnode_call.needs_patch);
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::NeedPatch));
+
+        let mut childless_custom_directive = for_element(
+            js("3"),
+            vec![AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(fervid_atom!("key").into()),
+                value: js("i"),
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                span: DUMMY_SP,
+            })],
+            vec![VCustomDirective {
+                name: fervid_atom!("dir"),
+                ..Default::default()
+            }],
+            vec![],
+        );
+        transform_and_record_template(
+            &mut childless_custom_directive,
+            &mut TransformSfcContext::anonymous(),
+        );
+
+        let vnode_call = expect_for_vnode(&childless_custom_directive.roots[0]);
+        assert!(!vnode_call.is_block);
+        assert!(vnode_call.needs_patch);
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::NeedPatch));
+
+        let mut custom_directive = for_element(
+            js("3"),
+            vec![],
+            vec![VCustomDirective {
+                name: fervid_atom!("dir"),
+                ..Default::default()
+            }],
+            vec![Node::Interpolation(Interpolation {
+                value: js("i"),
+                template_scope: 0,
+                patch_flag: false,
+                span: DUMMY_SP,
+            })],
+        );
+        transform_and_record_template(&mut custom_directive, &mut TransformSfcContext::anonymous());
+
+        let vnode_call = expect_for_vnode(&custom_directive.roots[0]);
+        assert!(vnode_call.is_block);
+        assert!(vnode_call.is_block_required);
+        assert!(vnode_call.patch_hints.flags.contains(PatchFlags::Text));
+        assert!(!vnode_call.needs_patch);
+        assert!(!vnode_call.patch_hints.flags.contains(PatchFlags::NeedPatch));
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_preserves_before_update_blocks_in_stable_v_for() {
+        for event in ["vue:before-update", "vue:beforeUpdate"] {
+            let mut template = for_element(
+                js("3"),
+                vec![AttributeOrBinding::VOn(VOnDirective {
+                    event: Some(StrOrExpr::Str(event.into())),
+                    handler: Some(js("handler")),
+                    modifiers: vec![],
+                    span: DUMMY_SP,
+                })],
+                vec![],
+                vec![Node::Element(ElementNode::new(StartingTag {
+                    tag_name: fervid_atom!("span"),
+                    attributes: vec![],
+                    directives: None,
+                }))],
+            );
+            transform_and_record_template(&mut template, &mut TransformSfcContext::anonymous());
+
+            let vnode_call = expect_for_vnode(&template.roots[0]);
+            assert!(vnode_call.is_block, "{event} should preserve the block");
+            assert!(
+                vnode_call.is_block_required,
+                "{event} should require the block"
+            );
+        }
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_keeps_dynamic_v_for_children_as_blocks() {
+        let mut template = for_element(js("items"), vec![], vec![], vec![]);
+        transform_and_record_template(&mut template, &mut TransformSfcContext::anonymous());
+
+        let vnode_call = expect_for_vnode(&template.roots[0]);
+        assert!(vnode_call.is_block);
+        assert!(!vnode_call.is_block_required);
+    }
+
     #[test]
     fn it_optimizes_nested_fragments() {
         // For cloning
         // <p>text</p>
         let p = ElementNode {
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             starting_tag: StartingTag {
                 tag_name: "p".into(),
                 attributes: vec![],
@@ -1164,10 +1645,11 @@ mod tests {
             template_scope: 0,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         };
         // <div v-if="false"></div>
         let div = ElementNode {
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             starting_tag: StartingTag {
                 tag_name: "div".into(),
                 attributes: vec![],
@@ -1180,10 +1662,11 @@ mod tests {
             template_scope: 0,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         };
         // <template></template>
         let tmpl = ElementNode {
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             starting_tag: StartingTag {
                 tag_name: "template".into(),
                 attributes: vec![],
@@ -1193,6 +1676,7 @@ mod tests {
             template_scope: 0,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         };
         let sfc_tmpl = SfcTemplateBlock {
             lang: "html".into(),
@@ -1208,6 +1692,9 @@ mod tests {
             p.starting_tag.directives = p_directives;
 
             let mut template = tmpl.clone();
+            if template_directives.is_some() {
+                template.tag_type = ElementKind::Template;
+            }
             template.starting_tag.directives = template_directives;
             template.children.push(Node::Element(p));
 
@@ -1240,10 +1727,10 @@ mod tests {
             let cond = prepare(Some(directives!(v_if: Some(js("val")))), None, false);
 
             // Folded to `<p v-if="val">text</p>`
-            assert!(cond.if_node.node.starting_tag.tag_name == "p");
+            let cond_node = expect_element(&cond.if_node.node);
+            assert!(cond_node.starting_tag.tag_name == "p");
             assert!(
-                cond.if_node
-                    .node
+                cond_node
                     .children
                     .first()
                     .is_some_and(|v| matches!(v, Node::Text(_, _)))
@@ -1255,8 +1742,14 @@ mod tests {
             let cond = prepare(
                 Some(
                     directives!(v_if: Some(js("val")), v_for: Some(VForDirective {
-                        iterable: js("3"),
-                        itervar: js("i"),
+                        parse_result: Box::new(ForParseResult {
+                            source: js("3"),
+                            value: js("i"),
+                            key: None,
+                            index: None,
+                            finalized: false,
+                            finalized_is_dynamic: false,
+                        }),
                         patch_flags: Default::default(),
                         span: DUMMY_SP,
                     })),
@@ -1266,7 +1759,11 @@ mod tests {
             );
 
             // Folded to `<p v-if="val" v-for="i in 3">text</p>`
-            let cond_node = &cond.if_node.node;
+            #[cfg(feature = "new-pipeline")]
+            let cond_node = expect_for_element(&cond.if_node.node);
+            #[cfg(not(feature = "new-pipeline"))]
+            let cond_node = expect_element(&cond.if_node.node);
+
             assert!(cond_node.starting_tag.tag_name == "p");
             assert!(
                 cond_node
@@ -1274,13 +1771,11 @@ mod tests {
                     .first()
                     .is_some_and(|v| matches!(v, Node::Text(_, _)))
             );
-            assert!(
-                cond_node
-                    .starting_tag
-                    .directives
-                    .as_ref()
-                    .is_some_and(|d| d.v_for.is_some())
-            );
+            let directives = cond_node.starting_tag.directives.as_ref();
+            #[cfg(feature = "new-pipeline")]
+            assert!(directives.is_some_and(|d| d.v_for.is_none()));
+            #[cfg(not(feature = "new-pipeline"))]
+            assert!(directives.is_some_and(|d| d.v_for.is_some()));
         };
 
         // <template v-if="val"><p v-for="j in 3">text</p></template>
@@ -1288,8 +1783,14 @@ mod tests {
             let cond = prepare(
                 Some(directives!(v_if: Some(js("val")))),
                 Some(directives!(v_for: Some(VForDirective {
-                    iterable: js("3"),
-                    itervar: js("j"),
+                    parse_result: Box::new(ForParseResult {
+                        source: js("3"),
+                        value: js("j"),
+                        key: None,
+                        index: None,
+                        finalized: false,
+                        finalized_is_dynamic: false,
+                    }),
                     patch_flags: Default::default(),
                     span: DUMMY_SP,
                 }))),
@@ -1297,7 +1798,10 @@ mod tests {
             );
 
             // Folded to `<p v-if="val" v-for="i in 3">text</p>`
-            let cond_node = &cond.if_node.node;
+            #[cfg(feature = "new-pipeline")]
+            let cond_node = expect_for_element(&cond.if_node.node);
+            #[cfg(not(feature = "new-pipeline"))]
+            let cond_node = expect_element(&cond.if_node.node);
             assert!(cond_node.starting_tag.tag_name == "p");
             assert!(
                 cond_node
@@ -1305,13 +1809,11 @@ mod tests {
                     .first()
                     .is_some_and(|v| matches!(v, Node::Text(_, _)))
             );
-            assert!(
-                cond_node
-                    .starting_tag
-                    .directives
-                    .as_ref()
-                    .is_some_and(|d| d.v_for.is_some())
-            );
+            let directives = cond_node.starting_tag.directives.as_ref();
+            #[cfg(feature = "new-pipeline")]
+            assert!(directives.is_some_and(|d| d.v_for.is_none()));
+            #[cfg(not(feature = "new-pipeline"))]
+            assert!(directives.is_some_and(|d| d.v_for.is_some()));
         };
 
         // <template v-if="val" v-for="i in 3"><p v-for="j in 3">text</p></template>
@@ -1319,15 +1821,27 @@ mod tests {
             let cond = prepare(
                 Some(
                     directives!(v_if: Some(js("val")), v_for: Some(VForDirective {
-                        iterable: js("3"),
-                        itervar: js("i"),
+                        parse_result: Box::new(ForParseResult {
+                            source: js("3"),
+                            value: js("i"),
+                            key: None,
+                            index: None,
+                            finalized: false,
+                            finalized_is_dynamic: false,
+                        }),
                         patch_flags: Default::default(),
                         span: DUMMY_SP,
                     })),
                 ),
                 Some(directives!(v_for: Some(VForDirective {
-                    iterable: js("3"),
-                    itervar: js("j"),
+                    parse_result: Box::new(ForParseResult {
+                        source: js("3"),
+                        value: js("j"),
+                        key: None,
+                        index: None,
+                        finalized: false,
+                        finalized_is_dynamic: false,
+                    }),
                     patch_flags: Default::default(),
                     span: DUMMY_SP,
                 }))),
@@ -1335,27 +1849,52 @@ mod tests {
             );
 
             // Not folded
-            let cond_node = &cond.if_node.node;
-            assert!(cond_node.starting_tag.tag_name == "template");
-            assert!(
-                cond_node
-                    .starting_tag
-                    .directives
-                    .as_ref()
-                    .is_some_and(|d| d.v_for.is_some())
-            );
+            #[cfg(not(feature = "new-pipeline"))]
+            {
+                let cond_node = expect_element(&cond.if_node.node);
+                assert!(cond_node.starting_tag.tag_name == "template");
+                assert!(
+                    cond_node
+                        .starting_tag
+                        .directives
+                        .as_ref()
+                        .is_some_and(|d| d.v_for.is_some())
+                );
 
-            let Some(Node::Element(first_child)) = cond_node.children.first() else {
-                panic!("First child should be an element")
-            };
-            assert!(first_child.starting_tag.tag_name == "p");
-            assert!(
-                first_child
-                    .starting_tag
-                    .directives
-                    .as_ref()
-                    .is_some_and(|d| d.v_for.is_some())
-            );
+                let Some(Node::Element(first_child)) = cond_node.children.first() else {
+                    panic!("First child should be an element")
+                };
+                assert!(first_child.starting_tag.tag_name == "p");
+                assert!(
+                    first_child
+                        .starting_tag
+                        .directives
+                        .as_ref()
+                        .is_some_and(|d| d.v_for.is_some())
+                );
+            }
+
+            #[cfg(feature = "new-pipeline")]
+            {
+                let Node::For(outer_for) = &cond.if_node.node else {
+                    panic!("Expected outer ForNode")
+                };
+                let [Node::For(inner_for)] = outer_for.children.as_slice() else {
+                    panic!("Expected inner ForNode")
+                };
+                let [Node::Element(first_child)] = inner_for.children.as_slice() else {
+                    panic!("Expected one Element child")
+                };
+
+                assert!(first_child.starting_tag.tag_name == "p");
+                assert!(
+                    first_child
+                        .starting_tag
+                        .directives
+                        .as_ref()
+                        .is_some_and(|d| d.v_for.is_none())
+                );
+            }
         };
 
         // <div v-if="false"></div>
@@ -1364,8 +1903,9 @@ mod tests {
             let cond = prepare(Some(directives!(v_else_if: Some(js("val")))), None, true);
 
             // Folded to `<div v-if="false"></div><p v-else-if="val">text</p>`
-            assert!(cond.if_node.node.starting_tag.tag_name == "div");
-            let else_if_node = &cond.else_if_nodes.first().expect("Should exist").node;
+            assert!(expect_element(&cond.if_node.node).starting_tag.tag_name == "div");
+            let else_if_node =
+                expect_element(&cond.else_if_nodes.first().expect("Should exist").node);
             assert!(else_if_node.starting_tag.tag_name == "p");
             assert!(
                 else_if_node
@@ -1381,8 +1921,9 @@ mod tests {
             let cond = prepare(Some(directives!(v_else: Some(()))), None, true);
 
             // Folded to `<div v-if="false"></div><p v-else-if="val">text</p>`
-            assert!(cond.if_node.node.starting_tag.tag_name == "div");
+            assert!(expect_element(&cond.if_node.node).starting_tag.tag_name == "div");
             let else_node = cond.else_node.as_ref().expect("Should exist");
+            let else_node = expect_element(else_node);
             assert!(else_node.starting_tag.tag_name == "p");
             assert!(
                 else_node
@@ -1399,7 +1940,213 @@ mod tests {
     }
 
     fn check_text_node(node: &Node) {
-        assert!(matches!(node, Node::Text(text, DUMMY_SP) if text == "text"));
+        assert!(matches!(node, Node::Text(text, span) if text == "text" && *span == DUMMY_SP));
+    }
+
+    fn expect_element(node: &Node) -> &ElementNode {
+        let Node::Element(element) = node else {
+            panic!("Expected element")
+        };
+        element
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn expect_for_element(node: &Node) -> &ElementNode {
+        let Node::For(for_node) = node else {
+            panic!("Expected ForNode")
+        };
+        let [Node::Element(element)] = for_node.children.as_slice() else {
+            panic!("Expected one Element child")
+        };
+        element
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn expect_for_vnode(node: &Node) -> &fervid_core::VNodeCall {
+        let element = expect_for_element(node);
+        let Some(codegen_node) = element.codegen_node.as_deref() else {
+            panic!("Expected v-for child VNodeCall")
+        };
+        let ElementCodegenValue::VNodeCall(vnode_call) = &codegen_node.value;
+        vnode_call
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn expect_element_vnode(node: &Node) -> (&ElementNode, &fervid_core::VNodeCall) {
+        let element = expect_element(node);
+        let Some(codegen_node) = element.codegen_node.as_deref() else {
+            panic!("Expected element VNodeCall")
+        };
+        let ElementCodegenValue::VNodeCall(vnode_call) = &codegen_node.value;
+        (element, vnode_call)
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn expect_object_prop<'a>(
+        vnode_call: &'a fervid_core::VNodeCall,
+        expected_name: &str,
+    ) -> &'a fervid_core::Property {
+        let Some(PropsExpression::ObjectExpression(props)) = vnode_call.props.as_ref() else {
+            panic!("Expected object props")
+        };
+        let [prop] = props.properties.as_slice() else {
+            panic!("Expected one property")
+        };
+        let fervid_core::ExpressionPropNameNode::SimpleExpression(name) = &prop.key else {
+            panic!("Expected static property name")
+        };
+        assert_eq!(name.ast.sym, expected_name);
+        prop
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn directive_element(directives: VueDirectives, children: Vec<Node>) -> SfcTemplateBlock {
+        SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: fervid_atom!("div"),
+                    attributes: vec![],
+                    directives: Some(Box::new(directives)),
+                },
+                children,
+                template_scope: 0,
+                tag_type: ElementKind::Element,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
+                codegen_node: None,
+            })],
+            span: DUMMY_SP,
+        }
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn transform_component_slot(slot_props: &str, child_expr: &str) -> (String, String) {
+        let mut sfc_template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: fervid_atom!("Comp"),
+                    attributes: vec![],
+                    directives: Some(Box::new(VueDirectives {
+                        v_slot: Some(fervid_core::VSlotDirective {
+                            slot_name: None,
+                            value: Some(Box::new(parse_slot_props(slot_props))),
+                        }),
+                        ..Default::default()
+                    })),
+                },
+                children: vec![Node::Interpolation(Interpolation {
+                    value: js(child_expr),
+                    template_scope: 0,
+                    patch_flag: false,
+                    span: DUMMY_SP,
+                })],
+                template_scope: 0,
+                tag_type: ElementKind::Component,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
+                codegen_node: None,
+            })],
+            span: DUMMY_SP,
+        };
+
+        transform_and_record_template(&mut sfc_template, &mut TransformSfcContext::anonymous());
+
+        let Node::Element(component) = &sfc_template.roots[0] else {
+            panic!("Expected component root")
+        };
+        let directives = component
+            .starting_tag
+            .directives
+            .as_ref()
+            .expect("component should retain directives");
+        let slot_props = directives
+            .v_slot
+            .as_ref()
+            .and_then(|v_slot| v_slot.value.as_ref())
+            .expect("component should retain slot props");
+        let [Node::Interpolation(interpolation)] = component.children.as_slice() else {
+            panic!("Expected one interpolation")
+        };
+
+        (to_str(slot_props.as_ref()), to_str(&interpolation.value))
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn parse_slot_props(raw: &str) -> Pat {
+        let span = Span::new(BytePos(0), BytePos(raw.len() as u32));
+        let lexer = Lexer::new(
+            Syntax::Typescript(TsSyntax::default()),
+            EsVersion::EsNext,
+            StringInput::new(raw, span.lo, span.hi),
+            None,
+        );
+
+        Parser::new_from(lexer)
+            .parse_pat()
+            .expect("slot props pattern should parse")
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn v_on_element(
+        tag_name: &str,
+        tag_type: ElementKind,
+        directives: Vec<VOnDirective>,
+    ) -> SfcTemplateBlock {
+        let mut element = element_from_tag(tag_name);
+        element.tag_type = tag_type;
+        element.starting_tag.attributes = directives
+            .into_iter()
+            .map(AttributeOrBinding::VOn)
+            .collect();
+
+        SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(element)],
+            span: DUMMY_SP,
+        }
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn for_element(
+        source: Box<swc_core::ecma::ast::Expr>,
+        attributes: Vec<AttributeOrBinding>,
+        custom_directives: Vec<VCustomDirective>,
+        children: Vec<Node>,
+    ) -> SfcTemplateBlock {
+        SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: fervid_atom!("div"),
+                    attributes,
+                    directives: Some(Box::new(VueDirectives {
+                        v_for: Some(VForDirective {
+                            parse_result: Box::new(ForParseResult {
+                                source,
+                                value: js("i"),
+                                key: None,
+                                index: None,
+                                finalized: false,
+                                finalized_is_dynamic: false,
+                            }),
+                            patch_flags: Default::default(),
+                            span: DUMMY_SP,
+                        }),
+                        custom: custom_directives,
+                        ..Default::default()
+                    })),
+                },
+                children,
+                template_scope: 0,
+                tag_type: ElementKind::Element,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
+                codegen_node: None,
+            })],
+            span: DUMMY_SP,
+        }
     }
 
     // <h1 v-if="true">if</h1>
@@ -1415,9 +2162,10 @@ mod tests {
             },
             children: vec![Node::Text("if".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -1425,13 +2173,13 @@ mod tests {
         assert_eq!("true", to_str(&if_node.condition));
         assert!(matches!(
             &if_node.node,
-            ElementNode {
+            Node::Element(ElementNode {
                 starting_tag: StartingTag {
                     tag_name,
                     ..
                 },
                 ..
-            } if tag_name == "h1"
+            }) if tag_name == "h1"
         ));
     }
 
@@ -1448,9 +2196,10 @@ mod tests {
             },
             children: vec![Node::Text("else-if".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -1459,13 +2208,13 @@ mod tests {
         assert_eq!("_ctx.foo", to_str(&else_if_node.condition));
         assert!(matches!(
             &else_if_node.node,
-            ElementNode {
+            Node::Element(ElementNode {
                 starting_tag: StartingTag {
                     tag_name,
                     ..
                 },
                 ..
-            } if tag_name == "h2"
+            }) if tag_name == "h2"
         ));
     }
 
@@ -1482,23 +2231,24 @@ mod tests {
             },
             children: vec![Node::Text("else".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
-    fn check_else_node(else_node: Option<&ElementNode>) {
+    fn check_else_node(else_node: Option<&Node>) {
         let else_node = else_node.expect("Must have else node");
         assert!(matches!(
             else_node,
-            ElementNode {
+            Node::Element(ElementNode {
                 starting_tag: StartingTag {
                     tag_name,
                     ..
                 },
                 ..
-            } if tag_name == "h3"
+            }) if tag_name == "h3"
         ));
     }
 }

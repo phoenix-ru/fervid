@@ -45,18 +45,15 @@ mod tests {
     fn it_generates_empty_suspense() {
         // <suspense></suspense>
         test_out(
-            ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Suspense),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "suspense".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![],
+                ElementKind::Builtin(BuiltinType::Suspense),
+            ),
             r#"(_openBlock(),_createBlock(_Suspense))"#,
         )
     }
@@ -65,9 +62,8 @@ mod tests {
     fn it_generates_suspense_attrs() {
         // <suspense foo="bar" :baz="qux"></suspense>
         test_out(
-            ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Suspense),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "suspense".into(),
                     attributes: vec![
                         regular_attribute("foo", "bar"),
@@ -75,11 +71,9 @@ mod tests {
                     ],
                     directives: None,
                 },
-                children: vec![],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![],
+                ElementKind::Builtin(BuiltinType::Suspense),
+            ),
             r#"(_openBlock(),_createBlock(_Suspense,{foo:"bar",baz:qux}))"#,
         )
     }
@@ -88,18 +82,15 @@ mod tests {
     fn it_generates_suspense_children() {
         // <suspense>foobar</suspense>
         test_out(
-            ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Suspense),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "suspense".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![Node::Text("foobar".into(), DUMMY_SP)],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![Node::Text("foobar".into(), DUMMY_SP)],
+                ElementKind::Builtin(BuiltinType::Suspense),
+            ),
             r#"(_openBlock(),_createBlock(_Suspense,null,{default:_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
         )
     }
@@ -108,9 +99,8 @@ mod tests {
     fn it_generates_full_suspense() {
         // <suspense foo="bar" :baz="qux">foobar</suspense>
         test_out(
-            ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Suspense),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "suspense".into(),
                     attributes: vec![
                         regular_attribute("foo", "bar"),
@@ -118,11 +108,9 @@ mod tests {
                     ],
                     directives: None,
                 },
-                children: vec![Node::Text("foobar".into(), DUMMY_SP)],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![Node::Text("foobar".into(), DUMMY_SP)],
+                ElementKind::Builtin(BuiltinType::Suspense),
+            ),
             r#"(_openBlock(),_createBlock(_Suspense,{foo:"bar",baz:qux},{default:_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
         )
     }

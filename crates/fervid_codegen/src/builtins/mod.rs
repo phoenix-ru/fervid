@@ -24,7 +24,9 @@ impl CodegenContext {
             BuiltinType::Slot => self.generate_slot(element_node),
             BuiltinType::Suspense => self.generate_suspense(element_node),
             BuiltinType::Teleport => self.generate_teleport(element_node),
-            BuiltinType::Transition => self.generate_transition(element_node),
+            BuiltinType::Transition | BuiltinType::BaseTransition => {
+                self.generate_transition(element_node)
+            }
             BuiltinType::TransitionGroup => self.generate_transition_group(element_node),
         }
     }

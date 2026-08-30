@@ -40,7 +40,7 @@ impl CodegenContext {
                 argument: Some(StrOrExpr::Str(name)),
                 value,
                 ..
-            }) if name == "is" => (**value).to_owned(),
+            }) if name.value == "is" => (**value).to_owned(),
 
             _ => unreachable!(),
         };
@@ -113,18 +113,15 @@ mod tests {
             || {
                 // <component></component>
                 test_out(
-                    ElementNode {
-                        kind: ElementKind::Builtin(BuiltinType::Component),
-                        starting_tag: StartingTag {
+                    ElementNode::new_with_children_and_type(
+                        StartingTag {
                             tag_name: "component".into(),
                             attributes: vec![],
                             directives: None,
                         },
-                        children: vec![],
-                        template_scope: 0,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    },
+                        vec![],
+                        ElementKind::Builtin(BuiltinType::Component),
+                    ),
                     r#""#,
                 );
             },
@@ -136,18 +133,15 @@ mod tests {
     fn it_generates_component_is_static() {
         // <component is="div"></component>
         test_out(
-            ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Component),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "component".into(),
                     attributes: vec![regular_attribute("is", "div")],
                     directives: None,
                 },
-                children: vec![],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![],
+                ElementKind::Builtin(BuiltinType::Component),
+            ),
             r#"(_openBlock(),_createBlock(_resolveDynamicComponent("div")))"#,
         );
     }
@@ -156,18 +150,15 @@ mod tests {
     fn it_generates_component_is_binding() {
         // <component :is="foo"></component>
         test_out(
-            ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Component),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "component".into(),
                     attributes: vec![v_bind_attribute("is", "foo")],
                     directives: None,
                 },
-                children: vec![],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![],
+                ElementKind::Builtin(BuiltinType::Component),
+            ),
             r#"(_openBlock(),_createBlock(_resolveDynamicComponent(foo)))"#,
         );
     }
@@ -176,9 +167,8 @@ mod tests {
     fn it_generates_component_builtin_attrs() {
         // <component is="div" foo="bar" :baz="qux"></component>
         test_out(
-            ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Component),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "component".into(),
                     attributes: vec![
                         regular_attribute("is", "div"),
@@ -187,11 +177,9 @@ mod tests {
                     ],
                     directives: None,
                 },
-                children: vec![],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![],
+                ElementKind::Builtin(BuiltinType::Component),
+            ),
             r#"(_openBlock(),_createBlock(_resolveDynamicComponent("div"),{foo:"bar",baz:qux}))"#,
         )
     }
@@ -200,18 +188,15 @@ mod tests {
     fn it_generates_component_builtin_default_slot() {
         // <component is="div">foobar</component>
         test_out(
-            ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Component),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "component".into(),
                     attributes: vec![regular_attribute("is", "div")],
                     directives: None,
                 },
-                children: vec![Node::Text("foobar".into(), DUMMY_SP)],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![Node::Text("foobar".into(), DUMMY_SP)],
+                ElementKind::Builtin(BuiltinType::Component),
+            ),
             r#"(_openBlock(),_createBlock(_resolveDynamicComponent("div"),null,{default:_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
         )
     }
@@ -222,16 +207,14 @@ mod tests {
         //   <template v-slot:named>foobar</template>
         // </component>
         test_out(
-            ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Component),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "component".into(),
                     attributes: vec![regular_attribute("is", "div")],
                     directives: None,
                 },
-                children: vec![Node::Element(ElementNode {
-                    kind: ElementKind::Element,
-                    starting_tag: StartingTag {
+                vec![Node::Element(ElementNode::new_with_children(
+                    StartingTag {
                         tag_name: "template".into(),
                         attributes: vec![],
                         directives: Some(Box::new(VueDirectives {
@@ -242,15 +225,10 @@ mod tests {
                             ..Default::default()
                         })),
                     },
-                    children: vec![Node::Text("foobar".into(), DUMMY_SP)],
-                    template_scope: 0,
-                    patch_hints: Default::default(),
-                    span: DUMMY_SP,
-                })],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                    vec![Node::Text("foobar".into(), DUMMY_SP)],
+                ))],
+                ElementKind::Builtin(BuiltinType::Component),
+            ),
             r#"(_openBlock(),_createBlock(_resolveDynamicComponent("div"),null,{named:_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
         )
     }
@@ -264,9 +242,8 @@ mod tests {
         //   </template>
         // </component>
         test_out(
-            ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Component),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "component".into(),
                     attributes: vec![
                         regular_attribute("is", "div"),
@@ -275,11 +252,10 @@ mod tests {
                     ],
                     directives: None,
                 },
-                children: vec![
+                vec![
                     Node::Text("foobar".into(), DUMMY_SP),
-                    Node::Element(ElementNode {
-                        kind: ElementKind::Element,
-                        starting_tag: StartingTag {
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "template".into(),
                             attributes: vec![],
                             directives: Some(Box::new(VueDirectives {
@@ -290,16 +266,11 @@ mod tests {
                                 ..Default::default()
                             })),
                         },
-                        children: vec![Node::Text("bazqux".into(), DUMMY_SP)],
-                        template_scope: 0,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
+                        vec![Node::Text("bazqux".into(), DUMMY_SP)],
+                    )),
                 ],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                ElementKind::Builtin(BuiltinType::Component),
+            ),
             r#"(_openBlock(),_createBlock(_resolveDynamicComponent("div"),{foo:"bar",baz:qux},{named:_withCtx(()=>[_createTextVNode("bazqux")]),default:_withCtx(()=>[_createTextVNode("foobar")]),_:1}))"#,
         )
     }

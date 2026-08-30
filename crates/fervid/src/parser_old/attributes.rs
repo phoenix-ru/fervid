@@ -337,8 +337,15 @@ fn parse_directive<'i>(
                 push_directive!(
                     v_for,
                     VForDirective {
-                        iterable,
-                        itervar,
+                        parse_result: Box::new(fervid_core::ForParseResult {
+                            source: iterable,
+                            // TODO: Legacy parser must split value, key, and index aliases
+                            value: itervar,
+                            key: None,
+                            index: None,
+                            finalized: false,
+                            finalized_is_dynamic: false,
+                        }),
                         patch_flags: Default::default(),
                         span: DUMMY_SP
                     }
@@ -458,7 +465,7 @@ fn convert_argument(
 
                 Ok(Some(StrOrExpr::Expr(dynamic_argument)))
             } else {
-                Ok(Some(StrOrExpr::Str(raw_arg)))
+                Ok(Some(raw_arg.into()))
             }
         }
         None => Ok(None),

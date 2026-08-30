@@ -1,8 +1,13 @@
 use fervid_core::{
-    AttributeOrBinding, ElementNode, IntoIdent, VueImports, check_attribute_name, fervid_atom,
+    AttributeOrBinding, ElementNode, IntoIdent, VBindDirective, VueImports, check_attribute_name,
+    fervid_atom,
 };
-use swc_core::ecma::ast::{
-    ArrayLit, CallExpr, Callee, Expr, ExprOrSpread, Lit, MemberExpr, MemberProp, ObjectLit, Str,
+use swc_core::{
+    common::Span,
+    ecma::ast::{
+        ArrayLit, ArrowExpr, BlockStmtOrExpr, CallExpr, Callee, Expr, ExprOrSpread, Lit,
+        MemberExpr, MemberProp, ObjectLit, Str,
+    },
 };
 
 use crate::CodegenContext;
@@ -80,36 +85,11 @@ impl CodegenContext {
             expr: Box::new(name_expr),
         });
 
-        // Third arg (optional): attributes
-        if has_attributes {
-            let mut attrs_obj = ObjectLit {
-                span,
-                props: Vec::with_capacity(element_node.starting_tag.attributes.len()),
-            };
-
-            match idx_of_name {
-                // Split attributes to two slices if we have a `name`
-                Some(idx) => {
-                    let attrs_slice1 = &element_node.starting_tag.attributes[..idx];
-                    let attrs_slice2 = &element_node.starting_tag.attributes[(idx + 1)..];
-
-                    // TODO Consider attr hints?
-                    self.generate_attributes(attrs_slice1, &mut attrs_obj.props);
-                    self.generate_attributes(attrs_slice2, &mut attrs_obj.props);
-                }
-
-                // TODO Consider attr hints?
-                None => {
-                    self.generate_attributes(
-                        &element_node.starting_tag.attributes,
-                        &mut attrs_obj.props,
-                    );
-                }
-            }
-
+        // Third arg (optional): slot props
+        if let Some(slot_props) = self.generate_slot_props(element_node, idx_of_name, span) {
             render_slot_args.push(ExprOrSpread {
                 spread: None,
-                expr: Box::new(Expr::Object(attrs_obj)),
+                expr: Box::new(slot_props),
             });
         } else if has_children {
             // Pushes `{}` as third argument
@@ -122,7 +102,7 @@ impl CodegenContext {
             })
         }
 
-        // Fourth arg (optional): children
+        // Fourth arg (optional): slot children (fallback)
         if has_children {
             let slot_children = self
                 .generate_element_children(element_node, false)
@@ -136,16 +116,28 @@ impl CodegenContext {
                 })
                 .collect();
 
-            render_slot_args.push(ExprOrSpread {
-                spread: None,
-                expr: Box::new(Expr::Array(ArrayLit {
+            // () => [child1, child2]
+            let fallback = Box::new(Expr::Arrow(ArrowExpr {
+                span,
+                ctxt: Default::default(),
+                params: vec![],
+                body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::Array(ArrayLit {
                     span,
                     elems: slot_children,
-                })),
+                })))),
+                is_async: false,
+                is_generator: false,
+                type_params: None,
+                return_type: None,
+            }));
+
+            render_slot_args.push(ExprOrSpread {
+                spread: None,
+                expr: fallback,
             });
         }
 
-        // `renderSlot(_ctx.$slots, "slot-name", { slot: attributes }, [slot, children])`
+        // `renderSlot(_ctx.$slots, "slot-name", { slot: attributes }, () => [slot, children])`
         Expr::Call(CallExpr {
             span,
             ctxt: Default::default(),
@@ -157,6 +149,92 @@ impl CodegenContext {
             type_args: None,
         })
     }
+
+    fn generate_slot_props(
+        &mut self,
+        element_node: &ElementNode,
+        idx_of_name: Option<usize>,
+        span: Span,
+    ) -> Option<Expr> {
+        let max_len = element_node.starting_tag.attributes.len();
+        let mut merge_args = Vec::with_capacity(max_len);
+        let mut segment = Vec::with_capacity(max_len);
+        let mut has_argumentless_v_bind = false;
+
+        for (index, attr) in element_node.starting_tag.attributes.iter().enumerate() {
+            // `name` attribute itself shouldn't become a slot prop
+            if Some(index) == idx_of_name {
+                continue;
+            }
+
+            if let AttributeOrBinding::VBind(VBindDirective {
+                argument: None,
+                value,
+                ..
+            }) = attr
+            {
+                self.push_slot_props_segment(&segment, &mut merge_args, span);
+                segment.clear();
+                has_argumentless_v_bind = true;
+
+                // Value was already transformed
+                merge_args.push(*value.to_owned());
+            } else {
+                // TODO Avoid unnecessary cloning when re-writing this function
+                segment.push(attr.clone());
+            }
+        }
+
+        self.push_slot_props_segment(&segment, &mut merge_args, span);
+
+        if merge_args.len() <= 1 {
+            let value = merge_args.pop()?;
+
+            // `<slot v-bind="obj" />` needs `normalizeProps(guardReactiveProps(obj))`
+            if has_argumentless_v_bind {
+                // TODO: scrap this and do inside transform instead
+            }
+
+            return Some(value);
+        }
+
+        Some(Expr::Call(CallExpr {
+            span,
+            ctxt: Default::default(),
+            callee: Callee::Expr(Box::new(Expr::Ident(
+                self.get_and_add_import_ident(VueImports::MergeProps)
+                    .into_ident(),
+            ))),
+            args: merge_args
+                .into_iter()
+                .map(|expr| ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(expr),
+                })
+                .collect(),
+            type_args: None,
+        }))
+    }
+
+    // TODO: Re-implement the proper slot props codegen
+    // using codegenNode when ready. It should be better optimized to avoid unnecessary cloning.
+    fn push_slot_props_segment(
+        &mut self,
+        attributes: &[AttributeOrBinding],
+        merge_args: &mut Vec<Expr>,
+        span: Span,
+    ) {
+        if attributes.is_empty() {
+            return;
+        }
+
+        let mut props = Vec::new();
+        self.generate_attributes(attributes, &mut props);
+
+        if !props.is_empty() {
+            merge_args.push(Expr::Object(ObjectLit { span, props }));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -164,24 +242,21 @@ mod tests {
     use fervid_core::{BuiltinType, ElementKind, Node, StartingTag};
     use swc_core::common::DUMMY_SP;
 
-    use crate::test_utils::{regular_attribute, v_bind_attribute};
+    use crate::test_utils::{js, regular_attribute, v_bind_attribute};
 
     use super::*;
 
     macro_rules! slot {
         ($attributes: expr, $children: expr) => {
-            ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::Slot),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "slot".into(),
                     attributes: $attributes,
                     directives: None,
                 },
-                children: $children,
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            }
+                $children,
+                ElementKind::Builtin(BuiltinType::Slot),
+            )
         };
     }
 
@@ -282,33 +357,26 @@ mod tests {
             slot!(
                 vec![],
                 vec![
-                    Node::Element(ElementNode {
-                        kind: ElementKind::Element,
-                        starting_tag: StartingTag {
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "div".into(),
                             attributes: vec![],
                             directives: None
                         },
-                        children: vec![Node::Text("Placeholder".into(), DUMMY_SP)],
-                        template_scope: 0,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
-                    Node::Element(ElementNode {
-                        kind: ElementKind::Component,
-                        starting_tag: StartingTag {
+                        vec![Node::Text("Placeholder".into(), DUMMY_SP)],
+                    )),
+                    Node::Element(ElementNode::new_with_children_and_type(
+                        StartingTag {
                             tag_name: "foo-component".into(),
                             attributes: vec![],
                             directives: None
                         },
-                        children: vec![],
-                        template_scope: 0,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    })
+                        vec![],
+                        ElementKind::Component,
+                    ))
                 ]
             ),
-            r#"_renderSlot(_ctx.$slots,"default",{},[_createElementVNode("div",null,"Placeholder"),_createVNode(_component_foo_component)])"#,
+            r#"_renderSlot(_ctx.$slots,"default",{},()=>[_createElementVNode("div",null,"Placeholder"),_createVNode(_component_foo_component)])"#,
         );
     }
 
@@ -326,33 +394,68 @@ mod tests {
                     v_bind_attribute("baz", "qux"),
                 ],
                 vec![
-                    Node::Element(ElementNode {
-                        kind: ElementKind::Element,
-                        starting_tag: StartingTag {
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "div".into(),
                             attributes: vec![],
                             directives: None
                         },
-                        children: vec![Node::Text("Placeholder".into(), DUMMY_SP)],
-                        template_scope: 0,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
-                    Node::Element(ElementNode {
-                        kind: ElementKind::Component,
-                        starting_tag: StartingTag {
+                        vec![Node::Text("Placeholder".into(), DUMMY_SP)],
+                    )),
+                    Node::Element(ElementNode::new_with_children_and_type(
+                        StartingTag {
                             tag_name: "foo-component".into(),
                             attributes: vec![],
                             directives: None
                         },
-                        children: vec![],
-                        template_scope: 0,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    })
+                        vec![],
+                        ElementKind::Component
+                    ))
                 ]
             ),
-            r#"_renderSlot(_ctx.$slots,"test-slot",{foo:"bar",baz:qux},[_createElementVNode("div",null,"Placeholder"),_createVNode(_component_foo_component)])"#,
+            r#"_renderSlot(_ctx.$slots,"test-slot",{foo:"bar",baz:qux},()=>[_createElementVNode("div",null,"Placeholder"),_createVNode(_component_foo_component)])"#,
+        );
+    }
+
+    #[test]
+    fn it_normalizes_argumentless_v_bind() {
+        // <slot v-bind="obj" />
+        test_out(
+            slot!(
+                vec![AttributeOrBinding::VBind(VBindDirective {
+                    argument: None,
+                    value: js("obj"),
+                    is_camel: false,
+                    is_prop: false,
+                    is_attr: false,
+                    span: DUMMY_SP,
+                })],
+                vec![]
+            ),
+            "_renderSlot(_ctx.$slots,\"default\",obj)",
+        );
+    }
+
+    #[test]
+    fn it_merges_argumentless_v_bind_in_source_order() {
+        // <slot foo="before" v-bind="obj" bar="after" />
+        test_out(
+            slot!(
+                vec![
+                    regular_attribute("foo", "before"),
+                    AttributeOrBinding::VBind(VBindDirective {
+                        argument: None,
+                        value: js("obj"),
+                        is_camel: false,
+                        is_prop: false,
+                        is_attr: false,
+                        span: DUMMY_SP,
+                    }),
+                    regular_attribute("bar", "after"),
+                ],
+                vec![]
+            ),
+            "_renderSlot(_ctx.$slots,\"default\",_mergeProps({foo:\"before\"},obj,{bar:\"after\"}))",
         );
     }
 

@@ -184,7 +184,11 @@ fn transform_element_asset_urls(
         };
 
         *attr = AttributeOrBinding::VBind(VBindDirective {
-            argument: Some(StrOrExpr::Str(name.to_owned())),
+            argument: Some(StrOrExpr::Str(Str {
+                span: *span,
+                value: name.to_owned(),
+                raw: None,
+            })),
             value: import_expr,
             is_camel: false,
             is_prop: false,
