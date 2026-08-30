@@ -20,16 +20,18 @@ use crate::{
         expr_transform::{
             BindingsHelperTransform, is_model_member_expression, transform_v_model_expression,
         },
+        node_transforms::TransformNodeState,
         utils::to_camel_case,
     },
 };
 
 pub fn transform_v_model(
     ctx: &mut TransformSfcContext,
+    state: &TransformNodeState,
     v_model: &VModelDirective,
     node: &ElementNode,
 ) -> Option<DirectiveTransformResult> {
-    Some(transform_v_model_base(ctx, v_model, node)?.result)
+    Some(transform_v_model_base(ctx, state, v_model, node)?.result)
 }
 
 pub struct VModelTransformState {
@@ -40,10 +42,11 @@ pub struct VModelTransformState {
 
 pub fn transform_v_model_base(
     ctx: &mut TransformSfcContext,
+    state: &TransformNodeState,
     v_model: &VModelDirective,
     node: &ElementNode,
 ) -> Option<VModelTransformState> {
-    let scope = ctx.current_template_scope;
+    let scope = state.current_scope;
     let expr_span = v_model.value.span();
 
     // Like vuejs-core `bindingMetadata[rawExp]``, only inspect direct identifiers
@@ -297,7 +300,9 @@ mod tests {
     use crate::{
         SetupBinding, TemplateScope, TransformSfcContext,
         error::{TemplateErrorKind, TransformError},
-        template::directive_transforms::DirectiveTransformResult,
+        template::{
+            directive_transforms::DirectiveTransformResult, node_transforms::TransformNodeState,
+        },
         test_utils::{
             AssertType, element_from_tag, js, js_child_node_to_str, property_to_str, to_str,
         },
@@ -323,7 +328,8 @@ mod tests {
         directive: &VModelDirective,
         node: &fervid_core::ElementNode,
     ) -> DirectiveTransformResult {
-        transform_v_model(ctx, directive, node)
+        let state = TransformNodeState::default();
+        transform_v_model(ctx, &state, directive, node)
             .expect("v-model with a valid expression should produce a result")
     }
 
@@ -566,8 +572,11 @@ mod tests {
                     .setup_bindings
                     .push(SetupBinding::new(value.into(), binding_type));
             }
+            let state = TransformNodeState::default();
 
-            assert!(transform_v_model(&mut ctx, &directive(value, None, &[]), &node).is_none());
+            assert!(
+                transform_v_model(&mut ctx, &state, &directive(value, None, &[]), &node).is_none()
+            );
             assert_error(&ctx, expected);
         }
 
@@ -576,7 +585,10 @@ mod tests {
             variables: smallvec![fervid_atom!("item")],
             parent: 0,
         });
-        assert!(transform_v_model(&mut ctx, &directive("item", None, &[]), &node).is_none());
+        let state = TransformNodeState::default();
+        assert!(
+            transform_v_model(&mut ctx, &state, &directive("item", None, &[]), &node).is_none()
+        );
         assert_error(&ctx, TemplateErrorKind::VModelOnScopeVariable);
     }
 }

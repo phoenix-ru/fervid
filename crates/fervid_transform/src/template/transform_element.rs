@@ -29,6 +29,7 @@ use crate::{
         core::v_slot::build_slots,
         directive_transforms::{BuiltinRuntimeDirective, DirectiveTransforms},
         expr_transform::BindingsHelperTransform,
+        node_transforms::TransformNodeState,
         utils::{
             find_prop, is_core_component, is_static_arg_of, to_camel_case, to_pascal_case,
             to_valid_asset_id,
@@ -71,7 +72,11 @@ pub struct PatchMarkers {
     pub is_block_required: bool,
 }
 
-pub fn post_transform_element_node(node: &mut Node, ctx: &mut TransformSfcContext) {
+pub fn post_transform_element_node(
+    node: &mut Node,
+    ctx: &mut TransformSfcContext,
+    state: &mut TransformNodeState,
+) {
     let Node::Element(node) = node else {
         return;
     };
@@ -84,9 +89,10 @@ pub fn post_transform_element_node(node: &mut Node, ctx: &mut TransformSfcContex
     }
 
     let is_component = matches!(node.tag_type, ElementKind::Component);
+    let scope_to_use = state.current_scope;
 
     let vnode_tag = if is_component {
-        resolve_component_type(node, ctx, false)
+        resolve_component_type(node, ctx, false, scope_to_use)
     } else {
         VNodeCallTag::Expr(Box::new(Expr::Lit(Lit::Str(Str::from(
             node.starting_tag.tag_name.to_owned(),
@@ -132,7 +138,7 @@ pub fn post_transform_element_node(node: &mut Node, ctx: &mut TransformSfcContex
         let props_build_result = build_props(
             node,
             ctx,
-            ctx.current_template_scope,
+            state,
             None,
             is_component,
             is_dynamic_component,
@@ -267,6 +273,7 @@ fn resolve_component_type(
     node: &mut ElementNode,
     ctx: &mut TransformSfcContext,
     ssr: bool,
+    scope_to_use: u32,
 ) -> VNodeCallTag {
     let mut tag = Cow::Borrowed(&node.starting_tag.tag_name);
 
@@ -323,7 +330,7 @@ fn resolve_component_type(
 
     // 3. User component (from setup bindings)
     // Note: `resolve_component_setup_reference` already handles `.` inside component name
-    if let Some(resolved_from_setup) = resolve_component_setup_reference(ctx, &tag) {
+    if let Some(resolved_from_setup) = resolve_component_setup_reference(ctx, &tag, scope_to_use) {
         return VNodeCallTag::Expr(resolved_from_setup);
     }
 
@@ -365,6 +372,7 @@ fn resolve_component_type(
 fn resolve_component_setup_reference(
     ctx: &mut TransformSfcContext,
     tag_name: &FervidAtom,
+    scope_to_use: u32,
 ) -> Option<Box<Expr>> {
     // Check the existing resolutions.
     // Do nothing if found, regardless if it was previously resolved or not,
@@ -395,7 +403,7 @@ fn resolve_component_setup_reference(
         // the official compiler sees them as if `SetupMaybeRef` and transforms.
         if !matches!(found.binding_type, BindingTypes::Component) {
             ctx.bindings_helper
-                .transform_expr(&mut resolved_to, ctx.current_template_scope);
+                .transform_expr(&mut resolved_to, scope_to_use);
         }
 
         // For namespaced components, add the second part (`Bar` in `<Foo.Bar>`)
@@ -450,7 +458,7 @@ fn find_binding<'a>(
 pub fn build_props(
     node: &mut ElementNode,
     ctx: &mut TransformSfcContext,
-    scope_to_use: u32,
+    state: &mut TransformNodeState,
     props: Option<Props>,
     is_component: bool,
     is_dynamic_component: bool,
@@ -460,6 +468,7 @@ pub fn build_props(
     let mut merge_args: Vec<PropsExpression> = vec![];
     let mut runtime_directives: Vec<RuntimeDirective> = vec![];
     let element_span = node.span;
+    let scope_to_use = state.current_scope;
 
     // Patch hints
     // https://github.com/vuejs/core/blob/75220c7995a13a483ae9599a739075be1c8e17f8/packages/compiler-core/src/transforms/transformElement.ts#L395
@@ -503,7 +512,8 @@ pub fn build_props(
 
     macro_rules! transform_directive {
         ($transform_name: ident, $value: expr) => {
-            if let Some(directive_transform_result) = transforms.$transform_name(ctx, $value, node)
+            if let Some(directive_transform_result) =
+                transforms.$transform_name(ctx, state, $value, node)
             {
                 if !ssr {
                     for prop in directive_transform_result.props.iter() {
@@ -713,7 +723,7 @@ pub fn build_props(
                 }
 
                 let Some(directive_transform_result) =
-                    transforms.transform_v_on(ctx, v_on_directive, node)
+                    transforms.transform_v_on(ctx, state, v_on_directive, node)
                 else {
                     continue;
                 };
@@ -844,8 +854,7 @@ pub fn build_props(
         patch_markers.flags |= PatchFlags::NeedPatch;
     }
 
-    // TODO Use `context.inSSR` instead of `ssr`
-    if let Some(props_expression_inner) = props_expression.take_if(|_| !ssr) {
+    if let Some(props_expression_inner) = props_expression.take_if(|_| !ctx.in_ssr) {
         match props_expression_inner {
             // mergeProps call, do nothing
             PropsExpression::CallExpression(_) => {
@@ -1328,4 +1337,52 @@ fn void0() -> Expr {
             value: 0.0,
         }))),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use fervid_core::{AttributeOrBinding, JsChildNode, PropsExpression, VBindDirective};
+    use swc_core::common::DUMMY_SP;
+
+    use crate::{
+        TransformSfcContext,
+        template::node_transforms::TransformNodeState,
+        test_utils::{element_from_tag, js, js_child_node_to_str},
+    };
+
+    use super::build_props;
+
+    #[test]
+    fn it_normalizes_argumentless_v_bind_props() {
+        // <div v-bind="obj" />
+        let mut element = element_from_tag("div");
+        element.starting_tag.attributes = vec![AttributeOrBinding::VBind(VBindDirective {
+            argument: None,
+            value: js("obj"),
+            is_camel: false,
+            is_prop: false,
+            is_attr: false,
+            span: DUMMY_SP,
+        })];
+        let mut ctx = TransformSfcContext::anonymous();
+        let mut state = TransformNodeState::default();
+
+        let result = build_props(
+            &mut element,
+            &mut ctx,
+            &mut state,
+            None,
+            false,
+            false,
+            false,
+        );
+
+        let Some(PropsExpression::CallExpression(call)) = result.props else {
+            panic!("Expected normalized props call")
+        };
+        assert_eq!(
+            "_normalizeProps(_guardReactiveProps(obj))",
+            js_child_node_to_str(&JsChildNode::CallExpression(call))
+        );
+    }
 }

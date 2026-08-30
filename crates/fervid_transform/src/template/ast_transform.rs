@@ -56,7 +56,7 @@ pub fn transform_and_record_template(
 
     // Optimize conditional sequences within template root
     let node_transforms = ctx.node_transforms.clone();
-    node_transforms.pre_transform_children(ctx, &mut template.roots, ElementKind::Element);
+    node_transforms.pre_transform_children(ctx, &mut template.roots, ElementKind::Element, 0);
 
     // Merge more than 1 child into a separate `<template>` element so that Fragment gets generated.
     // #11: Do this only when not all children are `TextNode`s.
@@ -122,8 +122,10 @@ impl Visitor for TemplateVisitor<'_> {
     fn visit_node(&mut self, node: &mut Node) {
         #[cfg(feature = "new-pipeline")]
         {
+            let parent_scope = self.current_scope;
             let node_transforms = self.ctx.node_transforms.clone();
-            node_transforms.pre_transform_node(self.ctx, node);
+            let mut state = node_transforms.pre_transform_node(self.ctx, node, parent_scope);
+            self.current_scope = state.current_scope;
 
             // SFC asset transforms run after compiler node transforms
             if let Node::Element(element_node) = node {
@@ -140,7 +142,10 @@ impl Visitor for TemplateVisitor<'_> {
                 Node::Text(_, _) | Node::Comment(_, _) => {}
             }
 
-            node_transforms.post_transform_node(self.ctx, node);
+            node_transforms.post_transform_node(self.ctx, node, &mut state);
+
+            // Reset scope
+            self.current_scope = parent_scope;
         }
 
         #[cfg(not(feature = "new-pipeline"))]
@@ -186,13 +191,10 @@ impl Visitor for TemplateVisitor<'_> {
     }
 
     fn visit_for_node(&mut self, for_node: &mut ForNode) {
-        // TODO: Refactor this to re-use existing scope logic
         let old_scope = self.current_scope;
-        let old_ctx_scope = self.ctx.current_template_scope;
         let old_v_for_scope = self.v_for_scope;
 
         self.current_scope = for_node.template_scope;
-        self.ctx.current_template_scope = for_node.template_scope;
 
         // TODO: Remove this after all code is migrated to directive_scopes
         self.v_for_scope = true;
@@ -202,6 +204,7 @@ impl Visitor for TemplateVisitor<'_> {
             self.ctx,
             &mut for_node.children,
             ElementKind::Template,
+            self.current_scope,
         );
 
         for child in for_node.children.iter_mut() {
@@ -209,7 +212,6 @@ impl Visitor for TemplateVisitor<'_> {
         }
 
         self.current_scope = old_scope;
-        self.ctx.current_template_scope = old_ctx_scope;
         self.v_for_scope = old_v_for_scope;
     }
 
@@ -254,6 +256,7 @@ impl TemplateVisitor<'_> {
             self.ctx,
             &mut element_node.children,
             element_node.tag_type,
+            self.current_scope,
         );
 
         for child in element_node.children.iter_mut() {
@@ -619,7 +622,12 @@ impl TemplateVisitor<'_> {
 
         // Merge conditional nodes and clean up whitespace
         let node_transforms = self.ctx.node_transforms.clone();
-        node_transforms.pre_transform_children(self.ctx, &mut element_node.children, element_kind);
+        node_transforms.pre_transform_children(
+            self.ctx,
+            &mut element_node.children,
+            element_kind,
+            scope_to_use,
+        );
 
         // Patch flag for HTML elements which only contain interpolation and text,
         // e.g. `<p>{{ msg }}</p>`.
@@ -715,6 +723,13 @@ mod tests {
         Conditional, ElementKind, ForParseResult, Node, PatchHints, VForDirective, VueDirectives,
     };
     use swc_core::common::DUMMY_SP;
+    #[cfg(feature = "new-pipeline")]
+    use swc_core::{
+        common::{BytePos, Span},
+        ecma::ast::{EsVersion, Pat},
+    };
+    #[cfg(feature = "new-pipeline")]
+    use swc_ecma_parser::{Lexer, Parser, StringInput, Syntax, TsSyntax};
 
     #[cfg(feature = "new-pipeline")]
     use crate::test_utils::element_from_tag;
@@ -1138,6 +1153,43 @@ mod tests {
         );
         assert_eq!(0, ctx.directive_scopes.v_for);
         assert_eq!(0, ctx.directive_scopes.v_slot);
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_transforms_v_slot_pattern_default_expressions_in_parent_scope() {
+        let (slot_props, body) = transform_component_slot("{ value = outer }", "value + outer");
+
+        assert_eq!("{value=_ctx.outer}", slot_props);
+        assert_eq!("value+_ctx.outer", body);
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_transforms_v_slot_pattern_computed_keys_in_parent_scope() {
+        let (slot_props, body) = transform_component_slot("{ [key]: value }", "value + key");
+
+        assert_eq!("{[_ctx.key]:value}", slot_props);
+        assert_eq!("value+_ctx.key", body);
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_transforms_nested_v_slot_pattern_defaults_in_parent_scope() {
+        let (slot_props, body) =
+            transform_component_slot("{ foo: { bar = baz }, ...rest }", "bar + rest + baz");
+
+        assert_eq!("{foo:{bar=_ctx.baz},...rest}", slot_props);
+        assert_eq!("bar+rest+_ctx.baz", body);
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_transforms_array_v_slot_pattern_defaults_in_parent_scope() {
+        let (slot_props, body) = transform_component_slot("[item = fallback]", "item + fallback");
+
+        assert_eq!("[item=_ctx.fallback]", slot_props);
+        assert_eq!("item+_ctx.fallback", body);
     }
 
     #[cfg(feature = "new-pipeline")]
@@ -1966,6 +2018,74 @@ mod tests {
             })],
             span: DUMMY_SP,
         }
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn transform_component_slot(slot_props: &str, child_expr: &str) -> (String, String) {
+        let mut sfc_template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: fervid_atom!("Comp"),
+                    attributes: vec![],
+                    directives: Some(Box::new(VueDirectives {
+                        v_slot: Some(fervid_core::VSlotDirective {
+                            slot_name: None,
+                            value: Some(Box::new(parse_slot_props(slot_props))),
+                        }),
+                        ..Default::default()
+                    })),
+                },
+                children: vec![Node::Interpolation(Interpolation {
+                    value: js(child_expr),
+                    template_scope: 0,
+                    patch_flag: false,
+                    span: DUMMY_SP,
+                })],
+                template_scope: 0,
+                tag_type: ElementKind::Component,
+                patch_hints: Default::default(),
+                span: DUMMY_SP,
+                codegen_node: None,
+            })],
+            span: DUMMY_SP,
+        };
+
+        transform_and_record_template(&mut sfc_template, &mut TransformSfcContext::anonymous());
+
+        let Node::Element(component) = &sfc_template.roots[0] else {
+            panic!("Expected component root")
+        };
+        let directives = component
+            .starting_tag
+            .directives
+            .as_ref()
+            .expect("component should retain directives");
+        let slot_props = directives
+            .v_slot
+            .as_ref()
+            .and_then(|v_slot| v_slot.value.as_ref())
+            .expect("component should retain slot props");
+        let [Node::Interpolation(interpolation)] = component.children.as_slice() else {
+            panic!("Expected one interpolation")
+        };
+
+        (to_str(slot_props.as_ref()), to_str(&interpolation.value))
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn parse_slot_props(raw: &str) -> Pat {
+        let span = Span::new(BytePos(0), BytePos(raw.len() as u32));
+        let lexer = Lexer::new(
+            Syntax::Typescript(TsSyntax::default()),
+            EsVersion::EsNext,
+            StringInput::new(raw, span.lo, span.hi),
+            None,
+        );
+
+        Parser::new_from(lexer)
+            .parse_pat()
+            .expect("slot props pattern should parse")
     }
 
     #[cfg(feature = "new-pipeline")]

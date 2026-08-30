@@ -20,6 +20,7 @@ use crate::{
     template::{
         directive_transforms::DirectiveTransformResult,
         expr_transform::BindingsHelperTransform,
+        node_transforms::TransformNodeState,
         utils::{to_pascal_case, wrap_in_event_arrow},
         v_on::wrap_in_args_arrow,
     },
@@ -28,11 +29,12 @@ use crate::{
 
 pub fn transform_v_on(
     ctx: &mut TransformSfcContext,
+    state: &TransformNodeState,
     v_on: &VOnDirective,
     node: &ElementNode,
 ) -> Option<DirectiveTransformResult> {
-    let state = transform_v_on_base(ctx, v_on, node)?;
-    Some(finish_v_on(state))
+    let v_on_state = transform_v_on_base(ctx, state, v_on, node)?;
+    Some(finish_v_on(v_on_state))
 }
 
 pub struct VOnTransformState {
@@ -42,6 +44,7 @@ pub struct VOnTransformState {
 
 pub fn transform_v_on_base(
     ctx: &mut TransformSfcContext,
+    state: &TransformNodeState,
     v_on: &VOnDirective,
     node: &ElementNode,
 ) -> Option<VOnTransformState> {
@@ -65,7 +68,7 @@ pub fn transform_v_on_base(
         StrOrExpr::Expr(expr) => dynamic_event_key(ctx, expr, v_on.span),
     };
 
-    let (handler, should_cache) = transform_handler(ctx, v_on, node);
+    let (handler, should_cache) = transform_handler(ctx, state, v_on, node);
 
     let property = Property {
         key: event_name,
@@ -110,6 +113,7 @@ pub fn finish_v_on(mut state: VOnTransformState) -> DirectiveTransformResult {
 
 fn transform_handler(
     ctx: &mut TransformSfcContext,
+    state: &TransformNodeState,
     v_on: &VOnDirective,
     node: &ElementNode,
 ) -> (Box<Expr>, bool) {
@@ -118,7 +122,7 @@ fn transform_handler(
         return (empty_handler(), should_cache);
     };
 
-    let scope_to_use = ctx.current_template_scope;
+    let scope_to_use = state.current_scope;
 
     let handler_kind = classify_handler(handler);
     let is_member_expr = matches!(handler_kind, HandlerKind::MemberExpr);
@@ -319,7 +323,8 @@ mod tests {
         TransformSfcContext,
         error::{TemplateErrorKind, TransformError},
         template::{
-            directive_transforms::DirectiveTransformResult, expr_transform::BindingsHelperTransform,
+            directive_transforms::DirectiveTransformResult,
+            expr_transform::BindingsHelperTransform, node_transforms::TransformNodeState,
         },
         test_utils::{
             AssertType, element_from_tag, element_with_children, js, property_to_str, to_str,
@@ -354,6 +359,8 @@ mod tests {
     ) -> (TransformSfcContext, DirectiveTransformResult) {
         let mut ctx = TransformSfcContext::anonymous();
         ctx.cache_handlers = false;
+        let state = TransformNodeState::default();
+
         let mut directive = VOnDirective {
             event: Some(event),
             handler: handler.map(js),
@@ -366,7 +373,7 @@ mod tests {
         if let Some(StrOrExpr::Expr(event)) = directive.event.as_mut() {
             ctx.bindings_helper.transform_expr(event, 0);
         }
-        let result = transform_v_on(&mut ctx, &directive, node)
+        let result = transform_v_on(&mut ctx, &state, &directive, node)
             .expect("v-on with an event argument should produce a result");
         (ctx, result)
     }

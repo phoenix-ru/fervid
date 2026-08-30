@@ -132,7 +132,6 @@ impl TransformSfcContext {
             deps: Default::default(),
             scopes: vec![],
             directive_scopes: Default::default(),
-            current_template_scope: 0,
             transform_asset_urls: options.transform_asset_urls.clone(),
             errors: vec![],
             warnings: vec![],

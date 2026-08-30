@@ -14,16 +14,18 @@ use crate::{
     template::{
         core::v_on::{finish_v_on, transform_v_on_base},
         directive_transforms::DirectiveTransformResult,
+        node_transforms::TransformNodeState,
         utils::{capitalize, maybe_parenthesize},
     },
 };
 
 pub fn transform_v_on(
     ctx: &mut TransformSfcContext,
+    state: &TransformNodeState,
     v_on: &VOnDirective,
     node: &ElementNode,
 ) -> Option<DirectiveTransformResult> {
-    let mut state = transform_v_on_base(ctx, v_on, node)?;
+    let mut state = transform_v_on_base(ctx, state, v_on, node)?;
 
     if v_on.modifiers.is_empty() {
         return Some(finish_v_on(state));
@@ -292,7 +294,8 @@ mod tests {
     use crate::{
         TransformSfcContext,
         template::{
-            directive_transforms::DirectiveTransformResult, expr_transform::BindingsHelperTransform,
+            directive_transforms::DirectiveTransformResult,
+            expr_transform::BindingsHelperTransform, node_transforms::TransformNodeState,
         },
         test_utils::{AssertType, element_with_children, js, property_to_str, to_str},
     };
@@ -305,6 +308,8 @@ mod tests {
     ) -> (TransformSfcContext, DirectiveTransformResult) {
         let mut ctx = TransformSfcContext::anonymous();
         ctx.cache_handlers = false;
+        let state = TransformNodeState::default();
+
         let mut directive = VOnDirective {
             event: Some(event),
             handler: Some(js("handler")),
@@ -318,7 +323,7 @@ mod tests {
             ctx.bindings_helper.transform_expr(event, 0);
         }
         let node = element_with_children(vec![Node::Text(fervid_atom!("child"), DUMMY_SP)]);
-        let result = transform_v_on(&mut ctx, &directive, &node)
+        let result = transform_v_on(&mut ctx, &state, &directive, &node)
             .expect("DOM v-on with an event argument should produce a result");
         (ctx, result)
     }

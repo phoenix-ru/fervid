@@ -63,7 +63,7 @@ mod tests {
 
     use crate::{
         TransformSfcContext,
-        template::core::v_for::pre_transform_for,
+        template::{core::v_for::pre_transform_for, node_transforms::TransformNodeState},
         test_utils::{element_from_tag, js},
     };
 
@@ -90,9 +90,10 @@ mod tests {
         }));
         let mut node = Node::Element(element);
         let mut ctx = TransformSfcContext::anonymous();
+        let mut state = TransformNodeState::default();
 
         pre_transform_once(&mut ctx, &mut node);
-        pre_transform_for(&mut ctx, &mut node);
+        pre_transform_for(&mut ctx, &mut state, &mut node);
         post_transform_once(&mut ctx, &mut node);
 
         assert_eq!(ctx.directive_scopes.v_once, 0);

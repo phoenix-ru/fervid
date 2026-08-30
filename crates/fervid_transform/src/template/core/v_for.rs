@@ -7,10 +7,17 @@ use swc_core::ecma::ast::{Expr, Lit, Str};
 
 use crate::{
     TransformSfcContext,
-    template::{collect_vars::collect_variables, expr_transform::BindingsHelperTransform},
+    template::{
+        collect_vars::collect_variables, expr_transform::BindingsHelperTransform,
+        node_transforms::TransformNodeState,
+    },
 };
 
-pub fn pre_transform_for(ctx: &mut TransformSfcContext, node: &mut Node) {
+pub fn pre_transform_for(
+    ctx: &mut TransformSfcContext,
+    state: &mut TransformNodeState,
+    node: &mut Node,
+) {
     let Node::Element(element_node) = node else {
         return;
     };
@@ -30,15 +37,23 @@ pub fn pre_transform_for(ctx: &mut TransformSfcContext, node: &mut Node) {
         return;
     };
 
-    process_for(ctx, node, v_for);
+    process_for(ctx, state, node, v_for);
 }
 
-pub fn post_transform_for(ctx: &mut TransformSfcContext, node: &mut Node) {
+pub fn post_transform_for(
+    ctx: &mut TransformSfcContext,
+    state: &mut TransformNodeState,
+    node: &mut Node,
+) {
     let Node::For(for_node) = node else {
+        return;
+    };
+    let Some(previous_current_scope) = state.for_scope else {
         return;
     };
 
     ctx.directive_scopes.v_for -= 1;
+    state.current_scope = previous_current_scope;
 
     // TODO: Finish renderList codegen finalization. This currently only reconciles the child
     // vnode's block and patch requirements after its element transform has run
@@ -65,9 +80,12 @@ pub fn post_transform_for(ctx: &mut TransformSfcContext, node: &mut Node) {
     }
 }
 
-pub fn process_for(ctx: &mut TransformSfcContext, node: &mut Node, mut v_for: VForDirective) {
-    let parent_scope = ctx.current_template_scope;
-
+pub fn process_for(
+    ctx: &mut TransformSfcContext,
+    state: &mut TransformNodeState,
+    node: &mut Node,
+    mut v_for: VForDirective,
+) {
     let Node::Element(element_node) = node else {
         return;
     };
@@ -80,9 +98,13 @@ pub fn process_for(ctx: &mut TransformSfcContext, node: &mut Node, mut v_for: VF
         .and_then(|directives| directives.v_once.take())
         .is_some();
 
+    // The transform uses currently active scope as parent
+    let parent_scope = state.current_scope;
+
     // TODO: Move to codegen
     let (has_key, mut key) = find_for_key(element_node);
 
+    // exclude moving
     finalize_for_parse_result(ctx, &mut v_for.parse_result, parent_scope);
 
     let is_stable = matches!(v_for.parse_result.source.as_ref(), Expr::Lit(_));
@@ -96,7 +118,7 @@ pub fn process_for(ctx: &mut TransformSfcContext, node: &mut Node, mut v_for: VF
     // END TODO
 
     // Create new template scope
-    let scope_to_use = ctx.bindings_helper.template_scopes.len() as u32;
+    let new_scope_to_use = ctx.bindings_helper.template_scopes.len() as u32;
     ctx.bindings_helper
         .template_scopes
         .push(crate::TemplateScope {
@@ -110,7 +132,7 @@ pub fn process_for(ctx: &mut TransformSfcContext, node: &mut Node, mut v_for: VF
         Node::For(ForNode {
             parse_result: v_for.parse_result,
             children: vec![],
-            template_scope: scope_to_use,
+            template_scope: new_scope_to_use,
             // TODO Assign during codegen phase instead
             codegen_node: Some(Box::new(ForCodegenNode {
                 patch_flags,
@@ -142,10 +164,13 @@ pub fn process_for(ctx: &mut TransformSfcContext, node: &mut Node, mut v_for: VF
         for_node.children.push(original_node);
     }
 
+    // Update the scopes
     ctx.directive_scopes.v_for += 1;
+    state.current_scope = new_scope_to_use;
+    state.for_scope = Some(parent_scope);
 
     // Get the iterator variables and collect their variables
-    let scope = &mut ctx.bindings_helper.template_scopes[scope_to_use as usize];
+    let scope = &mut ctx.bindings_helper.template_scopes[new_scope_to_use as usize];
     collect_variables(&for_node.parse_result.value, scope);
     if let Some(key) = &for_node.parse_result.key {
         collect_variables(key, scope);
@@ -154,9 +179,9 @@ pub fn process_for(ctx: &mut TransformSfcContext, node: &mut Node, mut v_for: VF
         collect_variables(index, scope);
     }
 
-    // TODO: Move to codegen
+    // TODO: Move to codegen phase
     if is_template && let Some(key) = key.as_mut() {
-        ctx.bindings_helper.transform_expr(key, scope_to_use);
+        ctx.bindings_helper.transform_expr(key, new_scope_to_use);
     }
     for_node
         .codegen_node

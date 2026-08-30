@@ -11,19 +11,31 @@ use swc_core::{
 };
 
 use crate::{
-    TransformSfcContext,
+    TemplateScope, TransformSfcContext,
     error::{TemplateError, TemplateErrorKind, TransformError},
     template::{
-        collect_vars::collect_variables, core::v_for::finalize_for_parse_result,
-        expr_transform::BindingsHelperTransform,
+        collect_vars::{collect_pattern_bindings, collect_variables},
+        core::v_for::finalize_for_parse_result,
+        node_transforms::TransformNodeState,
     },
 };
 
-pub fn track_slot_scopes(
+/// A NodeTransform that:
+/// 1. Tracks scope identifiers for scoped slots so that they don't get prefixed
+///    by transformExpression. This is only applied in non-browser builds with
+///    { prefixIdentifiers: true }.
+/// 2. Track v-slot depths so that we know a slot is inside another slot.
+///    Note the exit callback is executed before buildSlots() on the same node,
+///    so only nested slots see positive numbers.
+pub fn pre_track_slot_scopes(
     ctx: &mut TransformSfcContext,
-    node: &mut ElementNode,
-    scope_to_use: u32,
-) -> bool {
+    state: &mut TransformNodeState,
+    node: &Node,
+) {
+    let Node::Element(node) = node else {
+        return;
+    };
+
     // Only components and templates are processed in vuejs-core.
     // Fervid separates built-ins as ElementKind::Builtin so Slots need to be ignored
     let should_process = matches!(
@@ -32,58 +44,90 @@ pub fn track_slot_scopes(
     ) || matches!(node.tag_type, ElementKind::Builtin(builtin) if !matches!(builtin, BuiltinType::Slot));
 
     if !should_process {
-        return false;
+        return;
     }
 
     let Some(v_slot) = node
         .starting_tag
         .directives
-        .as_mut()
-        .and_then(|v| v.v_slot.as_mut())
+        .as_ref()
+        .and_then(|v| v.v_slot.as_ref())
     else {
-        return false;
+        return;
     };
+
+    // The transform uses currently active scope as parent
+    let parent_scope = state.current_scope;
+
+    // Create a new scope, it will have ID equal to length
+    let new_scope_to_use = ctx.bindings_helper.template_scopes.len() as u32;
+    ctx.bindings_helper.template_scopes.push(TemplateScope {
+        variables: SmallVec::new(),
+        parent: parent_scope,
+    });
 
     ctx.directive_scopes.v_slot += 1;
 
-    if let Some(v_slot_value) = v_slot.value.as_mut() {
-        let scope = &mut ctx.bindings_helper.template_scopes[scope_to_use as usize];
-        collect_variables(v_slot_value, scope);
+    if let Some(v_slot_value) = v_slot.value.as_ref() {
+        let scope = &mut ctx.bindings_helper.template_scopes[new_scope_to_use as usize];
+        collect_pattern_bindings(v_slot_value, scope);
     }
 
-    // Transform `v-slot` argument if it is dynamic
-    if let Some(StrOrExpr::Expr(expr)) = v_slot.slot_name.as_mut() {
-        ctx.bindings_helper.transform_expr(expr, scope_to_use);
-    }
-
-    true
+    state.slot_scopes = Some(parent_scope);
+    state.current_scope = new_scope_to_use;
 }
 
-pub fn track_v_for_slot_scopes(
+pub fn post_track_slot_scopes(
     ctx: &mut TransformSfcContext,
-    node: &mut ElementNode,
-    parent_scope: u32,
-    scope_to_use: u32,
-) -> bool {
+    state: &mut TransformNodeState,
+    _node: &Node,
+) {
+    if let Some(previous_current_scope) = state.slot_scopes {
+        state.current_scope = previous_current_scope;
+        ctx.directive_scopes.v_slot -= 1;
+    }
+}
+
+/// A NodeTransform that tracks scope identifiers for scoped slots with v-for.
+/// This transform is only applied in non-browser builds with { prefixIdentifiers: true }
+pub fn pre_track_v_for_slot_scopes(
+    ctx: &mut TransformSfcContext,
+    state: &mut TransformNodeState,
+    node: &mut Node,
+) {
+    let Node::Element(node) = node else {
+        return;
+    };
+
     if !matches!(node.tag_type, ElementKind::Template) {
-        return false;
+        return;
     }
 
     let Some(directives) = node.starting_tag.directives.as_mut() else {
-        return false;
+        return;
     };
 
     if directives.v_slot.is_none() {
-        return false;
+        return;
     }
 
     let Some(v_for) = directives.v_for.as_mut() else {
-        return false;
+        return;
     };
+
+    // The transform uses currently active scope as parent
+    let parent_scope = state.current_scope;
 
     finalize_for_parse_result(ctx, &mut v_for.parse_result, parent_scope);
 
-    let scope = &mut ctx.bindings_helper.template_scopes[scope_to_use as usize];
+    // Create a new scope, it will have ID equal to length
+    let new_scope_to_use = ctx.bindings_helper.template_scopes.len() as u32;
+    ctx.bindings_helper.template_scopes.push(TemplateScope {
+        variables: SmallVec::new(),
+        parent: parent_scope,
+    });
+
+    let scope = &mut ctx.bindings_helper.template_scopes[new_scope_to_use as usize];
     collect_variables(&v_for.parse_result.value, scope);
     if let Some(key) = &v_for.parse_result.key {
         collect_variables(key, scope);
@@ -92,7 +136,18 @@ pub fn track_v_for_slot_scopes(
         collect_variables(index, scope);
     }
 
-    true
+    state.v_for_slot_scopes = Some(parent_scope);
+    state.current_scope = new_scope_to_use;
+}
+
+pub fn post_track_v_for_slot_scopes(
+    _ctx: &mut TransformSfcContext,
+    state: &mut TransformNodeState,
+    _node: &Node,
+) {
+    if let Some(previous_current_scope) = state.v_for_slot_scopes {
+        state.current_scope = previous_current_scope;
+    }
 }
 
 // Instead of being a DirectiveTransform, v-slot processing is called during

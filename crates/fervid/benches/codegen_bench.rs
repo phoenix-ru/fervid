@@ -35,7 +35,6 @@ fn codegen_benchmark(c: &mut Criterion) {
                     errors: vec![],
                     warnings: vec![],
                     directive_scopes: Default::default(),
-                    current_template_scope: 0,
                     directive_transforms: Default::default(),
                     node_transforms: Default::default(),
                     cache_handlers: false,

@@ -7,7 +7,10 @@ use fervid_core::{
 };
 use swc_core::ecma::ast::Expr;
 
-use crate::{TransformSfcContext, template::core::v_bind::transform_v_bind};
+use crate::{
+    TransformSfcContext,
+    template::{core::v_bind::transform_v_bind, node_transforms::TransformNodeState},
+};
 
 pub struct DirectiveTransformResult {
     pub runtime_directive: Option<BuiltinRuntimeDirective>,
@@ -28,6 +31,7 @@ pub trait DirectiveTransforms: Debug {
     fn transform_v_bind(
         &self,
         ctx: &mut TransformSfcContext,
+        _state: &mut TransformNodeState,
         v_bind: &VBindDirective,
         node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
@@ -37,24 +41,27 @@ pub trait DirectiveTransforms: Debug {
     fn transform_v_on(
         &self,
         ctx: &mut TransformSfcContext,
+        state: &mut TransformNodeState,
         v_on: &VOnDirective,
         node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
-        super::core::v_on::transform_v_on(ctx, v_on, node)
+        super::core::v_on::transform_v_on(ctx, state, v_on, node)
     }
 
     fn transform_v_model(
         &self,
         ctx: &mut TransformSfcContext,
+        state: &mut TransformNodeState,
         v_model: &VModelDirective,
         node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
-        super::core::v_model::transform_v_model(ctx, v_model, node)
+        super::core::v_model::transform_v_model(ctx, state, v_model, node)
     }
 
     fn transform_v_html(
         &self,
         _ctx: &mut TransformSfcContext,
+        _state: &mut TransformNodeState,
         _v_html: &Expr,
         _node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
@@ -64,6 +71,7 @@ pub trait DirectiveTransforms: Debug {
     fn transform_v_text(
         &self,
         _ctx: &mut TransformSfcContext,
+        _state: &mut TransformNodeState,
         _v_text: &Expr,
         _node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
@@ -73,6 +81,7 @@ pub trait DirectiveTransforms: Debug {
     fn transform_v_show(
         &self,
         _ctx: &mut TransformSfcContext,
+        _state: &mut TransformNodeState,
         _v_show: &Expr,
         _node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
@@ -113,15 +122,17 @@ impl DirectiveTransforms for DomDirectiveTransform {
     fn transform_v_on(
         &self,
         ctx: &mut TransformSfcContext,
+        state: &mut TransformNodeState,
         v_on: &VOnDirective,
         node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
-        super::dom::v_on::transform_v_on(ctx, v_on, node)
+        super::dom::v_on::transform_v_on(ctx, state, v_on, node)
     }
 
     fn transform_v_html(
         &self,
         ctx: &mut TransformSfcContext,
+        _state: &mut TransformNodeState,
         v_html: &Expr,
         node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
@@ -131,6 +142,7 @@ impl DirectiveTransforms for DomDirectiveTransform {
     fn transform_v_text(
         &self,
         ctx: &mut TransformSfcContext,
+        _state: &mut TransformNodeState,
         v_text: &Expr,
         node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
@@ -140,6 +152,7 @@ impl DirectiveTransforms for DomDirectiveTransform {
     fn transform_v_show(
         &self,
         ctx: &mut TransformSfcContext,
+        _state: &mut TransformNodeState,
         v_show: &Expr,
         _node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
@@ -149,9 +162,10 @@ impl DirectiveTransforms for DomDirectiveTransform {
     fn transform_v_model(
         &self,
         ctx: &mut TransformSfcContext,
+        state: &mut TransformNodeState,
         v_model: &VModelDirective,
         node: &ElementNode,
     ) -> Option<DirectiveTransformResult> {
-        super::dom::v_model::transform_v_model(ctx, v_model, node)
+        super::dom::v_model::transform_v_model(ctx, state, v_model, node)
     }
 }

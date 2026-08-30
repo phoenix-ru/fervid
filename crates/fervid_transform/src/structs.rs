@@ -40,7 +40,6 @@ pub struct TransformSfcContext {
     pub scopes: Vec<TypeScopeContainer>,
     /// Scopes for directives
     pub directive_scopes: DirectiveScopes,
-    pub current_template_scope: u32,
     pub errors: Vec<TransformError>,
     pub warnings: Vec<TransformError>,
     pub directive_transforms: DirectiveTransformsProvider,
@@ -332,7 +331,6 @@ impl TransformSfcContext {
             deps: HashSet::default(),
             scopes: vec![],
             directive_scopes: Default::default(),
-            current_template_scope: 0,
             transform_asset_urls: TransformAssetUrlsConfig::default(),
             errors: vec![],
             warnings: vec![],

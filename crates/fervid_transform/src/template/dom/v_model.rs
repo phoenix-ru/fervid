@@ -10,11 +10,13 @@ use crate::{
     template::{
         core::v_model::{VModelTransformState, transform_v_model_base},
         directive_transforms::{BuiltinRuntimeDirective, DirectiveTransformResult},
+        node_transforms::TransformNodeState,
     },
 };
 
 pub fn transform_v_model(
     ctx: &mut TransformSfcContext,
+    state: &TransformNodeState,
     v_model: &VModelDirective,
     node: &ElementNode,
 ) -> Option<DirectiveTransformResult> {
@@ -22,7 +24,7 @@ pub fn transform_v_model(
         result: mut base_result,
         value: transformed_value,
         argument,
-    } = transform_v_model_base(ctx, v_model, node)?;
+    } = transform_v_model_base(ctx, state, v_model, node)?;
 
     // Base transform has errors OR component v-model (only need props).
     // Note: Fervid doesn't normally return empty `props`,
@@ -179,7 +181,9 @@ mod tests {
     use crate::{
         SetupBinding, TransformSfcContext,
         error::{TemplateErrorKind, TransformError},
-        template::directive_transforms::DirectiveTransformResult,
+        template::{
+            directive_transforms::DirectiveTransformResult, node_transforms::TransformNodeState,
+        },
         test_utils::{element_from_tag, js, to_str},
     };
 
@@ -227,9 +231,15 @@ mod tests {
         ctx.cache_handlers = false;
         let mut node = element_from_tag(tag);
         node.starting_tag.attributes = attributes;
+        let state = TransformNodeState::default();
 
-        let result = transform_v_model(&mut ctx, &directive("model", argument, modifiers), &node)
-            .expect("v-model with a valid expression should produce a result");
+        let result = transform_v_model(
+            &mut ctx,
+            &state,
+            &directive("model", argument, modifiers),
+            &node,
+        )
+        .expect("v-model with a valid expression should produce a result");
         (ctx, result)
     }
 
@@ -302,9 +312,15 @@ mod tests {
             BindingTypes::SetupRef,
         ));
         let node = element_from_tag("input");
+        let state = TransformNodeState::default();
 
-        let result = transform_v_model(&mut ctx, &directive("inputModel", None, &["lazy"]), &node)
-            .expect("input v-model should produce a result");
+        let result = transform_v_model(
+            &mut ctx,
+            &state,
+            &directive("inputModel", None, &["lazy"]),
+            &node,
+        )
+        .expect("input v-model should produce a result");
         let runtime = result
             .runtime_directive
             .as_ref()

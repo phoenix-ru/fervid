@@ -2,7 +2,7 @@ use fervid_core::{Conditional, ConditionalNodeSequence, ElementKind, ElementNode
 
 use crate::{TransformSfcContext, template::expr_transform::BindingsHelperTransform};
 
-pub fn transform_if(ctx: &mut TransformSfcContext, children: &mut Vec<Node>) {
+pub fn transform_if(ctx: &mut TransformSfcContext, children: &mut Vec<Node>, scope_to_use: u32) {
     // Merge multiple v-if/else-if/else nodes into a ConditionalNodeSequence
     if !children.is_empty() {
         let mut seq: Option<ConditionalNodeSequence> = None;
@@ -48,12 +48,11 @@ pub fn transform_if(ctx: &mut TransformSfcContext, children: &mut Vec<Node>) {
             if is_template_slot_carrier(child_element) {
                 if let Some(directives) = child_element.starting_tag.directives.as_mut() {
                     if let Some(ref mut v_if_cond) = directives.v_if {
-                        ctx.bindings_helper
-                            .transform_expr(v_if_cond, ctx.current_template_scope);
+                        ctx.bindings_helper.transform_expr(v_if_cond, scope_to_use);
                     }
                     if let Some(ref mut v_else_if_cond) = directives.v_else_if {
                         ctx.bindings_helper
-                            .transform_expr(v_else_if_cond, ctx.current_template_scope);
+                            .transform_expr(v_else_if_cond, scope_to_use);
                     }
                 }
 
