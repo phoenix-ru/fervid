@@ -11,7 +11,7 @@ use swc_core::{
 
 use crate::CodegenContext;
 
-mod v_for;
+pub(crate) mod v_for;
 mod v_html;
 mod v_memo;
 mod v_model;

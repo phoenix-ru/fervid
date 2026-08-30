@@ -1,15 +1,16 @@
 use fervid_core::{
-    ArrayExpression, CacheExpression, CallExpression as FervidCallExpression, ElementCodegenNode,
-    ElementCodegenValue, ElementNode, ExpressionNode, ExpressionPropNameNode, IntoIdent,
-    JsChildNode, ObjectExpression, PropsExpression, SlotBuild, SlotFlag, SlotSource, StrOrExpr,
-    VNodeCall, VNodeCallTag, VNodeChildren, VueImports, is_valid_propname,
+    ArrayExpression, CacheExpression, CallExpression as FervidCallExpression, DynamicSlot,
+    DynamicSlotBuild, ElementCodegenNode, ElementCodegenValue, ElementNode, ExpressionNode,
+    ExpressionPropNameNode, IntoIdent, JsChildNode, Node, ObjectExpression, PropsExpression,
+    SlotBuild, SlotFlag, SlotSource, StrOrExpr, VNodeCall, VNodeCallTag, VNodeChildren, VueImports,
+    fervid_atom, is_valid_propname,
 };
 use swc_core::{
     common::{DUMMY_SP, Span},
     ecma::ast::{
-        ArrayLit, ArrowExpr, BlockStmtOrExpr, CallExpr, Callee, ComputedPropName, Expr,
-        ExprOrSpread, IdentName, KeyValueProp, Lit, Null, Number, ObjectLit, Prop, PropName,
-        PropOrSpread, Str,
+        ArrayLit, ArrowExpr, BlockStmtOrExpr, CallExpr, Callee, ComputedPropName, CondExpr, Expr,
+        ExprOrSpread, IdentName, KeyValueProp, Lit, Null, Number, ObjectLit, ParenExpr, Pat, Prop,
+        PropName, PropOrSpread, Str,
     },
 };
 
@@ -210,10 +211,37 @@ impl CodegenContext {
                     }))),
                 }))));
 
-                Expr::Object(ObjectLit {
+                let static_slots = Expr::Object(ObjectLit {
                     span: DUMMY_SP,
                     props,
-                })
+                });
+
+                if slots.dynamic_slots.is_empty() {
+                    static_slots
+                } else {
+                    let dynamic_slots = slots
+                        .dynamic_slots
+                        .iter()
+                        .map(|slot| Some(expr_arg(self.generate_dynamic_slot(element_node, slot))))
+                        .collect();
+
+                    Expr::Call(CallExpr {
+                        span: DUMMY_SP,
+                        ctxt: Default::default(),
+                        callee: Callee::Expr(Box::new(Expr::Ident(
+                            self.get_and_add_import_ident(VueImports::CreateSlots)
+                                .into_ident(),
+                        ))),
+                        args: vec![
+                            expr_arg(static_slots),
+                            expr_arg(Expr::Array(ArrayLit {
+                                span: DUMMY_SP,
+                                elems: dynamic_slots,
+                            })),
+                        ],
+                        type_args: None,
+                    })
+                }
             }
         }
     }
@@ -223,26 +251,27 @@ impl CodegenContext {
         element_node: &ElementNode,
         slot: &SlotBuild,
     ) -> PropOrSpread {
-        let slot_children = match &slot.source {
-            SlotSource::ImplicitDefaultSlot(indices) => indices
-                .iter()
-                .filter_map(|idx| element_node.children.get(*idx))
-                .collect::<Vec<_>>(),
-            SlotSource::TemplateSlotChildren(index) => element_node
-                .children
-                .get(*index)
-                .and_then(|node| match node {
-                    fervid_core::Node::Element(element) => Some(element.children.iter().collect()),
-                    _ => None,
-                })
-                .unwrap_or_default(),
-        };
+        // "slot-name": withCtx((props) => [child1, child2])
+        PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+            key: str_or_expr_to_prop_name(&slot.name),
+            value: self.generate_slot_function(element_node, slot.props.as_deref(), &slot.source),
+        })))
+    }
+
+    fn generate_slot_function(
+        &mut self,
+        element_node: &ElementNode,
+        props: Option<&Pat>,
+        source: &SlotSource,
+    ) -> Box<Expr> {
+        let slot_children = get_slot_source_nodes(element_node, source);
+        let total_children = slot_children.len();
 
         let mut generated_children = Vec::new();
         self.generate_node_sequence(
             &mut slot_children.into_iter(),
             &mut generated_children,
-            0,
+            total_children,
             false,
         );
 
@@ -254,16 +283,10 @@ impl CodegenContext {
                 .collect(),
         });
 
-        let params = slot
-            .props
-            .as_ref()
-            .map(|props| vec![*props.to_owned()])
-            .unwrap_or_default();
-
         let arrow = Expr::Arrow(ArrowExpr {
             span: DUMMY_SP,
             ctxt: Default::default(),
-            params,
+            params: props.cloned().into_iter().collect(),
             body: Box::new(BlockStmtOrExpr::Expr(Box::new(body))),
             is_async: false,
             is_generator: false,
@@ -271,21 +294,149 @@ impl CodegenContext {
             return_type: None,
         });
 
-        let with_ctx = Expr::Call(CallExpr {
+        Box::new(Expr::Call(CallExpr {
             span: DUMMY_SP,
             ctxt: Default::default(),
             callee: Callee::Expr(Box::new(Expr::Ident(
                 self.get_and_add_import_ident(VueImports::WithCtx)
-                    .into_ident_spanned(DUMMY_SP),
+                    .into_ident(),
             ))),
             args: vec![expr_arg(arrow)],
             type_args: None,
-        });
+        }))
+    }
 
-        PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-            key: str_or_expr_to_prop_name(&slot.name),
-            value: Box::new(with_ctx),
-        })))
+    fn generate_dynamic_slot(&mut self, element_node: &ElementNode, slot: &DynamicSlot) -> Expr {
+        match slot {
+            DynamicSlot::Conditional(conditional) => {
+                let mut alternate = conditional
+                    .else_slot
+                    .as_ref()
+                    .map(|slot| self.generate_dynamic_slot_object(element_node, slot))
+                    .unwrap_or_else(undefined_expr);
+
+                for branch in conditional.else_if_slots.iter().rev() {
+                    alternate = Expr::Cond(CondExpr {
+                        span: DUMMY_SP,
+                        test: branch.condition.clone(),
+                        cons: Box::new(
+                            self.generate_dynamic_slot_object(element_node, &branch.slot),
+                        ),
+                        alt: Box::new(alternate),
+                    });
+                }
+
+                Expr::Cond(CondExpr {
+                    span: DUMMY_SP,
+                    test: conditional.if_slot.condition.clone(),
+                    cons: Box::new(
+                        self.generate_dynamic_slot_object(element_node, &conditional.if_slot.slot),
+                    ),
+                    alt: Box::new(alternate),
+                })
+            }
+
+            DynamicSlot::RenderList(render_list) => {
+                let Some(Node::Element(carrier)) =
+                    element_node.children.get(render_list.slot_template_index)
+                else {
+                    debug_assert!(
+                        false,
+                        "Dynamic v-for slot source must be a template element"
+                    );
+                    return undefined_expr();
+                };
+
+                let Some(v_for) = carrier
+                    .starting_tag
+                    .directives
+                    .as_deref()
+                    .and_then(|directives| directives.v_for.as_ref())
+                else {
+                    debug_assert!(false, "Dynamic v-for slot carrier must retain v-for");
+                    return undefined_expr();
+                };
+
+                let render_item = Expr::Arrow(ArrowExpr {
+                    span: v_for.span,
+                    ctxt: Default::default(),
+                    params: crate::directives::v_for::create_for_loop_params(
+                        &v_for.parse_result,
+                        1,
+                    ),
+                    body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::Paren(ParenExpr {
+                        span: DUMMY_SP,
+                        expr: Box::new(
+                            self.generate_dynamic_slot_object(element_node, &render_list.slot),
+                        ),
+                    })))),
+                    is_async: false,
+                    is_generator: false,
+                    type_params: None,
+                    return_type: None,
+                });
+
+                Expr::Call(CallExpr {
+                    span: v_for.span,
+                    ctxt: Default::default(),
+                    callee: Callee::Expr(Box::new(Expr::Ident(
+                        self.get_and_add_import_ident(VueImports::RenderList)
+                            .into_ident_spanned(v_for.span),
+                    ))),
+                    args: vec![
+                        expr_arg(*v_for.parse_result.source.clone()),
+                        expr_arg(render_item),
+                    ],
+                    type_args: None,
+                })
+            }
+        }
+    }
+
+    fn generate_dynamic_slot_object(
+        &mut self,
+        element_node: &ElementNode,
+        slot: &DynamicSlotBuild,
+    ) -> Expr {
+        let mut props = vec![
+            PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                key: PropName::Ident(IdentName {
+                    span: DUMMY_SP,
+                    sym: "name".into(),
+                }),
+                value: Box::new(str_or_expr_to_expr(&slot.name)),
+            }))),
+            PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                key: PropName::Ident(IdentName {
+                    span: DUMMY_SP,
+                    sym: "fn".into(),
+                }),
+                value: self.generate_slot_function(
+                    element_node,
+                    slot.props.as_deref(),
+                    &slot.source,
+                ),
+            }))),
+        ];
+
+        if let Some(key) = slot.key {
+            props.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+                key: PropName::Ident(IdentName {
+                    span: DUMMY_SP,
+                    sym: "key".into(),
+                }),
+                value: Box::new(Expr::Lit(Lit::Num(Number {
+                    span: DUMMY_SP,
+                    value: key as f64,
+                    raw: None,
+                }))),
+            }))));
+        }
+
+        Expr::Object(ObjectLit {
+            span: DUMMY_SP,
+            props,
+        })
     }
 
     fn generate_js_child_node(&mut self, node: &JsChildNode) -> Expr {
@@ -363,8 +514,30 @@ fn expr_arg(expr: Expr) -> ExprOrSpread {
     }
 }
 
+fn get_slot_source_nodes<'a>(element_node: &'a ElementNode, source: &SlotSource) -> Vec<&'a Node> {
+    match source {
+        SlotSource::ImplicitDefaultSlot(indices) => indices
+            .iter()
+            .filter_map(|idx| element_node.children.get(*idx))
+            .collect(),
+
+        SlotSource::TemplateSlotChildren(index) => element_node
+            .children
+            .get(*index)
+            .and_then(|node| match node {
+                fervid_core::Node::Element(element) => Some(element.children.iter().collect()),
+                _ => None,
+            })
+            .unwrap_or_default(),
+    }
+}
+
 fn null_expr() -> Expr {
     Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))
+}
+
+fn undefined_expr() -> Expr {
+    Expr::Ident(fervid_atom!("undefined").into_ident())
 }
 
 fn str_or_expr_to_prop_name(value: &StrOrExpr) -> PropName {
@@ -374,6 +547,13 @@ fn str_or_expr_to_prop_name(value: &StrOrExpr) -> PropName {
             span: DUMMY_SP,
             expr: expr.to_owned(),
         }),
+    }
+}
+
+fn str_or_expr_to_expr(value: &StrOrExpr) -> Expr {
+    match value {
+        StrOrExpr::Str(value) => Expr::Lit(Lit::Str(value.clone())),
+        StrOrExpr::Expr(value) => *value.clone(),
     }
 }
 
@@ -397,6 +577,14 @@ fn expression_prop_name_to_prop_name(value: &ExpressionPropNameNode) -> PropName
 #[cfg(test)]
 mod tests {
     use fervid_core::{CompoundExpressionNode, ExpressionNode};
+
+    #[cfg(feature = "new-pipeline")]
+    use fervid_core::{
+        ElementKind, ElementNode, ForParseResult, Interpolation, Node, PatchHints, SfcDescriptor,
+        SfcTemplateBlock, StartingTag, StrOrExpr, VForDirective, VSlotDirective, VueDirectives,
+    };
+    #[cfg(feature = "new-pipeline")]
+    use swc_core::common::DUMMY_SP;
 
     use crate::test_utils::{js, to_str};
 
@@ -423,5 +611,183 @@ mod tests {
             to_str(ctx.generate_cache_expression(&cache)),
             "_cache[1]||(_cache[1]=(...args)=>handler(...args))"
         );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_generates_static_slots() {
+        assert_eq!(
+            // <template v-slot:header>static</template>
+            transform_and_generate_slots(vec![slot("header", "static", None)]),
+            "(_openBlock(),_createBlock(_component_Comp,null,{\"header\":_withCtx(()=>[_createTextVNode(\"static\")]),_:1}))"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_generates_dynamic_slots() {
+        assert_eq!(
+            // <template v-if="ok" v-slot:header>dynamic</template>
+            transform_and_generate_slots(vec![slot("header", "dynamic", Some("ok"))]),
+            "(_openBlock(),_createBlock(_component_Comp,null,_createSlots({_:2},[_ctx.ok?{name:\"header\",fn:_withCtx(()=>[_createTextVNode(\"dynamic\")]),key:0}:undefined]),1024))"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_generates_static_and_dynamic_slots() {
+        assert_eq!(
+            transform_and_generate_slots(vec![
+                // <template v-slot:header>static</template>
+                slot("header", "static", None),
+                // <template v-if="ok" v-slot:footer>dynamic</template>
+                slot("footer", "dynamic", Some("ok")),
+            ]),
+            "(_openBlock(),_createBlock(_component_Comp,null,_createSlots({\"header\":_withCtx(()=>[_createTextVNode(\"static\")]),_:2},[_ctx.ok?{name:\"footer\",fn:_withCtx(()=>[_createTextVNode(\"dynamic\")]),key:0}:undefined]),1024))"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_generates_conditional_slot_chain() {
+        assert_eq!(
+            transform_and_generate_slots(vec![
+                // <template v-if="ok" v-slot:one>one</template>
+                slot_with_condition("one", "one", Some("ok"), None, false),
+                // <template v-else-if="other" v-slot:two>two</template>
+                slot_with_condition("two", "two", None, Some("other"), false),
+                // <template v-else v-slot:three>three</template>
+                slot_with_condition("three", "three", None, None, true),
+            ]),
+            "(_openBlock(),_createBlock(_component_Comp,null,_createSlots({_:2},[_ctx.ok?{name:\"one\",fn:_withCtx(()=>[_createTextVNode(\"one\")]),key:0}:_ctx.other?{name:\"two\",fn:_withCtx(()=>[_createTextVNode(\"two\")]),key:1}:{name:\"three\",fn:_withCtx(()=>[_createTextVNode(\"three\")]),key:2}]),1024))"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_generates_v_for_dynamic_slots() {
+        assert_eq!(
+            // <template v-for="item in items" v-slot:[item.name]>{{ item.value }}</template>
+            transform_and_generate_slots(vec![v_for_slot()]),
+            "(_openBlock(),_createBlock(_component_Comp,null,_createSlots({_:2},[_renderList(_ctx.items,(item)=>({name:item.name,fn:_withCtx(()=>[_createTextVNode(_toDisplayString(item.value),1)])}))]),1024))"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn transform_and_generate_slots(children: Vec<Node>) -> String {
+        let mut template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(ElementNode {
+                starting_tag: StartingTag {
+                    tag_name: "Comp".into(),
+                    attributes: vec![],
+                    directives: None,
+                },
+                children,
+                template_scope: 0,
+                tag_type: ElementKind::Component,
+                patch_hints: PatchHints::default(),
+                span: DUMMY_SP,
+                codegen_node: None,
+            })],
+            span: DUMMY_SP,
+        };
+        let descriptor = SfcDescriptor::default();
+        let options = fervid_transform::TransformSfcOptions {
+            is_prod: false,
+            is_ce: false,
+            props_destructure: Default::default(),
+            scope_id: "",
+            filename: "anonymous.vue",
+            transform_asset_urls: Default::default(),
+            directive_transforms: Default::default(),
+            node_transforms: Default::default(),
+        };
+        let mut transform_ctx = fervid_transform::TransformSfcContext::new(&descriptor, &options);
+        fervid_transform::template::transform_and_record_template(
+            &mut template,
+            &mut transform_ctx,
+        );
+        assert!(transform_ctx.errors.is_empty());
+
+        let mut codegen_ctx = CodegenContext::default();
+        to_str(codegen_ctx.generate_node(&template.roots[0], true))
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn slot(name: &str, text: &str, condition: Option<&str>) -> Node {
+        slot_with_condition(name, text, condition, None, false)
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn slot_with_condition(
+        name: &str,
+        text: &str,
+        v_if: Option<&str>,
+        v_else_if: Option<&str>,
+        v_else: bool,
+    ) -> Node {
+        Node::Element(ElementNode {
+            starting_tag: StartingTag {
+                tag_name: "template".into(),
+                attributes: vec![],
+                directives: Some(Box::new(VueDirectives {
+                    v_else: v_else.then_some(()),
+                    v_else_if: v_else_if.map(js),
+                    v_if: v_if.map(js),
+                    v_slot: Some(VSlotDirective {
+                        slot_name: Some(name.into()),
+                        value: None,
+                    }),
+                    ..Default::default()
+                })),
+            },
+            children: vec![Node::Text(text.into(), DUMMY_SP)],
+            template_scope: 0,
+            tag_type: ElementKind::Template,
+            patch_hints: PatchHints::default(),
+            span: DUMMY_SP,
+            codegen_node: None,
+        })
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn v_for_slot() -> Node {
+        Node::Element(ElementNode {
+            starting_tag: StartingTag {
+                tag_name: "template".into(),
+                attributes: vec![],
+                directives: Some(Box::new(VueDirectives {
+                    v_for: Some(VForDirective {
+                        parse_result: Box::new(ForParseResult {
+                            source: js("items"),
+                            value: js("item"),
+                            key: None,
+                            index: None,
+                            finalized: false,
+                            finalized_is_dynamic: false,
+                        }),
+                        patch_flags: Default::default(),
+                        span: DUMMY_SP,
+                    }),
+                    v_slot: Some(VSlotDirective {
+                        slot_name: Some(StrOrExpr::Expr(js("item.name"))),
+                        value: None,
+                    }),
+                    ..Default::default()
+                })),
+            },
+            children: vec![Node::Interpolation(Interpolation {
+                value: js("item.value"),
+                template_scope: 0,
+                patch_flag: false,
+                span: DUMMY_SP,
+            })],
+            template_scope: 0,
+            tag_type: ElementKind::Template,
+            patch_hints: PatchHints::default(),
+            span: DUMMY_SP,
+            codegen_node: None,
+        })
     }
 }

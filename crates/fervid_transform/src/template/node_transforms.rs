@@ -62,14 +62,14 @@ impl Default for NodeTransformsProvider {
 impl NodeTransforms for BaseNodeTransform {
     fn pre_transform_children(
         &self,
-        _ctx: &mut TransformSfcContext,
+        ctx: &mut TransformSfcContext,
         children: &mut Vec<Node>,
         element_kind: ElementKind,
     ) {
         // Whitespace handling happens during parser/transform normalization in Vue.
         transform_whitespace(children, element_kind);
         // transformIf,
-        transform_if(children);
+        transform_if(ctx, children);
     }
 
     fn pre_transform_node(&self, ctx: &mut TransformSfcContext, node: &mut Node) {

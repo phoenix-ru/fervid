@@ -21,6 +21,8 @@ flags! {
         CreatePropsRestProxy,
         #[strum(serialize = "_createTextVNode")]
         CreateTextVNode,
+        #[strum(serialize = "_createSlots")]
+        CreateSlots,
         #[strum(serialize = "_createVNode")]
         CreateVNode,
         #[strum(serialize = "_defineComponent")]

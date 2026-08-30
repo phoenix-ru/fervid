@@ -13,7 +13,7 @@ use swc_core::{
 
 use crate::CodegenContext;
 
-fn create_for_loop_params(result: &ForParseResult, minimum_len: usize) -> Vec<Pat> {
+pub(crate) fn create_for_loop_params(result: &ForParseResult, minimum_len: usize) -> Vec<Pat> {
     let params_len = if result.index.is_some() {
         3
     } else if result.key.is_some() {

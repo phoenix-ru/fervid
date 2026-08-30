@@ -1,6 +1,8 @@
-use fervid_core::{Conditional, ConditionalNodeSequence, ElementNode, Node};
+use fervid_core::{Conditional, ConditionalNodeSequence, ElementKind, ElementNode, Node};
 
-pub fn transform_if(children: &mut Vec<Node>) {
+use crate::{TransformSfcContext, template::expr_transform::BindingsHelperTransform};
+
+pub fn transform_if(ctx: &mut TransformSfcContext, children: &mut Vec<Node>) {
     // Merge multiple v-if/else-if/else nodes into a ConditionalNodeSequence
     if !children.is_empty() {
         let mut seq: Option<ConditionalNodeSequence> = None;
@@ -41,6 +43,23 @@ pub fn transform_if(children: &mut Vec<Node>) {
                     continue;
                 }
             };
+
+            // `<template v-slot>` structural directives belong to build_slots
+            if is_template_slot_carrier(child_element) {
+                if let Some(directives) = child_element.starting_tag.directives.as_mut() {
+                    if let Some(ref mut v_if_cond) = directives.v_if {
+                        ctx.bindings_helper
+                            .transform_expr(v_if_cond, ctx.current_template_scope);
+                    }
+                    if let Some(ref mut v_else_if_cond) = directives.v_else_if {
+                        ctx.bindings_helper
+                            .transform_expr(v_else_if_cond, ctx.current_template_scope);
+                    }
+                }
+
+                finish_seq!(child);
+                continue;
+            }
 
             let Some(ref mut directives) = child_element.starting_tag.directives else {
                 finish_seq!(child);
@@ -153,4 +172,13 @@ fn optimize_v_if_plus_v_for(mut parent: ElementNode) -> ElementNode {
     };
 
     child
+}
+
+fn is_template_slot_carrier(node: &ElementNode) -> bool {
+    matches!(node.tag_type, ElementKind::Template)
+        && node
+            .starting_tag
+            .directives
+            .as_ref()
+            .is_some_and(|directives| directives.v_slot.is_some())
 }
