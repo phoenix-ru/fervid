@@ -94,7 +94,7 @@ jobs:
         with:
           # Sync with rust-toolchain.toml
           # toolchain: stable
-          toolchain: nightly-2025-10-16
+          toolchain: nightly-2026-07-16
           targets: ${{ matrix.settings.target }}
       - name: Cache cargo
         uses: actions/cache@v5

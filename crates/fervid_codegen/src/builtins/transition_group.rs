@@ -44,18 +44,15 @@ mod tests {
     fn it_generates_empty_transition_group() {
         // <transition-group></transition-group>
         test_out(
-            ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::TransitionGroup),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "transition-group".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![],
+                ElementKind::Builtin(BuiltinType::TransitionGroup),
+            ),
             r#"_createVNode(_TransitionGroup)"#,
         )
     }
@@ -64,9 +61,8 @@ mod tests {
     fn it_generates_transition_group_attrs() {
         // <transition-group foo="bar" :baz="qux"></transition-group>
         test_out(
-            ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::TransitionGroup),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "transition-group".into(),
                     attributes: vec![
                         regular_attribute("foo", "bar"),
@@ -74,11 +70,9 @@ mod tests {
                     ],
                     directives: None,
                 },
-                children: vec![],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![],
+                ElementKind::Builtin(BuiltinType::TransitionGroup),
+            ),
             r#"_createVNode(_TransitionGroup,{foo:"bar",baz:qux})"#,
         )
     }
@@ -87,18 +81,15 @@ mod tests {
     fn it_generates_transition_group_children() {
         // <transition-group>foobar</transition-group>
         test_out(
-            ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::TransitionGroup),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "transition-group".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![Node::Text("foobar".into(), DUMMY_SP)],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![Node::Text("foobar".into(), DUMMY_SP)],
+                ElementKind::Builtin(BuiltinType::TransitionGroup),
+            ),
             r#"_createVNode(_TransitionGroup,null,{default:_withCtx(()=>[_createTextVNode("foobar")]),_:1})"#,
         )
     }
@@ -107,9 +98,8 @@ mod tests {
     fn it_generates_full_transition_group() {
         // <transition-group foo="bar" :baz="qux">foobar</transition-group>
         test_out(
-            ElementNode {
-                kind: ElementKind::Builtin(BuiltinType::TransitionGroup),
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "transition-group".into(),
                     attributes: vec![
                         regular_attribute("foo", "bar"),
@@ -117,11 +107,9 @@ mod tests {
                     ],
                     directives: None,
                 },
-                children: vec![Node::Text("foobar".into(), DUMMY_SP)],
-                template_scope: 0,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![Node::Text("foobar".into(), DUMMY_SP)],
+                ElementKind::Builtin(BuiltinType::TransitionGroup),
+            ),
             r#"_createVNode(_TransitionGroup,{foo:"bar",baz:qux},{default:_withCtx(()=>[_createTextVNode("foobar")]),_:1})"#,
         )
     }

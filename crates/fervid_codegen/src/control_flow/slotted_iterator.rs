@@ -206,9 +206,10 @@ mod tests {
             },
             children: vec![Node::Text("This is an h1".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -225,9 +226,10 @@ mod tests {
             },
             children: vec![],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -249,9 +251,10 @@ mod tests {
             },
             children: vec![Node::Text("This is a component".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -265,9 +268,10 @@ mod tests {
             },
             children: vec![Node::Text("This is just a template".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -287,9 +291,10 @@ mod tests {
             },
             children: vec![Node::Text("This is a default template".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -309,9 +314,10 @@ mod tests {
             },
             children: vec![Node::Text("This is a named template".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 }

@@ -12,12 +12,12 @@ const EXT_CANDIDATES: &[&str] = &[
 /// Resolve all globals' filesystem paths and cache them into `resolved`.
 pub async fn resolve_global_paths(workspace_root: &Path, globals: &mut NuxtGlobals) {
     // Imports
-    for (_name, target) in globals.imports.iter_mut() {
+    for target in globals.imports.values_mut() {
         resolve_one_target(workspace_root, target).await;
     }
 
     // Components
-    for (_name, target) in globals.components.iter_mut() {
+    for target in globals.components.values_mut() {
         resolve_one_target(workspace_root, target).await;
     }
 }

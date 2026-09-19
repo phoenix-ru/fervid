@@ -1,120 +1,22 @@
-use fervid_core::{IntoIdent, VueImports, fervid_atom};
-use swc_core::{
-    common::DUMMY_SP,
-    ecma::ast::{
-        AssignExpr, AssignOp, AssignTarget, BinExpr, BinaryOp, CallExpr, Callee, ComputedPropName,
-        Expr, ExprOrSpread, Lit, MemberExpr, Number, ParenExpr, SeqExpr, SimpleAssignTarget,
-    },
-};
+use fervid_core::{CacheMarker, CacheMarkers};
+use swc_core::ecma::ast::Expr;
 
 use crate::CodegenContext;
 
 impl CodegenContext {
-    /// Generates the complex cache structure for `v-once`.
-    ///
-    /// ## Example
-    /// In:
-    /// `<div v-once></div>`
-    ///
-    /// Out:
-    /// ```js
-    /// _cache[0] || (
-    ///   _setBlockTracking(-1),
-    ///   _cache[0] = _createElementVNode("div"),
-    ///   _setBlockTracking(1),
-    ///   _cache[0]
-    /// )
-    /// ```
-    pub fn generate_v_once(&mut self, item_render_expr: Box<Expr>) -> Expr {
-        // Prepare
+    /// Generates a tracked vnode cache entry for `v-once`
+    pub fn generate_v_once(&mut self, item_render_expr: Expr) -> Expr {
         let cache_idx = self.allocate_next_cache_entry();
-        let cache_ident = fervid_atom!("_cache");
-        let set_block_tracking_ident = Box::new(Expr::Ident(
-            self.get_and_add_import_ident(VueImports::SetBlockTracking)
-                .into_ident(),
-        ));
+        let markers = CacheMarkers::from(CacheMarker::NeedPauseTracking | CacheMarker::InVOnce);
 
-        // `_setBlockTracking($value)`
-        macro_rules! set_block_tracking {
-            ($value: literal, $ident: expr) => {
-                Box::new(Expr::Call(CallExpr {
-                    span: DUMMY_SP,
-                    ctxt: Default::default(),
-                    callee: Callee::Expr($ident),
-                    args: vec![ExprOrSpread {
-                        spread: None,
-                        expr: Box::new(Expr::Lit(Lit::Num(Number {
-                            span: DUMMY_SP,
-                            value: $value,
-                            raw: None,
-                        }))),
-                    }],
-                    type_args: None,
-                }))
-            };
-        }
-
-        // 1. `_cache[cache_idx]`
-        let cache_member_expr = MemberExpr {
-            span: DUMMY_SP,
-            obj: Box::new(Expr::Ident(cache_ident.into_ident())),
-            prop: swc_core::ecma::ast::MemberProp::Computed(ComputedPropName {
-                span: DUMMY_SP,
-                expr: Box::new(Expr::Lit(Lit::Num(Number {
-                    span: DUMMY_SP,
-                    value: cache_idx as f64,
-                    raw: None,
-                }))),
-            }),
-        };
-        let cache_expr = Box::new(Expr::Member(cache_member_expr.to_owned()));
-
-        // 2. `_setBlockTracking(-1)`
-        let decrement_tracking = set_block_tracking!(-1.0, set_block_tracking_ident.to_owned());
-
-        // 3. `_cache[idx] = item_render_expr`
-        let cache_assign = Box::new(Expr::Assign(AssignExpr {
-            span: DUMMY_SP,
-            op: AssignOp::Assign,
-            left: AssignTarget::Simple(SimpleAssignTarget::Member(cache_member_expr)),
-            right: item_render_expr,
-        }));
-
-        // 4. `_setBlockTracking(1)`
-        let increment_tracking = set_block_tracking!(1.0, set_block_tracking_ident);
-
-        // 5. Combine to
-        // (
-        //   _setBlockTracking(-1),
-        //   _cache[0] = _createElementVNode("div"),
-        //   _setBlockTracking(1),
-        //   _cache[0]
-        // )
-        let parens_expr = Box::new(Expr::Paren(ParenExpr {
-            span: DUMMY_SP,
-            expr: Box::new(Expr::Seq(SeqExpr {
-                span: DUMMY_SP,
-                exprs: vec![
-                    decrement_tracking,
-                    cache_assign,
-                    increment_tracking,
-                    cache_expr.to_owned(),
-                ],
-            })),
-        }));
-
-        // 6. Combine to the final form
-        Expr::Bin(BinExpr {
-            span: DUMMY_SP,
-            op: BinaryOp::LogicalOr,
-            left: cache_expr,
-            right: parens_expr,
-        })
+        self.wrap_cache_expression(cache_idx, item_render_expr, markers)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use fervid_core::{CacheMarker, CacheMarkers};
+
     use crate::test_utils::js;
 
     use super::*;
@@ -127,17 +29,31 @@ mod tests {
         let item_render_expr = js("_createElementVNode(\"div\")");
 
         // First `v-once`
-        let v_once_expr = ctx.generate_v_once(item_render_expr.to_owned());
+        let v_once_expr = ctx.generate_v_once(*item_render_expr.to_owned());
         assert_eq!(
             crate::test_utils::to_str(v_once_expr),
-            "_cache[0]||(_setBlockTracking(-1),_cache[0]=_createElementVNode(\"div\"),_setBlockTracking(1),_cache[0])"
+            "_cache[0]||(_setBlockTracking(-1,true),(_cache[0]=_createElementVNode(\"div\")).cacheIndex=0,_setBlockTracking(1),_cache[0])"
         );
 
         // Second `v-once` with increased cache index
-        let v_once_expr = ctx.generate_v_once(item_render_expr);
+        let v_once_expr = ctx.generate_v_once(*item_render_expr);
         assert_eq!(
             crate::test_utils::to_str(v_once_expr),
-            "_cache[1]||(_setBlockTracking(-1),_cache[1]=_createElementVNode(\"div\"),_setBlockTracking(1),_cache[1])"
+            "_cache[1]||(_setBlockTracking(-1,true),(_cache[1]=_createElementVNode(\"div\")).cacheIndex=1,_setBlockTracking(1),_cache[1])"
+        );
+    }
+
+    #[test]
+    fn it_generates_spread_array_cache() {
+        let mut ctx = CodegenContext::default();
+        let index = ctx.allocate_next_cache_entry();
+        let markers = CacheMarkers::from(CacheMarker::NeedArraySpread);
+
+        let cache = ctx.wrap_cache_expression(index, *js("items"), markers);
+
+        assert_eq!(
+            crate::test_utils::to_str(cache),
+            "[...(_cache[0]||(_cache[0]=items))]"
         );
     }
 }

@@ -222,11 +222,12 @@ h1 { color: red }
 
         assert_eq!(3, template.roots.len());
 
-        let Node::Element(div) = &template.roots[1] else {
+        if let Node::Element(div) = &template.roots[1] {
+            assert_eq!(14, div.span.lo.0);
+            assert_eq!(14 + content.trim().len() as u32, div.span.hi.0);
+        } else {
             panic!("Expected element");
-        };
-        assert_eq!(14, div.span.lo.0);
-        assert_eq!(14 + content.trim().len() as u32, div.span.hi.0);
+        }
     }
 
     #[test]
