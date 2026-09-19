@@ -65,10 +65,10 @@ pub fn transform_v_model(
                     AttributeOrBinding::RegularAttribute { name, value, span }
                         if name == "type" =>
                     {
-                        match value.as_str() {
-                            "radio" => directive_to_use = VueImports::VModelRadio,
-                            "checkbox" => directive_to_use = VueImports::VModelCheckbox,
-                            "file" => {
+                        match value.as_ref().map(|v| v.as_str()) {
+                            Some("radio") => directive_to_use = VueImports::VModelRadio,
+                            Some("checkbox") => directive_to_use = VueImports::VModelCheckbox,
+                            Some("file") => {
                                 is_invalid_type = true;
                                 ctx.errors
                                     .push(TransformError::TemplateError(TemplateError {
@@ -192,7 +192,7 @@ mod tests {
     fn regular(name: &str, value: &str) -> AttributeOrBinding {
         AttributeOrBinding::RegularAttribute {
             name: name.into(),
-            value: value.into(),
+            value: Some(value.into()),
             span: DUMMY_SP,
         }
     }

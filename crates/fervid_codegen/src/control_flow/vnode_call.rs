@@ -16,6 +16,7 @@ use swc_core::{
 
 use crate::context::CodegenContext;
 
+#[allow(dead_code)]
 impl CodegenContext {
     pub(crate) fn generate_element_codegen_node(
         &mut self,
@@ -26,6 +27,9 @@ impl CodegenContext {
         let value = match &codegen_node.value {
             ElementCodegenValue::VNodeCall(vnode) => {
                 self.generate_vnode_call(element, vnode, wrap_in_block)
+            }
+            ElementCodegenValue::SlotOutletCall(slot_outlet) => {
+                self.generate_slot_outlet_call(element, slot_outlet)
             }
         };
 
@@ -154,7 +158,7 @@ impl CodegenContext {
         }
     }
 
-    fn generate_props_expression(&mut self, props: &PropsExpression) -> Expr {
+    pub(crate) fn generate_props_expression(&mut self, props: &PropsExpression) -> Expr {
         match props {
             PropsExpression::ObjectExpression(object) => self.generate_object_expression(object),
             PropsExpression::CallExpression(call) => self.generate_call_expression(call),
@@ -162,7 +166,7 @@ impl CodegenContext {
         }
     }
 
-    fn generate_vnode_children(
+    pub(crate) fn generate_vnode_children(
         &mut self,
         element_node: &ElementNode,
         children: &VNodeChildren,

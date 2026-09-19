@@ -36,7 +36,7 @@ pub fn find_prop<'a>(
                 if dynamic_only {
                     continue;
                 }
-                if attr_name == name && (allow_empty || !value.is_empty()) {
+                if attr_name == name && (allow_empty || value.is_some()) {
                     return Some(attr_or_binding);
                 }
             }

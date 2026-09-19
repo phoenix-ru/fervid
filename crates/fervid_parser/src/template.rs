@@ -390,7 +390,7 @@ mod tests {
         assert_eq!(1, first_div.starting_tag.attributes.len());
         assert!(matches!(
             first_div.starting_tag.attributes.first(),
-            Some(AttributeOrBinding::RegularAttribute { name, value, .. }) if name == ":parse-this" && value == "false"
+            Some(AttributeOrBinding::RegularAttribute { name, value: Some(value), .. }) if name == ":parse-this" && value == "false"
         ));
 
         // Check the <h1>
@@ -415,11 +415,11 @@ mod tests {
         let input_attr_1 = input.starting_tag.attributes.first().unwrap();
         let input_attr_2 = input.starting_tag.attributes.get(1).unwrap();
         assert!(
-            matches!(input_attr_1, AttributeOrBinding::RegularAttribute { name, value, .. } if name == "v-model" && value == "msg")
+            matches!(input_attr_1, AttributeOrBinding::RegularAttribute { name, value: Some(value), .. } if name == "v-model" && value == "msg")
         );
         assert!(
             // Second v-pre should not be recognized as a directive, because it is inside the first
-            matches!(input_attr_2, AttributeOrBinding::RegularAttribute { name, value, .. } if name == "v-pre" && value.is_empty())
+            matches!(input_attr_2, AttributeOrBinding::RegularAttribute { name, value: None, .. } if name == "v-pre")
         );
     }
 

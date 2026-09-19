@@ -606,7 +606,7 @@ impl SfcParser<'_, '_, '_> {
 pub fn create_regular_attribute(raw_attribute: Attribute) -> AttributeOrBinding {
     AttributeOrBinding::RegularAttribute {
         name: raw_attribute.name,
-        value: raw_attribute.value.unwrap_or_default(),
+        value: raw_attribute.value,
         span: raw_attribute.span,
     }
 }

@@ -164,6 +164,21 @@ pub struct VNodeCall {
     pub is_component: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct SlotOutletCall {
+    pub name: StrOrExpr,
+    pub props: Option<PropsExpression>,
+    pub fallback: SlotOutletFallback,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub enum SlotOutletFallback {
+    #[default]
+    None,
+    UseChildren,
+}
+
 flagset::flags! {
     pub enum CacheMarker: u8 {
         NeedPauseTracking = 1 << 0,
@@ -183,6 +198,7 @@ pub struct ElementCodegenNode {
 #[derive(Debug, Clone)]
 pub enum ElementCodegenValue {
     VNodeCall(Box<VNodeCall>),
+    SlotOutletCall(Box<SlotOutletCall>),
 }
 
 /// Outer Fragment VNodeCall generated for v-for

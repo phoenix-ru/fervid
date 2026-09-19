@@ -86,7 +86,7 @@ fn parse_vanilla_attr<'i>(
         Err(_) => {
             out.push(AttributeOrBinding::RegularAttribute {
                 name: attr_name.into(),
-                value: attr_name.into(),
+                value: Some(attr_name.into()),
                 span: DUMMY_SP,
             });
             Ok((input, ()))
@@ -100,7 +100,7 @@ fn parse_vanilla_attr<'i>(
 
             out.push(AttributeOrBinding::RegularAttribute {
                 name: attr_name.into(),
-                value: attr_value.into(),
+                value: Some(attr_value.into()),
                 span: DUMMY_SP,
             });
 

@@ -5,10 +5,10 @@ use fervid_core::{
     CustomDirectiveBinding, ElementCodegenNode, ElementCodegenValue, ElementKind, ElementNode,
     ExpressionNode, ExpressionPropNameNode, FervidAtom, IntoIdent, JsChildNode, Node, PatchFlags,
     PatchHints, Property, PropsExpression, SimpleExpressionNode, SimpleExpressionPropNameNode,
-    StartingTag, StrOrExpr, VCustomDirective, VNodeCall, VNodeCallTag, VNodeChildren,
-    VueDirectives, VueImports, create_array_expression, create_call_expression,
-    create_object_expression, create_object_property, create_simple_expression_bool,
-    create_simple_expression_propname, create_simple_expression_str, fervid_atom, str_to_propname,
+    StartingTag, StrOrExpr, VCustomDirective, VNodeCall, VNodeCallTag, VNodeChildren, VueImports,
+    create_array_expression, create_call_expression, create_object_expression,
+    create_object_property, create_simple_expression_bool, create_simple_expression_propname,
+    create_simple_expression_str, fervid_atom, str_to_propname,
 };
 use flagset::FlagSet;
 use fxhash::FxHashMap;
@@ -36,11 +36,6 @@ use crate::{
         },
     },
 };
-
-pub struct Props<'a> {
-    pub attributes: &'a [AttributeOrBinding],
-    pub directives: Option<&'a VueDirectives>,
-}
 
 pub enum RuntimeDirective {
     Builtin(BuiltinRuntimeDirective),
@@ -139,7 +134,7 @@ pub fn post_transform_element_node(
             node,
             ctx,
             state,
-            None,
+            &[],
             is_component,
             is_dynamic_component,
             false,
@@ -284,9 +279,13 @@ fn resolve_component_type(
         if is_explicit_dynamic {
             let mut exp: Option<ExpressionNode> = None;
             if let AttributeOrBinding::RegularAttribute { value, span, .. } = is_prop {
-                exp = Some(ExpressionNode::SimpleExpression(
-                    create_simple_expression_str(value.clone(), true, *span),
-                ));
+                exp = value.as_ref().map(|value| {
+                    ExpressionNode::SimpleExpression(create_simple_expression_str(
+                        value.clone(),
+                        true,
+                        *span,
+                    ))
+                });
             } else if let AttributeOrBinding::VBind(v_bind_directive) = is_prop {
                 // Note: we assume this is a simple expression while we don't have this information
                 exp = Some(ExpressionNode::SimpleExpression(SimpleExpressionNode {
@@ -307,7 +306,9 @@ fn resolve_component_type(
                     DUMMY_SP,
                 ));
             }
-        } else if let AttributeOrBinding::RegularAttribute { value, .. } = is_prop
+        } else if let AttributeOrBinding::RegularAttribute {
+            value: Some(value), ..
+        } = is_prop
             && let Some(value_without_prefix) = value.strip_prefix("vue:")
         {
             // <button is="vue:xxx">
@@ -459,7 +460,7 @@ pub fn build_props(
     node: &mut ElementNode,
     ctx: &mut TransformSfcContext,
     state: &mut TransformNodeState,
-    props: Option<Props>,
+    skip_attribute_indices: &[usize],
     is_component: bool,
     is_dynamic_component: bool,
     ssr: bool,
@@ -502,11 +503,6 @@ pub fn build_props(
         };
     }
 
-    let props = props.unwrap_or_else(|| Props {
-        attributes: &node.starting_tag.attributes,
-        directives: node.starting_tag.directives.as_deref(),
-    });
-
     // Cloning transforms is fine here due to the structure being optimized for it
     let transforms = ctx.directive_transforms.clone();
 
@@ -540,7 +536,14 @@ pub fn build_props(
     }
 
     // Static attributes, `v-bind` and `v-on`
-    for prop in props.attributes {
+    for (attr_index, prop) in node.starting_tag.attributes.iter().enumerate() {
+        // Skip the attribute if the option was provided.
+        // This normally applies to `name` attribute for slots which is generated
+        // not as a regular attribute.
+        if skip_attribute_indices.contains(&attr_index) {
+            continue;
+        }
+
         match prop {
             AttributeOrBinding::RegularAttribute { name, value, span } => {
                 let mut is_static = true;
@@ -552,18 +555,21 @@ pub fn build_props(
                     // TODO: Use `binding_metadata` instead
                     // Get the binding type regardless of template generation mode to mark the ref as "used".
                     // This is the importUsageCheck behavior of the official compiler
-                    let binding_type = if value.is_empty() {
-                        BindingTypes::Unresolved
-                    } else {
+                    let binding_type = if let Some(value) = value
+                        && !value.is_empty()
+                    {
                         ctx.bindings_helper
                             .get_var_binding_type(scope_to_use, value)
+                    } else {
+                        BindingTypes::Unresolved
                     };
 
                     // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L506
                     // In inline mode there is no setupState object, so we can't use string
                     // keys to set the ref. Instead, we need to transform it to pass the
                     // actual ref.
-                    if !value.is_empty()
+                    if let Some(value) = value
+                        && !value.is_empty()
                         && ctx.bindings_helper.template_generation_mode.is_inline()
                         && matches!(
                             binding_type,
@@ -591,7 +597,8 @@ pub fn build_props(
 
                 // skip is on <component>, or is="vue:xxx"
                 if name == "is"
-                    && (is_component_tag(&node.starting_tag) || value.starts_with("vue:"))
+                    && (is_component_tag(&node.starting_tag)
+                        || value.as_ref().is_some_and(|v| v.starts_with("vue:")))
                 {
                     continue;
                 }
@@ -602,7 +609,12 @@ pub fn build_props(
 
                 properties.push(create_object_property(
                     create_simple_expression_propname(name.to_owned(), true, name_span).into(),
-                    create_simple_expression_str(value.to_owned(), is_static, value_span).into(),
+                    create_simple_expression_str(
+                        value.to_owned().unwrap_or_default(),
+                        is_static,
+                        value_span,
+                    )
+                    .into(),
                 ));
             }
 
@@ -754,7 +766,7 @@ pub fn build_props(
     }
 
     // Directives
-    if let Some(directives) = props.directives {
+    if let Some(directives) = node.starting_tag.directives.as_ref() {
         // Skip v-once/v-memo - they are handled by dedicated transforms.
         // Skip v-is
 
@@ -1367,15 +1379,7 @@ mod tests {
         let mut ctx = TransformSfcContext::anonymous();
         let mut state = TransformNodeState::default();
 
-        let result = build_props(
-            &mut element,
-            &mut ctx,
-            &mut state,
-            None,
-            false,
-            false,
-            false,
-        );
+        let result = build_props(&mut element, &mut ctx, &mut state, &[], false, false, false);
 
         let Some(PropsExpression::CallExpression(call)) = result.props else {
             panic!("Expected normalized props call")

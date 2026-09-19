@@ -328,12 +328,12 @@ impl CodegenContext {
                         AttributeOrBinding::RegularAttribute { name, value, .. }
                             if name == "type" =>
                         {
-                            match value.as_ref() {
-                                "checkbox" => {
+                            match value.as_ref().map(|v| v.as_str()) {
+                                Some("checkbox") => {
                                     return self
                                         .get_and_add_import_ident(VueImports::VModelCheckbox);
                                 }
-                                "radio" => {
+                                Some("radio") => {
                                     return self.get_and_add_import_ident(VueImports::VModelRadio);
                                 }
                                 _ => return self.get_and_add_import_ident(VueImports::VModelText),

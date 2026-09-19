@@ -70,7 +70,9 @@ pub fn post_transform_for(
     let Some(codegen_node) = element.codegen_node.as_mut() else {
         return;
     };
-    let ElementCodegenValue::VNodeCall(vnode_call) = &mut codegen_node.value;
+    let ElementCodegenValue::VNodeCall(vnode_call) = &mut codegen_node.value else {
+        return;
+    };
 
     let should_use_block = !is_stable || vnode_call.is_block_required;
     vnode_call.is_block = should_use_block;
@@ -215,12 +217,16 @@ fn find_for_key(node: &fervid_core::ElementNode) -> (bool, Option<Box<Expr>>) {
     for attribute in &node.starting_tag.attributes {
         match attribute {
             AttributeOrBinding::RegularAttribute { name, value, span } if name == "key" => {
-                let key = (!value.is_empty()).then(|| {
-                    Box::new(Expr::Lit(Lit::Str(Str {
-                        span: *span,
-                        value: value.clone(),
-                        raw: None,
-                    })))
+                let key = value.as_ref().and_then(|value| {
+                    if value.is_empty() {
+                        None
+                    } else {
+                        Some(Box::new(Expr::Lit(Lit::Str(Str {
+                            span: *span,
+                            value: value.clone(),
+                            raw: None,
+                        }))))
+                    }
                 });
                 return (true, key);
             }

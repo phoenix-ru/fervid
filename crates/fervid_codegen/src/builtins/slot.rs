@@ -65,7 +65,7 @@ impl CodegenContext {
             match name_attr {
                 AttributeOrBinding::RegularAttribute { value, .. } => Expr::Lit(Lit::Str(Str {
                     span,
-                    value: value.to_owned(),
+                    value: value.to_owned().unwrap_or_default(),
                     raw: None,
                 })),
                 AttributeOrBinding::VBind(v_bind) => (*v_bind.value).to_owned(),

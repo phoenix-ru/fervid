@@ -1,7 +1,7 @@
 use swc_core::{
     common::{DUMMY_SP, Span, Spanned},
     ecma::{
-        ast::{Expr, Ident, Pat, Str},
+        ast::{Expr, Ident, Lit, Pat, Str},
         atoms::Atom,
     },
 };
@@ -232,7 +232,7 @@ pub enum AttributeOrBinding {
     /// `RegularAttribute` is a plain HTML attribute without any associated logic
     RegularAttribute {
         name: FervidAtom,
-        value: FervidAtom,
+        value: Option<FervidAtom>,
         span: Span,
     },
     /// `v-bind` directive
@@ -265,6 +265,15 @@ impl From<FervidAtom> for StrOrExpr {
             span: DUMMY_SP,
             raw: None,
         })
+    }
+}
+
+impl From<StrOrExpr> for Expr {
+    fn from(value: StrOrExpr) -> Self {
+        match value {
+            StrOrExpr::Str(s) => Expr::Lit(Lit::Str(s)),
+            StrOrExpr::Expr(expr) => *expr,
+        }
     }
 }
 

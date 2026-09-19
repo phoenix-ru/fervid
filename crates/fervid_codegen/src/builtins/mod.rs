@@ -7,6 +7,7 @@ mod common;
 mod component;
 mod keepalive;
 mod slot;
+mod slot_outlet;
 mod suspense;
 mod teleport;
 mod transition;

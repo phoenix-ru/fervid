@@ -508,19 +508,22 @@ impl TemplateVisitor<'_> {
 
                     // Get the binding type regardless of template generation mode to mark the ref as "used".
                     // This is the importUsageCheck behavior of the official compiler
-                    let binding_type = if value.is_empty() {
-                        BindingTypes::Unresolved
-                    } else {
+                    let binding_type = if let Some(value) = value
+                        && !value.is_empty()
+                    {
                         self.ctx
                             .bindings_helper
                             .get_var_binding_type(scope_to_use, value)
+                    } else {
+                        BindingTypes::Unresolved
                     };
 
                     // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L506
                     // In inline mode there is no setupState object, so we can't use string
                     // keys to set the ref. Instead, we need to transform it to pass the
                     // actual ref.
-                    if !value.is_empty()
+                    if let Some(value) = value
+                        && !value.is_empty()
                         && matches!(
                             self.ctx.bindings_helper.template_generation_mode,
                             TemplateGenerationMode::Inline
@@ -678,7 +681,7 @@ impl TemplateVisitor<'_> {
                 .attributes
                 .push(AttributeOrBinding::RegularAttribute {
                     name: fervid_atom!("ref_key"),
-                    value: ref_key,
+                    value: Some(ref_key),
                     span: DUMMY_SP,
                 });
         }
@@ -1230,7 +1233,10 @@ mod tests {
             .codegen_node
             .as_deref()
             .expect("directive-only element should have a VNodeCall")
-            .value;
+            .value
+        else {
+            panic!("directive-only element should have a VNodeCall")
+        };
         assert_eq!(
             1,
             vnode_call
@@ -1525,7 +1531,7 @@ mod tests {
                 }),
                 AttributeOrBinding::RegularAttribute {
                     name: fervid_atom!("ref"),
-                    value: fervid_atom!("items"),
+                    value: Some(fervid_atom!("items")),
                     span: DUMMY_SP,
                 },
             ],
@@ -1967,7 +1973,9 @@ mod tests {
         let Some(codegen_node) = element.codegen_node.as_deref() else {
             panic!("Expected v-for child VNodeCall")
         };
-        let ElementCodegenValue::VNodeCall(vnode_call) = &codegen_node.value;
+        let ElementCodegenValue::VNodeCall(vnode_call) = &codegen_node.value else {
+            panic!("Expected v-for child VNodeCall")
+        };
         vnode_call
     }
 
@@ -1977,7 +1985,9 @@ mod tests {
         let Some(codegen_node) = element.codegen_node.as_deref() else {
             panic!("Expected element VNodeCall")
         };
-        let ElementCodegenValue::VNodeCall(vnode_call) = &codegen_node.value;
+        let ElementCodegenValue::VNodeCall(vnode_call) = &codegen_node.value else {
+            panic!("Expected element VNodeCall")
+        };
         (element, vnode_call)
     }
 

@@ -608,6 +608,10 @@ fn inject_key(ctx: &mut CodegenContext, expr: &mut Expr, key: Expr, span: Span) 
                 return;
             }
 
+            // TODO: Fix inject_key incorrectly injecting at position 1
+            // for renderSlot which needs to be position 5.
+            // Check the actual callee.
+
             let props = &mut call.args[1].expr;
             match props.as_mut() {
                 Expr::Lit(Lit::Null(_)) => **props = key_object,
@@ -836,7 +840,7 @@ mod tests {
             }),
             fervid_core::AttributeOrBinding::RegularAttribute {
                 name: fervid_atom!("ref"),
-                value: fervid_atom!("items"),
+                value: Some(fervid_atom!("items")),
                 span: DUMMY_SP,
             },
         ];

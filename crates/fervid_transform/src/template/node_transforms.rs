@@ -134,7 +134,7 @@ impl NodeTransforms for BaseNodeTransform {
         // prefixIdentifiers ? transformExpression,
         pre_transform_expression(ctx, &state, node);
         // transformSlotOutlet,
-        pre_transform_slot_outlet(ctx, node);
+        super::core::transform_slot_outlet::pre_transform_slot_outlet(ctx, &mut state, node);
 
         // transformElement - no pre hook
 
@@ -162,8 +162,8 @@ impl NodeTransforms for BaseNodeTransform {
         // transformElement
         post_transform_element_node(node, ctx, state);
 
-        // transformSlotOutlet,
-        post_transform_slot_outlet(ctx, node);
+        // transformSlotOutlet - no post hook
+
         // prefixIdentifiers ? transformExpression,
         post_transform_expression(ctx, node);
         // prefixIdentifiers ? trackVForSlotScopes,
@@ -187,9 +187,6 @@ fn pre_transform_memo(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 fn post_transform_memo(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
 fn post_transform_expression(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
-
-fn pre_transform_slot_outlet(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
-fn post_transform_slot_outlet(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
 fn pre_transform_text(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 fn post_transform_text(_ctx: &mut TransformSfcContext, _node: &mut Node) {}

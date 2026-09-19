@@ -140,6 +140,8 @@ pub enum TemplateErrorKind {
     VSlotDuplicateSlotNames,
     /// Extraneous children found when component already has explicitly named default slot. These children will be ignored.
     VSlotExtraneousDefaultSlotChildren,
+    /// Unexpected custom directive on <slot> outlet
+    VSlotUnexpectedDirectiveOnSlotOutlet,
     /// v-slot can only be used on components or <template> tags.
     VSlotMisplaced,
     /// v-text will override element children.
