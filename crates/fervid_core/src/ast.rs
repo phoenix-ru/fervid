@@ -169,6 +169,7 @@ pub struct SlotOutletCall {
     pub name: StrOrExpr,
     pub props: Option<PropsExpression>,
     pub fallback: SlotOutletFallback,
+    pub no_slotted: bool,
     pub span: Span,
 }
 

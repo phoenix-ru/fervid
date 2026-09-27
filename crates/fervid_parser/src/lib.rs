@@ -347,13 +347,34 @@ h1 { color: red }
 
     #[test]
     fn slotted_detection() {
-        // TODO Implement :slotted and ::v-slotted detection
-        let _descriptor1 = parse("<template>hi</template>");
-        let _descriptor2 = parse("<template>hi</template><style>h1{color:red;}</style>");
-        let _descriptor3 =
-            parse("<template>hi</template><style scoped>:slotted(h1){color:red;}</style>");
-        let _descriptor4 =
-            parse("<template>hi</template><style scoped>::v-slotted(h1){color:red;}</style>");
+        macro_rules! assert_slotted {
+            ($content: literal, $expected: literal) => {{
+                let descriptor = parse($content);
+                assert_eq!(descriptor.slotted, $expected);
+            }};
+        }
+
+        assert_slotted!("<template>hi</template>", false);
+        assert_slotted!(
+            "<template>hi</template><style>h1{color:red;}</style>",
+            false
+        );
+        assert_slotted!(
+            "<template>hi</template><style scoped>:slotted(h1){color:red;}</style>",
+            true
+        );
+        assert_slotted!(
+            "<template>hi</template><style scoped>::v-slotted(h1){color:red;}</style>",
+            true
+        );
+        assert_slotted!(
+            "<template>hi</template><style>:slotted(h1){color:red;}</style>",
+            false
+        );
+        assert_slotted!(
+            "<template>hi</template><style>::v-slotted(h1){color:red;}</style>",
+            false
+        );
     }
 
     #[test]

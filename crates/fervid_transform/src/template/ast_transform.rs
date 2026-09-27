@@ -1210,6 +1210,7 @@ mod tests {
                             argument: None,
                             modifiers: vec![],
                             value: None,
+                            span: DUMMY_SP,
                         }],
                         ..Default::default()
                     })),

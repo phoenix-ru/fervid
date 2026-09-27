@@ -424,6 +424,7 @@ fn parse_directive<'i>(
                     argument,
                     modifiers,
                     value: None,
+                    span: DUMMY_SP,
                 });
                 break 'custom;
             };
@@ -436,6 +437,7 @@ fn parse_directive<'i>(
                     argument,
                     modifiers,
                     value: Some(parsed),
+                    span: DUMMY_SP,
                 });
             }
         }

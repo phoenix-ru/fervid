@@ -116,6 +116,8 @@ impl TransformSfcContext {
             bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
         }
 
+        let has_scoped_styles = sfc_descriptor.styles.iter().any(|style| style.is_scoped);
+
         TransformSfcContext {
             filename: options.filename.to_string(),
             // Explicitly not defined as a tiny performance optimization
@@ -137,6 +139,8 @@ impl TransformSfcContext {
             warnings: vec![],
             directive_transforms: options.directive_transforms.to_owned(),
             node_transforms: options.node_transforms.to_owned(),
+            has_scoped_styles,
+            slotted: sfc_descriptor.slotted,
         }
     }
 

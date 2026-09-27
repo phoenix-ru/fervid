@@ -4127,6 +4127,7 @@ mod tests {
             }),
             styles: vec![],
             custom_blocks: vec![],
+            slotted: false,
         };
         let mut ctx = TypeResolveContext::new(
             &sfc_descriptor,

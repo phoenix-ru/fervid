@@ -39,6 +39,8 @@ fn codegen_benchmark(c: &mut Criterion) {
                     node_transforms: Default::default(),
                     cache_handlers: false,
                     in_ssr: false,
+                    has_scoped_styles: false,
+                    slotted: false,
                 };
 
                 fervid_transform::template::transform_and_record_template(template_block, &mut ctx);

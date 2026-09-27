@@ -5,7 +5,7 @@ use fervid_core::{
     ElementNode, FervidAtom, Property, StrOrExpr, VBindDirective, VModelDirective, VOnDirective,
     VueImports,
 };
-use swc_core::ecma::ast::Expr;
+use swc_core::{common::Span, ecma::ast::Expr};
 
 use crate::{
     TransformSfcContext,
@@ -24,6 +24,7 @@ pub struct BuiltinRuntimeDirective {
     pub value: Option<Box<Expr>>,
     pub arg: Option<StrOrExpr>,
     pub modifiers: Vec<FervidAtom>,
+    pub span: Span,
 }
 
 #[enum_dispatch]

@@ -46,6 +46,10 @@ pub struct TransformSfcContext {
     pub node_transforms: NodeTransformsProvider,
     pub cache_handlers: bool,
     pub in_ssr: bool,
+    /// Whether the descriptor contained `<style scoped>`
+    pub has_scoped_styles: bool,
+    /// Whether there was a usage of `:slotted` or `::v-slotted` inside a scoped style
+    pub slotted: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -336,6 +340,8 @@ impl TransformSfcContext {
             warnings: vec![],
             directive_transforms: Default::default(),
             node_transforms: Default::default(),
+            has_scoped_styles: false,
+            slotted: false,
         }
     }
 }

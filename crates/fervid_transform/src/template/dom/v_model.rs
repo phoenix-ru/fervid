@@ -2,7 +2,7 @@ use fervid_core::{
     AttributeOrBinding, ElementKind, ElementNode, ExpressionPropNameNode, StrOrExpr,
     VBindDirective, VModelDirective, VueImports,
 };
-use swc_core::common::Spanned;
+use swc_core::common::{DUMMY_SP, Spanned};
 
 use crate::{
     TransformSfcContext,
@@ -55,6 +55,7 @@ pub fn transform_v_model(
     if matches!(tag, "input" | "textarea" | "select") || is_custom_element {
         let mut directive_to_use = VueImports::VModelText;
         let mut is_invalid_type = false;
+        let mut runtime_directive_span = DUMMY_SP;
 
         if tag == "input" || is_custom_element {
             let mut found = false;
@@ -84,15 +85,18 @@ pub fn transform_v_model(
                             _ => {}
                         }
                         found = true;
+                        runtime_directive_span = *span;
                         break;
                     }
 
                     // :type="foo"
                     AttributeOrBinding::VBind(VBindDirective {
                         argument: Some(StrOrExpr::Str(s)),
+                        span,
                         ..
                     }) if s.value == "type" => {
                         found = true;
+                        runtime_directive_span = *span;
                         directive_to_use = VueImports::VModelDynamic;
                         break;
                     }
@@ -101,9 +105,11 @@ pub fn transform_v_model(
                     // Element has bindings with dynamic keys, which can possibly contain "type".
                     AttributeOrBinding::VBind(VBindDirective {
                         argument: None | Some(StrOrExpr::Expr(_)),
+                        span,
                         ..
                     }) => {
                         found = true;
+                        runtime_directive_span = *span;
                         directive_to_use = VueImports::VModelDynamic;
                         // Don't break here and try to find a narrower match
                     }
@@ -130,6 +136,7 @@ pub fn transform_v_model(
                 value: Some(transformed_value),
                 arg: argument,
                 modifiers: v_model.modifiers.to_owned(),
+                span: runtime_directive_span,
             });
         }
     } else {

@@ -1,5 +1,5 @@
 use fervid_core::VueImports;
-use swc_core::ecma::ast::Expr;
+use swc_core::{common::Spanned, ecma::ast::Expr};
 
 use crate::{
     TransformSfcContext,
@@ -16,6 +16,8 @@ pub fn transform_v_show(
             value: Some(Box::new(v_show.to_owned())),
             arg: None,
             modifiers: vec![],
+            // TODO Add spans to simple directives and use directive span here
+            span: v_show.span(),
         }),
         props: vec![],
         remove_children: false,

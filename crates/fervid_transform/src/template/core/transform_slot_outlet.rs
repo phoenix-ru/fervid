@@ -3,14 +3,13 @@ use fervid_core::{
     ElementNode, FervidAtom, Node, PropsExpression, SlotOutletCall, StrOrExpr, fervid_atom,
 };
 use smallvec::SmallVec;
-use swc_core::common::DUMMY_SP;
 
 use crate::{
     TransformSfcContext,
     error::{TemplateError, TemplateErrorKind, TransformError},
     template::{
         node_transforms::TransformNodeState,
-        transform_element::build_props,
+        transform_element::{RuntimeDirective, build_props},
         utils::{is_static_arg_of, to_camel_case},
     },
 };
@@ -45,6 +44,7 @@ pub fn pre_transform_slot_outlet(
             } else {
                 fervid_core::SlotOutletFallback::UseChildren
             },
+            no_slotted: ctx.has_scoped_styles && !ctx.slotted,
             span: element_node.span,
         })),
         cache: Default::default(),
@@ -118,9 +118,11 @@ pub fn process_slot_outlet(
         false,
     );
 
-    if let Some(_illegal_directive) = build_props_result.directives.first() {
-        // TODO Use span of illegal_directive
-        let span = DUMMY_SP;
+    if let Some(illegal_directive) = build_props_result.directives.first() {
+        let span = match illegal_directive {
+            RuntimeDirective::Builtin(builtin_runtime_directive) => builtin_runtime_directive.span,
+            RuntimeDirective::Custom(custom_directive) => custom_directive.span,
+        };
 
         ctx.errors
             .push(TransformError::TemplateError(TemplateError {

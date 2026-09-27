@@ -577,6 +577,7 @@ impl SfcParser<'_, '_, '_> {
                         argument,
                         modifiers,
                         value: None,
+                        span: raw_attribute.span,
                     });
                     break 'custom;
                 };
@@ -590,6 +591,7 @@ impl SfcParser<'_, '_, '_> {
                             argument,
                             modifiers,
                             value: Some(parsed),
+                            span: raw_attribute.span,
                         });
                     }
                     Result::Err(expr_err) => self.report_error(expr_err),
@@ -1211,7 +1213,8 @@ mod tests {
                 name,
                 argument: None,
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(20) },
             } if name == "custom-dir" && v.is_ident() && modifiers.is_empty()
         ));
         assert!(matches!(
@@ -1220,7 +1223,8 @@ mod tests {
                 name,
                 argument: Some(StrOrExpr::Str(arg)),
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(25) },
             } if name == "custom" && arg.value == "arg-name" && v.is_ident() && modifiers.is_empty()
         ));
         assert!(matches!(
@@ -1229,7 +1233,8 @@ mod tests {
                 name,
                 argument: Some(StrOrExpr::Expr(arg)),
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(27) },
             } if name == "custom" && arg.is_bin() && v.is_ident() && modifiers.is_empty()
         ));
         assert!(matches!(
@@ -1238,7 +1243,8 @@ mod tests {
                 name,
                 argument: Some(StrOrExpr::Expr(arg)),
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(27) },
             } if name == "custom" && arg.is_member() && v.is_ident() && modifiers.is_empty()
         ));
         assert!(matches!(
@@ -1247,7 +1253,8 @@ mod tests {
                 name,
                 argument: Some(StrOrExpr::Expr(arg)),
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(28) },
             } if name == "custom" && arg.is_member() && v.is_ident() && modifiers.is_empty()
         ));
         assert!(matches!(
@@ -1256,7 +1263,8 @@ mod tests {
                 name,
                 argument: Some(StrOrExpr::Str(arg)),
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(26) },
             } if name == "custom" && arg.value == "arg[name]" && v.is_ident() && modifiers.is_empty()
         ));
         assert!(matches!(
@@ -1265,7 +1273,8 @@ mod tests {
                 name,
                 argument: None,
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(26) },
             } if name == "custom" && v.is_ident() && modifiers.len() == 2
         ));
         assert!(matches!(
@@ -1274,7 +1283,8 @@ mod tests {
                 name,
                 argument: None,
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(28) },
             } if name == "custom" && v.is_ident() && modifiers.len() == 2
         ));
         assert!(matches!(
@@ -1283,7 +1293,8 @@ mod tests {
                 name,
                 argument: Some(StrOrExpr::Str(arg)),
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(25) },
             } if name == "custom" && arg.value == "arg" && v.is_ident() && modifiers.len() == 1
         ));
         assert!(matches!(
@@ -1292,7 +1303,8 @@ mod tests {
                 name,
                 argument: Some(StrOrExpr::Expr(arg)),
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(27) },
             } if name == "custom" && arg.is_ident() && v.is_ident() && modifiers.len() == 1
         ));
     }

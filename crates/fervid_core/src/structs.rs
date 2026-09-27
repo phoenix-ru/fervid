@@ -518,6 +518,8 @@ pub struct VCustomDirective {
     pub modifiers: Vec<FervidAtom>,
     /// `loremIpsum` in `v-foo="loremIpsum"`
     pub value: Option<Box<Expr>>,
+    /// Span of the whole directive
+    pub span: Span,
 }
 
 /// The type of a binding (or identifier) which is used to show where this binding came from,
