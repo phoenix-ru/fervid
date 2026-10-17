@@ -69,8 +69,15 @@ fn transform_element_asset_urls(
             continue;
         };
 
-        if (!attrs.contains(name) && !wild_card_attrs.contains(name))
-            || value.trim().is_empty()
+        if !attrs.contains(name) && !wild_card_attrs.contains(name) {
+            continue;
+        }
+
+        let Some(value) = value else {
+            continue;
+        };
+
+        if value.trim().is_empty()
             || is_external_url(value)
             || is_data_url(value)
             || value.starts_with('#')
@@ -184,7 +191,11 @@ fn transform_element_asset_urls(
         };
 
         *attr = AttributeOrBinding::VBind(VBindDirective {
-            argument: Some(StrOrExpr::Str(name.to_owned())),
+            argument: Some(StrOrExpr::Str(Str {
+                span: *span,
+                value: name.to_owned(),
+                raw: None,
+            })),
             value: import_expr,
             is_camel: false,
             is_prop: false,

@@ -37,7 +37,7 @@ mod tests {
             // <test-component v-text="foo + bar" />
             ElementNode {
                 children: vec![],
-                kind: ElementKind::Component,
+                tag_type: ElementKind::Component,
                 starting_tag: StartingTag {
                     tag_name: "test-component".into(),
                     attributes: vec![],
@@ -54,6 +54,7 @@ mod tests {
                 template_scope: 0,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
+                codegen_node: None,
             },
             r#"_createVNode(_component_test_component,{textContent:foo+bar})"#,
             false,
@@ -66,7 +67,7 @@ mod tests {
             // <h1 v-text="foo + bar" />
             ElementNode {
                 children: vec![],
-                kind: ElementKind::Element,
+                tag_type: ElementKind::Element,
                 starting_tag: StartingTag {
                     tag_name: "h1".into(),
                     attributes: vec![],
@@ -78,6 +79,7 @@ mod tests {
                 template_scope: 0,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
+                codegen_node: None,
             },
             r#"_createElementVNode("h1",{textContent:foo+bar})"#,
             false,
@@ -85,7 +87,7 @@ mod tests {
     }
 
     fn test_out(input: ElementNode, expected: &str, wrap_in_block: bool) {
-        let is_component = matches!(input.kind, ElementKind::Component);
+        let is_component = matches!(input.tag_type, ElementKind::Component);
 
         let mut ctx = CodegenContext::default();
         let out = if is_component {

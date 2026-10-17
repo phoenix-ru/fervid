@@ -1,10 +1,14 @@
-use crate::FervidAtom;
+use crate::{BuiltinType, FervidAtom};
 use flagset::{FlagSet, flags};
 use strum_macros::{AsRefStr, EnumString, IntoStaticStr};
 
 flags! {
     #[derive(AsRefStr, EnumString, IntoStaticStr)]
     pub enum VueImports: u64 {
+        #[strum(serialize = "_BaseTransition")]
+        BaseTransition,
+        #[strum(serialize = "_camelize")]
+        Camelize,
         #[strum(serialize = "_createBlock")]
         CreateBlock,
         #[strum(serialize = "_createCommentVNode")]
@@ -17,12 +21,16 @@ flags! {
         CreatePropsRestProxy,
         #[strum(serialize = "_createTextVNode")]
         CreateTextVNode,
+        #[strum(serialize = "_createSlots")]
+        CreateSlots,
         #[strum(serialize = "_createVNode")]
         CreateVNode,
         #[strum(serialize = "_defineComponent")]
         DefineComponent,
         #[strum(serialize = "_Fragment")]
         Fragment,
+        #[strum(serialize = "_guardReactiveProps")]
+        GuardReactiveProps,
         #[strum(serialize = "_isMemoSame")]
         IsMemoSame,
         #[strum(serialize = "_isRef")]
@@ -33,10 +41,14 @@ flags! {
         MergeDefaults,
         #[strum(serialize = "_mergeModels")]
         MergeModels,
+        #[strum(serialize = "_mergeProps")]
+        MergeProps,
         #[strum(serialize = "_normalizeClass")]
         NormalizeClass,
         #[strum(serialize = "_normalizeStyle")]
         NormalizeStyle,
+        #[strum(serialize = "_normalizeProps")]
+        NormalizeProps,
         #[strum(serialize = "_openBlock")]
         OpenBlock,
         #[strum(serialize = "_renderList")]
@@ -59,6 +71,8 @@ flags! {
         ToDisplayString,
         #[strum(serialize = "_toHandlerKey")]
         ToHandlerKey,
+        #[strum(serialize = "_toHandlers")]
+        ToHandlers,
         #[strum(serialize = "_Transition")]
         Transition,
         #[strum(serialize = "_TransitionGroup")]
@@ -79,6 +93,10 @@ flags! {
         VModelSelect,
         #[strum(serialize = "_vModelText")]
         VModelText,
+        #[strum(serialize = "_withKeys")]
+        VOnWithKeys,
+        #[strum(serialize = "_withModifiers")]
+        VOnWithModifiers,
         #[strum(serialize = "_vShow")]
         VShow,
         #[strum(serialize = "_withCtx")]
@@ -87,8 +105,6 @@ flags! {
         WithDirectives,
         #[strum(serialize = "_withMemo")]
         WithMemo,
-        #[strum(serialize = "_withModifiers")]
-        WithModifiers,
     }
 }
 
@@ -105,3 +121,19 @@ impl VueImports {
 }
 
 pub type VueImportsSet = FlagSet<VueImports>;
+
+impl From<BuiltinType> for VueImports {
+    fn from(value: BuiltinType) -> Self {
+        match value {
+            BuiltinType::BaseTransition => VueImports::BaseTransition,
+            BuiltinType::KeepAlive => VueImports::KeepAlive,
+            BuiltinType::Suspense => VueImports::Suspense,
+            BuiltinType::Teleport => VueImports::Teleport,
+            BuiltinType::Transition => VueImports::Transition,
+            BuiltinType::TransitionGroup => VueImports::TransitionGroup,
+            // Note: these built-ins are not valid
+            BuiltinType::Component => VueImports::ResolveComponent,
+            BuiltinType::Slot => VueImports::ResolveComponent,
+        }
+    }
+}

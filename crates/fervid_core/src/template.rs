@@ -27,7 +27,7 @@ pub fn is_from_default_slot(node: &Node) -> bool {
 
     match v_slot.slot_name.as_ref() {
         None => true,
-        Some(StrOrExpr::Str(s)) if s == "default" => true,
+        Some(StrOrExpr::Str(s)) if s.value == "default" => true,
         Some(_) => false,
     }
 }

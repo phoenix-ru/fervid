@@ -363,7 +363,7 @@ pub fn postprocess_models(
             }
         }
 
-        let model_update_evt_name = format!("update:{}", &model.name.value);
+        let model_update_evt_name = format!("update:{}", model.name.value);
 
         // Push a string literal into emits
         emits.push(Some(ExprOrSpread {
@@ -379,7 +379,7 @@ pub fn postprocess_models(
         let modifier_name = if &model.name.value == "modelValue" {
             fervid_atom!("modelModifiers")
         } else {
-            FervidAtom::from(format!("{}Modifiers", &model.name.value))
+            FervidAtom::from(format!("{}Modifiers", model.name.value))
         };
 
         // Push an options object (or expr) into props

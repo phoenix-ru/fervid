@@ -37,7 +37,7 @@ pub fn js(raw: &str) -> Box<Expr> {
 pub fn regular_attribute(name: &str, value: &str) -> AttributeOrBinding {
     AttributeOrBinding::RegularAttribute {
         name: name.into(),
-        value: value.into(),
+        value: Some(value.into()),
         span: DUMMY_SP,
     }
 }

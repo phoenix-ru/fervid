@@ -6,7 +6,7 @@ use swc_core::{
 use crate::{
     SfcExportedObjectHelper,
     error::{ScriptError, ScriptErrorKind, TransformError},
-    script::setup::utils::unwrap_ts_node_expr,
+    utils::unwrap_ts_node_expr,
 };
 
 use super::macros::TransformMacroResult;

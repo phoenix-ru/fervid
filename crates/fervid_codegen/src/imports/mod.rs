@@ -62,7 +62,7 @@ mod tests {
         ctx.add_to_imports(VueImports::NormalizeClass);
         ctx.add_to_imports(VueImports::ToDisplayString);
         ctx.add_to_imports(VueImports::WithDirectives);
-        ctx.add_to_imports(VueImports::WithModifiers);
+        ctx.add_to_imports(VueImports::VOnWithModifiers);
         ctx.add_to_imports(VueImports::OpenBlock);
 
         assert_eq!(7, ctx.bindings_helper.vue_imports.into_iter().count());
@@ -79,7 +79,7 @@ mod tests {
         ctx.add_to_imports(VueImports::NormalizeClass);
         ctx.add_to_imports(VueImports::ToDisplayString);
         ctx.add_to_imports(VueImports::WithDirectives);
-        ctx.add_to_imports(VueImports::WithModifiers);
+        ctx.add_to_imports(VueImports::VOnWithModifiers);
         ctx.add_to_imports(VueImports::OpenBlock);
 
         let generated_imports = ctx.generate_imports();
@@ -98,7 +98,7 @@ mod tests {
 
         assert_eq!(
             crate::test_utils::to_str(vue_import_decl),
-            "import{createBlock as _createBlock,normalizeClass as _normalizeClass,openBlock as _openBlock,toDisplayString as _toDisplayString,withCtx as _withCtx,withDirectives as _withDirectives,withModifiers as _withModifiers}from\"vue\";"
+            "import{createBlock as _createBlock,normalizeClass as _normalizeClass,openBlock as _openBlock,toDisplayString as _toDisplayString,withModifiers as _withModifiers,withCtx as _withCtx,withDirectives as _withDirectives}from\"vue\";"
         );
     }
 }

@@ -23,3 +23,7 @@ flagset = "0.4.3"
 [dev-dependencies]
 panic-message = "0.3.0"
 swc_ecma_parser = { workspace = true }
+
+[features]
+default = []
+new-pipeline = ["fervid_transform/new-pipeline"]

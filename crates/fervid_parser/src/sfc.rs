@@ -92,6 +92,11 @@ impl SfcParser<'_, '_, '_> {
                 }
             } else if tag_name.eq("style") {
                 if let Some(style_block) = self.parse_sfc_style_element(root_element) {
+                    if style_block.is_scoped && !sfc_descriptor.slotted {
+                        sfc_descriptor.slotted = style_block.content.contains(":slotted(")
+                            || style_block.content.contains("::v-slotted(");
+                    }
+
                     sfc_descriptor.styles.push(style_block);
                 }
             } else if let Some(custom_block) = self.parse_sfc_custom_block_element(root_element) {

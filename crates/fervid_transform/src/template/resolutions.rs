@@ -4,7 +4,7 @@ use swc_core::{
     ecma::ast::{Expr, IdentName, MemberExpr, MemberProp},
 };
 
-use crate::{BindingsHelper, SetupBinding};
+use crate::{BindingsHelper, SetupBinding, TransformSfcContext};
 
 use super::{
     ast_transform::TemplateVisitor,
@@ -67,65 +67,64 @@ impl TemplateVisitor<'_> {
                 .insert(tag_name.to_owned(), ComponentBinding::Unresolved);
         }
     }
-
-    /// Fuzzy-matches the directive name to a binding name
-    pub fn maybe_resolve_directive(&mut self, directive_name: &FervidAtom) {
-        // Check the existing resolutions.
-        // Do nothing if found, regardless if it was previously resolved or not,
-        // because codegen will handle the runtime resolution.
-        if self
-            .ctx
-            .bindings_helper
-            .custom_directives
-            .contains_key(directive_name)
-        {
-            return;
-        }
-
-        // Some special symbols in the directive name just make it impossible to create a js variable
-        if directive_name.chars().any(|c| c == '[' || c == ']') {
-            return;
-        }
-
-        // Directive bindings should always have a name in format `vCustomDirective` or `VCustomDirective`
-        let mut normalized = String::with_capacity(directive_name.len());
-        to_pascal_case(directive_name, &mut normalized);
-
-        let found = self.ctx.bindings_helper.setup_bindings.iter().find(
-            |SetupBinding {
-                 sym: name,
-                 binding_type: _,
-                 span: _,
-             }| {
-                (name.starts_with('v') || name.starts_with('V')) && name[1..] == normalized
-            },
-        );
-
-        // TODO Auto-importing the directives can happen here
-
-        if let Some(found) = found {
-            let mut resolved_to = Expr::Ident(found.sym.to_owned().into_ident());
-
-            // Transform the identifier
-            self.ctx
-                .bindings_helper
-                .transform_expr(&mut resolved_to, self.current_scope);
-
-            // Was resolved
-            self.ctx.bindings_helper.custom_directives.insert(
-                directive_name.to_owned(),
-                CustomDirectiveBinding::Resolved(Box::new(resolved_to)),
-            );
-        } else {
-            // Was not resolved
-            self.ctx.bindings_helper.custom_directives.insert(
-                directive_name.to_owned(),
-                CustomDirectiveBinding::Unresolved,
-            );
-        }
-    }
 }
 
+/// Fuzzy-matches the directive name to a binding name
+pub fn maybe_resolve_directive(
+    ctx: &mut TransformSfcContext,
+    directive_name: &FervidAtom,
+    scope_to_use: u32,
+) {
+    // Check the existing resolutions.
+    // Do nothing if found, regardless if it was previously resolved or not,
+    // because codegen will handle the runtime resolution.
+    if ctx
+        .bindings_helper
+        .custom_directives
+        .contains_key(directive_name)
+    {
+        return;
+    }
+
+    // Some special symbols in the directive name just make it impossible to create a js variable
+    if directive_name.chars().any(|c| c == '[' || c == ']') {
+        return;
+    }
+
+    // Directive bindings should always have a name in format `vCustomDirective` or `VCustomDirective`
+    let mut normalized = String::with_capacity(directive_name.len());
+    to_pascal_case(directive_name, &mut normalized);
+
+    let found = ctx.bindings_helper.setup_bindings.iter().find(
+        |SetupBinding {
+             sym: name,
+             binding_type: _,
+             span: _,
+         }| { (name.starts_with('v') || name.starts_with('V')) && name[1..] == normalized },
+    );
+
+    // TODO Auto-importing the directives can happen here
+
+    if let Some(found) = found {
+        let mut resolved_to = Expr::Ident(found.sym.to_owned().into_ident());
+
+        // Transform the identifier
+        ctx.bindings_helper
+            .transform_expr(&mut resolved_to, scope_to_use);
+
+        // Was resolved
+        ctx.bindings_helper.custom_directives.insert(
+            directive_name.to_owned(),
+            CustomDirectiveBinding::Resolved(Box::new(resolved_to)),
+        );
+    } else {
+        // Was not resolved
+        ctx.bindings_helper.custom_directives.insert(
+            directive_name.to_owned(),
+            CustomDirectiveBinding::Unresolved,
+        );
+    }
+}
 fn find_binding<'a>(
     bindings_helper: &'a mut BindingsHelper,
     tag_name: &str,
@@ -341,12 +340,12 @@ mod tests {
             SetupBinding::new(fervid_atom!("vFoo"), BindingTypes::SetupLet),
             SetupBinding::new(fervid_atom!("VBar"), BindingTypes::SetupConst),
         ]);
-        let mut template_visitor = TemplateVisitor::new(&mut ctx);
+        let template_visitor = TemplateVisitor::new(&mut ctx);
 
         macro_rules! assert_resolved {
             ($atom: literal) => {{
                 let v = fervid_atom!($atom);
-                template_visitor.maybe_resolve_directive(&v);
+                maybe_resolve_directive(template_visitor.ctx, &v, template_visitor.current_scope);
                 assert!(matches!(
                     template_visitor
                         .ctx
@@ -371,12 +370,12 @@ mod tests {
             SetupBinding::new(fervid_atom!("VFooBar"), BindingTypes::Imported),
             SetupBinding::new(fervid_atom!("vBazQux"), BindingTypes::SetupMaybeRef),
         ]);
-        let mut template_visitor = TemplateVisitor::new(&mut ctx);
+        let template_visitor = TemplateVisitor::new(&mut ctx);
 
         macro_rules! assert_resolved {
             ($atom: literal) => {{
                 let v = fervid_atom!($atom);
-                template_visitor.maybe_resolve_directive(&v);
+                maybe_resolve_directive(template_visitor.ctx, &v, template_visitor.current_scope);
                 assert!(matches!(
                     template_visitor
                         .ctx
@@ -403,12 +402,12 @@ mod tests {
             SetupBinding::new(fervid_atom!("bazQux"), BindingTypes::SetupMaybeRef),
             SetupBinding::new(fervid_atom!("TestNotDirective"), BindingTypes::SetupConst),
         ]);
-        let mut template_visitor = TemplateVisitor::new(&mut ctx);
+        let template_visitor = TemplateVisitor::new(&mut ctx);
 
         macro_rules! assert_unresolved {
             ($atom: literal) => {{
                 let v = fervid_atom!($atom);
-                template_visitor.maybe_resolve_directive(&v);
+                maybe_resolve_directive(template_visitor.ctx, &v, template_visitor.current_scope);
                 assert!(matches!(
                     template_visitor
                         .ctx
@@ -446,7 +445,11 @@ mod tests {
 
         // <div v-my-dir></div>
         let v_my_dir = fervid_atom!("my-dir");
-        template_visitor.maybe_resolve_directive(&v_my_dir);
+        maybe_resolve_directive(
+            template_visitor.ctx,
+            &v_my_dir,
+            template_visitor.current_scope,
+        );
         assert!(matches!(
             template_visitor
                 .ctx

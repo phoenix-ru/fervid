@@ -15,4 +15,6 @@ pub static VUE_BUILTINS: phf::Map<&'static str, BuiltinType> = phf_map! {
     "Transition" => BuiltinType::Transition,
     "transition-group" => BuiltinType::TransitionGroup,
     "TransitionGroup" => BuiltinType::TransitionGroup,
+    "BaseTransition" => BuiltinType::BaseTransition,
+    "base-transition" => BuiltinType::BaseTransition,
 };

@@ -23,10 +23,10 @@ use crate::{
             define_props::{process_define_props, process_with_defaults},
             define_props_destructure::collect_props_destructure,
             define_slots::process_define_slots,
-            utils::unwrap_ts_node_expr,
         },
     },
     structs::SfcExportedObjectHelper,
+    utils::unwrap_ts_node_expr,
 };
 
 use super::define_model::postprocess_models;
