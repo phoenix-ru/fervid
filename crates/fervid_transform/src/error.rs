@@ -110,6 +110,8 @@ pub enum TemplateErrorKind {
     TransformAssetUrlsBaseUrlParseFailed,
     /// Failed parsing the configured base URL when doing asset URL transform
     TransformAssetUrlsUrlParseFailed,
+    /// <template v-for> key should be placed on the <template> tag
+    VForTemplateKeyPlacement,
     /// v-html will override element children.
     VHtmlWithChildren,
     /// v-model argument is not supported on plain elements

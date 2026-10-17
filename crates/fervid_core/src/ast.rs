@@ -170,6 +170,7 @@ pub struct SlotOutletCall {
     pub props: Option<PropsExpression>,
     pub fallback: SlotOutletFallback,
     pub no_slotted: bool,
+    pub branch_key: Option<Box<Expr>>,
     pub span: Span,
 }
 

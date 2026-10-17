@@ -45,6 +45,7 @@ pub fn pre_transform_slot_outlet(
                 fervid_core::SlotOutletFallback::UseChildren
             },
             no_slotted: ctx.has_scoped_styles && !ctx.slotted,
+            branch_key: None,
             span: element_node.span,
         })),
         cache: Default::default(),

@@ -6,6 +6,11 @@ use swc_core::{
     ecma::ast::{ArrowExpr, BindingIdent, BlockStmtOrExpr, Expr, Ident, Lit, ParenExpr, Pat},
 };
 
+#[path = "utils/inject_prop.rs"]
+mod inject_prop;
+
+pub(crate) use inject_prop::{has_unnormalized_prop, inject_prop};
+
 /// Note: the original implementation only handles Teleport, Suspense, KeepAlive and BaseTransition
 pub fn is_core_component(tag: &str) -> Option<BuiltinType> {
     let built_in = VUE_BUILTINS.get(tag);

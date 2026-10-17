@@ -17,7 +17,9 @@ impl CodegenContext {
         element_node: &ElementNode,
         slot_outlet_call: &SlotOutletCall,
     ) -> Expr {
-        let capacity = if slot_outlet_call.no_slotted {
+        let capacity = if slot_outlet_call.branch_key.is_some() {
+            6
+        } else if slot_outlet_call.no_slotted {
             5
         } else if !element_node.children.is_empty() {
             4
@@ -63,7 +65,7 @@ impl CodegenContext {
             });
         }
 
-        //4: Fallback
+        // 4: Fallback
         if let SlotOutletFallback::UseChildren = slot_outlet_call.fallback {
             let (children, _) = self.generate_element_children(element_node, true);
             let children = Expr::Array(ArrayLit {
@@ -101,10 +103,24 @@ impl CodegenContext {
             });
         }
 
+        // 5: noSlotted
         if slot_outlet_call.no_slotted {
             slot_args.push(ExprOrSpread {
                 spread: None,
                 expr: Box::new(Expr::Lit(true.into())),
+            });
+        } else if capacity > 5 {
+            slot_args.push(ExprOrSpread {
+                spread: None,
+                expr: Box::new(Expr::Ident(fervid_atom!("undefined").into_ident())),
+            });
+        }
+
+        // 6: Slot branch key
+        if let Some(ref branch_key) = slot_outlet_call.branch_key {
+            slot_args.push(ExprOrSpread {
+                spread: None,
+                expr: branch_key.to_owned(),
             });
         }
 
@@ -124,8 +140,9 @@ impl CodegenContext {
 #[cfg(all(test, feature = "new-pipeline"))]
 mod tests {
     use fervid_core::{
-        AttributeOrBinding, BuiltinType, ElementKind, ElementNode, Node, SfcDescriptor,
-        SfcStyleBlock, StartingTag, StrOrExpr, VBindDirective, VCustomDirective, VueDirectives,
+        AttributeOrBinding, BuiltinType, ElementCodegenValue, ElementKind, ElementNode, Node,
+        SfcDescriptor, SfcStyleBlock, StartingTag, StrOrExpr, VBindDirective, VCustomDirective,
+        VueDirectives,
     };
     use fervid_transform::{
         TransformSfcContext, TransformSfcOptions,
@@ -412,6 +429,71 @@ mod tests {
         );
     }
 
+    // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vFor.spec.ts#L921-L969
+    #[test]
+    fn template_v_for_key_injection_with_single_slot_child() {
+        assert_eq!(
+            // <template v-for="item in items" :key="item.id"><slot /></template>
+            // slotted: false
+            transform_and_generate_slot_outlet_with_branch_key(
+                vec![],
+                vec![],
+                false,
+                false,
+                "item.id"
+            ),
+            "_renderSlot(_ctx.$slots,\"default\",{},undefined,undefined,item.id)"
+        );
+    }
+
+    #[test]
+    fn template_v_for_key_injection_with_slot_fallback() {
+        assert_eq!(
+            // <template v-for="item in items" :key="item.id"><slot>fallback</slot></template>
+            // slotted: false
+            transform_and_generate_slot_outlet_with_branch_key(
+                vec![],
+                vec![Node::Text("fallback".into(), DUMMY_SP)],
+                false,
+                false,
+                "item.id",
+            ),
+            "_renderSlot(_ctx.$slots,\"default\",{},()=>[\"fallback\"],undefined,item.id)"
+        );
+    }
+
+    #[test]
+    fn template_v_for_key_injection_with_slot_props() {
+        assert_eq!(
+            // <template v-for="item in items" :key="item.id"><slot foo="bar" /></template>
+            // slotted: false
+            transform_and_generate_slot_outlet_with_branch_key(
+                vec![regular_attribute("foo", Some("bar"))],
+                vec![],
+                false,
+                false,
+                "item.id",
+            ),
+            "_renderSlot(_ctx.$slots,\"default\",{foo:\"bar\"},undefined,undefined,item.id)"
+        );
+    }
+
+    #[test]
+    fn template_v_for_key_injection_with_no_slotted_scope() {
+        assert_eq!(
+            // <template v-for="item in items" :key="item.id"><slot /></template>
+            // slotted: false
+            transform_and_generate_slot_outlet_with_branch_key(
+                vec![],
+                vec![],
+                true,
+                false,
+                "item.id"
+            ),
+            "_renderSlot(_ctx.$slots,\"default\",{},undefined,true,item.id)"
+        );
+    }
+
     fn transform_and_generate_slot_outlet(attributes: Vec<AttributeOrBinding>) -> String {
         transform_and_generate_slot_outlet_with(attributes, vec![], false, false)
     }
@@ -421,6 +503,38 @@ mod tests {
         children: Vec<Node>,
         has_scoped_styles: bool,
         slotted: bool,
+    ) -> String {
+        transform_and_generate_slot_outlet_with_optional_branch_key(
+            attributes,
+            children,
+            has_scoped_styles,
+            slotted,
+            None,
+        )
+    }
+
+    fn transform_and_generate_slot_outlet_with_branch_key(
+        attributes: Vec<AttributeOrBinding>,
+        children: Vec<Node>,
+        has_scoped_styles: bool,
+        slotted: bool,
+        branch_key: &str,
+    ) -> String {
+        transform_and_generate_slot_outlet_with_optional_branch_key(
+            attributes,
+            children,
+            has_scoped_styles,
+            slotted,
+            Some(branch_key),
+        )
+    }
+
+    fn transform_and_generate_slot_outlet_with_optional_branch_key(
+        attributes: Vec<AttributeOrBinding>,
+        children: Vec<Node>,
+        has_scoped_styles: bool,
+        slotted: bool,
+        branch_key: Option<&str>,
     ) -> String {
         let mut node = slot_outlet(attributes, children);
         let descriptor = SfcDescriptor {
@@ -440,9 +554,21 @@ mod tests {
         let options = transform_options();
         let mut ctx = TransformSfcContext::new(&descriptor, &options);
         let mut state = TransformNodeState::default();
-
         pre_transform_expression(&mut ctx, &state, &mut node);
         pre_transform_slot_outlet(&mut ctx, &mut state, &mut node);
+
+        if let Some(branch_key) = branch_key {
+            let Node::Element(element) = &mut node else {
+                panic!("slot outlet must be an element");
+            };
+            let Some(codegen_node) = element.codegen_node.as_mut() else {
+                panic!("slot outlet must have a codegen node");
+            };
+            let ElementCodegenValue::SlotOutletCall(slot_call) = &mut codegen_node.value else {
+                panic!("slot outlet must generate renderSlot");
+            };
+            slot_call.branch_key = Some(js(branch_key));
+        }
 
         let mut codegen = CodegenContext::default();
         to_str(codegen.generate_node(&node, false))
