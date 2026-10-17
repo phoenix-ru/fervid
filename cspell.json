@@ -163,6 +163,7 @@
     "**/*.snap",
     "crates/fervid_napi/__tests__/defineProps.spec.ts",
     "crates/fervid_napi/*.(m|c)?js",
-    "*.sh"
+    "*.sh",
+    "*.vim"
   ]
 }
