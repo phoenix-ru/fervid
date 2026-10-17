@@ -76,22 +76,20 @@ pub fn post_transform_element_node(
         return;
     };
 
-    // TODO: This filter might discard built-in components which seem to be handled here
-    // The official compiler only handles elements and components (no SLOT or TEMPLATE),
-    // and implicitly considers built-in components here as well
-    if !matches!(node.tag_type, ElementKind::Element | ElementKind::Component) {
-        return;
-    }
-
-    let is_component = matches!(node.tag_type, ElementKind::Component);
     let scope_to_use = state.current_scope;
 
-    let vnode_tag = if is_component {
-        resolve_component_type(node, ctx, false, scope_to_use)
-    } else {
-        VNodeCallTag::Expr(Box::new(Expr::Lit(Lit::Str(Str::from(
-            node.starting_tag.tag_name.to_owned(),
-        )))))
+    let (is_component, vnode_tag) = match node.tag_type {
+        ElementKind::Template | ElementKind::Builtin(BuiltinType::Slot) => return,
+        ElementKind::Component | ElementKind::Builtin(BuiltinType::Component) => {
+            (true, resolve_component_type(node, ctx, false, scope_to_use))
+        }
+        ElementKind::Builtin(builtin_type) => (true, VNodeCallTag::Builtin(builtin_type)),
+        ElementKind::Element => (
+            false,
+            VNodeCallTag::Expr(Box::new(Expr::Lit(Lit::Str(Str::from(
+                node.starting_tag.tag_name.to_owned(),
+            ))))),
+        ),
     };
 
     let tag = node.starting_tag.tag_name.to_owned();

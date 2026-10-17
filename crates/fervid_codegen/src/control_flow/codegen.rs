@@ -369,21 +369,6 @@ impl CodegenContext {
         })
     }
 
-    /// Special case: `<template>` with `v-if`/`v-else-if`/`v-else`/`v-for`
-    #[inline]
-    pub fn should_generate_fragment(&self, element_node: &ElementNode) -> bool {
-        element_node.starting_tag.tag_name.eq("template")
-            && match element_node.starting_tag.directives {
-                Some(ref directives) => {
-                    directives.v_if.is_some()
-                        || directives.v_else_if.is_some()
-                        || directives.v_else.is_some()
-                        || directives.v_for.is_some()
-                }
-                None => false,
-            }
-    }
-
     /// Produce the index for a next `cache[idx]` entry.
     /// This is useful for a `v-once` or event handlers.
     pub fn allocate_next_cache_entry(&mut self) -> u8 {

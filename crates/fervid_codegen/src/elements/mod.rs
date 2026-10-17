@@ -32,10 +32,10 @@ impl CodegenContext {
             None
         };
 
-        // There is a special case here: `<template>` with `v-if`/`v-else-if`/`v-else`/`v-for`
-        let should_generate_fragment_instead = (wrap_in_block
-            && element_node.starting_tag.tag_name == "template")
-            || self.should_generate_fragment(element_node);
+        // There is a special case here: `<template>` with
+        // `v-if`/`v-else-if`/`v-else`/`v-for`/`v-slot`
+        let should_generate_fragment_instead =
+            matches!(element_node.tag_type, fervid_core::ElementKind::Template);
 
         // Generate children
         // Inlining is forbidden if we changed from `<template>` to `Fragment`

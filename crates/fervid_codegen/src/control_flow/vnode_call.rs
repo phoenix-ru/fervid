@@ -50,9 +50,8 @@ impl CodegenContext {
         let span = DUMMY_SP;
         // TODO(new-pipeline): structural transforms (`transformIf`/`transformFor`) should create
         // fragment VNodeCalls directly. This keeps old Fervid template-carrier behavior until then.
-        let should_generate_fragment_instead = (wrap_in_block
-            && element_node.starting_tag.tag_name == "template")
-            || self.should_generate_fragment(element_node);
+        let should_generate_fragment_instead =
+            matches!(element_node.tag_type, fervid_core::ElementKind::Template);
         let tag = if should_generate_fragment_instead {
             Expr::Ident(
                 self.get_and_add_import_ident(VueImports::Fragment)

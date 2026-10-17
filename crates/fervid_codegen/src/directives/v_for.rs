@@ -62,18 +62,11 @@ impl CodegenContext {
             .patch_flags
             .contains(PatchFlags::StableFragment);
 
-        let mut item_render_expr = if let [Node::Element(_)] = for_node.children.as_slice() {
+        let item_render_expr = if let [Node::Element(_)] = for_node.children.as_slice() {
             self.generate_node(&for_node.children[0], !is_stable)
         } else {
             self.generate_for_fragment(&for_node.children, codegen_node.key.as_deref(), span)
         };
-
-        if codegen_node.is_template
-            && matches!(for_node.children.as_slice(), [Node::Element(_)])
-            && let Some(key) = codegen_node.key.as_deref()
-        {
-            inject_key(self, &mut item_render_expr, key.clone(), span);
-        }
 
         let render_list_arrow = Expr::Arrow(ArrowExpr {
             span,
@@ -585,58 +578,13 @@ fn key_object(key: Expr, span: Span) -> Expr {
     })
 }
 
-// TODO: Move to v_for codegen transform and use better AST instead of guessing
-fn inject_key(ctx: &mut CodegenContext, expr: &mut Expr, key: Expr, span: Span) {
-    match expr {
-        Expr::Paren(paren) => inject_key(ctx, &mut paren.expr, key, span),
-        Expr::Seq(sequence) => {
-            if let Some(last) = sequence.exprs.last_mut() {
-                inject_key(ctx, last, key, span);
-            }
-        }
-        Expr::Call(call) => {
-            if let Some(first) = call.args.first_mut()
-                && matches!(first.expr.as_ref(), Expr::Paren(_) | Expr::Seq(_))
-            {
-                inject_key(ctx, &mut first.expr, key, span);
-                return;
-            }
-
-            let key_object = key_object(key, span);
-            if call.args.len() < 2 {
-                call.args.push(expr_arg(key_object));
-                return;
-            }
-
-            let props = &mut call.args[1].expr;
-            match props.as_mut() {
-                Expr::Lit(Lit::Null(_)) => **props = key_object,
-                Expr::Object(object) => object.props.extend(match key_object {
-                    Expr::Object(key_object) => key_object.props,
-                    _ => unreachable!(),
-                }),
-                _ => {
-                    let existing =
-                        std::mem::replace(props, Box::new(Expr::Lit(Lit::Null(Null { span }))));
-                    **props = Expr::Call(CallExpr {
-                        span,
-                        ctxt: Default::default(),
-                        callee: Callee::Expr(Box::new(Expr::Ident(
-                            ctx.get_and_add_import_ident(VueImports::MergeProps)
-                                .into_ident_spanned(span),
-                        ))),
-                        args: vec![expr_arg(*existing), expr_arg(key_object)],
-                        type_args: None,
-                    });
-                }
-            }
-        }
-        _ => {}
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "new-pipeline")]
+    use fervid_core::{
+        AttributeOrBinding, BuiltinType, ElementCodegenValue, SfcDescriptor, SfcTemplateBlock,
+        VBindDirective, VNodeCall, VNodeCallTag, VueDirectives,
+    };
     use fervid_core::{
         CacheMarker, ElementKind, ElementNode, ForCodegenNode, ForNode, ForParseResult, Node,
         PatchFlags, PatchHints, StartingTag,
@@ -884,6 +832,434 @@ mod tests {
             crate::test_utils::to_str(result),
             "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(3,(i)=>_createElementVNode(\"div\",{key:i,ref_for:true,ref:\"items\"},null,512)),64))"
         );
+    }
+
+    // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vFor.spec.ts#L921-L1030
+    // Built-in reference: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/transformElement.spec.ts#L444-L559
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn keyed_template_with_single_plain_element_injects_typed_key() {
+        // <template v-for="item in items" :key="item.id"><div /></template>
+        let (node, output) = generate_keyed_template_child(element("div"));
+        let vnode = keyed_template_vnode(&node);
+        assert!(matches!(&vnode.tag, VNodeCallTag::Expr(_)));
+        assert!(vnode.is_block);
+        assert!(
+            output.contains("_createElementBlock(\"div\",{key:item.id})"),
+            "{output}"
+        );
+    }
+
+    // Vue parser classifies only structural directives as fragment templates:
+    // https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/src/parser.ts#L767-L780
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn keyed_template_with_non_structural_template_child_keeps_native_tag() {
+        // <template v-for="item in items" :key="item.id"><template v-cloak><div /></template></template>
+        // <template v-for="item in items" :key="item.id"><template v-pre><div /></template></template>
+        for directives in [
+            VueDirectives {
+                v_cloak: Some(()),
+                ..Default::default()
+            },
+            VueDirectives {
+                v_pre: Some(()),
+                ..Default::default()
+            },
+        ] {
+            let mut child = element_with_kind("template", ElementKind::Element, vec![]);
+            let Node::Element(element) = &mut child else {
+                panic!("expected native template element")
+            };
+            element.starting_tag.directives = Some(Box::new(directives));
+            element
+                .children
+                .push(element_with_kind("div", ElementKind::Element, vec![]));
+
+            let (node, output) = generate_keyed_template_child(child);
+            let vnode = keyed_template_vnode(&node);
+            assert!(
+                matches!(&vnode.tag, VNodeCallTag::Expr(tag) if matches!(tag.as_ref(), Expr::Lit(Lit::Str(tag)) if tag.value == "template"))
+            );
+            assert!(
+                output.contains("_createElementBlock(\"template\",{key:item.id}"),
+                "{output}"
+            );
+            assert!(
+                !output.contains("_createElementBlock(_Fragment,{key:item.id}"),
+                "{output}"
+            );
+        }
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn keyed_template_with_single_component_injects_typed_key() {
+        // <template v-for="item in items" :key="item.id"><Comp /></template>
+        let (node, output) = generate_keyed_template_child(element_with_kind(
+            "Comp",
+            ElementKind::Component,
+            vec![],
+        ));
+        let vnode = keyed_template_vnode(&node);
+        assert!(vnode.is_component && vnode.is_block);
+        assert!(
+            output.contains("_createBlock(_component_Comp,{key:item.id})"),
+            "{output}"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn keyed_template_with_single_slot_uses_sixth_argument() {
+        // <template v-for="item in items" :key="item.id"><slot /></template>
+        let (node, output) = generate_keyed_template_child(element_with_kind(
+            "slot",
+            ElementKind::Builtin(BuiltinType::Slot),
+            vec![],
+        ));
+        let Node::For(for_node) = &node else {
+            panic!("expected ForNode")
+        };
+        let [Node::Element(child)] = for_node.children.as_slice() else {
+            panic!("expected sole element")
+        };
+        assert!(matches!(
+            child.codegen_node.as_deref().map(|codegen| &codegen.value),
+            Some(ElementCodegenValue::SlotOutletCall(slot)) if slot.branch_key.is_some()
+        ));
+        assert!(
+            output.contains("_renderSlot(_ctx.$slots,\"default\",{},undefined,undefined,item.id)"),
+            "{output}"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn keyed_template_with_teleport_injects_into_typed_vnode() {
+        // <template v-for="item in items" :key="item.id"><Teleport to="body" /></template>
+        let (node, output) = generate_keyed_template_child(element_with_kind(
+            "Teleport",
+            ElementKind::Builtin(BuiltinType::Teleport),
+            vec![AttributeOrBinding::RegularAttribute {
+                name: "to".into(),
+                value: Some("body".into()),
+                span: DUMMY_SP,
+            }],
+        ));
+        let vnode = keyed_template_vnode(&node);
+        assert!(matches!(
+            vnode.tag,
+            VNodeCallTag::Builtin(BuiltinType::Teleport)
+        ));
+        assert!(vnode.is_component && vnode.is_block);
+        assert!(
+            output.contains("_createBlock(_Teleport,{key:item.id,to:\"body\"})"),
+            "{output}"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn keyed_template_with_dynamic_component_resolves_is() {
+        // <template v-for="item in items" :key="item.id"><component :is="which" /></template>
+        let (node, output) = generate_keyed_template_child(element_with_kind(
+            "component",
+            ElementKind::Builtin(BuiltinType::Component),
+            vec![AttributeOrBinding::VBind(VBindDirective {
+                argument: Some("is".into()),
+                value: js("which"),
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                span: DUMMY_SP,
+            })],
+        ));
+        let vnode = keyed_template_vnode(&node);
+        assert!(
+            matches!(&vnode.tag, VNodeCallTag::CallExpression(call) if call.callee == VueImports::ResolveDynamicComponent)
+        );
+        assert!(vnode.is_component && vnode.is_block);
+        assert!(
+            output.contains("_createBlock(_resolveDynamicComponent(_ctx.which),{key:item.id})"),
+            "{output}"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn keyed_template_with_other_builtins_keeps_typed_key() {
+        // <template v-for="item in items" :key="item.id"><Suspense /></template>
+        // Likewise for KeepAlive, BaseTransition, Transition, TransitionGroup
+        for (tag, kind, helper) in [
+            ("Suspense", BuiltinType::Suspense, "_Suspense"),
+            ("KeepAlive", BuiltinType::KeepAlive, "_KeepAlive"),
+            (
+                "BaseTransition",
+                BuiltinType::BaseTransition,
+                "_BaseTransition",
+            ),
+            ("Transition", BuiltinType::Transition, "_Transition"),
+            (
+                "TransitionGroup",
+                BuiltinType::TransitionGroup,
+                "_TransitionGroup",
+            ),
+        ] {
+            let (node, output) = generate_keyed_template_child(element_with_kind(
+                tag,
+                ElementKind::Builtin(kind),
+                vec![],
+            ));
+            let vnode = keyed_template_vnode(&node);
+            assert!(matches!(vnode.tag, VNodeCallTag::Builtin(_)), "{tag}");
+            assert!(vnode.is_component && vnode.is_block, "{tag}");
+            assert!(
+                output.contains(&format!("_createBlock({helper},{{key:item.id}}")),
+                "{tag}: {output}"
+            );
+        }
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn keyed_template_with_teleport_children_preserves_array() {
+        // <template v-for="item in items" :key="item.id"><Teleport to="body"><div /></Teleport></template>
+        let mut teleport = element_with_kind(
+            "Teleport",
+            ElementKind::Builtin(BuiltinType::Teleport),
+            vec![AttributeOrBinding::RegularAttribute {
+                name: "to".into(),
+                value: Some("body".into()),
+                span: DUMMY_SP,
+            }],
+        );
+        let Node::Element(teleport_element) = &mut teleport else {
+            panic!("expected Teleport")
+        };
+        teleport_element.children.push(element("div"));
+        let (node, output) = generate_keyed_template_child(teleport);
+        let vnode = keyed_template_vnode(&node);
+        assert!(matches!(
+            vnode.tag,
+            VNodeCallTag::Builtin(BuiltinType::Teleport)
+        ));
+        assert!(
+            output.contains("_createBlock(_Teleport,{key:item.id,to:\"body\"},["),
+            "{output}"
+        );
+        assert!(output.contains("_createElementVNode(\"div\")"), "{output}");
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn keyed_template_with_keep_alive_preserves_raw_child_and_patch_flag() {
+        // <template v-for="item in items" :key="item.id"><KeepAlive><Comp /></KeepAlive></template>
+        let mut keep_alive = element_with_kind(
+            "KeepAlive",
+            ElementKind::Builtin(BuiltinType::KeepAlive),
+            vec![],
+        );
+        let Node::Element(keep_alive_element) = &mut keep_alive else {
+            panic!("expected KeepAlive")
+        };
+        keep_alive_element
+            .children
+            .push(element_with_kind("Comp", ElementKind::Component, vec![]));
+        let (node, output) = generate_keyed_template_child(keep_alive);
+        let vnode = keyed_template_vnode(&node);
+        assert!(vnode.patch_hints.flags.contains(PatchFlags::DynamicSlots));
+        assert!(
+            output.contains("_createBlock(_KeepAlive,{key:item.id},["),
+            "{output}"
+        );
+        assert!(output.contains("_createVNode(_component_Comp)"), "{output}");
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn keyed_template_with_slot_building_builtin_preserves_default_slot() {
+        // <template v-for="item in items" :key="item.id"><Suspense><div /></Suspense></template>
+        // Likewise for BaseTransition, Transition, TransitionGroup
+        // TODO: Vue emits stable slots (_: 1) without DYNAMIC_SLOTS for this case;
+        // Fervid emits dynamic slots (_: 2) with patch flag 1024, potentially forcing extra updates
+        for (tag, kind, helper) in [
+            ("Suspense", BuiltinType::Suspense, "_Suspense"),
+            (
+                "BaseTransition",
+                BuiltinType::BaseTransition,
+                "_BaseTransition",
+            ),
+            ("Transition", BuiltinType::Transition, "_Transition"),
+            (
+                "TransitionGroup",
+                BuiltinType::TransitionGroup,
+                "_TransitionGroup",
+            ),
+        ] {
+            let mut builtin = element_with_kind(tag, ElementKind::Builtin(kind), vec![]);
+            let Node::Element(element) = &mut builtin else {
+                panic!("expected built-in")
+            };
+            element
+                .children
+                .push(element_with_kind("div", ElementKind::Element, vec![]));
+            let (node, output) = generate_keyed_template_child(builtin);
+            let vnode = keyed_template_vnode(&node);
+            assert!(
+                matches!(vnode.children, Some(fervid_core::VNodeChildren::Slots(_))),
+                "{tag}"
+            );
+            assert!(
+                output.contains(&format!(
+                    "_createBlock({helper},{{key:item.id}},{{\"default\":"
+                )),
+                "{tag}: {output}"
+            );
+        }
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn keyed_template_with_multiple_children_keeps_fragment_key() {
+        // <template v-for="item in items" :key="item.id">hello<span /></template>
+        let (node, output) = generate_keyed_template_children(vec![
+            Node::Text("hello".into(), DUMMY_SP),
+            element("span"),
+        ]);
+        let Node::For(for_node) = node else {
+            panic!("expected ForNode")
+        };
+        assert!(matches!(
+            for_node
+                .codegen_node
+                .as_ref()
+                .and_then(|codegen| codegen.key.as_deref()),
+            Some(Expr::Member(_)),
+        ));
+        assert!(
+            output.contains("_createElementBlock(_Fragment,{key:item.id},["),
+            "{output}"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn generate_keyed_template_child(child: Node) -> (Node, String) {
+        generate_keyed_template_children(vec![child])
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn generate_keyed_template_children(children: Vec<Node>) -> (Node, String) {
+        let root = element_with_kind(
+            "template",
+            ElementKind::Template,
+            vec![AttributeOrBinding::VBind(VBindDirective {
+                argument: Some("key".into()),
+                value: js("item.id"),
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                span: DUMMY_SP,
+            })],
+        );
+        let Node::Element(mut root) = root else {
+            panic!("expected template element")
+        };
+        root.children = children;
+        root.starting_tag.directives = Some(Box::new(VueDirectives {
+            v_for: Some(VForDirective {
+                parse_result: Box::new(ForParseResult {
+                    source: js("items"),
+                    value: js("item"),
+                    key: None,
+                    index: None,
+                    finalized: false,
+                    finalized_is_dynamic: false,
+                }),
+                patch_flags: Default::default(),
+                span: DUMMY_SP,
+            }),
+            ..Default::default()
+        }));
+        let mut template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(root)],
+            span: DUMMY_SP,
+        };
+        let descriptor = SfcDescriptor::default();
+        let options = fervid_transform::TransformSfcOptions {
+            is_prod: false,
+            is_ce: false,
+            props_destructure: Default::default(),
+            scope_id: "",
+            filename: "anonymous.vue",
+            transform_asset_urls: Default::default(),
+            directive_transforms: Default::default(),
+            node_transforms: Default::default(),
+        };
+        let mut transform_ctx = fervid_transform::TransformSfcContext::new(&descriptor, &options);
+        fervid_transform::template::transform_and_record_template(
+            &mut template,
+            &mut transform_ctx,
+        );
+        assert!(
+            transform_ctx.errors.is_empty(),
+            "{:#?}",
+            transform_ctx.errors
+        );
+
+        let root = template
+            .roots
+            .pop()
+            .expect("keyed template must have a root");
+        let mut codegen_ctx = CodegenContext::default();
+        let output = crate::test_utils::to_str(codegen_ctx.generate_node(&root, true));
+        (root, output)
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn keyed_template_vnode(node: &Node) -> &VNodeCall {
+        let Node::For(for_node) = node else {
+            panic!("expected ForNode")
+        };
+        assert!(
+            for_node
+                .codegen_node
+                .as_ref()
+                .is_some_and(|codegen| codegen.key.is_none()),
+            "single-child key must move out of ForCodegenNode"
+        );
+        let [Node::Element(child)] = for_node.children.as_slice() else {
+            panic!("expected sole element")
+        };
+        let Some(ElementCodegenValue::VNodeCall(vnode)) =
+            child.codegen_node.as_deref().map(|codegen| &codegen.value)
+        else {
+            panic!("expected typed child VNodeCall")
+        };
+        let Some(fervid_core::PropsExpression::ObjectExpression(props)) = vnode.props.as_ref()
+        else {
+            panic!("keyed child must have object props")
+        };
+        assert!(props.properties.iter().any(|prop| matches!(&prop.key, fervid_core::ExpressionPropNameNode::SimpleExpression(key) if key.ast.sym == "key")), "key missing from typed child props");
+        vnode
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn element_with_kind(
+        tag: &str,
+        kind: ElementKind,
+        attributes: Vec<AttributeOrBinding>,
+    ) -> Node {
+        Node::Element(ElementNode::new_with_children_and_type(
+            StartingTag {
+                tag_name: tag.into(),
+                attributes,
+                directives: None,
+            },
+            vec![],
+            kind,
+        ))
     }
 
     #[test]

@@ -285,7 +285,15 @@ fn recognize_element_kind(
     attributes: &[AttributeOrBinding],
     directives: Option<&VueDirectives>,
 ) -> ElementKind {
-    if tag_name == "template" && directives.is_some() {
+    if tag_name == "template"
+        && directives.is_some_and(|d| {
+            d.v_if.is_some()
+                || d.v_else.is_some()
+                || d.v_else_if.is_some()
+                || d.v_for.is_some()
+                || d.v_slot.is_some()
+        })
+    {
         return ElementKind::Template;
     }
 
@@ -360,6 +368,58 @@ mod tests {
         };
 
         assert!(matches!(element.tag_type, ElementKind::Element));
+    }
+
+    // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/src/parser.ts#L638-L648
+    // Structural template directives: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/src/parser.ts#L767-L780
+    #[test]
+    fn it_marks_template_with_v_cloak_as_element() {
+        // <template><template v-cloak><div /></template></template>
+        let mut errors = Vec::new();
+        let mut parser = SfcParser::new(
+            "<template><template v-cloak><div /></template></template>",
+            &mut errors,
+        );
+        let parsed = parser.parse_sfc().expect("template should parse");
+        let template = parsed.template.expect("SFC should contain a template");
+        let [Node::Element(element)] = template.roots.as_slice() else {
+            panic!("SFC template should have one element child")
+        };
+
+        assert!(matches!(element.tag_type, ElementKind::Element));
+        assert!(
+            element
+                .starting_tag
+                .directives
+                .as_ref()
+                .is_some_and(|d| d.v_cloak.is_some())
+        );
+        assert!(errors.is_empty(), "{errors:#?}");
+    }
+
+    #[test]
+    fn it_marks_template_with_v_pre_as_element() {
+        // <template><template v-pre><div /></template></template>
+        let mut errors = Vec::new();
+        let mut parser = SfcParser::new(
+            "<template><template v-pre><div /></template></template>",
+            &mut errors,
+        );
+        let parsed = parser.parse_sfc().expect("template should parse");
+        let template = parsed.template.expect("SFC should contain a template");
+        let [Node::Element(element)] = template.roots.as_slice() else {
+            panic!("SFC template should have one element child")
+        };
+
+        assert!(matches!(element.tag_type, ElementKind::Element));
+        assert!(
+            element
+                .starting_tag
+                .directives
+                .as_ref()
+                .is_some_and(|d| d.v_pre.is_some())
+        );
+        assert!(errors.is_empty(), "{errors:#?}");
     }
 
     #[test]
