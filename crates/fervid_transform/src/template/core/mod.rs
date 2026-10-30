@@ -5,6 +5,7 @@ pub mod transform_slot_outlet;
 pub mod transform_whitespace;
 pub mod v_bind;
 pub mod v_for;
+pub mod v_memo;
 pub mod v_model;
 pub mod v_on;
 pub mod v_once;

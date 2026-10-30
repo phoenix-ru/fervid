@@ -181,6 +181,12 @@ pub enum SlotOutletFallback {
     UseChildren,
 }
 
+#[derive(Debug, Clone)]
+pub struct WithMemoCall {
+    pub expr: Box<Expr>,
+    pub vnode_call: VNodeCall,
+}
+
 flagset::flags! {
     pub enum CacheMarker: u8 {
         NeedPauseTracking = 1 << 0,
@@ -201,6 +207,7 @@ pub struct ElementCodegenNode {
 pub enum ElementCodegenValue {
     VNodeCall(Box<VNodeCall>),
     SlotOutletCall(Box<SlotOutletCall>),
+    WithMemoCall(Box<WithMemoCall>),
 }
 
 /// Outer Fragment VNodeCall generated for v-for

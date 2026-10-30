@@ -221,6 +221,7 @@ impl CodegenContext {
         };
 
         // Generate directives operating on render code
+        #[cfg(not(feature = "new-pipeline"))]
         if let Some(ref directives) = element_node.starting_tag.directives {
             // This block generates `v-for` and `v-memo`.
             // These are dependent on each other, therefore need to be generated like that.

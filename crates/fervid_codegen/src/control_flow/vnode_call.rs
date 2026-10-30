@@ -3,7 +3,7 @@ use fervid_core::{
     DynamicSlotBuild, ElementCodegenNode, ElementCodegenValue, ElementNode, ExpressionNode,
     ExpressionPropNameNode, IntoIdent, JsChildNode, Node, ObjectExpression, PropsExpression,
     SlotBuild, SlotFlag, SlotSource, StrOrExpr, VNodeCall, VNodeCallTag, VNodeChildren, VueImports,
-    fervid_atom, is_valid_propname,
+    WithMemoCall, fervid_atom, is_valid_propname,
 };
 use swc_core::{
     common::{DUMMY_SP, Span},
@@ -30,6 +30,9 @@ impl CodegenContext {
             }
             ElementCodegenValue::SlotOutletCall(slot_outlet) => {
                 self.generate_slot_outlet_call(element, slot_outlet)
+            }
+            ElementCodegenValue::WithMemoCall(with_memo_call) => {
+                self.generate_with_memo_call(element, with_memo_call)
             }
         };
 
@@ -144,6 +147,15 @@ impl CodegenContext {
         }
 
         expr
+    }
+
+    fn generate_with_memo_call(
+        &mut self,
+        element_node: &ElementNode,
+        with_memo_call: &WithMemoCall,
+    ) -> Expr {
+        let vnode_call = self.generate_vnode_call(element_node, &with_memo_call.vnode_call, false);
+        self.generate_v_memo(with_memo_call.expr.to_owned(), Box::new(vnode_call))
     }
 
     fn generate_vnode_tag(&mut self, tag: &VNodeCallTag, span: Span) -> Expr {

@@ -140,6 +140,10 @@ pub fn post_transform_for(
                         }
                     }
                 }
+
+                ElementCodegenValue::WithMemoCall(_with_memo_call) => {
+                    // TODO ???
+                }
             }
         }
 

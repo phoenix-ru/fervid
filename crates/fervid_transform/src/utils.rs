@@ -1,4 +1,4 @@
-use fervid_core::fervid_atom;
+use fervid_core::{VNodeCall, fervid_atom};
 use swc_core::{
     atoms::Atom,
     common::DUMMY_SP,
@@ -7,6 +7,16 @@ use swc_core::{
         Str,
     },
 };
+
+use crate::TransformSfcContext;
+
+pub fn convert_to_block(_ctx: &mut TransformSfcContext, vnode_call: &mut VNodeCall) {
+    // if !vnode_call.is_block {
+    vnode_call.is_block = true;
+    // }
+    // TODO Helper removal is not supported
+    // TODO Helper is not being added here (should it?)
+}
 
 pub fn infer_name(exported_obj: &mut ObjectLit, filename: &str) {
     // Look for a user-defined `name`

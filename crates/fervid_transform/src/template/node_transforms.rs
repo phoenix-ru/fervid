@@ -11,6 +11,7 @@ use crate::{
             transform_if::transform_if,
             transform_whitespace::transform_whitespace,
             v_for::{post_transform_for, pre_transform_for},
+            v_memo::{post_transform_memo, pre_transform_memo},
             v_once::{post_transform_once, pre_transform_once},
         },
         transform_element::post_transform_element_node,
@@ -86,6 +87,10 @@ pub struct TransformNodeState {
     // v-for
     /// Some(value) marks the previous current scope
     pub for_scope: Option<u32>,
+
+    // v-memo
+    /// true marks the presence of v-memo on the original node
+    pub v_memo: bool,
 }
 
 impl TransformNodeState {
@@ -126,7 +131,7 @@ impl NodeTransforms for BaseNodeTransform {
         // transformIf,
         pre_transform_if(ctx, node);
         // transformMemo,
-        pre_transform_memo(ctx, node);
+        pre_transform_memo(ctx, &mut state, node);
         // transformFor,
         pre_transform_for(ctx, &mut state, node);
         // prefixIdentifiers ? trackVForSlotScopes,
@@ -171,7 +176,7 @@ impl NodeTransforms for BaseNodeTransform {
         // transformFor,
         post_transform_for(ctx, state, node);
         // transformMemo,
-        post_transform_memo(ctx, node);
+        post_transform_memo(ctx, state, node);
         // transformIf,
         post_transform_if(ctx, node);
         // transformOnce,
@@ -182,9 +187,6 @@ impl NodeTransforms for BaseNodeTransform {
 
 fn pre_transform_if(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 fn post_transform_if(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
-
-fn pre_transform_memo(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
-fn post_transform_memo(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
 fn post_transform_expression(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
