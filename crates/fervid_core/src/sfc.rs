@@ -9,6 +9,9 @@ pub struct SfcDescriptor {
     pub script_setup: Option<SfcScriptBlock>,
     pub styles: Vec<SfcStyleBlock>,
     pub custom_blocks: Vec<SfcCustomBlock>,
+
+    /// Whether there is a :slotted or ::v-slotted style
+    pub slotted: bool,
 }
 
 #[derive(Clone, Debug)]

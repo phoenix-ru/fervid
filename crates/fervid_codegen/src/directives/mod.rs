@@ -11,7 +11,7 @@ use swc_core::{
 
 use crate::CodegenContext;
 
-mod v_for;
+pub(crate) mod v_for;
 mod v_html;
 mod v_memo;
 mod v_model;
@@ -89,7 +89,7 @@ impl CodegenContext {
         }
 
         Expr::Call(CallExpr {
-            span: DUMMY_SP, // TODO Span
+            span: DUMMY_SP,
             ctxt: Default::default(),
             callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                 span: DUMMY_SP,
@@ -181,11 +181,7 @@ impl CodegenContext {
 
         // Write the argument or `void 0`
         let directive_arg_expr = match argument {
-            Some(StrOrExpr::Str(s)) => Box::new(Expr::Lit(Lit::Str(Str {
-                span: DUMMY_SP,
-                value: s.to_owned(),
-                raw: None,
-            }))),
+            Some(StrOrExpr::Str(s)) => Box::new(Expr::Lit(Lit::Str(s.to_owned()))),
             Some(StrOrExpr::Expr(expr)) => expr.to_owned(),
             None => Box::new(void0()),
         };

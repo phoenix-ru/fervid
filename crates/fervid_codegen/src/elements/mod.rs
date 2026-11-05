@@ -32,10 +32,10 @@ impl CodegenContext {
             None
         };
 
-        // There is a special case here: `<template>` with `v-if`/`v-else-if`/`v-else`/`v-for`
-        let should_generate_fragment_instead = (wrap_in_block
-            && element_node.starting_tag.tag_name == "template")
-            || self.should_generate_fragment(element_node);
+        // There is a special case here: `<template>` with
+        // `v-if`/`v-else-if`/`v-else`/`v-for`/`v-slot`
+        let should_generate_fragment_instead =
+            matches!(element_node.tag_type, fervid_core::ElementKind::Template);
 
         // Generate children
         // Inlining is forbidden if we changed from `<template>` to `Fragment`
@@ -328,12 +328,12 @@ impl CodegenContext {
                         AttributeOrBinding::RegularAttribute { name, value, .. }
                             if name == "type" =>
                         {
-                            match value.as_ref() {
-                                "checkbox" => {
+                            match value.as_ref().map(|v| v.as_str()) {
+                                Some("checkbox") => {
                                     return self
                                         .get_and_add_import_ident(VueImports::VModelCheckbox);
                                 }
-                                "radio" => {
+                                Some("radio") => {
                                     return self.get_and_add_import_ident(VueImports::VModelRadio);
                                 }
                                 _ => return self.get_and_add_import_ident(VueImports::VModelText),
@@ -344,7 +344,7 @@ impl CodegenContext {
                         AttributeOrBinding::VBind(VBindDirective {
                             argument: Some(StrOrExpr::Str(s)),
                             ..
-                        }) if s == "type" => {
+                        }) if s.value == "type" => {
                             return self.get_and_add_import_ident(VueImports::VModelDynamic);
                         }
 
@@ -392,9 +392,10 @@ mod tests {
                 },
                 children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
                 template_scope: 0,
-                kind: ElementKind::Element,
+                tag_type: ElementKind::Element,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
+                codegen_node: None,
             },
             r#"_createElementVNode("div",{foo:"bar",baz:qux,readonly:true,onClick:handleClick},"hello from div")"#,
             false,
@@ -413,9 +414,10 @@ mod tests {
                 },
                 children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
                 template_scope: 0,
-                kind: ElementKind::Element,
+                tag_type: ElementKind::Element,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
+                codegen_node: None,
             },
             r#"_createElementVNode("div",null,"hello from div")"#,
             false,
@@ -437,9 +439,10 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
-                kind: ElementKind::Element,
+                tag_type: ElementKind::Element,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
+                codegen_node: None,
             },
             r#"_createElementVNode("div",{foo:"bar","some-baz":qux})"#,
             false,
@@ -458,9 +461,10 @@ mod tests {
                 },
                 children: vec![],
                 template_scope: 0,
-                kind: ElementKind::Element,
+                tag_type: ElementKind::Element,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
+                codegen_node: None,
             },
             r#"_createElementVNode("div",{foo:"bar","some-baz":qux})"#,
             false,
@@ -488,9 +492,10 @@ mod tests {
                     Node::Text(" bye!".into(), DUMMY_SP),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Element,
+                tag_type: ElementKind::Element,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
+                codegen_node: None,
             },
             r#"_createElementVNode("div",null,"hello from div "+_toDisplayString(true)+" bye!")"#,
             false,
@@ -523,15 +528,17 @@ mod tests {
                         },
                         children: vec![Node::Text("bye!".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
+                        codegen_node: None,
                     }),
                 ],
                 template_scope: 0,
-                kind: ElementKind::Element,
+                tag_type: ElementKind::Element,
                 patch_hints: Default::default(),
                 span: DUMMY_SP,
+                codegen_node: None,
             },
             r#"_createElementVNode("div",null,[_createTextVNode("hello from div "+_toDisplayString(true)),_createElementVNode("span",null,"bye!")])"#,
             false,

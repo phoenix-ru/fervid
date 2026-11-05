@@ -1,4 +1,4 @@
-use fervid_core::{ConditionalNodeSequence, ElementNode};
+use fervid_core::{ConditionalNodeSequence, Node};
 use swc_core::{
     common::{DUMMY_SP, Spanned},
     ecma::ast::{CondExpr, Expr},
@@ -13,13 +13,12 @@ impl CodegenContext {
         // First, push the `if` node
         let if_conditional = &conditional_seq.if_node;
         let if_expr = &if_conditional.condition;
-        let if_element_node = &if_conditional.node;
-        // let _has_js = transform_scoped(&mut if_expr, &self.scope_helper, if_element_node.template_scope);
+        let if_node = &if_conditional.node;
+        // let _has_js = transform_scoped(&mut if_expr, &self.scope_helper, if_node.template_scope);
         conditional_exprs.push(Box::new(if_expr.to_owned()));
-        conditional_exprs.push(Box::new(self.generate_element_or_component(
-            if_element_node,
-            should_wrap_in_block(if_element_node),
-        )));
+        conditional_exprs.push(Box::new(
+            self.generate_node(if_node, should_wrap_in_block(if_node)),
+        ));
 
         // Then, push all the `else-if` nodes
         for else_if_conditional in conditional_seq.else_if_nodes.iter() {
@@ -28,17 +27,16 @@ impl CodegenContext {
 
             // let _has_js = transform_scoped(&mut else_if_expr, &self.scope_helper, else_if_node.template_scope);
             conditional_exprs.push(Box::new(else_if_expr.to_owned()));
-            conditional_exprs.push(Box::new(self.generate_element_or_component(
-                else_if_node,
-                should_wrap_in_block(else_if_node),
-            )));
+            conditional_exprs.push(Box::new(
+                self.generate_node(else_if_node, should_wrap_in_block(else_if_node)),
+            ));
         }
 
         // Push either `else` or a comment node
         let else_expr = if let Some(ref else_node) = conditional_seq.else_node {
-            self.generate_element_or_component(else_node, should_wrap_in_block(else_node))
+            self.generate_node(else_node, should_wrap_in_block(else_node))
         } else {
-            self.generate_comment_vnode("v-if", DUMMY_SP)
+            self.generate_comment_vnode("v-if", DUMMY_SP, true)
         };
         conditional_exprs.push(Box::new(else_expr));
 
@@ -79,17 +77,23 @@ impl CodegenContext {
 }
 
 /// Omits wrapping conditional node in block when `v-for` directive is present (it will create its own block)
-fn should_wrap_in_block(element_node: &ElementNode) -> bool {
-    element_node
-        .starting_tag
-        .directives
-        .as_ref()
-        .is_none_or(|d| d.v_for.is_none())
+fn should_wrap_in_block(node: &Node) -> bool {
+    match node {
+        Node::Element(element_node) => element_node
+            .starting_tag
+            .directives
+            .as_ref()
+            .is_none_or(|d| d.v_for.is_none()),
+        Node::For(_) => false,
+        _ => true,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use fervid_core::{Conditional, ElementKind, ElementNode, Node, StartingTag};
+    #[cfg(feature = "new-pipeline")]
+    use fervid_core::{SfcDescriptor, SfcTemplateBlock, VueDirectives};
 
     use crate::test_utils::js;
 
@@ -102,7 +106,7 @@ mod tests {
             ConditionalNodeSequence {
                 if_node: Box::new(Conditional {
                     condition: *js("foo || true"),
-                    node: ElementNode {
+                    node: Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "h1".into(),
                             attributes: vec![],
@@ -110,15 +114,18 @@ mod tests {
                         },
                         children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
-                    },
+                        codegen_node: None,
+                    }),
                 }),
                 else_if_nodes: vec![],
                 else_node: None,
+                span: DUMMY_SP,
+                key_base: 0,
             },
-            r#"foo||true?(_openBlock(),_createElementBlock("h1",null,"hello")):_createCommentVNode("v-if")"#,
+            r#"foo||true?(_openBlock(),_createElementBlock("h1",null,"hello")):_createCommentVNode("v-if",true)"#,
         )
     }
 
@@ -130,7 +137,7 @@ mod tests {
             ConditionalNodeSequence {
                 if_node: Box::new(Conditional {
                     condition: *js("foo || true"),
-                    node: ElementNode {
+                    node: Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "h1".into(),
                             attributes: vec![],
@@ -138,13 +145,14 @@ mod tests {
                         },
                         children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
-                    },
+                        codegen_node: None,
+                    }),
                 }),
                 else_if_nodes: vec![],
-                else_node: Some(Box::new(ElementNode {
+                else_node: Some(Box::new(Node::Element(ElementNode {
                     starting_tag: StartingTag {
                         tag_name: "h2".into(),
                         attributes: vec![],
@@ -152,10 +160,13 @@ mod tests {
                     },
                     children: vec![Node::Text("bye".into(), DUMMY_SP)],
                     template_scope: 0,
-                    kind: ElementKind::Element,
+                    tag_type: ElementKind::Element,
                     patch_hints: Default::default(),
                     span: DUMMY_SP,
-                })),
+                    codegen_node: None,
+                }))),
+                span: DUMMY_SP,
+                key_base: 0,
             },
             r#"foo||true?(_openBlock(),_createElementBlock("h1",null,"hello")):(_openBlock(),_createElementBlock("h2",null,"bye"))"#,
         )
@@ -170,7 +181,7 @@ mod tests {
             ConditionalNodeSequence {
                 if_node: Box::new(Conditional {
                     condition: *js("foo"),
-                    node: ElementNode {
+                    node: Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "h1".into(),
                             attributes: vec![],
@@ -178,15 +189,16 @@ mod tests {
                         },
                         children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
-                    },
+                        codegen_node: None,
+                    }),
                 }),
                 else_if_nodes: vec![
                     Conditional {
                         condition: *js("true"),
-                        node: ElementNode {
+                        node: Node::Element(ElementNode {
                             starting_tag: StartingTag {
                                 tag_name: "h2".into(),
                                 attributes: vec![],
@@ -194,14 +206,15 @@ mod tests {
                             },
                             children: vec![Node::Text("hi".into(), DUMMY_SP)],
                             template_scope: 0,
-                            kind: ElementKind::Element,
+                            tag_type: ElementKind::Element,
                             patch_hints: Default::default(),
                             span: DUMMY_SP,
-                        },
+                            codegen_node: None,
+                        }),
                     },
                     Conditional {
                         condition: *js("undefined"),
-                        node: ElementNode {
+                        node: Node::Element(ElementNode {
                             starting_tag: StartingTag {
                                 tag_name: "h3".into(),
                                 attributes: vec![],
@@ -209,15 +222,18 @@ mod tests {
                             },
                             children: vec![Node::Text("bye".into(), DUMMY_SP)],
                             template_scope: 0,
-                            kind: ElementKind::Element,
+                            tag_type: ElementKind::Element,
                             patch_hints: Default::default(),
                             span: DUMMY_SP,
-                        },
+                            codegen_node: None,
+                        }),
                     },
                 ],
                 else_node: None,
+                span: DUMMY_SP,
+                key_base: 0,
             },
-            r#"foo?(_openBlock(),_createElementBlock("h1",null,"hello")):true?(_openBlock(),_createElementBlock("h2",null,"hi")):undefined?(_openBlock(),_createElementBlock("h3",null,"bye")):_createCommentVNode("v-if")"#,
+            r#"foo?(_openBlock(),_createElementBlock("h1",null,"hello")):true?(_openBlock(),_createElementBlock("h2",null,"hi")):undefined?(_openBlock(),_createElementBlock("h3",null,"bye")):_createCommentVNode("v-if",true)"#,
         )
     }
 
@@ -231,7 +247,7 @@ mod tests {
             ConditionalNodeSequence {
                 if_node: Box::new(Conditional {
                     condition: *js("foo"),
-                    node: ElementNode {
+                    node: Node::Element(ElementNode {
                         starting_tag: StartingTag {
                             tag_name: "h1".into(),
                             attributes: vec![],
@@ -239,15 +255,16 @@ mod tests {
                         },
                         children: vec![Node::Text("hello".into(), DUMMY_SP)],
                         template_scope: 0,
-                        kind: ElementKind::Element,
+                        tag_type: ElementKind::Element,
                         patch_hints: Default::default(),
                         span: DUMMY_SP,
-                    },
+                        codegen_node: None,
+                    }),
                 }),
                 else_if_nodes: vec![
                     Conditional {
                         condition: *js("true"),
-                        node: ElementNode {
+                        node: Node::Element(ElementNode {
                             starting_tag: StartingTag {
                                 tag_name: "h2".into(),
                                 attributes: vec![],
@@ -255,14 +272,15 @@ mod tests {
                             },
                             children: vec![Node::Text("hi".into(), DUMMY_SP)],
                             template_scope: 0,
-                            kind: ElementKind::Element,
+                            tag_type: ElementKind::Element,
                             patch_hints: Default::default(),
                             span: DUMMY_SP,
-                        },
+                            codegen_node: None,
+                        }),
                     },
                     Conditional {
                         condition: *js("undefined"),
-                        node: ElementNode {
+                        node: Node::Element(ElementNode {
                             starting_tag: StartingTag {
                                 tag_name: "h3".into(),
                                 attributes: vec![],
@@ -270,13 +288,14 @@ mod tests {
                             },
                             children: vec![Node::Text("good morning".into(), DUMMY_SP)],
                             template_scope: 0,
-                            kind: ElementKind::Element,
+                            tag_type: ElementKind::Element,
                             patch_hints: Default::default(),
                             span: DUMMY_SP,
-                        },
+                            codegen_node: None,
+                        }),
                     },
                 ],
-                else_node: Some(Box::new(ElementNode {
+                else_node: Some(Box::new(Node::Element(ElementNode {
                     starting_tag: StartingTag {
                         tag_name: "h4".into(),
                         attributes: vec![],
@@ -284,13 +303,90 @@ mod tests {
                     },
                     children: vec![Node::Text("bye".into(), DUMMY_SP)],
                     template_scope: 0,
-                    kind: ElementKind::Element,
+                    tag_type: ElementKind::Element,
                     patch_hints: Default::default(),
                     span: DUMMY_SP,
-                })),
+                    codegen_node: None,
+                }))),
+                span: DUMMY_SP,
+                key_base: 0,
             },
             r#"foo?(_openBlock(),_createElementBlock("h1",null,"hello")):true?(_openBlock(),_createElementBlock("h2",null,"hi")):undefined?(_openBlock(),_createElementBlock("h3",null,"good morning")):(_openBlock(),_createElementBlock("h4",null,"bye"))"#,
         )
+    }
+
+    // Vue 3.5.44 source: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/src/transforms/vIf.ts
+    // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L483-L503
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_generates_keyed_template_if_fragment_with_text() {
+        // <template v-if="ok">hello</template>
+        assert_eq!(
+            transform_and_generate_template_if(vec![Node::Text("hello".into(), DUMMY_SP)]),
+            "_ctx.ok?(_openBlock(),_createElementBlock(_Fragment,{key:0},[_createTextVNode(\"hello\")],64)):_createCommentVNode(\"v-if\",true)"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_generates_keyed_template_if_fragment_with_multiple_children() {
+        // <template v-if="ok"><i/><b/></template>
+        let element = |tag_name| {
+            Node::Element(ElementNode::new(StartingTag {
+                tag_name,
+                attributes: vec![],
+                directives: None,
+            }))
+        };
+        assert_eq!(
+            transform_and_generate_template_if(vec![element("i".into()), element("b".into())]),
+            "_ctx.ok?(_openBlock(),_createElementBlock(_Fragment,{key:0},[_createElementVNode(\"i\"),_createElementVNode(\"b\")],64)):_createCommentVNode(\"v-if\",true)"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn transform_and_generate_template_if(children: Vec<Node>) -> String {
+        let mut template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(ElementNode::new_with_children_and_type(
+                StartingTag {
+                    tag_name: "template".into(),
+                    attributes: vec![],
+                    directives: Some(Box::new(VueDirectives {
+                        v_if: Some(js("ok")),
+                        ..Default::default()
+                    })),
+                },
+                children,
+                ElementKind::Template,
+            ))],
+            span: DUMMY_SP,
+        };
+        let descriptor = SfcDescriptor::default();
+        let options = fervid_transform::TransformSfcOptions {
+            is_prod: false,
+            is_ce: false,
+            props_destructure: Default::default(),
+            scope_id: "",
+            filename: "anonymous.vue",
+            transform_asset_urls: Default::default(),
+            directive_transforms: Default::default(),
+            node_transforms: Default::default(),
+        };
+        let mut transform_ctx = fervid_transform::TransformSfcContext::new(&descriptor, &options);
+        fervid_transform::template::transform_and_record_template(
+            &mut template,
+            &mut transform_ctx,
+        );
+        assert!(
+            transform_ctx.errors.is_empty(),
+            "{:#?}",
+            transform_ctx.errors
+        );
+
+        let root = template.roots.first().expect("conditional template root");
+        let mut codegen_ctx = CodegenContext::default();
+        crate::test_utils::to_str(codegen_ctx.generate_node(root, true))
     }
 
     fn test_out(input: ConditionalNodeSequence, expected: &str) {

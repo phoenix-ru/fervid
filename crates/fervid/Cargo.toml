@@ -10,6 +10,7 @@ license = "Apache-2.0"
 [features]
 default = []
 dbg_print = []
+new-pipeline = ["fervid_transform/new-pipeline", "fervid_codegen/new-pipeline"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
