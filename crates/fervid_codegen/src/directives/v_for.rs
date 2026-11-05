@@ -1,6 +1,8 @@
 use fervid_core::{
-    ForNode, ForParseResult, IntoIdent, Node, PatchFlags, VForDirective, VueImports, fervid_atom,
+    ForCodegenNodeMemo, ForNode, ForParseResult, IntoIdent, Node, PatchFlags, VForDirective,
+    VueImports, fervid_atom,
 };
+use fervid_transform::template::utils::maybe_parenthesize;
 use swc_core::{
     common::{DUMMY_SP, Span},
     ecma::ast::{
@@ -62,22 +64,86 @@ impl CodegenContext {
             .patch_flags
             .contains(PatchFlags::StableFragment);
 
-        let item_render_expr = if let [Node::Element(_)] = for_node.children.as_slice() {
+        // 1.1. One Element child can be generated as-is (likely into VNodeCall),
+        // otherwise wrap it with Fragment
+        let item_render_expr = Box::new(if let [Node::Element(_)] = for_node.children.as_slice() {
             self.generate_node(&for_node.children[0], !is_stable)
         } else {
             self.generate_for_fragment(&for_node.children, codegen_node.key.as_deref(), span)
+        });
+
+        // 2. Generate `renderList`. Two cases are possible here:
+        // a. Normal (e.g. `<div v-for="item in list" :key="item.key" />`
+        // _renderList(_ctx.list, (item) => {
+        //   return (_openBlock(), _createElementBlock("div", {
+        //     key: item.key
+        //   }))
+        // })
+        //
+        // b. Memoized (e.g. `<div v-for="item in list" v-memo="[]" :key="item.key" />`)
+        // _renderList(_ctx.list, (item, __, ___, _cached) => {
+        //   const _memo = ([])
+        //   if (_cached && _cached.el && _cached.key === item.key && _isMemoSame(_cached, _memo)) return _cached
+        //   const _item = (_openBlock(), _createElementBlock("div", { key: item.key }))
+        //   _item.memo = _memo
+        //   return _item
+        // }, _cache, 4)
+
+        // 2.1. `_renderList` first argument - iterable
+        let render_list_iterable = ExprOrSpread {
+            spread: None,
+            expr: for_node.parse_result.source.to_owned(),
         };
 
-        let render_list_arrow = Expr::Arrow(ArrowExpr {
-            span,
-            ctxt: Default::default(),
-            params: create_for_loop_params(&for_node.parse_result, 1),
-            body: Box::new(BlockStmtOrExpr::Expr(Box::new(item_render_expr))),
-            is_async: false,
-            is_generator: false,
-            type_params: None,
-            return_type: None,
-        });
+        // 2.2. `_renderList` second argument - render function or memoized arrow function
+        let (render_list_arrow, memo_cache_args) = if let Some(ref memo) = codegen_node.memo {
+            // Memoized
+            let memoized_arrow = self.generate_memoized_render_arrow(
+                create_for_loop_params(&for_node.parse_result, 3),
+                item_render_expr,
+                memo.to_owned(),
+            );
+
+            // Memoized renderList stores previous VNodes in `_cache[index]`.
+            // `_renderList(source, arrow, _cache, index)`
+            let index = self.allocate_next_cache_entry();
+            let cache = expr_arg(Expr::Ident(fervid_atom!("_cache").into_ident()));
+            let cache_index = expr_arg(Expr::Lit(Lit::Num(Number {
+                span,
+                value: index.into(),
+                raw: None,
+            })));
+
+            (
+                ExprOrSpread::from(memoized_arrow),
+                Some([cache, cache_index]),
+            )
+        } else {
+            // Plain render function
+            (
+                ExprOrSpread::from(Expr::Arrow(ArrowExpr {
+                    span,
+                    ctxt: Default::default(),
+                    params: create_for_loop_params(&for_node.parse_result, 1),
+                    body: Box::new(BlockStmtOrExpr::Expr(item_render_expr)),
+                    is_async: false,
+                    is_generator: false,
+                    type_params: None,
+                    return_type: None,
+                })),
+                None,
+            )
+        };
+
+        // 2.3. `_renderList` arguments:
+        // Plain:    `(source, arrow)`
+        // Memoized: `(source, arrow, _cache, index)`
+        let mut render_list_args = vec![render_list_iterable, render_list_arrow];
+        if let Some(memo_cache_args) = memo_cache_args {
+            render_list_args.extend(memo_cache_args);
+        }
+
+        // 2.4. Build `renderList` itself
         let render_list = Expr::Call(CallExpr {
             span,
             ctxt: Default::default(),
@@ -85,12 +151,12 @@ impl CodegenContext {
                 self.get_and_add_import_ident(VueImports::RenderList)
                     .into_ident_spanned(span),
             ))),
-            args: vec![
-                expr_arg(*for_node.parse_result.source.clone()),
-                expr_arg(render_list_arrow),
-            ],
+            args: render_list_args,
             type_args: None,
         });
+
+        // 3. Build the for loop Fragment.
+        // Note: this is separate from Fragment which is built for multi-child for
         let fragment = Expr::Call(CallExpr {
             span,
             ctxt: Default::default(),
@@ -114,9 +180,11 @@ impl CodegenContext {
             type_args: None,
         });
 
+        // 4. Wrap in `openBlock`
         let value =
             self.wrap_in_open_block_with_tracking(fragment, span, codegen_node.disable_tracking);
 
+        // 5. Cache if needed
         if codegen_node.cache.is_empty() {
             value
         } else {
@@ -269,17 +337,17 @@ impl CodegenContext {
     /// Generates `v-for` in combination with `v-memo`.
     ///
     /// ## Example
-    /// IN: `<div v-for="i in 3" v-memo="[]"></div>`
+    /// IN: `<div v-for="i in 3" v-memo="[]" :key="i"></div>`
     ///
     /// OUT:
     /// ```js
     /// (_openBlock(), _createElementBlock(_Fragment, null, _renderList(3, (i, __, ___, _cached) => {
     ///   const _memo = ([])
-    ///   if (_cached && _isMemoSame(_cached, _memo)) return _cached
-    ///   const _item = (_openBlock(), _createElementBlock("div"))
+    ///   if (_cached && _cached.el && _cached.key === i && _isMemoSame(_cached, _memo)) return _cached
+    ///   const _item = (_openBlock(), _createElementBlock("div", { key: i }))
     ///   _item.memo = _memo
     ///   return _item
-    /// }, _cache, 0), 64 /* STABLE_FRAGMENT */))
+    /// }, _cache, 4), 64 /* STABLE_FRAGMENT */))
     /// ```
     pub fn generate_v_for_memoized(
         &mut self,
@@ -303,7 +371,11 @@ impl CodegenContext {
             expr: self.generate_memoized_render_arrow(
                 create_for_loop_params(&v_for.parse_result, 3),
                 item_render_expr,
-                memo_expr,
+                // Memo key is unsupported here
+                ForCodegenNodeMemo {
+                    expr: memo_expr,
+                    key: None,
+                },
             ),
         };
 
@@ -400,14 +472,14 @@ impl CodegenContext {
     /// Generates the arrow function for [generate_v_for_memoized].
     ///
     /// ## Example
-    /// IN: `<div v-for="i in 3" v-memo="[]"></div>`
+    /// IN: `<div v-for="i in 3" v-memo="[]" :key="i"></div>`
     ///
     /// OUT:
     /// ```js
     /// (i, __, ___, _cached) => {
     ///   const _memo = ([])
-    ///   if (_cached && _isMemoSame(_cached, _memo)) return _cached
-    ///   const _item = (_openBlock(), _createElementBlock("div"))
+    ///   if (_cached && _cached.el && _cached.key === i && _isMemoSame(_cached, _memo)) return _cached
+    ///   const _item = (_openBlock(), _createElementBlock("div", { key: i }))
     ///   _item.memo = _memo
     ///   return _item
     /// }
@@ -416,10 +488,11 @@ impl CodegenContext {
         &mut self,
         mut render_list_params: Vec<Pat>,
         item_render_expr: Box<Expr>,
-        memo_expr: Box<Expr>,
+        memo: ForCodegenNodeMemo,
     ) -> Box<Expr> {
         // `_cached`
         let cached_ident = fervid_atom!("_cached").into_ident();
+        let cached_expr = Box::new(Expr::Ident(cached_ident.to_owned()));
 
         // `_memo`
         let memo_ident = fervid_atom!("_memo").into_ident();
@@ -430,7 +503,7 @@ impl CodegenContext {
             type_ann: None,
         }));
 
-        // `const _memo = ([])`
+        // `const _memo = (memo_expr)`
         let const_memo = Stmt::Decl(Decl::Var(Box::new(VarDecl {
             span: DUMMY_SP,
             ctxt: Default::default(),
@@ -442,10 +515,39 @@ impl CodegenContext {
                     id: memo_ident.to_owned(),
                     type_ann: None,
                 }),
-                init: Some(memo_expr),
+                init: Some(maybe_parenthesize(memo.expr)),
                 definite: false,
             }],
         })));
+
+        // `_cached.el`
+        let cached_el = Box::new(Expr::Member(MemberExpr {
+            span: DUMMY_SP,
+            obj: cached_expr.to_owned(),
+            prop: MemberProp::Ident(IdentName {
+                span: DUMMY_SP,
+                sym: fervid_atom!("el"),
+            }),
+        }));
+
+        // `_cached.key === memo_key`
+        let cached_key_check = memo.key.map(|memo_key| {
+            let cached_key = Box::new(Expr::Member(MemberExpr {
+                span: DUMMY_SP,
+                obj: cached_expr.to_owned(),
+                prop: MemberProp::Ident(IdentName {
+                    span: DUMMY_SP,
+                    sym: fervid_atom!("key"),
+                }),
+            }));
+
+            Box::new(Expr::Bin(BinExpr {
+                span: DUMMY_SP,
+                op: BinaryOp::EqEqEq,
+                left: cached_key,
+                right: maybe_parenthesize(memo_key),
+            }))
+        });
 
         // `_isMemoSame(_cached, _memo)`
         let is_memo_same = Box::new(Expr::Call(CallExpr {
@@ -460,7 +562,7 @@ impl CodegenContext {
             args: vec![
                 ExprOrSpread {
                     spread: None,
-                    expr: Box::new(Expr::Ident(cached_ident.to_owned())),
+                    expr: cached_expr.to_owned(),
                 },
                 ExprOrSpread {
                     spread: None,
@@ -470,15 +572,22 @@ impl CodegenContext {
             type_args: None,
         }));
 
-        // `_cached && _isMemoSame(_cached, _memo)`
-        let cache_cond = Box::new(Expr::Bin(BinExpr {
-            span: DUMMY_SP,
-            op: BinaryOp::LogicalAnd,
-            left: Box::new(Expr::Ident(cached_ident.to_owned())),
-            right: is_memo_same,
-        }));
+        // `_cached && _cached.el && _cached.key === memo_key && _isMemoSame(_cached, _memo)`
+        // `_cached.key` check is optional and depends on memo key presence
+        let mut cache_cond = cached_expr.to_owned();
+        for term in std::iter::once(cached_el)
+            .chain(cached_key_check)
+            .chain(std::iter::once(is_memo_same))
+        {
+            cache_cond = Box::new(Expr::Bin(BinExpr {
+                span: DUMMY_SP,
+                op: BinaryOp::LogicalAnd,
+                left: cache_cond,
+                right: term,
+            }));
+        }
 
-        // `if (_cached && _isMemoSame(_cached, _memo)) return _cached`
+        // `if (_cached && _cached.el && _cached.key === memo_key && _isMemoSame(_cached, _memo)) return _cached`
         let if_cached_return = Stmt::If(IfStmt {
             span: DUMMY_SP,
             test: cache_cond,
@@ -582,8 +691,8 @@ fn key_object(key: Expr, span: Span) -> Expr {
 mod tests {
     #[cfg(feature = "new-pipeline")]
     use fervid_core::{
-        AttributeOrBinding, BuiltinType, ElementCodegenValue, SfcDescriptor, SfcTemplateBlock,
-        VBindDirective, VNodeCall, VNodeCallTag, VueDirectives,
+        AttributeOrBinding, BuiltinType, ElementCodegenValue, ForCodegenNodeMemo, SfcDescriptor,
+        SfcTemplateBlock, VBindDirective, VNodeCall, VNodeCallTag, VueDirectives,
     };
     use fervid_core::{
         CacheMarker, ElementKind, ElementNode, ForCodegenNode, ForNode, ForParseResult, Node,
@@ -669,6 +778,393 @@ mod tests {
             crate::test_utils::to_str(result),
             "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(10,(item)=>_createElementVNode(\"p\")),64))"
         );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn memoized_for_node_checks_key_only_when_present() {
+        // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L58-L85
+        // <div v-for="item in items" :key="item.id" v-memo="[item.rev]" />
+        let mut keyed_child = element("div");
+        let Node::Element(child) = &mut keyed_child else {
+            panic!("expected element child");
+        };
+        child
+            .starting_tag
+            .attributes
+            .push(AttributeOrBinding::VBind(VBindDirective {
+                argument: Some(fervid_atom!("key").into()),
+                value: js("item.id"),
+                is_camel: false,
+                is_prop: false,
+                is_attr: false,
+                span: DUMMY_SP,
+            }));
+        let mut keyed = for_node(
+            js("items"),
+            vec![keyed_child],
+            PatchFlags::KeyedFragment,
+            true,
+            false,
+            Some(js("item.id")),
+        );
+        let codegen = keyed
+            .codegen_node
+            .as_mut()
+            .expect("loop needs codegen metadata");
+        codegen.memo = Some(ForCodegenNodeMemo {
+            expr: js("[item.rev]"),
+            key: Some(js("item.id")),
+        });
+        let output = crate::test_utils::to_str(CodegenContext::default().generate_for_node(&keyed));
+        assert!(
+            output
+                .contains("_cached&&_cached.el&&_cached.key===item.id&&_isMemoSame(_cached,_memo)"),
+            "{output}"
+        );
+        assert!(output.contains("},_cache,0)"), "{output}");
+        assert!(output.contains("{key:item.id}"), "{output}");
+
+        // <div v-for="item in items" v-memo="[item.rev]" />
+        let mut unkeyed = for_node(
+            js("items"),
+            vec![element("div")],
+            PatchFlags::UnkeyedFragment,
+            true,
+            false,
+            None,
+        );
+        unkeyed
+            .codegen_node
+            .as_mut()
+            .expect("loop needs codegen metadata")
+            .memo = Some(ForCodegenNodeMemo {
+            expr: js("[item.rev]"),
+            key: None,
+        });
+        let output =
+            crate::test_utils::to_str(CodegenContext::default().generate_for_node(&unkeyed));
+        assert!(
+            output.contains("_cached&&_cached.el&&_isMemoSame(_cached,_memo)"),
+            "{output}"
+        );
+        assert!(!output.contains("_cached.key"), "{output}");
+        assert!(output.contains("},_cache,0)"), "{output}");
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn memo_on_root_and_component_uses_vnode_factory() {
+        // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L11-L21
+        // <div v-memo="[x]" />
+        let (_, output) =
+            transform_and_generate_node(memo_element("div", ElementKind::Element, "[x]"));
+        assert!(output.contains("_withMemo([_ctx.x],()=>"), "{output}");
+        assert!(output.contains("_createElementBlock(\"div\")"), "{output}");
+
+        // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L45-L47
+        // <Comp v-memo="[x]" />
+        let (_, output) =
+            transform_and_generate_node(memo_element("Comp", ElementKind::Component, "[x]"));
+        assert!(
+            output.contains("_withMemo([_ctx.x],()=>_createVNode("),
+            "{output}"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn memo_on_element_preserves_dynamic_key() {
+        // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L24-L29
+        // <div v-memo="[updateKey]" :key="updateKey" />
+        let mut node = memo_element("div", ElementKind::Element, "[updateKey]");
+        let Node::Element(element) = &mut node else {
+            panic!("memo input should be element");
+        };
+        element
+            .starting_tag
+            .attributes
+            .push(crate::test_utils::v_bind_attribute("key", "updateKey"));
+        let (_, output) = transform_and_generate_node(node);
+        assert!(output.contains("_withMemo([_ctx.updateKey]"), "{output}");
+        assert!(output.contains("{key:_ctx.updateKey}"), "{output}");
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn memo_inside_v_if_keeps_branch_wrapper() {
+        // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L49-L56
+        // <div v-if="ok" v-memo="[x]" />
+        let mut node = memo_element("div", ElementKind::Element, "[x]");
+        let Node::Element(element) = &mut node else {
+            panic!("memo input should be element");
+        };
+        element
+            .starting_tag
+            .directives
+            .as_mut()
+            .expect("memo directive should be present")
+            .v_if = Some(js("ok"));
+        let (_, output) = transform_and_generate_node(node);
+        assert!(output.contains("_ctx.ok?_withMemo([_ctx.x]"), "{output}");
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn memo_on_v_if_and_v_else_keeps_both_wrappers() {
+        // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L49-L56
+        // <section><div v-if="ok" v-memo="[x]" /><Comp v-else v-memo="[x]" /></section>
+        let mut root = element_with_kind("section", ElementKind::Element, vec![]);
+        let Node::Element(section) = &mut root else {
+            panic!("expected section element");
+        };
+        let mut if_node = memo_element("div", ElementKind::Element, "[x]");
+        let Node::Element(if_element) = &mut if_node else {
+            panic!("expected v-if element");
+        };
+        if_element
+            .starting_tag
+            .directives
+            .as_mut()
+            .expect("memo directive should be present")
+            .v_if = Some(js("ok"));
+        let mut else_node = memo_element("Comp", ElementKind::Component, "[x]");
+        let Node::Element(else_element) = &mut else_node else {
+            panic!("expected v-else component");
+        };
+        else_element
+            .starting_tag
+            .directives
+            .as_mut()
+            .expect("memo directive should be present")
+            .v_else = Some(());
+        section.children.extend([if_node, else_node]);
+
+        let (_, output) = transform_and_generate_node(root);
+        assert_eq!(output.matches("_withMemo([_ctx.x]").count(), 2, "{output}");
+        assert!(output.contains("_ctx.ok?"), "{output}");
+        assert!(output.contains("{key:0}"), "{output}");
+        assert!(output.contains("{key:1}"), "{output}");
+        assert!(output.contains("_cache,0)"), "{output}");
+        assert!(output.contains("_cache,1)"), "{output}");
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn nested_memo_uses_separate_cache_entries() {
+        // <div v-memo="[outer]"><span v-memo="[inner]" /></div>
+        let mut root = memo_element("div", ElementKind::Element, "[outer]");
+        let Node::Element(element) = &mut root else {
+            panic!("expected memoized element");
+        };
+        element
+            .children
+            .push(memo_element("span", ElementKind::Element, "[inner]"));
+        let (_, output) = transform_and_generate_node(root);
+        assert!(output.contains("_withMemo([_ctx.inner]"), "{output}");
+        assert!(output.contains("_withMemo([_ctx.outer]"), "{output}");
+        assert!(output.contains("_cache,0)"), "{output}");
+        assert!(output.contains("_cache,1)"), "{output}");
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn memo_nested_in_v_for_keeps_child_dependency_scope() {
+        // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L31-L43
+        // <div v-for="item in items"><div v-memo="[item.id, updateKey]" :key="get(item, updateKey)" /></div>
+        let mut root = element_with_kind("div", ElementKind::Element, vec![]);
+        let Node::Element(outer) = &mut root else {
+            panic!("expected v-for element");
+        };
+        outer.starting_tag.directives = Some(Box::new(VueDirectives {
+            v_for: Some(VForDirective {
+                parse_result: Box::new(ForParseResult {
+                    source: js("items"),
+                    value: js("item"),
+                    key: None,
+                    index: None,
+                    finalized: false,
+                    finalized_is_dynamic: false,
+                }),
+                patch_flags: Default::default(),
+                span: DUMMY_SP,
+            }),
+            ..Default::default()
+        }));
+        let mut inner = memo_element("div", ElementKind::Element, "[item.id, updateKey]");
+        let Node::Element(inner_element) = &mut inner else {
+            panic!("expected memoized child");
+        };
+        inner_element
+            .starting_tag
+            .attributes
+            .push(crate::test_utils::v_bind_attribute(
+                "key",
+                "get(item, updateKey)",
+            ));
+        outer.children.push(inner);
+
+        let (_, output) = transform_and_generate_node(root);
+        assert!(
+            output.contains("_withMemo([item.id,_ctx.updateKey]"),
+            "{output}"
+        );
+        assert!(
+            output.contains("{key:_ctx.get(item,_ctx.updateKey)}"),
+            "{output}"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn memo_on_v_for_compares_processed_key() {
+        // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L58-L85
+        // <div v-for="item in items" :key="get(item, suffix)" v-memo="[item.rev]" />
+        let (_, output) = transform_and_generate_node(memo_for_element(
+            "div",
+            ElementKind::Element,
+            "[item.rev]",
+            Some("get(item, suffix)"),
+        ));
+        assert!(
+            output.contains("_cached.key===_ctx.get(item,_ctx.suffix)"),
+            "{output}"
+        );
+        assert!(
+            output.contains("{key:_ctx.get(item,_ctx.suffix)}"),
+            "{output}"
+        );
+        assert!(output.contains("},_cache,0)"), "{output}");
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn memo_on_v_for_parenthesizes_conditional_key() {
+        // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L78-L86
+        // <div v-for="item in items" :key="item.id ? item.id : fallback" v-memo="[item.rev]" />
+        let (_, output) = transform_and_generate_node(memo_for_element(
+            "div",
+            ElementKind::Element,
+            "[item.rev]",
+            Some("item.id ? item.id : fallback"),
+        ));
+        assert!(
+            output.contains("_cached.key===(item.id?item.id:_ctx.fallback)"),
+            "{output}"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn memo_on_template_v_for_keeps_carrier_expression() {
+        // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L88-L106
+        // <template v-for="item in items" :key="get(item)" v-memo="[item.rev]"><span /></template>
+        let mut node = memo_for_element(
+            "template",
+            ElementKind::Template,
+            "[item.rev]",
+            Some("get(item)"),
+        );
+        let Node::Element(element) = &mut node else {
+            panic!("memo input should be template element");
+        };
+        element
+            .children
+            .push(element_with_kind("span", ElementKind::Element, vec![]));
+        let (node, output) = transform_and_generate_node(node);
+        let Node::For(for_node) = node else {
+            panic!("template v-for should produce ForNode");
+        };
+        let memo = for_node
+            .codegen_node
+            .as_ref()
+            .and_then(|codegen| codegen.memo.as_ref())
+            .expect("template carrier memo should reach loop codegen");
+        assert_eq!(crate::test_utils::to_str(memo.expr.as_ref()), "[item.rev]");
+        assert!(output.contains("_cached.key===_ctx.get(item)"), "{output}");
+        assert!(output.contains("{key:_ctx.get(item)}"), "{output}");
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn memo_on_template_v_for_with_multiple_children_caches_fragment() {
+        // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/src/transforms/vFor.ts#L166-L180
+        // <template v-for="item in items" :key="item.id" v-memo="[item.rev]">hello<span /></template>
+        let mut node = memo_for_element(
+            "template",
+            ElementKind::Template,
+            "[item.rev]",
+            Some("item.id"),
+        );
+        let Node::Element(element) = &mut node else {
+            panic!("memo input should be template element");
+        };
+        element.children.extend([
+            Node::Text("hello".into(), DUMMY_SP),
+            element_with_kind("span", ElementKind::Element, vec![]),
+        ]);
+
+        let (node, output) = transform_and_generate_node(node);
+        let Node::For(for_node) = node else {
+            panic!("template v-for should produce ForNode");
+        };
+        assert!(
+            for_node
+                .codegen_node
+                .as_ref()
+                .is_some_and(|codegen| codegen.memo.is_some()),
+            "carrier memo should cover entire item fragment"
+        );
+        assert!(output.contains("_cached.key===item.id"), "{output}");
+        assert!(
+            output.contains("_createElementBlock(_Fragment,{key:item.id}"),
+            "{output}"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn memo_element(tag: &str, kind: ElementKind, memo: &str) -> Node {
+        let mut node = element_with_kind(tag, kind, vec![]);
+        let Node::Element(element) = &mut node else {
+            panic!("memo input should be element");
+        };
+        element.starting_tag.directives = Some(Box::new(VueDirectives {
+            v_memo: Some(js(memo)),
+            ..Default::default()
+        }));
+        node
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn memo_for_element(tag: &str, kind: ElementKind, memo: &str, key: Option<&str>) -> Node {
+        let mut node = memo_element(tag, kind, memo);
+        let Node::Element(element) = &mut node else {
+            panic!("memo loop input should be element");
+        };
+        if let Some(key) = key {
+            element
+                .starting_tag
+                .attributes
+                .push(crate::test_utils::v_bind_attribute("key", key));
+        }
+        element
+            .starting_tag
+            .directives
+            .as_mut()
+            .expect("memo directive should be present")
+            .v_for = Some(VForDirective {
+            parse_result: Box::new(ForParseResult {
+                source: js("items"),
+                value: js("item"),
+                key: None,
+                index: None,
+                finalized: false,
+                finalized_is_dynamic: false,
+            }),
+            patch_flags: Default::default(),
+            span: DUMMY_SP,
+        });
+        node
     }
 
     #[test]
@@ -1181,9 +1677,14 @@ mod tests {
             }),
             ..Default::default()
         }));
+        transform_and_generate_node(Node::Element(root))
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn transform_and_generate_node(root: Node) -> (Node, String) {
         let mut template = SfcTemplateBlock {
             lang: "html".into(),
-            roots: vec![Node::Element(root)],
+            roots: vec![root],
             span: DUMMY_SP,
         };
         let descriptor = SfcDescriptor::default();
@@ -1288,7 +1789,7 @@ mod tests {
 
         assert_eq!(
             crate::test_utils::to_str(res),
-            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(3,(item,__,___,_cached)=>{const _memo=[msg.value];if(_cached&&_isMemoSame(_cached,_memo))return _cached;const _item=_createElementVNode(\"div\");_item.memo=_memo;return _item;},_cache,0),64))"
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(3,(item,__,___,_cached)=>{const _memo=[msg.value];if(_cached&&_cached.el&&_isMemoSame(_cached,_memo))return _cached;const _item=_createElementVNode(\"div\");_item.memo=_memo;return _item;},_cache,0),64))"
         );
     }
 
@@ -1317,6 +1818,7 @@ mod tests {
                 is_template,
                 key,
                 cache: Default::default(),
+                memo: None,
             })),
             span: DUMMY_SP,
         }

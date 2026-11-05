@@ -218,6 +218,13 @@ pub struct ForCodegenNode {
     pub is_template: bool,
     pub key: Option<Box<Expr>>,
     pub cache: CacheMarkers,
+    pub memo: Option<ForCodegenNodeMemo>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ForCodegenNodeMemo {
+    pub expr: Box<Expr>,
+    pub key: Option<Box<Expr>>,
 }
 
 // JS Node Types
