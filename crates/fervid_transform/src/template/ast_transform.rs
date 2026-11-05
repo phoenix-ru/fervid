@@ -83,7 +83,7 @@ pub fn transform_and_record_template(
         }
 
         let new_root = Node::Element(ElementNode {
-            tag_type: ElementKind::Element,
+            tag_type: ElementKind::Template,
             starting_tag: StartingTag {
                 tag_name: fervid_atom!("template"),
                 attributes: vec![],
