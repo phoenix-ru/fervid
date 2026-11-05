@@ -195,6 +195,7 @@ pub struct ConditionalNodeSequence {
     pub else_if_nodes: Vec<Conditional>,
     pub else_node: Option<Box<Node>>,
     pub span: Span,
+    pub key_base: usize,
 }
 
 /// A wrapper around a `Node` with a condition attached to it.

@@ -156,6 +156,14 @@ impl CodegenContext {
         });
 
         // 3. Build the for loop Fragment.
+        // 3.1. Build the branch key when v-for is used together with v-if (`{ key: <number> }`)
+        let branch_key = if let Some(key) = codegen_node.branch_key {
+            expr_arg(key_object(Expr::from(key), span))
+        } else {
+            expr_arg(Expr::Lit(Lit::Null(Null { span })))
+        };
+
+        // 3.2. Build the Fragment itself.
         // Note: this is separate from Fragment which is built for multi-child for
         let fragment = Expr::Call(CallExpr {
             span,
@@ -169,7 +177,7 @@ impl CodegenContext {
                     self.get_and_add_import_ident(VueImports::Fragment)
                         .into_ident_spanned(span),
                 )),
-                expr_arg(Expr::Lit(Lit::Null(Null { span }))),
+                branch_key,
                 expr_arg(render_list),
                 expr_arg(Expr::Lit(Lit::Num(Number {
                     span,
@@ -240,7 +248,8 @@ impl CodegenContext {
         self.wrap_in_open_block(fragment, span)
     }
 
-    /// Generates `(openBlock(true), createElementBlock(Fragment, null, renderList(<list>, (<item>) => (<expr>)), <patch flag>))`
+    /// Generates `(openBlock(true), createElementBlock(Fragment, null, renderList(<list>, (<item>) => (<expr>)), <patch flag>))`.
+    /// The second `null` param can also be a branch key, e.g. `{ key: 0 }`
     pub fn generate_v_for(&mut self, v_for: &VForDirective, item_render_expr: Box<Expr>) -> Expr {
         let span = v_for.span;
 
@@ -300,6 +309,7 @@ impl CodegenContext {
                     optional: false,
                 })),
             },
+            // Note - `{ key: <number> }` is not supported here
             ExprOrSpread {
                 spread: None,
                 expr: Box::new(Expr::Lit(Lit::Null(Null { span }))),
@@ -349,6 +359,8 @@ impl CodegenContext {
     ///   return _item
     /// }, _cache, 4), 64 /* STABLE_FRAGMENT */))
     /// ```
+    ///
+    /// The second `null` param can also be a branch key, e.g. `{ key: 0 }`.
     pub fn generate_v_for_memoized(
         &mut self,
         v_for: &VForDirective,
@@ -782,6 +794,43 @@ mod tests {
 
     #[cfg(feature = "new-pipeline")]
     #[test]
+    fn v_if_v_for_keeps_branch_and_item_keys_separate() {
+        // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vFor.spec.ts#L1033-L1067
+        // <div v-if="ok" v-for="item in items" :key="item.id" />
+        let mut node = element_with_kind(
+            "div",
+            ElementKind::Element,
+            vec![crate::test_utils::v_bind_attribute("key", "item.id")],
+        );
+        let Node::Element(element) = &mut node else {
+            panic!("loop input should be element");
+        };
+        element.starting_tag.directives = Some(Box::new(VueDirectives {
+            v_if: Some(js("ok")),
+            v_for: Some(VForDirective {
+                parse_result: Box::new(ForParseResult {
+                    source: js("items"),
+                    value: js("item"),
+                    key: None,
+                    index: None,
+                    finalized: false,
+                    finalized_is_dynamic: false,
+                }),
+                patch_flags: Default::default(),
+                span: DUMMY_SP,
+            }),
+            ..Default::default()
+        }));
+
+        let (_, output) = transform_and_generate_node(node);
+        assert_eq!(
+            output,
+            "_ctx.ok?(_openBlock(true),_createElementBlock(_Fragment,{key:0},_renderList(_ctx.items,(item)=>(_openBlock(),_createElementBlock(\"div\",{key:item.id}))),128)):_createCommentVNode(\"v-if\",true)"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
     fn memoized_for_node_checks_key_only_when_present() {
         // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L58-L85
         // <div v-for="item in items" :key="item.id" v-memo="[item.rev]" />
@@ -941,12 +990,10 @@ mod tests {
         section.children.extend([if_node, else_node]);
 
         let (_, output) = transform_and_generate_node(root);
-        assert_eq!(output.matches("_withMemo([_ctx.x]").count(), 2, "{output}");
-        assert!(output.contains("_ctx.ok?"), "{output}");
-        assert!(output.contains("{key:0}"), "{output}");
-        assert!(output.contains("{key:1}"), "{output}");
-        assert!(output.contains("_cache,0)"), "{output}");
-        assert!(output.contains("_cache,1)"), "{output}");
+        assert_eq!(
+            output,
+            "(_openBlock(),_createElementBlock(\"section\",null,[_ctx.ok?_withMemo([_ctx.x],()=>(_openBlock(),_createElementBlock(\"div\",{key:0})),_cache,0):_withMemo([_ctx.x],()=>(_openBlock(),_createBlock(_component_Comp,{key:1})),_cache,1)]))"
+        );
     }
 
     #[cfg(feature = "new-pipeline")]
@@ -1819,6 +1866,7 @@ mod tests {
                 key,
                 cache: Default::default(),
                 memo: None,
+                branch_key: None,
             })),
             span: DUMMY_SP,
         }

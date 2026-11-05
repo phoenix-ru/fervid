@@ -401,6 +401,7 @@ pub fn process_for(
             Default::default()
         },
         memo,
+        branch_key: None,
     });
 
     for_node.codegen_node = Some(codegen_node);
@@ -559,6 +560,7 @@ mod tests {
                 key: Some(ident("item")),
                 cache: Default::default(),
                 memo: None,
+                branch_key: None,
             })),
             span: DUMMY_SP,
         })

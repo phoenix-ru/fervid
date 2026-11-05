@@ -150,7 +150,9 @@ impl CodegenContext {
                 self.generate_element_or_component(element_node, wrap_in_block)
             }
 
-            Node::Comment(comment, span) => self.generate_comment_vnode(comment, span.to_owned()),
+            Node::Comment(comment, span) => {
+                self.generate_comment_vnode(comment, span.to_owned(), false)
+            }
 
             Node::For(for_node) => self.generate_for_node(for_node),
 

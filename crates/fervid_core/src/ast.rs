@@ -62,6 +62,7 @@ pub enum VNodeCallTag {
     CallExpression(CallExpression),
     Builtin(BuiltinType),
     Expr(Box<Expr>),
+    Fragment,
 }
 
 #[derive(Debug, Clone)]
@@ -219,6 +220,8 @@ pub struct ForCodegenNode {
     pub key: Option<Box<Expr>>,
     pub cache: CacheMarkers,
     pub memo: Option<ForCodegenNodeMemo>,
+    /// Key prop to be generated in case the ForNode is a child of Conditional
+    pub branch_key: Option<usize>,
 }
 
 #[derive(Debug, Clone)]

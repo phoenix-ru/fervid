@@ -141,8 +141,8 @@ impl CodegenContext {
 mod tests {
     use fervid_core::{
         AttributeOrBinding, BuiltinType, ElementCodegenValue, ElementKind, ElementNode, Node,
-        SfcDescriptor, SfcStyleBlock, StartingTag, StrOrExpr, VBindDirective, VCustomDirective,
-        VueDirectives,
+        SfcDescriptor, SfcStyleBlock, SfcTemplateBlock, StartingTag, StrOrExpr, VBindDirective,
+        VCustomDirective, VueDirectives,
     };
     use fervid_transform::{
         TransformSfcContext, TransformSfcOptions,
@@ -492,6 +492,50 @@ mod tests {
             ),
             "_renderSlot(_ctx.$slots,\"default\",{},undefined,true,item.id)"
         );
+    }
+
+    #[test]
+    fn conditional_slot_outlet_preserves_user_key() {
+        // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/src/utils.ts#L480-L507
+        // <slot v-if="ok" :key="userKey" />
+        assert_eq!(
+            transform_and_generate_conditional_slot(vec![v_bind_attribute("key", "userKey")]),
+            "_ctx.ok?_renderSlot(_ctx.$slots,\"default\",{key:_ctx.userKey}):_createCommentVNode(\"v-if\",true)"
+        );
+    }
+
+    #[test]
+    fn conditional_slot_outlet_receives_sixth_branch_key() {
+        // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L525-L543
+        // <slot v-if="ok" />
+        assert_eq!(
+            transform_and_generate_conditional_slot(vec![]),
+            "_ctx.ok?_renderSlot(_ctx.$slots,\"default\",{},undefined,undefined,0):_createCommentVNode(\"v-if\",true)"
+        );
+    }
+
+    fn transform_and_generate_conditional_slot(attributes: Vec<AttributeOrBinding>) -> String {
+        let mut node = slot_outlet(attributes, vec![]);
+        let Node::Element(element) = &mut node else {
+            panic!("slot outlet must be an element");
+        };
+        element.starting_tag.directives = Some(Box::new(VueDirectives {
+            v_if: Some(js("ok")),
+            ..Default::default()
+        }));
+        let mut template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![node],
+            span: DUMMY_SP,
+        };
+        let descriptor = SfcDescriptor::default();
+        let options = transform_options();
+        let mut ctx = TransformSfcContext::new(&descriptor, &options);
+        fervid_transform::template::transform_and_record_template(&mut template, &mut ctx);
+        assert!(ctx.errors.is_empty(), "{:#?}", ctx.errors);
+
+        let root = template.roots.pop().expect("conditional slot needs root");
+        to_str(CodegenContext::default().generate_node(&root, true))
     }
 
     fn transform_and_generate_slot_outlet(attributes: Vec<AttributeOrBinding>) -> String {

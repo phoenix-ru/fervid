@@ -36,7 +36,7 @@ impl CodegenContext {
         let else_expr = if let Some(ref else_node) = conditional_seq.else_node {
             self.generate_node(else_node, should_wrap_in_block(else_node))
         } else {
-            self.generate_comment_vnode("v-if", DUMMY_SP)
+            self.generate_comment_vnode("v-if", DUMMY_SP, true)
         };
         conditional_exprs.push(Box::new(else_expr));
 
@@ -92,6 +92,8 @@ fn should_wrap_in_block(node: &Node) -> bool {
 #[cfg(test)]
 mod tests {
     use fervid_core::{Conditional, ElementKind, ElementNode, Node, StartingTag};
+    #[cfg(feature = "new-pipeline")]
+    use fervid_core::{SfcDescriptor, SfcTemplateBlock, VueDirectives};
 
     use crate::test_utils::js;
 
@@ -121,8 +123,9 @@ mod tests {
                 else_if_nodes: vec![],
                 else_node: None,
                 span: DUMMY_SP,
+                key_base: 0,
             },
-            r#"foo||true?(_openBlock(),_createElementBlock("h1",null,"hello")):_createCommentVNode("v-if")"#,
+            r#"foo||true?(_openBlock(),_createElementBlock("h1",null,"hello")):_createCommentVNode("v-if",true)"#,
         )
     }
 
@@ -163,6 +166,7 @@ mod tests {
                     codegen_node: None,
                 }))),
                 span: DUMMY_SP,
+                key_base: 0,
             },
             r#"foo||true?(_openBlock(),_createElementBlock("h1",null,"hello")):(_openBlock(),_createElementBlock("h2",null,"bye"))"#,
         )
@@ -227,8 +231,9 @@ mod tests {
                 ],
                 else_node: None,
                 span: DUMMY_SP,
+                key_base: 0,
             },
-            r#"foo?(_openBlock(),_createElementBlock("h1",null,"hello")):true?(_openBlock(),_createElementBlock("h2",null,"hi")):undefined?(_openBlock(),_createElementBlock("h3",null,"bye")):_createCommentVNode("v-if")"#,
+            r#"foo?(_openBlock(),_createElementBlock("h1",null,"hello")):true?(_openBlock(),_createElementBlock("h2",null,"hi")):undefined?(_openBlock(),_createElementBlock("h3",null,"bye")):_createCommentVNode("v-if",true)"#,
         )
     }
 
@@ -304,9 +309,84 @@ mod tests {
                     codegen_node: None,
                 }))),
                 span: DUMMY_SP,
+                key_base: 0,
             },
             r#"foo?(_openBlock(),_createElementBlock("h1",null,"hello")):true?(_openBlock(),_createElementBlock("h2",null,"hi")):undefined?(_openBlock(),_createElementBlock("h3",null,"good morning")):(_openBlock(),_createElementBlock("h4",null,"bye"))"#,
         )
+    }
+
+    // Vue 3.5.44 source: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/src/transforms/vIf.ts
+    // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L483-L503
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_generates_keyed_template_if_fragment_with_text() {
+        // <template v-if="ok">hello</template>
+        assert_eq!(
+            transform_and_generate_template_if(vec![Node::Text("hello".into(), DUMMY_SP)]),
+            "_ctx.ok?(_openBlock(),_createElementBlock(_Fragment,{key:0},[_createTextVNode(\"hello\")],64)):_createCommentVNode(\"v-if\",true)"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn it_generates_keyed_template_if_fragment_with_multiple_children() {
+        // <template v-if="ok"><i/><b/></template>
+        let element = |tag_name| {
+            Node::Element(ElementNode::new(StartingTag {
+                tag_name,
+                attributes: vec![],
+                directives: None,
+            }))
+        };
+        assert_eq!(
+            transform_and_generate_template_if(vec![element("i".into()), element("b".into())]),
+            "_ctx.ok?(_openBlock(),_createElementBlock(_Fragment,{key:0},[_createElementVNode(\"i\"),_createElementVNode(\"b\")],64)):_createCommentVNode(\"v-if\",true)"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn transform_and_generate_template_if(children: Vec<Node>) -> String {
+        let mut template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(ElementNode::new_with_children_and_type(
+                StartingTag {
+                    tag_name: "template".into(),
+                    attributes: vec![],
+                    directives: Some(Box::new(VueDirectives {
+                        v_if: Some(js("ok")),
+                        ..Default::default()
+                    })),
+                },
+                children,
+                ElementKind::Template,
+            ))],
+            span: DUMMY_SP,
+        };
+        let descriptor = SfcDescriptor::default();
+        let options = fervid_transform::TransformSfcOptions {
+            is_prod: false,
+            is_ce: false,
+            props_destructure: Default::default(),
+            scope_id: "",
+            filename: "anonymous.vue",
+            transform_asset_urls: Default::default(),
+            directive_transforms: Default::default(),
+            node_transforms: Default::default(),
+        };
+        let mut transform_ctx = fervid_transform::TransformSfcContext::new(&descriptor, &options);
+        fervid_transform::template::transform_and_record_template(
+            &mut template,
+            &mut transform_ctx,
+        );
+        assert!(
+            transform_ctx.errors.is_empty(),
+            "{:#?}",
+            transform_ctx.errors
+        );
+
+        let root = template.roots.first().expect("conditional template root");
+        let mut codegen_ctx = CodegenContext::default();
+        crate::test_utils::to_str(codegen_ctx.generate_node(root, true))
     }
 
     fn test_out(input: ConditionalNodeSequence, expected: &str) {

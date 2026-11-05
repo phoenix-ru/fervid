@@ -51,18 +51,7 @@ impl CodegenContext {
         wrap_in_block: bool,
     ) -> Expr {
         let span = DUMMY_SP;
-        // TODO(new-pipeline): structural transforms (`transformIf`/`transformFor`) should create
-        // fragment VNodeCalls directly. This keeps old Fervid template-carrier behavior until then.
-        let should_generate_fragment_instead =
-            matches!(element_node.tag_type, fervid_core::ElementKind::Template);
-        let tag = if should_generate_fragment_instead {
-            Expr::Ident(
-                self.get_and_add_import_ident(VueImports::Fragment)
-                    .into_ident_spanned(span),
-            )
-        } else {
-            self.generate_vnode_tag(&vnode_call.tag, span)
-        };
+        let tag = self.generate_vnode_tag(&vnode_call.tag, span);
         let props = vnode_call
             .props
             .as_ref()
@@ -70,7 +59,7 @@ impl CodegenContext {
         let children = vnode_call
             .children
             .as_ref()
-            .map(|children| self.generate_vnode_children(element_node, children));
+            .map(|children| self.generate_vnode_children(element_node, children, &vnode_call.tag));
         let patch_flags = vnode_call.patch_hints.flags.bits();
         let dynamic_prop_names = &vnode_call.patch_hints.props;
 
@@ -166,6 +155,10 @@ impl CodegenContext {
                 self.get_and_add_import_ident(VueImports::from(*builtin))
                     .into_ident_spanned(span),
             ),
+            VNodeCallTag::Fragment => Expr::Ident(
+                self.get_and_add_import_ident(VueImports::Fragment)
+                    .into_ident_spanned(span),
+            ),
         }
     }
 
@@ -181,11 +174,13 @@ impl CodegenContext {
         &mut self,
         element_node: &ElementNode,
         children: &VNodeChildren,
+        vnode_tag: &VNodeCallTag,
     ) -> Expr {
         match children {
             VNodeChildren::UseElementChildren => {
+                let allow_inlining = !matches!(vnode_tag, VNodeCallTag::Fragment);
                 let (mut children, was_inlined) =
-                    self.generate_element_children(element_node, true);
+                    self.generate_element_children(element_node, allow_inlining);
                 if was_inlined && children.len() == 1 {
                     children.pop().unwrap_or_else(null_expr)
                 } else {

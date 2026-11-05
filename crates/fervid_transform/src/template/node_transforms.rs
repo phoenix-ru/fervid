@@ -8,7 +8,7 @@ use crate::{
     template::{
         core::{
             transform_expression::pre_transform_expression,
-            transform_if::transform_if,
+            transform_if::{post_transform_if, transform_if},
             transform_whitespace::transform_whitespace,
             v_for::{post_transform_for, pre_transform_for},
             v_memo::{post_transform_memo, pre_transform_memo},
@@ -186,7 +186,6 @@ impl NodeTransforms for BaseNodeTransform {
 }
 
 fn pre_transform_if(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
-fn post_transform_if(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
 fn post_transform_expression(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
