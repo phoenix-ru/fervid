@@ -480,6 +480,7 @@ impl SfcParser<'_, '_, '_> {
                                     index,
                                     finalized: false,
                                     finalized_is_dynamic: false,
+                                    source_const_type: Default::default(),
                                 }),
                                 patch_flags: Default::default(),
                                 span,

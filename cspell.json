@@ -150,7 +150,9 @@
     "argumentless",
     "keyup",
     "contextmenu",
-    "mouseup"
+    "mouseup",
+    "trunc",
+    "hypot"
   ],
   "ignorePaths": [
     ".github/**",

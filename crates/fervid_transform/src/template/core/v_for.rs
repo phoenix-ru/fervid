@@ -381,7 +381,8 @@ pub fn process_for(
     }
 
     // Compute the patch flags
-    let is_stable = matches!(for_node.parse_result.source.as_ref(), Expr::Lit(_));
+    let is_stable =
+        for_node.parse_result.source_const_type != fervid_core::ConstantTypes::NotConstant;
     let patch_flags = if is_stable {
         PatchFlags::StableFragment.into()
     } else if has_key {
@@ -499,11 +500,11 @@ pub fn finalize_for_parse_result(
         return;
     }
 
-    // TODO What is better here - has_scope_ref or just has_js_bindings
-    result.finalized_is_dynamic = ctx
+    let metadata = ctx
         .bindings_helper
-        .transform_expr(&mut result.source, scope_to_use)
-        .has_js_bindings;
+        .transform_expr(&mut result.source, scope_to_use);
+    result.finalized_is_dynamic = metadata.has_js_bindings;
+    result.source_const_type = metadata.const_type;
 
     result.finalized = true;
 }
@@ -550,6 +551,7 @@ mod tests {
                 index: None,
                 finalized: true,
                 finalized_is_dynamic: true,
+                source_const_type: Default::default(),
             }),
             children: vec![Node::Element(child)],
             template_scope: 0,
@@ -807,6 +809,7 @@ mod tests {
                         index: None,
                         finalized: false,
                         finalized_is_dynamic: false,
+                        source_const_type: Default::default(),
                     }),
                     patch_flags: PatchFlags::KeyedFragment.into(),
                     span: DUMMY_SP,

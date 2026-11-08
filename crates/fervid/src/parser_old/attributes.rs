@@ -345,6 +345,7 @@ fn parse_directive<'i>(
                             index: None,
                             finalized: false,
                             finalized_is_dynamic: false,
+                            source_const_type: Default::default(),
                         }),
                         patch_flags: Default::default(),
                         span: DUMMY_SP

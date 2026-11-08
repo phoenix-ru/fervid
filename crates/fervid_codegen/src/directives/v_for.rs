@@ -703,8 +703,9 @@ fn key_object(key: Expr, span: Span) -> Expr {
 mod tests {
     #[cfg(feature = "new-pipeline")]
     use fervid_core::{
-        AttributeOrBinding, BuiltinType, ElementCodegenValue, ForCodegenNodeMemo, SfcDescriptor,
-        SfcTemplateBlock, VBindDirective, VNodeCall, VNodeCallTag, VueDirectives,
+        AttributeOrBinding, BindingTypes, BuiltinType, ElementCodegenValue, ForCodegenNodeMemo,
+        SfcDescriptor, SfcTemplateBlock, TemplateGenerationMode, VBindDirective, VNodeCall,
+        VNodeCallTag, VueDirectives,
     };
     use fervid_core::{
         CacheMarker, ElementKind, ElementNode, ForCodegenNode, ForNode, ForParseResult, Node,
@@ -726,6 +727,7 @@ mod tests {
                 index: Some(js("index")),
                 finalized: false,
                 finalized_is_dynamic: false,
+                source_const_type: Default::default(),
             }),
             patch_flags: PatchFlags::UnkeyedFragment.into(),
             span: DUMMY_SP,
@@ -746,6 +748,7 @@ mod tests {
                 index: Some(js("index")),
                 finalized: false,
                 finalized_is_dynamic: false,
+                source_const_type: Default::default(),
             }),
             patch_flags: PatchFlags::UnkeyedFragment.into(),
             span: DUMMY_SP,
@@ -815,6 +818,7 @@ mod tests {
                     index: None,
                     finalized: false,
                     finalized_is_dynamic: false,
+                    source_const_type: Default::default(),
                 }),
                 patch_flags: Default::default(),
                 span: DUMMY_SP,
@@ -1032,6 +1036,7 @@ mod tests {
                     index: None,
                     finalized: false,
                     finalized_is_dynamic: false,
+                    source_const_type: Default::default(),
                 }),
                 patch_flags: Default::default(),
                 span: DUMMY_SP,
@@ -1207,6 +1212,7 @@ mod tests {
                 index: None,
                 finalized: false,
                 finalized_is_dynamic: false,
+                source_const_type: Default::default(),
             }),
             patch_flags: Default::default(),
             span: DUMMY_SP,
@@ -1273,6 +1279,7 @@ mod tests {
                     index: None,
                     finalized: false,
                     finalized_is_dynamic: false,
+                    source_const_type: Default::default(),
                 }),
                 patch_flags: Default::default(),
                 span: DUMMY_SP,
@@ -1340,6 +1347,7 @@ mod tests {
                     index: None,
                     finalized: false,
                     finalized_is_dynamic: false,
+                    source_const_type: Default::default(),
                 }),
                 patch_flags: Default::default(),
                 span: DUMMY_SP,
@@ -1374,6 +1382,83 @@ mod tests {
         assert_eq!(
             crate::test_utils::to_str(result),
             "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(3,(i)=>_createElementVNode(\"div\",{key:i,ref_for:true,ref:\"items\"},null,512)),64))"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn setup_constant_keyed_loop_uses_stable_fragment() {
+        // Additional SFC regression. Vue reference for constant v-for sources:
+        // https://github.com/vuejs/core/blob/8b479a89445868d474f17e2d837765e7c9ece5e4/packages/compiler-core/__tests__/transforms/vFor.spec.ts#L840-L875
+        // <script setup>const list = [1, 2, 3]</script>
+        // <span v-for="i in list" :key="i">hey</span>
+        assert_eq!(
+            generate_setup_keyed_loop("list", Some(("list", BindingTypes::SetupConst))),
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(list,(i)=>_createElementVNode(\"span\",{key:i},\"hey\")),64))"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn parenthesized_setup_constant_keyed_loop_uses_stable_fragment() {
+        // Fervid extension: parentheses preserve source stability. Vue 3.5.45 uses KEYED_FRAGMENT (128)
+        // <script setup>const list = [1, 2, 3]</script>
+        // <span v-for="i in (list)" :key="i">hey</span>
+        assert_eq!(
+            generate_setup_keyed_loop("(list)", Some(("list", BindingTypes::SetupConst))),
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList((list),(i)=>_createElementVNode(\"span\",{key:i},\"hey\")),64))"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn literal_array_keyed_loop_uses_stable_fragment() {
+        // <span v-for="i in [1, 2, 3]" :key="i">hey</span>
+        assert_eq!(
+            generate_setup_keyed_loop("[1, 2, 3]", None),
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList([1,2,3],(i)=>_createElementVNode(\"span\",{key:i},\"hey\")),64))"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn literal_arithmetic_keyed_loop_uses_stable_fragment() {
+        // <span v-for="i in 1 + 2" :key="i">hey</span>
+        assert_eq!(
+            generate_setup_keyed_loop("1 + 2", None),
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(1+2,(i)=>_createElementVNode(\"span\",{key:i},\"hey\")),64))"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn pure_global_call_keyed_loop_uses_stable_fragment() {
+        // Fervid extension: Number('2') always returns 2. Vue 3.5.45 uses KEYED_FRAGMENT (128)
+        // <span v-for="i in Number('2')" :key="i">hey</span>
+        assert_eq!(
+            generate_setup_keyed_loop("Number('2')", None),
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(Number(\"2\"),(i)=>_createElementVNode(\"span\",{key:i},\"hey\")),64))"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn setup_ref_keyed_loop_keeps_dynamic_fragment() {
+        // Additional dynamic control: const items = ref([1, 2, 3])
+        // <span v-for="i in items" :key="i">hey</span>
+        assert_eq!(
+            generate_setup_keyed_loop("items", Some(("items", BindingTypes::SetupRef))),
+            "(_openBlock(true),_createElementBlock(_Fragment,null,_renderList(items.value,(i)=>(_openBlock(),_createElementBlock(\"span\",{key:i},\"hey\"))),128))"
+        );
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    #[test]
+    fn global_call_keyed_loop_keeps_dynamic_fragment() {
+        // <span v-for="i in Math.floor(Math.random() * 3)" :key="i">hey</span>
+        assert_eq!(
+            generate_setup_keyed_loop("Math.floor(Math.random() * 3)", None),
+            "(_openBlock(true),_createElementBlock(_Fragment,null,_renderList(Math.floor(Math.random()*3),(i)=>(_openBlock(),_createElementBlock(\"span\",{key:i},\"hey\"))),128))"
         );
     }
 
@@ -1718,6 +1803,7 @@ mod tests {
                     index: None,
                     finalized: false,
                     finalized_is_dynamic: false,
+                    source_const_type: Default::default(),
                 }),
                 patch_flags: Default::default(),
                 span: DUMMY_SP,
@@ -1823,6 +1909,7 @@ mod tests {
                 index: None,
                 finalized: false,
                 finalized_is_dynamic: false,
+                source_const_type: Default::default(),
             }),
             patch_flags: PatchFlags::StableFragment.into(),
             span: DUMMY_SP,
@@ -1856,6 +1943,7 @@ mod tests {
                 index: None,
                 finalized: true,
                 finalized_is_dynamic: true,
+                source_const_type: Default::default(),
             }),
             children,
             template_scope: 0,
@@ -1886,5 +1974,74 @@ mod tests {
             span: DUMMY_SP,
             codegen_node: None,
         })
+    }
+
+    #[cfg(feature = "new-pipeline")]
+    fn generate_setup_keyed_loop(source: &str, binding: Option<(&str, BindingTypes)>) -> String {
+        let Node::Element(mut child) = element("span") else {
+            panic!("loop child should be an element");
+        };
+        child
+            .starting_tag
+            .attributes
+            .push(crate::test_utils::v_bind_attribute("key", "i"));
+        child.starting_tag.directives = Some(Box::new(VueDirectives {
+            v_for: Some(VForDirective {
+                parse_result: Box::new(ForParseResult {
+                    source: js(source),
+                    value: js("i"),
+                    key: None,
+                    index: None,
+                    finalized: false,
+                    finalized_is_dynamic: false,
+                    source_const_type: Default::default(),
+                }),
+                patch_flags: Default::default(),
+                span: DUMMY_SP,
+            }),
+            ..Default::default()
+        }));
+        child.children.push(Node::Text("hey".into(), DUMMY_SP));
+
+        let mut template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(child)],
+            span: DUMMY_SP,
+        };
+        let descriptor = SfcDescriptor::default();
+        let options = fervid_transform::TransformSfcOptions {
+            is_prod: true,
+            is_ce: false,
+            props_destructure: Default::default(),
+            scope_id: "",
+            filename: "anonymous.vue",
+            transform_asset_urls: Default::default(),
+            directive_transforms: Default::default(),
+            node_transforms: Default::default(),
+        };
+        let mut transform_ctx = fervid_transform::TransformSfcContext::new(&descriptor, &options);
+        transform_ctx.bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
+        if let Some((name, binding_type)) = binding {
+            transform_ctx
+                .bindings_helper
+                .setup_bindings
+                .push(fervid_transform::SetupBinding::new(
+                    name.into(),
+                    binding_type,
+                ));
+        }
+        fervid_transform::template::transform_and_record_template(
+            &mut template,
+            &mut transform_ctx,
+        );
+        assert!(
+            transform_ctx.errors.is_empty(),
+            "{:#?}",
+            transform_ctx.errors
+        );
+
+        let root = template.roots.pop().expect("loop must retain a root");
+        let mut codegen_ctx = CodegenContext::default();
+        crate::test_utils::to_str(codegen_ctx.generate_node(&root, true))
     }
 }

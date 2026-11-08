@@ -82,6 +82,7 @@ mod tests {
                     index: None,
                     finalized: false,
                     finalized_is_dynamic: false,
+                    source_const_type: Default::default(),
                 }),
                 patch_flags: PatchFlags::UnkeyedFragment.into(),
                 span: DUMMY_SP,

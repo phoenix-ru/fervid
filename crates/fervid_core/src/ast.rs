@@ -8,7 +8,7 @@ use swc_core::{
 
 use crate::{BuiltinType, FervidAtom, PatchFlagsSet, PatchHints, StrOrExpr, VueImports};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ConstantTypes {
     #[default]
     NotConstant = 0,

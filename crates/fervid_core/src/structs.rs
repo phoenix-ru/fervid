@@ -6,7 +6,7 @@ use swc_core::{
     },
 };
 
-use crate::{ElementCodegenNode, ForCodegenNode};
+use crate::{ConstantTypes, ElementCodegenNode, ForCodegenNode};
 
 pub type FervidAtom = Atom;
 
@@ -464,6 +464,8 @@ pub struct ForParseResult {
     pub finalized: bool,
     /// Whether the finalized result was dynamic (i.e. used scope variables)
     pub finalized_is_dynamic: bool,
+    /// Constant classification of the source before identifier rewriting
+    pub source_const_type: ConstantTypes,
 }
 
 /// `v-on` and its shorthand `@`
