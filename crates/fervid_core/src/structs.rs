@@ -105,7 +105,7 @@ pub enum ElementKind {
 impl ElementNode {
     /// Helper function for creating a minimal version of ElementNode. The type is `Element`
     pub fn new(starting_tag: StartingTag) -> Self {
-        Self::new_with_children(starting_tag, vec![])
+        Self::new_with_children_and_type(starting_tag, vec![], ElementKind::Element)
     }
     /// Helper function for creating a minimal version of ElementNode with children. The type is `Element`
     pub fn new_with_children(starting_tag: StartingTag, children: Vec<Node>) -> Self {
@@ -240,6 +240,16 @@ pub enum AttributeOrBinding {
     VBind(VBindDirective),
     /// `v-on` directive
     VOn(VOnDirective),
+}
+
+impl Spanned for AttributeOrBinding {
+    fn span(&self) -> Span {
+        match self {
+            AttributeOrBinding::RegularAttribute { span, .. } => *span,
+            AttributeOrBinding::VBind(v_bind) => v_bind.span,
+            AttributeOrBinding::VOn(v_on) => v_on.span,
+        }
+    }
 }
 
 /// Describes a type which can be either a static &str or a js Expr.

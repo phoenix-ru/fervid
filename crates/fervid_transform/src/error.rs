@@ -106,6 +106,9 @@ pub enum TemplateErrorKind {
     // <KeepAlive> expects exactly one child component.
     // https://vuejs.org/error-reference/#compiler-46
     KeepAliveInvalidChildren,
+    /// Template carrier attributes are discarded except for key with v-for
+    /// https://vuejs.org/api/built-in-special-elements.html#template
+    TemplateDiscardedAttribute,
     /// Failed parsing the URL when doing asset URL transform
     TransformAssetUrlsBaseUrlParseFailed,
     /// Failed parsing the configured base URL when doing asset URL transform
@@ -136,6 +139,8 @@ pub enum TemplateErrorKind {
     VOnNoExpression,
     /// v-else/v-else-if has no adjacent v-if or v-else-if.
     VElseNoAdjacentIf,
+    /// Two branches of the same v-if sequence can render with the same key
+    VIfSameKey,
     /// Mixed v-slot usage on both the component and nested <template>. When there are multiple named slots, all slots should use <template> syntax to avoid scope ambiguity.
     VSlotMixedSlotUsage,
     /// Duplicate slot names found.

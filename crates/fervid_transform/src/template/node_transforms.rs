@@ -9,6 +9,7 @@ use crate::{
         core::{
             transform_expression::pre_transform_expression,
             transform_if::{post_transform_if, transform_if},
+            transform_template_attributes::transform_template_attributes,
             transform_whitespace::transform_whitespace,
             v_for::{post_transform_for, pre_transform_for},
             v_memo::{post_transform_memo, pre_transform_memo},
@@ -112,10 +113,12 @@ impl NodeTransforms for BaseNodeTransform {
         element_kind: ElementKind,
         scope_to_use: u32,
     ) {
+        // Check original template carriers before structural transforms replace them
+        transform_template_attributes(ctx, children);
         // Whitespace handling happens during parser/transform normalization in Vue.
         transform_whitespace(children, element_kind);
         // transformIf,
-        transform_if(ctx, children, scope_to_use);
+        transform_if(ctx, children, element_kind, scope_to_use);
     }
 
     fn pre_transform_node(

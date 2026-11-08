@@ -2,6 +2,7 @@ pub mod scope_tracking;
 pub mod transform_expression;
 pub mod transform_if;
 pub mod transform_slot_outlet;
+pub mod transform_template_attributes;
 pub mod transform_whitespace;
 pub mod v_bind;
 pub mod v_for;
