@@ -30,6 +30,7 @@ process.stdout.write(compileScript(descriptor, {
   id: "data-v-2b32dbe3",
   isProd: true,
   inlineTemplate: true,
+  templateOptions: { slotted: descriptor.slotted },
 }).content)
 ' > "$OUTPUT_DIR/vue-reference.js" \
   2> "$OUTPUT_DIR/vue-reference.stderr.txt"
