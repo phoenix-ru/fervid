@@ -79,7 +79,7 @@
     "@types/node": "^24.10.13",
     "@typescript-eslint/eslint-plugin": "^8.39.1",
     "@typescript-eslint/parser": "^8.39.1",
-    "@vue/compiler-sfc": "^3.5.18",
+    "@vue/compiler-sfc": "^3.5.45",
     "benny": "^3.7.1",
     "chalk": "^5.5.0",
     "eslint": "^9.33.0",
