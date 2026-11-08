@@ -6,6 +6,20 @@ packages:
   - '!node/playground'
   - node/examples/*
 
+# NAPI tests install on host runners but run on x64 macOS or Linux musl/arm containers
+supportedArchitectures:
+  os:
+    - current
+  cpu:
+    - current
+    - x64
+    - arm64
+    - arm
+  libc:
+    - current
+    - glibc
+    - musl
+
 allowBuilds:
   '@swc/core': false
   core-js: false
