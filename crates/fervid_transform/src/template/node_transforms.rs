@@ -131,8 +131,9 @@ impl NodeTransforms for BaseNodeTransform {
 
         // transformOnce,
         pre_transform_once(ctx, node);
-        // transformIf,
-        pre_transform_if(ctx, node);
+
+        // transformIf - already ran in pre_transform_children hook
+
         // transformMemo,
         pre_transform_memo(ctx, &mut state, node);
         // transformFor,
@@ -172,8 +173,8 @@ impl NodeTransforms for BaseNodeTransform {
 
         // transformSlotOutlet - no post hook
 
-        // prefixIdentifiers ? transformExpression,
-        post_transform_expression(ctx, node);
+        // prefixIdentifiers ? transformExpression - no post hook
+
         // prefixIdentifiers ? trackVForSlotScopes,
         super::core::v_slot::post_track_v_for_slot_scopes(ctx, state, node);
         // transformFor,
@@ -187,10 +188,6 @@ impl NodeTransforms for BaseNodeTransform {
         // TODO - User transforms in the separate implementation?
     }
 }
-
-fn pre_transform_if(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
-
-fn post_transform_expression(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 
 fn pre_transform_text(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
 fn post_transform_text(_ctx: &mut TransformSfcContext, _node: &mut Node) {}
