@@ -11,8 +11,9 @@ pub enum ComponentBinding {
 
     /// Component must be resolved in runtime, i.e. using `resolveComponent` call.
     /// The contained value is an identifier,
-    /// e.g. `_component_custom` in `const _component_custom = resolveComponent('custom')`
-    RuntimeResolved(Box<Ident>),
+    /// e.g. `_component_custom` in `const _component_custom = resolveComponent('custom')`.
+    /// The boolean value marks this component as self-reference (component used within itself).
+    RuntimeResolved(Box<Ident>, bool),
 
     /// Component was not resolved and would need to be
     /// either transformed (this is default from parser) or ignored

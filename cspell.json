@@ -142,9 +142,17 @@
     "dashmap",
     "ropey",
     "indexmap",
+    "fallthroughs",
+    "onclick",
     "nuxt",
     "vueuse",
-    "demi"
+    "demi",
+    "argumentless",
+    "keyup",
+    "contextmenu",
+    "mouseup",
+    "trunc",
+    "hypot"
   ],
   "ignorePaths": [
     ".github/**",
@@ -156,6 +164,8 @@
     "README.md",
     "**/*.snap",
     "crates/fervid_napi/__tests__/defineProps.spec.ts",
-    "crates/fervid_napi/*.(m|c)?js"
+    "crates/fervid_napi/*.(m|c)?js",
+    "*.sh",
+    "*.vim"
   ]
 }

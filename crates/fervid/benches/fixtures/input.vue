@@ -6,7 +6,9 @@
     :test-bound="bar + baz"
     disabled
     class=""
-    @click.prevent
+    @click.prevent.once.left
+    @[bar].stop.capture.onkeyup.right="foo?.bar()"
+    @click.right.middle
     @hello="world"
   >
     The text of the node

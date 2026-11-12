@@ -86,7 +86,7 @@ fn parse_vanilla_attr<'i>(
         Err(_) => {
             out.push(AttributeOrBinding::RegularAttribute {
                 name: attr_name.into(),
-                value: attr_name.into(),
+                value: Some(attr_name.into()),
                 span: DUMMY_SP,
             });
             Ok((input, ()))
@@ -100,7 +100,7 @@ fn parse_vanilla_attr<'i>(
 
             out.push(AttributeOrBinding::RegularAttribute {
                 name: attr_name.into(),
-                value: attr_value.into(),
+                value: Some(attr_value.into()),
                 span: DUMMY_SP,
             });
 
@@ -288,6 +288,7 @@ fn parse_directive<'i>(
                 is_prop,
                 is_attr,
                 span: DUMMY_SP,
+                const_type: fervid_core::ConstantTypes::NotConstant,
             }));
         }
         "on" => {
@@ -337,8 +338,16 @@ fn parse_directive<'i>(
                 push_directive!(
                     v_for,
                     VForDirective {
-                        iterable,
-                        itervar,
+                        parse_result: Box::new(fervid_core::ForParseResult {
+                            source: iterable,
+                            // TODO: Legacy parser must split value, key, and index aliases
+                            value: itervar,
+                            key: None,
+                            index: None,
+                            finalized: false,
+                            finalized_is_dynamic: false,
+                            source_const_type: Default::default(),
+                        }),
                         patch_flags: Default::default(),
                         span: DUMMY_SP
                     }
@@ -417,6 +426,7 @@ fn parse_directive<'i>(
                     argument,
                     modifiers,
                     value: None,
+                    span: DUMMY_SP,
                 });
                 break 'custom;
             };
@@ -429,6 +439,7 @@ fn parse_directive<'i>(
                     argument,
                     modifiers,
                     value: Some(parsed),
+                    span: DUMMY_SP,
                 });
             }
         }
@@ -458,7 +469,7 @@ fn convert_argument(
 
                 Ok(Some(StrOrExpr::Expr(dynamic_argument)))
             } else {
-                Ok(Some(StrOrExpr::Str(raw_arg)))
+                Ok(Some(raw_arg.into()))
             }
         }
         None => Ok(None),

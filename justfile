@@ -37,6 +37,10 @@ fmt-check:
 clean:
     cargo clean
 
+# Compile an arbitrary Vue SFC with the new pipeline
+run-new-pipeline input *args:
+    @cargo run --quiet -p fervid --features new-pipeline -- {{quote(input)}} {{args}}
+
 # Run fmt-check, lint, spell, and tests together
 check-all: fmt-check lint test spell
 
@@ -53,7 +57,7 @@ wasm-build:
 
 # Run the WASM playground preview server using node
 wasm-serve:
-    cd {{justfile_directory()}}/crates/fervid_wasm && node server.js
+    pnpm --prefix node/playground dev
 
 # --- NAPI (crates/fervid_napi) ---
 

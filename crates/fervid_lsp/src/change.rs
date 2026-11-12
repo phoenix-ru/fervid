@@ -66,6 +66,8 @@ pub async fn on_change<'a>(backend: &Backend, params: TextDocumentItem<'a>) {
                 scope_id: &file_hash,
                 filename: &uri_key,
                 transform_asset_urls: fervid_transform::TransformAssetUrlsConfig::Disabled,
+                directive_transforms: Default::default(),
+                node_transforms: Default::default(),
             };
             (
                 transform_sfc(sfc, transform_options, &mut transform_errors),

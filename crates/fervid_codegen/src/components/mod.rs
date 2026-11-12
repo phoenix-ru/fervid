@@ -1,5 +1,5 @@
 use fervid_core::{
-    ComponentBinding, ElementNode, FervidAtom, Node, PatchHints, StartingTag, StrOrExpr,
+    ComponentBinding, ElementNode, FervidAtom, IntoIdent, Node, PatchHints, StartingTag, StrOrExpr,
     VSlotDirective, VueDirectives, VueImports, fervid_atom, str_or_expr_to_propname,
 };
 use swc_core::{
@@ -193,14 +193,14 @@ impl CodegenContext {
 
         // We need sorted entries for stable output.
         // Entries are sorted by a component name (first element of tuple in hashmap entry)
-        let mut sorted_components: Vec<(&FervidAtom, &Ident)> = self
+        let mut sorted_components: Vec<(&FervidAtom, &Ident, bool)> = self
             .bindings_helper
             .components
             .iter()
             .filter_map(
                 |(component_name, component_resolution)| match component_resolution {
-                    ComponentBinding::RuntimeResolved(ident) => {
-                        Some((component_name, ident.as_ref()))
+                    ComponentBinding::RuntimeResolved(ident, is_self_reference) => {
+                        Some((component_name, ident.as_ref(), *is_self_reference))
                     }
                     _ => None,
                 },
@@ -210,7 +210,23 @@ impl CodegenContext {
         sorted_components.sort_by(|a, b| a.0.cmp(b.0));
 
         // Key is a component as used in template, value is the assigned Js identifier
-        for (component_name, component_identifier) in sorted_components.iter() {
+        for (component_name, component_identifier, is_self_reference) in sorted_components.iter() {
+            let mut args = Vec::with_capacity(1 + *is_self_reference as usize);
+            args.push(ExprOrSpread {
+                spread: None,
+                expr: Box::new(Expr::Lit(Lit::Str(Str {
+                    span: DUMMY_SP,
+                    value: (*component_name).to_owned(),
+                    raw: None,
+                }))),
+            });
+            if *is_self_reference {
+                args.push(ExprOrSpread {
+                    spread: None,
+                    expr: Box::new(true.into()),
+                });
+            }
+
             // _component_ident_name = resolveComponent("component-name")
             result.push(VarDeclarator {
                 span: DUMMY_SP,
@@ -221,20 +237,10 @@ impl CodegenContext {
                 init: Some(Box::new(Expr::Call(CallExpr {
                     span: DUMMY_SP,
                     ctxt: Default::default(),
-                    callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                        span: DUMMY_SP,
-                        ctxt: Default::default(),
-                        sym: resolve_component_ident.to_owned(),
-                        optional: false,
-                    }))),
-                    args: vec![ExprOrSpread {
-                        spread: None,
-                        expr: Box::new(Expr::Lit(Lit::Str(Str {
-                            span: DUMMY_SP,
-                            value: (*component_name).to_owned(),
-                            raw: None,
-                        }))),
-                    }],
+                    callee: Callee::Expr(Box::new(Expr::Ident(
+                        resolve_component_ident.to_owned().into_ident(),
+                    ))),
+                    args,
                     type_args: None,
                 }))),
                 definite: false,
@@ -430,7 +436,7 @@ impl CodegenContext {
         if !default_slot_children.is_empty() {
             // withCtx(() => [child1, child2, child3])
             result_static_slots.push(self.generate_slot_shell(
-                StrOrExpr::Str(fervid_atom!("default")),
+                fervid_atom!("default").into(),
                 default_slot_children,
                 None, // todo get the binding for `<template v-slot="binding"`
                 component_span,
@@ -495,7 +501,7 @@ impl CodegenContext {
             let slot_name = v_slot
                 .slot_name
                 .to_owned()
-                .unwrap_or_else(|| StrOrExpr::Str(fervid_atom!("default")));
+                .unwrap_or_else(|| fervid_atom!("default").into());
             let span = DUMMY_SP; // todo?
 
             out_static_slots.push(self.generate_slot_shell(
@@ -515,7 +521,7 @@ impl CodegenContext {
             Some(ComponentBinding::Resolved(component_binding)) => {
                 return (**component_binding).to_owned();
             }
-            Some(ComponentBinding::RuntimeResolved(component_identifier)) => {
+            Some(ComponentBinding::RuntimeResolved(component_identifier, _)) => {
                 return Expr::Ident((**component_identifier).to_owned());
             }
             _ => {}
@@ -540,7 +546,7 @@ impl CodegenContext {
 
         self.bindings_helper.components.insert(
             tag_name.to_owned(),
-            ComponentBinding::RuntimeResolved(Box::new(resolve_identifier.to_owned())),
+            ComponentBinding::RuntimeResolved(Box::new(resolve_identifier.to_owned()), false),
         );
 
         Expr::Ident(resolve_identifier)
@@ -647,36 +653,30 @@ mod tests {
     fn it_generates_basic_usage() {
         // <test-component></test-component>
         test_out(
-            ElementNode {
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "test-component".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![],
-                template_scope: 0,
-                kind: ElementKind::Component,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![],
+                ElementKind::Component,
+            ),
             r"_createVNode(_component_test_component)",
             false,
         );
 
         // <test-component />
         test_out(
-            ElementNode {
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "test-component".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![],
-                template_scope: 0,
-                kind: ElementKind::Component,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![],
+                ElementKind::Component,
+            ),
             r"_createVNode(_component_test_component)",
             false,
         );
@@ -686,8 +686,8 @@ mod tests {
     fn it_generates_attributes() {
         // <test-component foo="bar" :baz="qux"></test-component>
         test_out(
-            ElementNode {
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "test-component".into(),
                     attributes: vec![
                         regular_attribute("foo", "bar"),
@@ -695,12 +695,9 @@ mod tests {
                     ],
                     directives: None,
                 },
-                children: vec![],
-                template_scope: 0,
-                kind: ElementKind::Component,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                vec![],
+                ElementKind::Component,
+            ),
             r#"_createVNode(_component_test_component,{foo:"bar","some-baz":qux})"#,
             false,
         );
@@ -710,32 +707,25 @@ mod tests {
     fn it_generates_default_slot() {
         // <test-component>hello from component<div>hello from div</div></test-component>
         test_out(
-            ElementNode {
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "test-component".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![
+                vec![
                     Node::Text("hello from component".into(), DUMMY_SP),
-                    Node::Element(ElementNode {
-                        starting_tag: StartingTag {
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "div".into(),
                             attributes: vec![],
                             directives: None,
                         },
-                        children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
-                        template_scope: 0,
-                        kind: ElementKind::Element,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
+                        vec![Node::Text("hello from div".into(), DUMMY_SP)],
+                    )),
                 ],
-                template_scope: 0,
-                kind: ElementKind::Component,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                ElementKind::Component,
+            ),
             r#"_createVNode(_component_test_component,null,{default:_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
         );
@@ -744,14 +734,14 @@ mod tests {
         //   <template v-slot:default>hello from component<div>hello from div</div></template>
         // </test-component>
         test_out(
-            ElementNode {
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "test-component".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![Node::Element(ElementNode {
-                    starting_tag: StartingTag {
+                vec![Node::Element(ElementNode::new_with_children(
+                    StartingTag {
                         tag_name: "template".into(),
                         attributes: vec![],
                         directives: Some(Box::new(VueDirectives {
@@ -762,31 +752,20 @@ mod tests {
                             ..Default::default()
                         })),
                     },
-                    children: vec![
+                    vec![
                         Node::Text("hello from component".into(), DUMMY_SP),
-                        Node::Element(ElementNode {
-                            starting_tag: StartingTag {
+                        Node::Element(ElementNode::new_with_children(
+                            StartingTag {
                                 tag_name: "div".into(),
                                 attributes: vec![],
                                 directives: None,
                             },
-                            children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
-                            template_scope: 0,
-                            kind: ElementKind::Element,
-                            patch_hints: Default::default(),
-                            span: DUMMY_SP,
-                        }),
+                            vec![Node::Text("hello from div".into(), DUMMY_SP)],
+                        )),
                     ],
-                    template_scope: 0,
-                    kind: ElementKind::Element,
-                    patch_hints: Default::default(),
-                    span: DUMMY_SP,
-                })],
-                template_scope: 0,
-                kind: ElementKind::Component,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                ))],
+                ElementKind::Component,
+            ),
             r#"_createVNode(_component_test_component,null,{default:_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
         );
@@ -798,14 +777,14 @@ mod tests {
         //   <template v-slot:foo-bar>hello from component<div>hello from div</div></template>
         // </test-component>
         test_out(
-            ElementNode {
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "test-component".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![Node::Element(ElementNode {
-                    starting_tag: StartingTag {
+                vec![Node::Element(ElementNode::new_with_children(
+                    StartingTag {
                         tag_name: "template".into(),
                         attributes: vec![],
                         directives: Some(Box::new(VueDirectives {
@@ -816,31 +795,20 @@ mod tests {
                             ..Default::default()
                         })),
                     },
-                    children: vec![
+                    vec![
                         Node::Text("hello from component".into(), DUMMY_SP),
-                        Node::Element(ElementNode {
-                            starting_tag: StartingTag {
+                        Node::Element(ElementNode::new_with_children(
+                            StartingTag {
                                 tag_name: "div".into(),
                                 attributes: vec![],
                                 directives: None,
                             },
-                            children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
-                            template_scope: 0,
-                            kind: ElementKind::Element,
-                            patch_hints: Default::default(),
-                            span: DUMMY_SP,
-                        }),
+                            vec![Node::Text("hello from div".into(), DUMMY_SP)],
+                        )),
                     ],
-                    template_scope: 0,
-                    kind: ElementKind::Element,
-                    patch_hints: Default::default(),
-                    span: DUMMY_SP,
-                })],
-                template_scope: 0,
-                kind: ElementKind::Component,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                ))],
+                ElementKind::Component,
+            ),
             r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
         );
@@ -853,15 +821,15 @@ mod tests {
         //   <template v-slot:baz>hello from slot <b>two</b></template>
         // </test-component>
         test_out(
-            ElementNode {
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "test-component".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![
-                    Node::Element(ElementNode {
-                        starting_tag: StartingTag {
+                vec![
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "template".into(),
                             attributes: vec![],
                             directives: Some(Box::new(VueDirectives {
@@ -872,7 +840,7 @@ mod tests {
                                 ..Default::default()
                             })),
                         },
-                        children: vec![
+                        vec![
                             Node::Text("hello from slot ".into(), DUMMY_SP),
                             Node::Interpolation(Interpolation {
                                 value: js("one"),
@@ -881,13 +849,9 @@ mod tests {
                                 span: DUMMY_SP,
                             }),
                         ],
-                        template_scope: 0,
-                        kind: ElementKind::Element,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
-                    Node::Element(ElementNode {
-                        starting_tag: StartingTag {
+                    )),
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "template".into(),
                             attributes: vec![],
                             directives: Some(Box::new(VueDirectives {
@@ -898,32 +862,21 @@ mod tests {
                                 ..Default::default()
                             })),
                         },
-                        children: vec![
+                        vec![
                             Node::Text("hello from slot ".into(), DUMMY_SP),
-                            Node::Element(ElementNode {
-                                starting_tag: StartingTag {
+                            Node::Element(ElementNode::new_with_children(
+                                StartingTag {
                                     tag_name: "b".into(),
                                     attributes: vec![],
                                     directives: None,
                                 },
-                                children: vec![Node::Text("two".into(), DUMMY_SP)],
-                                template_scope: 0,
-                                kind: ElementKind::Element,
-                                patch_hints: Default::default(),
-                                span: DUMMY_SP,
-                            }),
+                                vec![Node::Text("two".into(), DUMMY_SP)],
+                            )),
                         ],
-                        template_scope: 0,
-                        kind: ElementKind::Element,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
+                    )),
                 ],
-                template_scope: 0,
-                kind: ElementKind::Component,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                ElementKind::Component,
+            ),
             r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot "+_toDisplayString(one),1)]),baz:_withCtx(()=>[_createTextVNode("hello from slot "),_createElementVNode("b",null,"two")])})"#,
             false,
         );
@@ -936,28 +889,24 @@ mod tests {
         //   <template v-slot:foo-bar>hello from slot</template>
         // </test-component>
         test_out(
-            ElementNode {
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "test-component".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![
+                vec![
                     Node::Text("hello from component".into(), DUMMY_SP),
-                    Node::Element(ElementNode {
-                        starting_tag: StartingTag {
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "div".into(),
                             attributes: vec![],
                             directives: None,
                         },
-                        children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
-                        template_scope: 0,
-                        kind: ElementKind::Element,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
-                    Node::Element(ElementNode {
-                        starting_tag: StartingTag {
+                        vec![Node::Text("hello from div".into(), DUMMY_SP)],
+                    )),
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "template".into(),
                             attributes: vec![],
                             directives: Some(Box::new(VueDirectives {
@@ -968,18 +917,11 @@ mod tests {
                                 ..Default::default()
                             })),
                         },
-                        children: vec![Node::Text("hello from slot".into(), DUMMY_SP)],
-                        template_scope: 0,
-                        kind: ElementKind::Element,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
+                        vec![Node::Text("hello from slot".into(), DUMMY_SP)],
+                    )),
                 ],
-                template_scope: 0,
-                kind: ElementKind::Component,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                ElementKind::Component,
+            ),
             r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),default:_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
         );
@@ -989,15 +931,15 @@ mod tests {
         //   <template v-slot:foo-bar>hello from slot</template>
         // </test-component>
         test_out(
-            ElementNode {
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "test-component".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![
-                    Node::Element(ElementNode {
-                        starting_tag: StartingTag {
+                vec![
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "template".into(),
                             attributes: vec![],
                             directives: Some(Box::new(VueDirectives {
@@ -1008,28 +950,20 @@ mod tests {
                                 ..Default::default()
                             })),
                         },
-                        children: vec![
+                        vec![
                             Node::Text("hello from default".into(), DUMMY_SP),
-                            Node::Element(ElementNode {
-                                starting_tag: StartingTag {
+                            Node::Element(ElementNode::new_with_children(
+                                StartingTag {
                                     tag_name: "div".into(),
                                     attributes: vec![],
                                     directives: None,
                                 },
-                                children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
-                                template_scope: 0,
-                                kind: ElementKind::Element,
-                                patch_hints: Default::default(),
-                                span: DUMMY_SP,
-                            }),
+                                vec![Node::Text("hello from div".into(), DUMMY_SP)],
+                            )),
                         ],
-                        template_scope: 0,
-                        kind: ElementKind::Element,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
-                    Node::Element(ElementNode {
-                        starting_tag: StartingTag {
+                    )),
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "template".into(),
                             attributes: vec![],
                             directives: Some(Box::new(VueDirectives {
@@ -1040,18 +974,11 @@ mod tests {
                                 ..Default::default()
                             })),
                         },
-                        children: vec![Node::Text("hello from slot".into(), DUMMY_SP)],
-                        template_scope: 0,
-                        kind: ElementKind::Element,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
+                        vec![Node::Text("hello from slot".into(), DUMMY_SP)],
+                    )),
                 ],
-                template_scope: 0,
-                kind: ElementKind::Component,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                ElementKind::Component,
+            ),
             r#"_createVNode(_component_test_component,null,{default:_withCtx(()=>[_createTextVNode("hello from default"),_createElementVNode("div",null,"hello from div")]),"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")])})"#,
             false,
         );
@@ -1061,15 +988,15 @@ mod tests {
         //   hello from component<div>hello from div</div>
         // </test-component>
         test_out(
-            ElementNode {
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "test-component".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![
-                    Node::Element(ElementNode {
-                        starting_tag: StartingTag {
+                vec![
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "template".into(),
                             attributes: vec![],
                             directives: Some(Box::new(VueDirectives {
@@ -1080,31 +1007,20 @@ mod tests {
                                 ..Default::default()
                             })),
                         },
-                        children: vec![Node::Text("hello from slot".into(), DUMMY_SP)],
-                        template_scope: 0,
-                        kind: ElementKind::Element,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
+                        vec![Node::Text("hello from slot".into(), DUMMY_SP)],
+                    )),
                     Node::Text("hello from component".into(), DUMMY_SP),
-                    Node::Element(ElementNode {
-                        starting_tag: StartingTag {
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "div".into(),
                             attributes: vec![],
                             directives: None,
                         },
-                        children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
-                        template_scope: 0,
-                        kind: ElementKind::Element,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
+                        vec![Node::Text("hello from div".into(), DUMMY_SP)],
+                    )),
                 ],
-                template_scope: 0,
-                kind: ElementKind::Component,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                ElementKind::Component,
+            ),
             r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),default:_withCtx(()=>[_createTextVNode("hello from component"),_createElementVNode("div",null,"hello from div")])})"#,
             false,
         );
@@ -1118,15 +1034,15 @@ mod tests {
         //   <template v-slot:baz>hello from baz</template>
         // </test-component>
         test_out(
-            ElementNode {
-                starting_tag: StartingTag {
+            ElementNode::new_with_children_and_type(
+                StartingTag {
                     tag_name: "test-component".into(),
                     attributes: vec![],
                     directives: None,
                 },
-                children: vec![
-                    Node::Element(ElementNode {
-                        starting_tag: StartingTag {
+                vec![
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "template".into(),
                             attributes: vec![],
                             directives: Some(Box::new(VueDirectives {
@@ -1137,14 +1053,10 @@ mod tests {
                                 ..Default::default()
                             })),
                         },
-                        children: vec![Node::Text("hello from slot".into(), DUMMY_SP)],
-                        template_scope: 0,
-                        kind: ElementKind::Element,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
-                    Node::Element(ElementNode {
-                        starting_tag: StartingTag {
+                        vec![Node::Text("hello from slot".into(), DUMMY_SP)],
+                    )),
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "template".into(),
                             attributes: vec![],
                             directives: Some(Box::new(VueDirectives {
@@ -1155,28 +1067,20 @@ mod tests {
                                 ..Default::default()
                             })),
                         },
-                        children: vec![
+                        vec![
                             Node::Text("hello from default".into(), DUMMY_SP),
-                            Node::Element(ElementNode {
-                                starting_tag: StartingTag {
+                            Node::Element(ElementNode::new_with_children(
+                                StartingTag {
                                     tag_name: "div".into(),
                                     attributes: vec![],
                                     directives: None,
                                 },
-                                children: vec![Node::Text("hello from div".into(), DUMMY_SP)],
-                                template_scope: 0,
-                                kind: ElementKind::Element,
-                                patch_hints: Default::default(),
-                                span: DUMMY_SP,
-                            }),
+                                vec![Node::Text("hello from div".into(), DUMMY_SP)],
+                            )),
                         ],
-                        template_scope: 0,
-                        kind: ElementKind::Element,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
-                    Node::Element(ElementNode {
-                        starting_tag: StartingTag {
+                    )),
+                    Node::Element(ElementNode::new_with_children(
+                        StartingTag {
                             tag_name: "template".into(),
                             attributes: vec![],
                             directives: Some(Box::new(VueDirectives {
@@ -1187,18 +1091,11 @@ mod tests {
                                 ..Default::default()
                             })),
                         },
-                        children: vec![Node::Text("hello from baz".into(), DUMMY_SP)],
-                        template_scope: 0,
-                        kind: ElementKind::Element,
-                        patch_hints: Default::default(),
-                        span: DUMMY_SP,
-                    }),
+                        vec![Node::Text("hello from baz".into(), DUMMY_SP)],
+                    )),
                 ],
-                template_scope: 0,
-                kind: ElementKind::Component,
-                patch_hints: Default::default(),
-                span: DUMMY_SP,
-            },
+                ElementKind::Component,
+            ),
             r#"_createVNode(_component_test_component,null,{"foo-bar":_withCtx(()=>[_createTextVNode("hello from slot")]),default:_withCtx(()=>[_createTextVNode("hello from default"),_createElementVNode("div",null,"hello from div")]),baz:_withCtx(()=>[_createTextVNode("hello from baz")])})"#,
             false,
         );

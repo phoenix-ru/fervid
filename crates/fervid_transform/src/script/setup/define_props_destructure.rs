@@ -24,9 +24,8 @@ use crate::{
         resolve_type::TypeResolveContext,
         utils::{is_call_of, resolve_object_key},
     },
+    utils::unwrap_ts_node_expr,
 };
-
-use super::utils::unwrap_ts_node_expr;
 
 // TODO This is a difference with the official compiler:
 // - official compiler does separate collection (called `process`) and processing (called `extract`) loops;

@@ -1,4 +1,4 @@
-use fervid_core::{AttributeOrBinding, FervidAtom, SfcCustomBlock, StartingTag, fervid_atom};
+use fervid_core::{AttributeOrBinding, FervidAtom, SfcCustomBlock, StartingTag};
 use swc_html_ast::Element;
 
 use crate::SfcParser;
@@ -10,7 +10,7 @@ impl SfcParser<'_, '_, '_> {
             .into_iter()
             .map(|attr| AttributeOrBinding::RegularAttribute {
                 name: attr.name,
-                value: attr.value.unwrap_or_else(|| fervid_atom!("")),
+                value: attr.value,
                 span: attr.span,
             })
             .collect();

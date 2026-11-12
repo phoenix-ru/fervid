@@ -1,1 +1,4 @@
 # This file is required since Farm cannot correctly resolve its dependencies from PNPM store otherwise
+allowBuilds:
+  core-js: false
+  esbuild: false

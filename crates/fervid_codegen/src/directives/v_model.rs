@@ -24,6 +24,8 @@ impl CodegenContext {
         let span = v_model.span;
         let mut buf = String::new();
 
+        // TODO Move the props part into the transform
+
         // 1. Get bound attribute (part after `:` or `modelValue`).
         // `v-model="smth"` is same as `v-model:modelValue="smth"`
         let bound_attribute = v_model
@@ -68,10 +70,10 @@ impl CodegenContext {
                 // This is weird, but that's how the official compiler is implemented
                 // modelValue => modelModifiers
                 // users-argument => "users-argumentModifiers"
-                if model_arg.eq("modelValue") {
+                if model_arg.value == "modelValue" {
                     buf.push_str("modelModifiers");
                 } else {
-                    buf.push_str(&model_arg);
+                    buf.push_str(&model_arg.value);
                     buf.push_str("Modifiers");
                 }
 
@@ -153,9 +155,9 @@ fn generate_v_model_handler_propname(
 ) -> PropName {
     match bound_attribute {
         StrOrExpr::Str(s) => {
-            buf.reserve(9 + s.len());
+            buf.reserve(9 + s.value.len());
             buf.push_str("onUpdate:");
-            let _ = to_camelcase(s, buf); // ignore fault
+            let _ = to_camelcase(&s.value, buf); // ignore fault
             str_to_propname(buf, span)
         }
 

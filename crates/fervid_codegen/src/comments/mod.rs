@@ -8,7 +8,27 @@ use crate::context::CodegenContext;
 
 impl CodegenContext {
     /// Generates `createCommentVNode("comment contents")`
-    pub fn generate_comment_vnode(&mut self, comment: &str, span: Span) -> Expr {
+    pub fn generate_comment_vnode(&mut self, comment: &str, span: Span, as_block: bool) -> Expr {
+        // "comment"
+        let comment_arg = ExprOrSpread {
+            spread: None,
+            expr: Box::new(Expr::Lit(Lit::Str(Str {
+                span,
+                value: FervidAtom::from(comment),
+                raw: None,
+            }))),
+        };
+
+        let args = if as_block {
+            let as_block_arg = ExprOrSpread {
+                spread: None,
+                expr: Box::new(Expr::from(true)),
+            };
+
+            vec![comment_arg, as_block_arg]
+        } else {
+            vec![comment_arg]
+        };
         Expr::Call(CallExpr {
             span,
             ctxt: Default::default(),
@@ -17,15 +37,7 @@ impl CodegenContext {
                 self.get_and_add_import_ident(VueImports::CreateCommentVNode)
                     .into_ident_spanned(span),
             ))),
-            // "comment"
-            args: vec![ExprOrSpread {
-                spread: None,
-                expr: Box::new(Expr::Lit(Lit::Str(Str {
-                    span,
-                    value: FervidAtom::from(comment),
-                    raw: None,
-                }))),
-            }],
+            args,
             type_args: None,
         })
     }
@@ -55,7 +67,7 @@ mod tests {
 
     fn test_out(input: &str, expected: &str) {
         let mut ctx = CodegenContext::default();
-        let out = ctx.generate_comment_vnode(input, DUMMY_SP);
+        let out = ctx.generate_comment_vnode(input, DUMMY_SP, false);
         assert_eq!(crate::test_utils::to_str(out), expected)
     }
 }
