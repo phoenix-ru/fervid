@@ -845,14 +845,10 @@ mod tests {
         child
             .starting_tag
             .attributes
-            .push(AttributeOrBinding::VBind(VBindDirective {
-                argument: Some(fervid_atom!("key").into()),
-                value: js("item.id"),
-                is_camel: false,
-                is_prop: false,
-                is_attr: false,
-                span: DUMMY_SP,
-            }));
+            .push(AttributeOrBinding::VBind(VBindDirective::new(
+                Some(fervid_atom!("key").into()),
+                js("item.id"),
+            )));
         let mut keyed = for_node(
             js("items"),
             vec![keyed_child],
@@ -1324,14 +1320,10 @@ mod tests {
             unreachable!()
         };
         root.starting_tag.attributes = vec![
-            fervid_core::AttributeOrBinding::VBind(fervid_core::VBindDirective {
-                argument: Some(fervid_atom!("key").into()),
-                value: js("i"),
-                is_camel: false,
-                is_prop: false,
-                is_attr: false,
-                span: DUMMY_SP,
-            }),
+            fervid_core::AttributeOrBinding::VBind(fervid_core::VBindDirective::new(
+                Some(fervid_atom!("key").into()),
+                js("i"),
+            )),
             fervid_core::AttributeOrBinding::RegularAttribute {
                 name: fervid_atom!("ref"),
                 value: Some(fervid_atom!("items")),
@@ -1594,14 +1586,10 @@ mod tests {
         let (node, output) = generate_keyed_template_child(element_with_kind(
             "component",
             ElementKind::Builtin(BuiltinType::Component),
-            vec![AttributeOrBinding::VBind(VBindDirective {
-                argument: Some("is".into()),
-                value: js("which"),
-                is_camel: false,
-                is_prop: false,
-                is_attr: false,
-                span: DUMMY_SP,
-            })],
+            vec![AttributeOrBinding::VBind(VBindDirective::new(
+                Some("is".into()),
+                js("which"),
+            ))],
         ));
         let vnode = keyed_template_vnode(&node);
         assert!(
@@ -1781,14 +1769,10 @@ mod tests {
         let root = element_with_kind(
             "template",
             ElementKind::Template,
-            vec![AttributeOrBinding::VBind(VBindDirective {
-                argument: Some("key".into()),
-                value: js("item.id"),
-                is_camel: false,
-                is_prop: false,
-                is_attr: false,
-                span: DUMMY_SP,
-            })],
+            vec![AttributeOrBinding::VBind(VBindDirective::new(
+                Some("key".into()),
+                js("item.id"),
+            ))],
         );
         let Node::Element(mut root) = root else {
             panic!("expected template element")

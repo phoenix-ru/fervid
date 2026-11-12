@@ -1,7 +1,8 @@
 use std::{fmt::Write, path::PathBuf};
 
 use fervid_core::{
-    AttributeOrBinding, ElementNode, FervidAtom, StrOrExpr, VBindDirective, fervid_atom,
+    AttributeOrBinding, ConstantTypes, ElementNode, FervidAtom, StrOrExpr, VBindDirective,
+    fervid_atom,
 };
 use swc_core::{
     common::{DUMMY_SP, Span},
@@ -163,8 +164,6 @@ fn transform_element_asset_urls(
             //     bail!(TransformAssetUrlsUrlParseFailed)
             // };
 
-            // dbg!(path_buf_str);
-
             // final_result.push_str(path_buf_str);
 
             *value = FervidAtom::from(final_result);
@@ -201,6 +200,7 @@ fn transform_element_asset_urls(
             is_prop: false,
             is_attr: false,
             span: *span,
+            const_type: ConstantTypes::CanStringify,
         });
     }
 }

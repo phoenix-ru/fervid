@@ -416,6 +416,7 @@ impl SfcParser<'_, '_, '_> {
                     is_prop,
                     is_attr,
                     span,
+                    const_type: fervid_core::ConstantTypes::NotConstant,
                 }));
             }
 

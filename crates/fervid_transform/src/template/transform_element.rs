@@ -239,6 +239,31 @@ pub fn post_transform_element_node(
         }
     }
 
+    // Patch flag for HTML elements which only contain interpolation and text,
+    // e.g. `<p>{{ msg }}</p>`.
+    // Does not apply to components or child-less elements
+    if matches!(node.tag_type, ElementKind::Element) {
+        let mut is_children_text_only = true;
+        let mut has_dynamic_interpolation = false;
+
+        for child in node.children.iter() {
+            match child {
+                Node::Interpolation(interpolation) if interpolation.patch_flag => {
+                    has_dynamic_interpolation = true
+                }
+                Node::Text(..) | Node::Interpolation(..) => {}
+                _ => {
+                    is_children_text_only = false;
+                    break;
+                }
+            }
+        }
+
+        if is_children_text_only && has_dynamic_interpolation {
+            patch_hints.flags |= PatchFlags::Text;
+        }
+    }
+
     // PatchFlag & dynamicPropNames
     // Note: stringification is not done here
     needs_patch = needs_patch
@@ -605,14 +630,29 @@ pub fn build_props(
                 let name_span = span.to_owned();
                 let value_span = span.to_owned();
 
-                properties.push(create_object_property(
-                    create_simple_expression_propname(name.to_owned(), true, name_span).into(),
+                // `is_static = false` here means that we should produce Ident and not Str
+                let value = if is_static {
                     create_simple_expression_str(
                         value.to_owned().unwrap_or_default(),
                         is_static,
                         value_span,
                     )
-                    .into(),
+                    .into()
+                } else {
+                    SimpleExpressionNode {
+                        ast: Box::new(Expr::Ident(
+                            value.to_owned().unwrap_or_default().into_ident(),
+                        )),
+                        is_static,
+                        const_type: ConstantTypes::NotConstant,
+                        is_handler_key: false,
+                    }
+                    .into()
+                };
+
+                properties.push(create_object_property(
+                    create_simple_expression_propname(name.to_owned(), true, name_span).into(),
+                    value,
                 ));
             }
 
@@ -654,6 +694,7 @@ pub fn build_props(
                 }
 
                 // Force hydration for v-bind with .prop modifier
+                // https://github.com/vuejs/core/blob/8b479a89445868d474f17e2d837765e7c9ece5e4/packages/compiler-core/src/transforms/transformElement.ts#L694
                 if v_bind_directive.is_prop {
                     patch_markers.flags |= PatchFlags::NeedHydration;
                 }
@@ -682,6 +723,7 @@ pub fn build_props(
 
                 // Inline before-update hooks need to force block so that it is invoked
                 // before children
+                // https://github.com/vuejs/core/blob/8b479a89445868d474f17e2d837765e7c9ece5e4/packages/compiler-core/src/transforms/transformElement.ts#L601-L612
                 if has_children
                     && (is_static_arg_of(v_on_directive.event.as_ref(), "vue:before-update")
                         || is_static_arg_of(v_on_directive.event.as_ref(), "vue:beforeUpdate"))
@@ -802,8 +844,9 @@ pub fn build_props(
         runtime_directives.reserve(directives.custom.len());
         for user_directive in directives.custom.iter() {
             runtime_directives.push(RuntimeDirective::Custom(user_directive.to_owned()));
-            // custom dirs may use beforeUpdate so they need to force blocks
+            // Custom dirs may use beforeUpdate so they need to force blocks
             // to ensure before-update gets called before children update
+            // https://github.com/vuejs/core/blob/8b479a89445868d474f17e2d837765e7c9ece5e4/packages/compiler-core/src/transforms/transformElement.ts#L718-L723
             if has_children {
                 patch_markers.should_use_block = true;
                 patch_markers.is_block_required = true;
@@ -839,6 +882,7 @@ pub fn build_props(
     }
 
     // PatchFlags analysis
+    // https://github.com/vuejs/core/blob/8b479a89445868d474f17e2d837765e7c9ece5e4/packages/compiler-core/src/transforms/transformElement.ts#L751-L773
     if patch_markers.has_dynamic_keys {
         patch_markers.flags |= PatchFlags::FullProps;
     } else {
@@ -1030,6 +1074,10 @@ fn analyze_patch_flag(
         patch_markers.has_vnode_hook = true;
     }
 
+    if name == "ref" {
+        patch_markers.has_ref = true;
+    }
+
     let mut value = Some(&prop.value);
 
     if is_event_handler && let JsChildNode::CallExpression(ref call_expr) = prop.value {
@@ -1044,7 +1092,7 @@ fn analyze_patch_flag(
         // TODO: Move this to get_constant_type and use get_constant_type(...) > 0
         Some(JsChildNode::ExpressionNode(expr_node)) => match expr_node.as_ref() {
             ExpressionNode::SimpleExpression(simple) => {
-                !matches!(simple.const_type, ConstantTypes::NotConstant)
+                simple.const_type > ConstantTypes::NotConstant
             }
             ExpressionNode::CompoundExpression(compound) => is_static(&compound.ast),
         },
@@ -1056,7 +1104,7 @@ fn analyze_patch_flag(
         return;
     }
     match name.as_str() {
-        "ref" => patch_markers.has_ref = true,
+        "ref" => {}
         "class" => patch_markers.has_class_binding = true,
         "style" => patch_markers.has_style_binding = true,
         x if x != "key" && !patch_markers.dynamic_prop_names.contains(name) => {
@@ -1352,7 +1400,6 @@ fn void0() -> Expr {
 #[cfg(test)]
 mod tests {
     use fervid_core::{AttributeOrBinding, JsChildNode, PropsExpression, VBindDirective};
-    use swc_core::common::DUMMY_SP;
 
     use crate::{
         TransformSfcContext,
@@ -1366,14 +1413,10 @@ mod tests {
     fn it_normalizes_argumentless_v_bind_props() {
         // <div v-bind="obj" />
         let mut element = element_from_tag("div");
-        element.starting_tag.attributes = vec![AttributeOrBinding::VBind(VBindDirective {
-            argument: None,
-            value: js("obj"),
-            is_camel: false,
-            is_prop: false,
-            is_attr: false,
-            span: DUMMY_SP,
-        })];
+        element.starting_tag.attributes = vec![AttributeOrBinding::VBind(VBindDirective::new(
+            None,
+            js("obj"),
+        ))];
         let mut ctx = TransformSfcContext::anonymous();
         let mut state = TransformNodeState::default();
 

@@ -191,14 +191,7 @@ mod tests {
         // <template v-if="ok" @click="onClick"><div/></template>
         for attribute in [
             regular_attribute("id", "ignored"),
-            AttributeOrBinding::VBind(VBindDirective {
-                argument: Some("title".into()),
-                value: js("title"),
-                is_camel: false,
-                is_prop: false,
-                is_attr: false,
-                span: DUMMY_SP,
-            }),
+            AttributeOrBinding::VBind(VBindDirective::new(Some("title".into()), js("title"))),
             AttributeOrBinding::VOn(VOnDirective {
                 event: Some("click".into()),
                 handler: Some(js("onClick")),
@@ -467,14 +460,7 @@ mod tests {
     }
 
     fn bound_key(value: &str) -> AttributeOrBinding {
-        AttributeOrBinding::VBind(VBindDirective {
-            argument: Some("key".into()),
-            value: js(value),
-            is_camel: false,
-            is_prop: false,
-            is_attr: false,
-            span: DUMMY_SP,
-        })
+        AttributeOrBinding::VBind(VBindDirective::new(Some("key".into()), js(value)))
     }
 
     fn v_for_directive() -> VForDirective {

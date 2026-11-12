@@ -288,6 +288,7 @@ fn parse_directive<'i>(
                 is_prop,
                 is_attr,
                 span: DUMMY_SP,
+                const_type: fervid_core::ConstantTypes::NotConstant,
             }));
         }
         "on" => {

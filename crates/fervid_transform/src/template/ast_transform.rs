@@ -128,6 +128,7 @@ impl Visitor for TemplateVisitor<'_> {
             self.current_scope = state.current_scope;
 
             // SFC asset transforms run after compiler node transforms
+            // Transform asset URLs (e.g. `src` in `<img src="">`) when the option is enabled (yes by default)
             if let Node::Element(element_node) = node {
                 super::asset_urls::transform_asset_urls(element_node, self.ctx);
             }
@@ -555,6 +556,7 @@ impl TemplateVisitor<'_> {
                                 is_prop: false,
                                 is_attr: false,
                                 span,
+                                const_type: fervid_core::ConstantTypes::NotConstant,
                             }),
                         );
                     }
@@ -673,6 +675,7 @@ impl TemplateVisitor<'_> {
                     is_prop: false,
                     is_attr: false,
                     span: DUMMY_SP,
+                    const_type: fervid_core::ConstantTypes::NotConstant,
                 }));
         }
         if let Some(ref_key) = ref_key {
@@ -1523,14 +1526,10 @@ mod tests {
         let mut static_ref = for_element(
             js("3"),
             vec![
-                AttributeOrBinding::VBind(VBindDirective {
-                    argument: Some(fervid_atom!("key").into()),
-                    value: js("i"),
-                    is_camel: false,
-                    is_prop: false,
-                    is_attr: false,
-                    span: DUMMY_SP,
-                }),
+                AttributeOrBinding::VBind(VBindDirective::new(
+                    Some(fervid_atom!("key").into()),
+                    js("i"),
+                )),
                 AttributeOrBinding::RegularAttribute {
                     name: fervid_atom!("ref"),
                     value: Some(fervid_atom!("items")),
@@ -1549,14 +1548,10 @@ mod tests {
 
         let mut childless_custom_directive = for_element(
             js("3"),
-            vec![AttributeOrBinding::VBind(VBindDirective {
-                argument: Some(fervid_atom!("key").into()),
-                value: js("i"),
-                is_camel: false,
-                is_prop: false,
-                is_attr: false,
-                span: DUMMY_SP,
-            })],
+            vec![AttributeOrBinding::VBind(VBindDirective::new(
+                Some(fervid_atom!("key").into()),
+                js("i"),
+            ))],
             vec![VCustomDirective {
                 name: fervid_atom!("dir"),
                 ..Default::default()

@@ -664,13 +664,9 @@ mod tests {
     }
 
     fn v_bind_attribute(name: &str, value: &str) -> AttributeOrBinding {
-        AttributeOrBinding::VBind(VBindDirective {
-            argument: Some(StrOrExpr::Str(name.into())),
-            value: js(value),
-            is_camel: false,
-            is_prop: false,
-            is_attr: false,
-            span: DUMMY_SP,
-        })
+        AttributeOrBinding::VBind(VBindDirective::new(
+            Some(StrOrExpr::Str(name.into())),
+            js(value),
+        ))
     }
 }

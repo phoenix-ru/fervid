@@ -1008,6 +1008,7 @@ impl TransformVisitor<'_> {
                 | BindingTypes::SetupReactiveConst
                 | BindingTypes::SetupMaybeRef
                 | BindingTypes::SetupRef
+                | BindingTypes::Imported
         ) {
             self.has_js_bindings = true;
         }
@@ -1064,14 +1065,16 @@ pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<Fervid
         BindingTypes::Options => Some(FervidAtom::from("$options")),
         BindingTypes::TemplateLocal
         | BindingTypes::JsGlobal
-        | BindingTypes::LiteralConst
-        | BindingTypes::Component
-        | BindingTypes::Imported => None,
+        | BindingTypes::Component => None,
         BindingTypes::SetupConst
         | BindingTypes::SetupLet
         | BindingTypes::SetupMaybeRef
         | BindingTypes::SetupReactiveConst
-        | BindingTypes::SetupRef => Some(FervidAtom::from("$setup")),
+        | BindingTypes::SetupRef
+        // TODO: LiteralConst should be moved to the module top,
+        // check if it should still be referenced as `$setup` then
+        | BindingTypes::LiteralConst
+        | BindingTypes::Imported => Some(FervidAtom::from("$setup")),
         BindingTypes::Unresolved => Some(FervidAtom::from("_ctx")),
         BindingTypes::PropsAliased => unimplemented!(),
     }
@@ -1839,6 +1842,37 @@ mod tests {
         println!("Elapsed grand2: {:?}", st3.elapsed());
 
         println!("Elapsed total: {:?}", st0.elapsed())
+    }
+
+    #[test]
+    fn it_works_with_imported() {
+        let mut helper = BindingsHelper {
+            template_generation_mode: TemplateGenerationMode::Inline,
+            ..Default::default()
+        };
+
+        // import imported from './somewhere'
+        helper.setup_bindings.push(SetupBinding::new(
+            FervidAtom::from("imported"),
+            BindingTypes::Imported,
+        ));
+
+        macro_rules! test {
+            ($expr: literal, $expected: literal) => {
+                let mut expr = js($expr);
+                helper.transform_expr(&mut expr, 0);
+
+                assert_eq!(to_str(&expr), $expected);
+            };
+        }
+
+        test!("imported", "_unref(imported)");
+        test!("imported.value", "_unref(imported).value");
+
+        helper.template_generation_mode = TemplateGenerationMode::RenderFn;
+
+        test!("imported", "$setup.imported");
+        test!("imported.value", "$setup.imported.value");
     }
 
     fn js(input: &str) -> Box<swc_core::ecma::ast::Expr> {

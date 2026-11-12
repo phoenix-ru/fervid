@@ -8,7 +8,7 @@ repository = "https://github.com/phoenix-ru/rust-vue-compiler"
 license = "Apache-2.0"
 
 [features]
-default = []
+default = ["new-pipeline"]
 dbg_print = []
 new-pipeline = ["fervid_transform/new-pipeline", "fervid_codegen/new-pipeline"]
 

@@ -99,7 +99,7 @@ pub fn transform_v_bind(
             SimpleExpressionNode {
                 ast: v_bind.value.to_owned(),
                 is_static: false,
-                const_type: ConstantTypes::NotConstant,
+                const_type: v_bind.const_type,
                 is_handler_key: false,
             },
         ))),

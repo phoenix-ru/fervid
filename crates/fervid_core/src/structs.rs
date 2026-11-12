@@ -496,6 +496,8 @@ pub struct VBindDirective {
     pub is_attr: bool,
     /// Byte location in source
     pub span: Span, // TODO Add constant type attribute to allow hoisting
+    /// Value constant type
+    pub const_type: ConstantTypes,
 }
 
 /// `v-model`
@@ -593,6 +595,20 @@ pub enum TemplateGenerationMode {
     /// e.g. `const foo = ref(0)` and `foo.bar` -> `$setup.foo.bar`.
     #[default]
     RenderFn,
+}
+
+impl VBindDirective {
+    pub fn new(argument: Option<StrOrExpr>, value: Box<Expr>) -> Self {
+        VBindDirective {
+            argument,
+            value,
+            is_camel: false,
+            is_prop: false,
+            is_attr: false,
+            span: DUMMY_SP,
+            const_type: ConstantTypes::NotConstant,
+        }
+    }
 }
 
 impl TemplateGenerationMode {

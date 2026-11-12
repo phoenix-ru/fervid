@@ -456,14 +456,7 @@ mod tests {
     #[test]
     fn v_if_on_slot_with_v_bind() {
         // <slot v-if="ok" v-bind="items"></slot>
-        let binding = AttributeOrBinding::VBind(VBindDirective {
-            argument: None,
-            value: js("items"),
-            is_camel: false,
-            is_prop: false,
-            is_attr: false,
-            span: DUMMY_SP,
-        });
+        let binding = AttributeOrBinding::VBind(VBindDirective::new(None, js("items")));
         assert_eq!(
             transform_and_generate_roots(vec![slot_outlet(vec![binding], true)]),
             "_ctx.ok?_renderSlot(_ctx.$slots,\"default\",_normalizeProps(_guardReactiveProps(_ctx.items)),undefined,undefined,0):_createCommentVNode(\"v-if\",true)"
@@ -953,14 +946,7 @@ mod tests {
 
     #[cfg(feature = "new-pipeline")]
     fn spread_obj() -> AttributeOrBinding {
-        AttributeOrBinding::VBind(VBindDirective {
-            argument: None,
-            value: js("obj"),
-            is_camel: false,
-            is_prop: false,
-            is_attr: false,
-            span: DUMMY_SP,
-        })
+        AttributeOrBinding::VBind(VBindDirective::new(None, js("obj")))
     }
 
     #[cfg(feature = "new-pipeline")]

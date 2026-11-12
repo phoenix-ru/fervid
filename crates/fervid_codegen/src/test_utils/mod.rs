@@ -45,14 +45,7 @@ pub fn regular_attribute(name: &str, value: &str) -> AttributeOrBinding {
 /// TEST ONLY
 #[inline]
 pub fn v_bind_attribute(name: &str, value: &str) -> AttributeOrBinding {
-    AttributeOrBinding::VBind(VBindDirective {
-        argument: Some(name.into()),
-        value: js(value),
-        is_camel: false,
-        is_prop: false,
-        is_attr: false,
-        span: DUMMY_SP,
-    })
+    AttributeOrBinding::VBind(VBindDirective::new(Some(name.into()), js(value)))
 }
 
 /// TEST ONLY

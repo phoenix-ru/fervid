@@ -205,14 +205,7 @@ mod tests {
     }
 
     fn bind(argument: Option<StrOrExpr>, value: &str) -> AttributeOrBinding {
-        AttributeOrBinding::VBind(VBindDirective {
-            argument,
-            value: js(value),
-            is_camel: false,
-            is_prop: false,
-            is_attr: false,
-            span: DUMMY_SP,
-        })
+        AttributeOrBinding::VBind(VBindDirective::new(argument, js(value)))
     }
 
     fn directive(value: &str, argument: Option<StrOrExpr>, modifiers: &[&str]) -> VModelDirective {

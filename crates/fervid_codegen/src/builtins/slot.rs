@@ -422,14 +422,10 @@ mod tests {
         // <slot v-bind="obj" />
         test_out(
             slot!(
-                vec![AttributeOrBinding::VBind(VBindDirective {
-                    argument: None,
-                    value: js("obj"),
-                    is_camel: false,
-                    is_prop: false,
-                    is_attr: false,
-                    span: DUMMY_SP,
-                })],
+                vec![AttributeOrBinding::VBind(VBindDirective::new(
+                    None,
+                    js("obj"),
+                ))],
                 vec![]
             ),
             "_renderSlot(_ctx.$slots,\"default\",obj)",
@@ -443,14 +439,7 @@ mod tests {
             slot!(
                 vec![
                     regular_attribute("foo", "before"),
-                    AttributeOrBinding::VBind(VBindDirective {
-                        argument: None,
-                        value: js("obj"),
-                        is_camel: false,
-                        is_prop: false,
-                        is_attr: false,
-                        span: DUMMY_SP,
-                    }),
+                    AttributeOrBinding::VBind(VBindDirective::new(None, js("obj"))),
                     regular_attribute("bar", "after"),
                 ],
                 vec![]

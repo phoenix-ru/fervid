@@ -829,19 +829,15 @@ mod tests {
         let Node::Element(element) = &mut node else {
             panic!("v-if should contain an element");
         };
+        // Note: Fervid does not support shorthands inside AST,
+        // those are expanded by the parser
         element
             .starting_tag
             .attributes
-            .push(AttributeOrBinding::VBind(VBindDirective {
-                argument: Some("key".into()),
-                // Note: Fervid does not support shorthands inside AST,
-                // those are expanded by the parser
-                value: js("key"),
-                is_camel: false,
-                is_prop: false,
-                is_attr: false,
-                span: DUMMY_SP,
-            }));
+            .push(AttributeOrBinding::VBind(VBindDirective::new(
+                Some("key".into()),
+                js("key"),
+            )));
         let seq = fold_if(vec![node]);
         let Node::Element(element) = &seq.if_node.node else {
             panic!("v-if should retain its element");
@@ -1067,14 +1063,10 @@ mod tests {
         // <div v-if="ok" :key="a + 1" /><div v-else :key="a + 1" />
         // <div v-if="ok" key="1" /><div v-else key="1" />
         for attributes in [
-            vec![AttributeOrBinding::VBind(VBindDirective {
-                argument: Some("key".into()),
-                value: js("a + 1"),
-                is_camel: false,
-                is_prop: false,
-                is_attr: false,
-                span: DUMMY_SP,
-            })],
+            vec![AttributeOrBinding::VBind(VBindDirective::new(
+                Some("key".into()),
+                js("a + 1"),
+            ))],
             vec![AttributeOrBinding::RegularAttribute {
                 name: "key".into(),
                 value: Some("1".into()),
@@ -1398,14 +1390,7 @@ mod tests {
     #[test]
     fn unknown_spread_key_does_not_report_unproven_collision() {
         // <div v-if="ok" v-bind="attrs"/><div v-else :key="0"/>
-        let spread = AttributeOrBinding::VBind(VBindDirective {
-            argument: None,
-            value: js("attrs"),
-            is_camel: false,
-            is_prop: false,
-            is_attr: false,
-            span: DUMMY_SP,
-        });
+        let spread = AttributeOrBinding::VBind(VBindDirective::new(None, js("attrs")));
         assert_diagnostics(
             vec![
                 with_attributes(if_branch("div", "ok"), vec![spread]),
@@ -1591,14 +1576,7 @@ mod tests {
     }
 
     fn bound_key(value: &str) -> AttributeOrBinding {
-        AttributeOrBinding::VBind(VBindDirective {
-            argument: Some("key".into()),
-            value: js(value),
-            is_camel: false,
-            is_prop: false,
-            is_attr: false,
-            span: DUMMY_SP,
-        })
+        AttributeOrBinding::VBind(VBindDirective::new(Some("key".into()), js(value)))
     }
 
     fn static_and_bound_key_branches(static_key: &str, expression: &str) -> Vec<Node> {

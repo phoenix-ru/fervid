@@ -2,23 +2,24 @@
 
 exports[`TS annotations 1`] = `
 "import { Foo, Bar, Baz, Qux, Fred } from './x';
-import { createCommentVNode as _createCommentVNode, createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createTextVNode as _createTextVNode, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, openBlock as _openBlock, renderList as _renderList, resolveComponent as _resolveComponent, toDisplayString as _toDisplayString, withCtx as _withCtx } from "vue";
+import { createCommentVNode as _createCommentVNode, createElementBlock as _createElementBlock, createTextVNode as _createTextVNode, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, openBlock as _openBlock, renderList as _renderList, resolveComponent as _resolveComponent, toDisplayString as _toDisplayString, withCtx as _withCtx } from "vue";
 export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
         const _component_Comp = _resolveComponent("Comp");
         return (_openBlock(), _createElementBlock(_Fragment, null, [
-            _createTextVNode(_toDisplayString(a as Foo) + " "),
+            _createTextVNode(_toDisplayString($setup.a as Foo) + " ", 1),
             _createCommentVNode(" {{ b<Bar>() }} "),
-            _createTextVNode(" " + _toDisplayString(Baz) + " "),
+            _createTextVNode(" " + _toDisplayString(($setup.b as Bar)()) + " " + _toDisplayString($setup.Baz) + " ", 1),
             _createVNode(_component_Comp, null, {
-                default: _withCtx(()=>[
+                "default": _withCtx(({ data })=>[
                         _createTextVNode(_toDisplayString(data), 1)
-                    ])
+                    ]),
+                _: 1 /* STABLE */
             }),
-            (_openBlock(), _createElementBlock(_Fragment, null, _renderList(_ctx.list as Fred, ({
+            (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.list as Fred, ({
                 z=x as Qux
-            })=>_createElementVNode("div")), 256))
+            })=>(_openBlock(), _createElementBlock("div"))), 256))
         ], 64));
     },
     setup (__props, { expose: __expose }) {
@@ -45,11 +46,11 @@ export default _defineComponent({
     render (_ctx, _cache, $props, $setup, $data, $options) {
         return (_openBlock(), _createElementBlock("div", {
             class: _normalizeClass([
-                cond ? '' : bar(),
+                $setup.cond ? '' : $setup.bar(),
                 'default'
             ]),
-            style: _normalizeStyle(baz)
-        }));
+            style: _normalizeStyle($setup.baz)
+        }, null, 6));
     },
     setup (__props, { expose: __expose }) {
         __expose();
@@ -75,9 +76,9 @@ export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
         return (_openBlock(), _createElementBlock(_Fragment, null, [
-            _createVNode(FooBaz),
-            _createVNode(FooQux),
-            _createVNode(foo),
+            _createVNode($setup.FooBaz),
+            _createVNode($setup.FooQux),
+            _createVNode($setup.foo),
             _createTextVNode(" FooBar ")
         ], 64));
     },
@@ -109,7 +110,7 @@ export default _defineComponent({
     render (_ctx, _cache, $props, $setup, $data, $options) {
         return _withDirectives((_openBlock(), _createElementBlock("div", null, null, 512)), [
             [
-                vMyDir
+                $setup.vMyDir
             ]
         ]);
     },
@@ -127,23 +128,25 @@ export default _defineComponent({
 
 exports[`dynamic arguments 1`] = `
 "import { FooBar, foo, bar, unused, baz, msg } from './x';
-import { createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
+import { createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, normalizeProps as _normalizeProps, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
 export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
         return (_openBlock(), _createElementBlock(_Fragment, null, [
-            _createVNode(FooBar),
-            _createVNode(FooBar),
-            _createElementVNode("div", {
-                [bar.attrName || ""]: 15
-            }, null, 16),
+            _createVNode($setup.FooBar),
+            _createVNode($setup.FooBar),
+            _createElementVNode("div", _normalizeProps({
+                [($setup.bar.attrName) || ""]: 15
+            }), null, 16),
             _createElementVNode("div", {
                 unused: "unused"
             }),
             _createElementVNode("div"),
-            _createVNode(FooBar, {
-                msg: msg
-            })
+            _createVNode($setup.FooBar, {
+                msg: $setup.msg
+            }, null, 8, [
+                "msg"
+            ])
         ], 64));
     },
     setup (__props, { expose: __expose }) {
@@ -176,7 +179,7 @@ import { defineComponent as _defineComponent, toDisplayString as _toDisplayStrin
 export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
-        return _toDisplayString(\`\${VAR}VAR2\${VAR3}\`);
+        return _toDisplayString(\`\${$setup.VAR}VAR2\${$setup.VAR3}\`);
     },
     setup (__props, { expose: __expose }) {
         __expose();
@@ -200,8 +203,8 @@ export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
         return (_openBlock(), _createElementBlock(_Fragment, null, [
-            _createVNode(FooBaz),
-            _createVNode(Last)
+            _createVNode($setup.FooBaz),
+            _createVNode($setup.Last)
         ], 64));
     },
     setup (__props, { expose: __expose }) {
@@ -225,7 +228,7 @@ import { createBlock as _createBlock, defineComponent as _defineComponent, openB
 export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
-        return (_openBlock(), _createBlock(Foo.Bar));
+        return (_openBlock(), _createBlock($setup.Foo.Bar));
     },
     setup (__props, { expose: __expose }) {
         __expose();
@@ -245,7 +248,7 @@ import { createBlock as _createBlock, defineComponent as _defineComponent, openB
 export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
-        return (_openBlock(), _createBlock(Foo.bar));
+        return (_openBlock(), _createBlock($setup.Foo.bar));
     },
     setup (__props, { expose: __expose }) {
         __expose();
@@ -265,7 +268,7 @@ import { createElementBlock as _createElementBlock, defineComponent as _defineCo
 export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
-        return (_openBlock(), _createElementBlock("div", null, _toDisplayString(Foo.Bar.Baz)));
+        return (_openBlock(), _createElementBlock("div", null, _toDisplayString($setup.Foo.Bar.Baz), 1));
     },
     setup (__props, { expose: __expose }) {
         __expose();
@@ -285,7 +288,7 @@ import { createElementBlock as _createElementBlock, defineComponent as _defineCo
 export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
-        return (_openBlock(), _createElementBlock("div", null, _toDisplayString(Foo.Bar.Baz)));
+        return (_openBlock(), _createElementBlock("div", null, _toDisplayString($setup.Foo.Bar.Baz), 1));
     },
     setup (__props, { expose: __expose }) {
         __expose();
@@ -301,11 +304,13 @@ export default _defineComponent({
 
 exports[`spread operator 1`] = `
 "import { Foo, Bar, Baz } from './foo';
-import { createElementBlock as _createElementBlock, defineComponent as _defineComponent, openBlock as _openBlock } from "vue";
+import { createElementBlock as _createElementBlock, defineComponent as _defineComponent, guardReactiveProps as _guardReactiveProps, normalizeProps as _normalizeProps, openBlock as _openBlock } from "vue";
 export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
-        return (_openBlock(), _createElementBlock("div", null, null, 16));
+        return (_openBlock(), _createElementBlock("div", _normalizeProps(_guardReactiveProps({
+            ...$setup.Foo.Bar.Baz
+        })), null, 16));
     },
     setup (__props, { expose: __expose }) {
         __expose();
@@ -332,7 +337,7 @@ export default _defineComponent({
             _createElementVNode("div", {
                 ref: ""
             }, null, 512),
-            _createVNode(Baz, {
+            _createVNode($setup.Baz, {
                 ref: "bar"
             }, null, 512)
         ], 64));
@@ -362,8 +367,10 @@ export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
         return (_openBlock(), _createElementBlock("div", {
-            id: z + 'y'
-        }, _toDisplayString(x) + " " + _toDisplayString(_ctx.yy) + " " + _toDisplayString(x$y), 1));
+            id: $setup.z + 'y'
+        }, _toDisplayString($setup.x) + " " + _toDisplayString(_ctx.yy) + " " + _toDisplayString($setup.x$y), 9, [
+            "id"
+        ]));
     },
     setup (__props, { expose: __expose }) {
         __expose();

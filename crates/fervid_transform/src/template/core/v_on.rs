@@ -24,7 +24,6 @@ use crate::{
         utils::{to_pascal_case, wrap_in_event_arrow},
         v_on::wrap_in_args_arrow,
     },
-    utils::unwrap_ts_node_expr,
 };
 
 pub fn transform_v_on(
@@ -156,7 +155,7 @@ fn transform_handler(
         // e.g. <transition> relies on checking cb.length to determine
         // transition end handling. Inline function is ok since its arity
         // is preserved even when cached.
-        !(is_member_expr && matches!(node.tag_type, ElementKind::Component)) &&
+        !(is_member_expr && matches!(node.tag_type, ElementKind::Component | ElementKind::Builtin(_))) &&
         // bail if the function references closure variables (v-for, v-slot)
         // it must be passed fresh to avoid stale values.
         !has_scope_ref;
@@ -175,15 +174,37 @@ enum HandlerKind {
 }
 
 fn classify_handler(handler: &Expr) -> HandlerKind {
-    let unwrapped = unwrap_ts_node_expr(handler);
+    let unwrapped = unwrap_ts_node_or_paren_expr(handler);
     match unwrapped {
+        // This is always as-is
+        Expr::Fn(_) | Expr::Arrow(_) => HandlerKind::Function,
+
+        // This is getting `(...args) => _ctx.smth && _ctx.smth(...args)`
         Expr::Member(_) => HandlerKind::MemberExpr,
+        Expr::Ident(ident) if ident.sym != "undefined" => HandlerKind::MemberExpr,
         Expr::OptChain(chain) if matches!(chain.base.as_ref(), OptChainBase::Member(_)) => {
             HandlerKind::MemberExpr
         }
-        Expr::Ident(ident) if ident.sym != "undefined" => HandlerKind::MemberExpr,
-        Expr::Fn(_) | Expr::Arrow(_) => HandlerKind::Function,
+
+        // This is getting `$event =>`
         _ => HandlerKind::Inline,
+        // Error? This would definitely lead to a runtime error
+        // Expr::SuperProp(_)
+        // | Expr::Yield(_)
+        // | Expr::MetaProp(_)
+        // | Expr::Await(_)
+        // | Expr::JSXMember(_)
+        // | Expr::JSXNamespacedName(_)
+        // | Expr::JSXEmpty(_)
+        // | Expr::JSXElement(_)
+        // | Expr::JSXFragment(_)
+        // | Expr::TsTypeAssertion(_)
+        // | Expr::TsConstAssertion(_)
+        // | Expr::TsAs(_)
+        // | Expr::TsInstantiation(_)
+        // | Expr::TsSatisfies(_)
+        // | Expr::PrivateName(_)
+        // | Expr::Invalid(_) |
     }
 }
 
@@ -192,8 +213,10 @@ fn is_runtime_constant_handler(
     handler: &Expr,
     scope_to_use: u32,
 ) -> bool {
-    let Expr::Ident(identifier) = unwrap_ts_node_or_paren_expr(handler) else {
-        return false;
+    let unwrapped = unwrap_ts_node_or_paren_expr(handler);
+    let Expr::Ident(identifier) = unwrapped else {
+        // Literals are runtime constants
+        return matches!(unwrapped, Expr::Lit(_));
     };
 
     let binding_type = ctx
@@ -235,6 +258,9 @@ fn static_event_key(
                 kind: TemplateErrorKind::VNodeHooks,
             }));
     }
+
+    // `vue:` events have special transform
+    // `vue:update` -> `onVnodeUpdate`
     if let Some(rest) = raw_name.strip_prefix("vue:") {
         raw_name = Cow::Owned(format!("vnode-{rest}"))
     }
@@ -263,6 +289,7 @@ fn static_event_key(
     })
 }
 
+/// Wraps dynamic key in `_toHandlerKey`
 fn dynamic_event_key(
     ctx: &mut TransformSfcContext,
     event: &Expr,

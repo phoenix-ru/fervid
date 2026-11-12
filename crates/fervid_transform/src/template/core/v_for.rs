@@ -611,14 +611,10 @@ mod tests {
             element
                 .starting_tag
                 .attributes
-                .push(AttributeOrBinding::VBind(VBindDirective {
-                    argument: Some(fervid_atom!("key").into()),
-                    value: js("item.id"),
-                    is_camel: false,
-                    is_prop: false,
-                    is_attr: false,
-                    span: DUMMY_SP,
-                }));
+                .push(AttributeOrBinding::VBind(VBindDirective::new(
+                    Some(fervid_atom!("key").into()),
+                    js("item.id"),
+                )));
             element
                 .starting_tag
                 .attributes
@@ -791,14 +787,10 @@ mod tests {
         // <div v-for="item in items" :key="get(item, suffix)" v-memo="[item.rev]" />
         let mut element = ElementNode::new(StartingTag {
             tag_name: "div".into(),
-            attributes: vec![AttributeOrBinding::VBind(VBindDirective {
-                argument: Some(fervid_atom!("key").into()),
-                value: js("get(item, suffix)"),
-                is_camel: false,
-                is_prop: false,
-                is_attr: false,
-                span: DUMMY_SP,
-            })],
+            attributes: vec![AttributeOrBinding::VBind(VBindDirective::new(
+                Some(fervid_atom!("key").into()),
+                js("get(item, suffix)"),
+            ))],
             directives: Some(Box::new(VueDirectives {
                 v_memo: Some(js("[item.rev]")),
                 v_for: Some(VForDirective {

@@ -84,6 +84,7 @@ fn transform_element_expressions(
         // }
 
         if let Some(v_slot) = directives.v_slot.as_mut() {
+            // Transform `v-slot` argument if it is dynamic
             if let Some(StrOrExpr::Expr(ref mut slot_name_expr)) = v_slot.slot_name {
                 ctx.bindings_helper
                     .transform_expr(slot_name_expr, scope_to_use);

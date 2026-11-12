@@ -5,7 +5,7 @@ exports[`SFC analyze <script> bindings > auto name inference > basic 1`] = `
 export default {
     __name: "FooBar",
     render (_ctx, _cache, $props, $setup, $data, $options) {
-        return _toDisplayString(a);
+        return _toDisplayString($setup.a);
     },
     setup (__props, { expose: __expose }) {
         __expose();
@@ -24,7 +24,7 @@ import { toDisplayString as _toDisplayString } from "vue";
 export default {
     name: 'Baz',
     render (_ctx, _cache, $props, $setup, $data, $options) {
-        return _toDisplayString(a);
+        return _toDisplayString($setup.a);
     },
     setup (__props, { expose: __expose }) {
         __expose();
@@ -42,7 +42,7 @@ exports[`SFC analyze <script> bindings > auto name inference > do not overwrite 
 export default {
     name: 'Baz',
     render (_ctx, _cache, $props, $setup, $data, $options) {
-        return _toDisplayString(a);
+        return _toDisplayString($setup.a);
     },
     setup (__props, { expose: __expose }) {
         __expose();

@@ -31,5 +31,5 @@ swc_ecma_codegen = { workspace = true }
 swc_ecma_parser = { workspace = true }
 
 [features]
-default = []
+default = ["new-pipeline"]
 new-pipeline = []

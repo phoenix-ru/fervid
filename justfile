@@ -57,7 +57,7 @@ wasm-build:
 
 # Run the WASM playground preview server using node
 wasm-serve:
-    cd {{justfile_directory()}}/crates/fervid_wasm && node server.js
+    pnpm --prefix node/playground dev
 
 # --- NAPI (crates/fervid_napi) ---
 
