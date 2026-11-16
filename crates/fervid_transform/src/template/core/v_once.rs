@@ -64,7 +64,7 @@ mod tests {
     use crate::{
         TransformSfcContext,
         template::{core::v_for::pre_transform_for, node_transforms::TransformNodeState},
-        test_utils::{element_from_tag, js},
+        test_utils::{element_from_tag, js, pat},
     };
 
     use super::{post_transform_once, pre_transform_once};
@@ -77,7 +77,7 @@ mod tests {
             v_for: Some(VForDirective {
                 parse_result: Box::new(ForParseResult {
                     source: js("items"),
-                    value: js("item"),
+                    value: pat("item"),
                     key: None,
                     index: None,
                     finalized: false,

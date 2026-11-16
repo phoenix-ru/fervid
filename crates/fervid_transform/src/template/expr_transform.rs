@@ -68,7 +68,7 @@ pub enum IdentTransformStrategy {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct TransformExpressionMetadata {
+pub struct BindingTransformMetadata {
     pub has_js_bindings: bool,
     pub has_template_scope_ref: bool,
     /// The lowest `ConstantTypes` encountered during transform.
@@ -87,8 +87,8 @@ pub struct VModelExpressionTransformResult {
 }
 
 pub trait BindingsHelperTransform {
-    fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32)
-    -> TransformExpressionMetadata;
+    fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> BindingTransformMetadata;
+    fn transform_pat(&mut self, pat: &mut Pat, scope_to_use: u32) -> BindingTransformMetadata;
     fn transform_v_model(
         &mut self,
         v_model: &mut VModelDirective,
@@ -100,12 +100,12 @@ pub trait BindingsHelperTransform {
 
 impl BindingsHelperTransform for BindingsHelper {
     /// Transforms the template expression
-    fn transform_expr(
-        &mut self,
-        expr: &mut Expr,
-        scope_to_use: u32,
-    ) -> TransformExpressionMetadata {
+    fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> BindingTransformMetadata {
         transform_expr_with_mode(self, expr, scope_to_use, false)
+    }
+
+    fn transform_pat(&mut self, pat: &mut Pat, scope_to_use: u32) -> BindingTransformMetadata {
+        transform_pat(self, pat, scope_to_use)
     }
 
     /// Transforms `v-model` directive by producing
@@ -220,7 +220,7 @@ fn transform_expr_with_mode(
     expr: &mut Expr,
     scope_to_use: u32,
     is_v_model_transform: bool,
-) -> TransformExpressionMetadata {
+) -> BindingTransformMetadata {
     let is_inline = bindings_helper.template_generation_mode.is_inline();
 
     let mut visitor = TransformVisitor {
@@ -240,7 +240,38 @@ fn transform_expr_with_mode(
     };
     expr.visit_mut_with(&mut visitor);
 
-    TransformExpressionMetadata {
+    BindingTransformMetadata {
+        has_js_bindings: visitor.has_js_bindings,
+        has_template_scope_ref: visitor.has_template_scope_ref,
+        const_type: visitor.const_type,
+    }
+}
+
+fn transform_pat(
+    bindings_helper: &mut BindingsHelper,
+    pat: &mut Pat,
+    scope_to_use: u32,
+) -> BindingTransformMetadata {
+    let is_inline = bindings_helper.template_generation_mode.is_inline();
+
+    let mut visitor = TransformVisitor {
+        current_scope: scope_to_use,
+        bindings_helper,
+        has_js_bindings: false,
+        has_template_scope_ref: false,
+        const_type: ConstantTypes::CanStringify,
+        root_is_wrapped_identifier: false,
+        is_inline,
+        is_in_assign_target: false,
+        is_in_destructure_assign: false,
+        is_v_model_transform: false,
+        local_vars: Vec::new(),
+        update_expr_helper: None,
+        should_consume_update_expr: false,
+    };
+    pat.visit_mut_with(&mut visitor);
+
+    BindingTransformMetadata {
         has_js_bindings: visitor.has_js_bindings,
         has_template_scope_ref: visitor.has_template_scope_ref,
         const_type: visitor.const_type,
@@ -506,6 +537,10 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                 let old_len = self.local_vars.len();
                 let func = &mut fn_expr.function;
 
+                // TODO: This should actually process the values inside the pat
+                // For example `function (x = name) {}`
+                // should be transformed to `function (x = _ctx.name) {}`
+
                 // Add the temporary variables
                 self.local_vars.reserve(func.params.len());
                 for param in func.params.iter() {
@@ -638,29 +673,42 @@ impl<'s> VisitMut for TransformVisitor<'s> {
         for prop in n.props.iter_mut() {
             match prop {
                 PropOrSpread::Prop(prop) => {
-                    // For shorthand, expand it and visit the value part
-                    if let Some(shorthand) = prop.as_mut_shorthand() {
-                        let prop_name = PropName::Ident(IdentName {
-                            span: shorthand.span,
-                            sym: shorthand.sym.to_owned(),
-                        });
+                    match prop.as_mut() {
+                        // For shorthand, expand it and visit the value part
+                        Prop::Shorthand(shorthand) => {
+                            let prop_name = PropName::Ident(IdentName {
+                                span: shorthand.span,
+                                sym: shorthand.sym.to_owned(),
+                            });
 
-                        let mut value_expr = Expr::Ident(shorthand.to_owned());
-                        value_expr.visit_mut_with(self);
+                            let mut value_expr = Expr::Ident(shorthand.to_owned());
+                            value_expr.visit_mut_with(self);
 
-                        *prop = Prop::KeyValue(KeyValueProp {
-                            key: prop_name,
-                            value: Box::new(value_expr),
-                        })
-                        .into();
-                        self.has_js_bindings = true;
-                    } else if let Some(keyvalue) = prop.as_mut_key_value() {
-                        if matches!(keyvalue.key, PropName::Computed(_)) {
+                            *prop = Prop::KeyValue(KeyValueProp {
+                                key: prop_name,
+                                value: Box::new(value_expr),
+                            })
+                            .into();
+                            self.has_js_bindings = true;
+                        }
+                        Prop::KeyValue(key_value) => {
+                            if matches!(key_value.key, PropName::Computed(_)) {
+                                self.const_type = ConstantTypes::NotConstant;
+                            }
+                            key_value.value.visit_mut_with(self);
+                        }
+
+                        // SWC says that Prop::Assign is invalid for ObjectLit,
+                        // which is true normally, but not when we are working with params
+                        // to directives like v-for
+                        // TODO: Move that transform to Pat and not Expr
+                        Prop::Assign(assign_prop) => {
+                            assign_prop.value.visit_mut_with(self);
+                        }
+
+                        _ => {
                             self.const_type = ConstantTypes::NotConstant;
                         }
-                        keyvalue.value.visit_mut_with(self);
-                    } else {
-                        self.const_type = ConstantTypes::NotConstant;
                     }
                 }
 

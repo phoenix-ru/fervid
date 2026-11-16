@@ -5,13 +5,20 @@ use fervid_core::{
 };
 use parser::parse_typescript_module;
 use swc_core::common::{SourceMap, sync::Lrc};
-use swc_core::ecma::ast::{Expr, Module};
+use swc_core::ecma::ast::{Expr, Module, Pat};
 use swc_ecma_codegen::{Emitter, Node as CodegenNode, text_writer::JsWriter};
 
 use self::parser::{parse_javascript_expr, parse_typescript_expr};
 
 pub fn js(raw: &str) -> Box<Expr> {
     parse_javascript_expr(raw, 0, Default::default()).unwrap().0
+}
+
+pub fn pat(raw: &str) -> Box<Pat> {
+    Box::new(
+        parser::parse_javascript_pat(raw, 0, Default::default())
+            .expect("input must be a valid binding pattern"),
+    )
 }
 
 pub fn ts(raw: &str) -> Box<Expr> {

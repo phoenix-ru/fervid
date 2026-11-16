@@ -341,7 +341,8 @@ fn parse_directive<'i>(
                         parse_result: Box::new(fervid_core::ForParseResult {
                             source: iterable,
                             // TODO: Legacy parser must split value, key, and index aliases
-                            value: itervar,
+                            // TODO: This is incorrect, pending removal
+                            value: Box::new(swc_core::ecma::ast::Pat::Expr(itervar)),
                             key: None,
                             index: None,
                             finalized: false,

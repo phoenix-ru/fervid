@@ -1,6 +1,6 @@
 use swc_core::{
     common::{BytePos, Span, comments::SingleThreadedComments},
-    ecma::ast::{EsVersion, Expr, Module},
+    ecma::ast::{EsVersion, Expr, Module, Pat},
 };
 use swc_ecma_parser::{EsSyntax, Parser, StringInput, Syntax, TsSyntax, lexer::Lexer};
 
@@ -76,6 +76,25 @@ pub fn parse_javascript_expr(
     let mut parser = Parser::new_from(lexer);
 
     parser.parse_expr().map(|module| (module, comments))
+}
+
+pub fn parse_javascript_pat(
+    input: &str,
+    span_start: u32,
+    es_syntax: EsSyntax,
+) -> Result<Pat, swc_ecma_parser::error::Error> {
+    let lexer = Lexer::new(
+        Syntax::Es(es_syntax),
+        EsVersion::EsNext,
+        StringInput::new(
+            input,
+            BytePos(span_start),
+            BytePos(span_start + input.len() as u32),
+        ),
+        None,
+    );
+
+    Parser::new_from(lexer).parse_pat()
 }
 
 pub fn parse_typescript_expr(

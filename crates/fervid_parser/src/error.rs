@@ -1,5 +1,7 @@
 use swc_core::common::{Span, Spanned};
 
+use crate::v_for::ParseVForError;
+
 #[derive(Debug)]
 pub struct ParseError {
     pub kind: ParseErrorKind,
@@ -38,6 +40,9 @@ pub enum ParseErrorKind {
     UnexpectedNonRawTextContent,
     /// Language not supported
     UnsupportedLang,
+    /// An error during v-for parsing
+    /// TODO: Move all variants here
+    VFor(Box<ParseVForError>),
 }
 
 impl From<swc_ecma_parser::error::Error> for ParseError {

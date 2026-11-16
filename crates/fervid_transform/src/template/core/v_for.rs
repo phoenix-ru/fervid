@@ -500,11 +500,21 @@ pub fn finalize_for_parse_result(
         return;
     }
 
-    let metadata = ctx
+    let source_metadata = ctx
         .bindings_helper
         .transform_expr(&mut result.source, scope_to_use);
-    result.finalized_is_dynamic = metadata.has_js_bindings;
-    result.source_const_type = metadata.const_type;
+
+    if let Some(ref mut key) = result.key {
+        ctx.bindings_helper.transform_pat(key, scope_to_use);
+    }
+    if let Some(ref mut index) = result.index {
+        ctx.bindings_helper.transform_pat(index, scope_to_use);
+    }
+    ctx.bindings_helper
+        .transform_pat(&mut result.value, scope_to_use);
+
+    result.finalized_is_dynamic = source_metadata.has_js_bindings;
+    result.source_const_type = source_metadata.const_type;
 
     result.finalized = true;
 }
@@ -517,7 +527,8 @@ mod tests {
         SlotOutletFallback, StartingTag, VBindDirective, VNodeCall, VNodeCallTag, VueDirectives,
         WithMemoCall, fervid_atom,
     };
-    use swc_core::common::DUMMY_SP;
+    use swc_core::ecma::ast::Pat;
+    use swc_core::{common::DUMMY_SP, ecma::ast::BindingIdent};
 
     use crate::test_utils::{element_from_tag, js, to_str};
 
@@ -527,6 +538,12 @@ mod tests {
         Box::new(Expr::Ident(
             fervid_core::FervidAtom::from(name).into_ident(),
         ))
+    }
+    fn pat_ident(name: &str) -> Box<Pat> {
+        Box::new(Pat::Ident(BindingIdent {
+            id: fervid_core::FervidAtom::from(name).into_ident(),
+            type_ann: None,
+        }))
     }
 
     fn loop_with_child(codegen: ElementCodegenValue) -> Node {
@@ -546,7 +563,7 @@ mod tests {
         Node::For(ForNode {
             parse_result: Box::new(ForParseResult {
                 source: ident("items"),
-                value: ident("item"),
+                value: pat_ident("item"),
                 key: None,
                 index: None,
                 finalized: true,
@@ -796,7 +813,7 @@ mod tests {
                 v_for: Some(VForDirective {
                     parse_result: Box::new(ForParseResult {
                         source: js("items"),
-                        value: ident("item"),
+                        value: pat_ident("item"),
                         key: None,
                         index: None,
                         finalized: false,

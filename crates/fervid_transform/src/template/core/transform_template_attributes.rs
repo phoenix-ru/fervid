@@ -99,7 +99,7 @@ mod tests {
     use fervid_core::{SfcTemplateBlock, VSlotDirective};
     use swc_core::common::{BytePos, DUMMY_SP, Span};
 
-    use crate::test_utils::{element_from_tag, js};
+    use crate::test_utils::{element_from_tag, js, pat};
 
     use super::*;
 
@@ -467,7 +467,7 @@ mod tests {
         VForDirective {
             parse_result: Box::new(ForParseResult {
                 source: js("items"),
-                value: js("item"),
+                value: pat("item"),
                 key: None,
                 index: None,
                 finalized: false,

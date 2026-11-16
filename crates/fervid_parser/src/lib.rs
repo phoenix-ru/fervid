@@ -5,6 +5,7 @@ mod script;
 mod sfc;
 mod style;
 mod template;
+mod v_for;
 
 pub use error::ParseError;
 use swc_core::common::comments::SingleThreadedComments;

@@ -1106,6 +1106,7 @@ version = "0.2.0"
 dependencies = [
  "fervid_core",
  "swc_core",
+ "swc_ecma_lexer",
  "swc_ecma_parser 22.0.3",
  "swc_html_ast 14.0.0",
  "swc_html_parser",

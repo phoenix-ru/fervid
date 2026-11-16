@@ -46,7 +46,7 @@ pub(crate) fn create_for_loop_params(result: &ForParseResult, minimum_len: usize
                         type_ann: None,
                     })
                 },
-                |param| Pat::Expr(param.to_owned()),
+                |param| (**param).to_owned(),
             )
         })
         .collect()
@@ -712,7 +712,7 @@ mod tests {
         PatchFlags, PatchHints, StartingTag,
     };
 
-    use crate::test_utils::js;
+    use crate::test_utils::{js, pat};
 
     use super::*;
 
@@ -722,9 +722,9 @@ mod tests {
         let v_for = VForDirective {
             parse_result: Box::new(ForParseResult {
                 source: js("items"),
-                value: js("value"),
-                key: Some(js("key")),
-                index: Some(js("index")),
+                value: pat("value"),
+                key: Some(pat("key")),
+                index: Some(pat("index")),
                 finalized: false,
                 finalized_is_dynamic: false,
                 source_const_type: Default::default(),
@@ -743,9 +743,9 @@ mod tests {
         let v_for = VForDirective {
             parse_result: Box::new(ForParseResult {
                 source: js("items"),
-                value: js("value"),
+                value: pat("value"),
                 key: None,
-                index: Some(js("index")),
+                index: Some(pat("index")),
                 finalized: false,
                 finalized_is_dynamic: false,
                 source_const_type: Default::default(),
@@ -776,7 +776,7 @@ mod tests {
         let result = ctx.generate_node(&dynamic_for, true);
         assert_eq!(
             crate::test_utils::to_str(result),
-            "(_openBlock(true),_createElementBlock(_Fragment,null,_renderList(items,(item)=>(_openBlock(),_createElementBlock(\"div\"))),256))"
+            "(_openBlock(true),_createElementBlock(_Fragment,null,_renderList(items,item=>(_openBlock(),_createElementBlock(\"div\"))),256))"
         );
 
         let stable_for = Node::For(for_node(
@@ -791,7 +791,7 @@ mod tests {
         let result = ctx.generate_node(&stable_for, true);
         assert_eq!(
             crate::test_utils::to_str(result),
-            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(10,(item)=>_createElementVNode(\"p\")),64))"
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(10,item=>_createElementVNode(\"p\")),64))"
         );
     }
 
@@ -813,7 +813,7 @@ mod tests {
             v_for: Some(VForDirective {
                 parse_result: Box::new(ForParseResult {
                     source: js("items"),
-                    value: js("item"),
+                    value: pat("item"),
                     key: None,
                     index: None,
                     finalized: false,
@@ -829,7 +829,7 @@ mod tests {
         let (_, output) = transform_and_generate_node(node);
         assert_eq!(
             output,
-            "_ctx.ok?(_openBlock(true),_createElementBlock(_Fragment,{key:0},_renderList(_ctx.items,(item)=>(_openBlock(),_createElementBlock(\"div\",{key:item.id}))),128)):_createCommentVNode(\"v-if\",true)"
+            "_ctx.ok?(_openBlock(true),_createElementBlock(_Fragment,{key:0},_renderList(_ctx.items,item=>(_openBlock(),_createElementBlock(\"div\",{key:item.id}))),128)):_createCommentVNode(\"v-if\",true)"
         );
     }
 
@@ -1027,7 +1027,7 @@ mod tests {
             v_for: Some(VForDirective {
                 parse_result: Box::new(ForParseResult {
                     source: js("items"),
-                    value: js("item"),
+                    value: pat("item"),
                     key: None,
                     index: None,
                     finalized: false,
@@ -1203,7 +1203,7 @@ mod tests {
             .v_for = Some(VForDirective {
             parse_result: Box::new(ForParseResult {
                 source: js("items"),
-                value: js("item"),
+                value: pat("item"),
                 key: None,
                 index: None,
                 finalized: false,
@@ -1237,7 +1237,7 @@ mod tests {
 
         assert_eq!(
             crate::test_utils::to_str(result),
-            "_cache[0]||(_setBlockTracking(-1),(_cache[0]=(_openBlock(),_createElementBlock(_Fragment,null,_renderList(10,(item)=>_createElementVNode(\"p\")),64))).cacheIndex=0,_setBlockTracking(1),_cache[0])"
+            "_cache[0]||(_setBlockTracking(-1),(_cache[0]=(_openBlock(),_createElementBlock(_Fragment,null,_renderList(10,item=>_createElementVNode(\"p\")),64))).cacheIndex=0,_setBlockTracking(1),_cache[0])"
         );
     }
 
@@ -1256,7 +1256,7 @@ mod tests {
 
         assert_eq!(
             crate::test_utils::to_str(result),
-            "(_openBlock(true),_createElementBlock(_Fragment,null,_renderList(items,(item)=>(_openBlock(),_createElementBlock(_Fragment,{key:item},[_createTextVNode(\"hello\"),_createElementVNode(\"span\")],64))),128))"
+            "(_openBlock(true),_createElementBlock(_Fragment,null,_renderList(items,item=>(_openBlock(),_createElementBlock(_Fragment,{key:item},[_createTextVNode(\"hello\"),_createElementVNode(\"span\")],64))),128))"
         );
     }
 
@@ -1270,7 +1270,7 @@ mod tests {
             v_for: Some(VForDirective {
                 parse_result: Box::new(ForParseResult {
                     source: js("items"),
-                    value: js("item"),
+                    value: pat("item"),
                     key: None,
                     index: None,
                     finalized: false,
@@ -1309,7 +1309,7 @@ mod tests {
 
         assert_eq!(
             crate::test_utils::to_str(result),
-            "(_openBlock(true),_createElementBlock(_Fragment,null,_renderList(_ctx.items,(item)=>(_openBlock(),_createElementBlock(\"div\"))),256))"
+            "(_openBlock(true),_createElementBlock(_Fragment,null,_renderList(_ctx.items,item=>(_openBlock(),_createElementBlock(\"div\"))),256))"
         );
     }
 
@@ -1334,7 +1334,7 @@ mod tests {
             v_for: Some(VForDirective {
                 parse_result: Box::new(ForParseResult {
                     source: js("3"),
-                    value: js("i"),
+                    value: pat("i"),
                     key: None,
                     index: None,
                     finalized: false,
@@ -1373,7 +1373,7 @@ mod tests {
 
         assert_eq!(
             crate::test_utils::to_str(result),
-            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(3,(i)=>_createElementVNode(\"div\",{key:i,ref_for:true,ref:\"items\"},null,512)),64))"
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(3,i=>_createElementVNode(\"div\",{key:i,ref_for:true,ref:\"items\"},null,512)),64))"
         );
     }
 
@@ -1386,7 +1386,7 @@ mod tests {
         // <span v-for="i in list" :key="i">hey</span>
         assert_eq!(
             generate_setup_keyed_loop("list", Some(("list", BindingTypes::SetupConst))),
-            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(list,(i)=>_createElementVNode(\"span\",{key:i},\"hey\")),64))"
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(list,i=>_createElementVNode(\"span\",{key:i},\"hey\")),64))"
         );
     }
 
@@ -1398,7 +1398,7 @@ mod tests {
         // <span v-for="i in (list)" :key="i">hey</span>
         assert_eq!(
             generate_setup_keyed_loop("(list)", Some(("list", BindingTypes::SetupConst))),
-            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList((list),(i)=>_createElementVNode(\"span\",{key:i},\"hey\")),64))"
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList((list),i=>_createElementVNode(\"span\",{key:i},\"hey\")),64))"
         );
     }
 
@@ -1408,7 +1408,7 @@ mod tests {
         // <span v-for="i in [1, 2, 3]" :key="i">hey</span>
         assert_eq!(
             generate_setup_keyed_loop("[1, 2, 3]", None),
-            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList([1,2,3],(i)=>_createElementVNode(\"span\",{key:i},\"hey\")),64))"
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList([1,2,3],i=>_createElementVNode(\"span\",{key:i},\"hey\")),64))"
         );
     }
 
@@ -1418,7 +1418,7 @@ mod tests {
         // <span v-for="i in 1 + 2" :key="i">hey</span>
         assert_eq!(
             generate_setup_keyed_loop("1 + 2", None),
-            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(1+2,(i)=>_createElementVNode(\"span\",{key:i},\"hey\")),64))"
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(1+2,i=>_createElementVNode(\"span\",{key:i},\"hey\")),64))"
         );
     }
 
@@ -1429,7 +1429,7 @@ mod tests {
         // <span v-for="i in Number('2')" :key="i">hey</span>
         assert_eq!(
             generate_setup_keyed_loop("Number('2')", None),
-            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(Number(\"2\"),(i)=>_createElementVNode(\"span\",{key:i},\"hey\")),64))"
+            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(Number(\"2\"),i=>_createElementVNode(\"span\",{key:i},\"hey\")),64))"
         );
     }
 
@@ -1440,7 +1440,7 @@ mod tests {
         // <span v-for="i in items" :key="i">hey</span>
         assert_eq!(
             generate_setup_keyed_loop("items", Some(("items", BindingTypes::SetupRef))),
-            "(_openBlock(true),_createElementBlock(_Fragment,null,_renderList(items.value,(i)=>(_openBlock(),_createElementBlock(\"span\",{key:i},\"hey\"))),128))"
+            "(_openBlock(true),_createElementBlock(_Fragment,null,_renderList(items.value,i=>(_openBlock(),_createElementBlock(\"span\",{key:i},\"hey\"))),128))"
         );
     }
 
@@ -1450,7 +1450,7 @@ mod tests {
         // <span v-for="i in Math.floor(Math.random() * 3)" :key="i">hey</span>
         assert_eq!(
             generate_setup_keyed_loop("Math.floor(Math.random() * 3)", None),
-            "(_openBlock(true),_createElementBlock(_Fragment,null,_renderList(Math.floor(Math.random()*3),(i)=>(_openBlock(),_createElementBlock(\"span\",{key:i},\"hey\"))),128))"
+            "(_openBlock(true),_createElementBlock(_Fragment,null,_renderList(Math.floor(Math.random()*3),i=>(_openBlock(),_createElementBlock(\"span\",{key:i},\"hey\"))),128))"
         );
     }
 
@@ -1782,7 +1782,7 @@ mod tests {
             v_for: Some(VForDirective {
                 parse_result: Box::new(ForParseResult {
                     source: js("items"),
-                    value: js("item"),
+                    value: pat("item"),
                     key: None,
                     index: None,
                     finalized: false,
@@ -1888,7 +1888,7 @@ mod tests {
         let v_for = VForDirective {
             parse_result: Box::new(ForParseResult {
                 source: js("3"),
-                value: js("item"),
+                value: pat("item"),
                 key: None,
                 index: None,
                 finalized: false,
@@ -1922,7 +1922,7 @@ mod tests {
         ForNode {
             parse_result: Box::new(ForParseResult {
                 source,
-                value: js("item"),
+                value: pat("item"),
                 key: None,
                 index: None,
                 finalized: true,
@@ -1973,7 +1973,7 @@ mod tests {
             v_for: Some(VForDirective {
                 parse_result: Box::new(ForParseResult {
                     source: js(source),
-                    value: js("i"),
+                    value: pat("i"),
                     key: None,
                     index: None,
                     finalized: false,

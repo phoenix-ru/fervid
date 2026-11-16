@@ -155,33 +155,6 @@ pub struct ForNode {
     pub span: Span,
 }
 
-impl ForNode {
-    #[inline]
-    pub fn source(&self) -> &Expr {
-        &self.parse_result.source
-    }
-
-    #[inline]
-    pub fn source_mut(&mut self) -> &mut Expr {
-        &mut self.parse_result.source
-    }
-
-    #[inline]
-    pub fn value_alias(&self) -> &Expr {
-        &self.parse_result.value
-    }
-
-    #[inline]
-    pub fn key_alias(&self) -> Option<&Expr> {
-        self.parse_result.key.as_deref()
-    }
-
-    #[inline]
-    pub fn object_index_alias(&self) -> Option<&Expr> {
-        self.parse_result.index.as_deref()
-    }
-}
-
 /// This is a synthetic node type only available after AST optimizations.
 /// Its purpose is to make conditional code generation trivial
 ///
@@ -455,11 +428,11 @@ pub struct ForParseResult {
     /// Iteration source: `bar` in `v-for="foo in bar"`
     pub source: Box<Expr>,
     /// Value alias: `foo` in `v-for="foo in bar"`
-    pub value: Box<Expr>,
+    pub value: Box<Pat>,
     /// Key alias: `bar` in `v-for="(foo, bar) in baz"`. This is not the vnode `key` prop
-    pub key: Option<Box<Expr>>,
+    pub key: Option<Box<Pat>>,
     /// Object index alias: `baz` in `v-for="(foo, bar, baz) in qux"`
-    pub index: Option<Box<Expr>>,
+    pub index: Option<Box<Pat>>,
     /// Whether expression transformation has already happened
     pub finalized: bool,
     /// Whether the finalized result was dynamic (i.e. used scope variables)

@@ -17,9 +17,7 @@ export default _defineComponent({
                     ]),
                 _: 1 /* STABLE */
             }),
-            (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.list as Fred, ({
-                z=x as Qux
-            })=>(_openBlock(), _createElementBlock("div"))), 256))
+            (_openBlock(true), _createElementBlock(_Fragment, null, _renderList(_ctx.list as Fred, ({ z = _ctx.x as Qux })=>(_openBlock(), _createElementBlock("div"))), 256))
         ], 64));
     },
     setup (__props, { expose: __expose }) {

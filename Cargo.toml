@@ -13,6 +13,7 @@ strum_macros = "0.26.4"
 swc_core = { version = "35", features = ["ecma_ast"] }
 swc_ecma_codegen = "16"
 swc_ecma_parser = "22"
+swc_ecma_lexer = "22"
 swc_html_ast = "14"
 swc_html_parser = "14"
 

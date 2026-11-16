@@ -1,7 +1,7 @@
 use fervid_core::{AttributeOrBinding, VBindDirective, VOnDirective};
 use swc_core::{
     common::{DUMMY_SP, SourceMap},
-    ecma::ast::Expr,
+    ecma::ast::{Expr, Pat},
 };
 use swc_ecma_codegen::{Emitter, Node, text_writer::JsWriter};
 
@@ -29,7 +29,11 @@ pub fn to_str(swc_node: impl Node) -> String {
 }
 
 pub fn js(raw: &str) -> Box<Expr> {
-    js_polyfill::parse_js(raw).expect("input must be a valid js")
+    js_polyfill::parse_js_into_expr(raw).expect("input must be a valid js")
+}
+
+pub fn pat(raw: &str) -> Box<Pat> {
+    Box::new(js_polyfill::parse_js_into_pat(raw).expect("input must be a valid binding pattern"))
 }
 
 /// TEST ONLY

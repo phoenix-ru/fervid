@@ -274,19 +274,9 @@ impl TemplateVisitor<'_> {
 
     #[cfg(not(feature = "new-pipeline"))]
     fn visit_element_node_old(&mut self, element_node: &mut ElementNode) {
-        let parent_scope = self.current_scope;
-        let mut scope_to_use = parent_scope;
-
         // Mark the node with a correct type (element, component or built-in)
         let element_kind = element_node.tag_type;
         let is_component = matches!(element_kind, ElementKind::Component);
-
-        if is_component {
-            self.maybe_resolve_component(&element_node.starting_tag.tag_name);
-        }
-
-        // `v-for` has special behavior with `ref`
-        let old_v_for_scope = self.v_for_scope;
 
         // Patch hints
         // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L406
@@ -299,210 +289,10 @@ impl TemplateVisitor<'_> {
         let mut ref_key = Option::<FervidAtom>::None;
         let mut should_use_block = false;
 
-        // Check if there is a scoping directive.
-        // Find a `v-for` or `v-slot` directive when in ElementNode
-        // and collect their variables into the new template scope
-        if let Some(ref mut directives) = element_node.starting_tag.directives {
-            let v_for = directives.v_for.as_mut();
-            let v_slot = directives.v_slot.as_mut();
-
-            // Create a new scope
-            if v_for.is_some() || v_slot.is_some() {
-                // New scope will have ID equal to length
-                scope_to_use = self.ctx.bindings_helper.template_scopes.len() as u32;
-                self.ctx
-                    .bindings_helper
-                    .template_scopes
-                    .push(TemplateScope {
-                        variables: SmallVec::new(),
-                        parent: parent_scope,
-                    });
-            }
-
-            // Collect `v-for` bindings
-            if let Some(v_for) = v_for {
-                self.v_for_scope = true;
-
-                // Get the iterator variables and collect their variables
-                let scope = &mut self.ctx.bindings_helper.template_scopes[scope_to_use as usize];
-                collect_variables(&v_for.parse_result.value, scope);
-                if let Some(key) = &v_for.parse_result.key {
-                    collect_variables(key, scope);
-                }
-                if let Some(index) = &v_for.parse_result.index {
-                    collect_variables(index, scope);
-                }
-
-                // Transform the source expression
-                let is_dynamic = self
-                    .ctx
-                    .bindings_helper
-                    .transform_expr(&mut v_for.parse_result.source, scope_to_use)
-                    .has_js_bindings;
-
-                // Add patch flags
-                if !is_dynamic {
-                    // This is `64 /* STABLE_FRAGMENT */`
-                    // when iterable is non-dynamic (number, string) (`v-for="i in 3"`)
-                    v_for.patch_flags |= PatchFlags::StableFragment;
-                } else {
-                    // Look for `key`. Fragment is either keyed or unkeyed.
-                    let has_key = element_node
-                        .starting_tag
-                        .attributes
-                        .iter()
-                        .any(|attr| check_attribute_name(attr, "key"));
-
-                    v_for.patch_flags |= if has_key {
-                        PatchFlags::KeyedFragment
-                    } else {
-                        PatchFlags::UnkeyedFragment
-                    };
-                }
-            }
-
-            // Collect `v-slot` bindings
-            if let Some(VSlotDirective {
-                slot_name, value, ..
-            }) = v_slot
-            {
-                if let Some(v_slot_value) = value {
-                    let scope =
-                        &mut self.ctx.bindings_helper.template_scopes[scope_to_use as usize];
-                    collect_variables(v_slot_value, scope);
-                }
-
-                // Transform `v-slot` argument if it is dynamic
-                if let Some(StrOrExpr::Expr(expr)) = slot_name {
-                    self.ctx.bindings_helper.transform_expr(expr, scope_to_use);
-                }
-            }
-        }
-
-        // Update the element's scope and the Visitor's current scope
-        element_node.template_scope = scope_to_use;
-        self.current_scope = scope_to_use;
-
-        // TODO Refactor the directives transformation logic
-        // and maybe the Visitor as well
-
         // Transform the VBind and VOn attributes, apply asset URLs transform
         for attr in element_node.starting_tag.attributes.iter_mut() {
             let patch_hints = &mut element_node.patch_hints;
             match attr {
-                // The logic for the patch flags:
-                // 1. Check if the attribute name is dynamic (`:foo` vs `:[foo]`) or ;
-                //    If it is, clear the previous prop hints and set FULL_PROPS, then continue loop;
-                // 2. Check if there is a Js variable in the value;
-                //    If there is, check if it is a component
-                // 2. Check if
-                AttributeOrBinding::VBind(v_bind) => {
-                    let has_bindings = self
-                        .ctx
-                        .bindings_helper
-                        .transform_expr(&mut v_bind.value, scope_to_use)
-                        .has_js_bindings;
-
-                    // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L676
-                    // Force hydration for v-bind with .prop modifier
-                    if v_bind.is_prop {
-                        patch_hints.flags |= PatchFlags::NeedHydration;
-                    }
-
-                    let Some(StrOrExpr::Str(ref argument)) = v_bind.argument else {
-                        if let Some(StrOrExpr::Expr(expr)) = v_bind.argument.as_mut() {
-                            self.ctx.bindings_helper.transform_expr(expr, scope_to_use);
-                        }
-
-                        // This is dynamic
-                        // From docs: [FULL_PROPS is] exclusive with CLASS, STYLE and PROPS.
-                        patch_hints.flags &=
-                            !(PatchFlags::Props | PatchFlags::Class | PatchFlags::Style);
-                        patch_hints.flags |= PatchFlags::FullProps;
-                        patch_hints.props.clear();
-                        has_dynamic_keys = true;
-                        continue;
-                    };
-
-                    // Skip `key` prop
-                    if argument.value == "key" {
-                        // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L585
-                        // #938: elements with dynamic keys should be forced into blocks
-                        should_use_block = true;
-                        continue;
-                    }
-
-                    // Skip `is` on `<component>`
-                    if argument.value == "is"
-                        && matches!(element_kind, ElementKind::Builtin(BuiltinType::Component))
-                    {
-                        continue;
-                    }
-
-                    // For `ref_for`
-                    if self.v_for_scope && argument.value == "ref" {
-                        has_ref = true;
-                    }
-
-                    // If we are FULL_PROPS already, do not add other props/class/style.
-                    // Or if we do not need to add.
-                    if !has_bindings || patch_hints.flags.contains(PatchFlags::FullProps) {
-                        continue;
-                    }
-
-                    // Adding `class` and `style` bindings depends on `is_component`
-                    // They are added to PROPS for the components.
-                    if is_component {
-                        patch_hints.flags |= PatchFlags::Props;
-                        patch_hints.props.push(argument.value.to_owned());
-                        continue;
-                    }
-
-                    if argument.value == "class" {
-                        patch_hints.flags |= PatchFlags::Class;
-                    } else if argument.value == "style" {
-                        patch_hints.flags |= PatchFlags::Style;
-                    } else {
-                        patch_hints.flags |= PatchFlags::Props;
-                        patch_hints.props.push(argument.value.to_owned());
-                    }
-                }
-
-                AttributeOrBinding::VOn(v_on) => {
-                    // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L589C54-L589C71
-                    // inline before-update hooks need to force block so that it is invoked
-                    // before children
-                    if has_children
-                        && matches!(&v_on.event, Some(StrOrExpr::Str(s)) if s.value == "vue:before-update")
-                    {
-                        should_use_block = true;
-                    }
-
-                    self.transform_v_on(v_on, scope_to_use);
-
-                    // TODO Transform the event name beforehand (?) and make sure the condition is 100% the same
-                    // https://github.com/vuejs/core/blob/f1068fc60ca511f68ff0aaedcc18b39124791d29/packages/compiler-core/src/transforms/transformElement.ts#L430
-                    if let Some(StrOrExpr::Str(evt_name)) = v_on.event.as_ref() {
-                        let has_v_node = evt_name.value.starts_with("vue:");
-
-                        // TODO Adjust condition due to the latest transformation changes
-                        if (!is_component
-                            || matches!(element_kind, ElementKind::Builtin(BuiltinType::Component)))
-                            && evt_name.value != "click"
-                            && evt_name.value != "update:modelValue"
-                            && evt_name.value != "update:model-value"
-                            && !has_v_node
-                        {
-                            has_hydration_event_binding = true;
-                        }
-
-                        has_vnode_hook |= has_v_node;
-                    } else {
-                        // https://github.com/vuejs/core/blob/f1068fc60ca511f68ff0aaedcc18b39124791d29/packages/compiler-core/src/transforms/transformElement.ts#L605
-                        has_dynamic_keys = true;
-                    }
-                }
-
                 // Transform the regular `ref` in `inline` mode
                 AttributeOrBinding::RegularAttribute { name, value, span } if name == "ref" => {
                     has_ref = true;
@@ -566,100 +356,6 @@ impl TemplateVisitor<'_> {
             }
         }
 
-        // Transform asset URLs (e.g. `src` in `<img src="">`) when the option is enabled (yes by default)
-        transform_asset_urls(element_node, self.ctx);
-
-        // Transform the directives
-        let patch_hints = &mut element_node.patch_hints;
-        if let Some(ref mut directives) = element_node.starting_tag.directives {
-            macro_rules! maybe_transform {
-                ($key: ident) => {
-                    match directives.$key.as_mut() {
-                        Some(expr) => {
-                            self.ctx
-                                .bindings_helper
-                                .transform_expr(expr, scope_to_use)
-                                .has_js_bindings
-                        }
-                        None => false,
-                    }
-                };
-            }
-            maybe_transform!(v_html);
-            maybe_transform!(v_memo);
-            maybe_transform!(v_show);
-            maybe_transform!(v_text);
-
-            for v_model in directives.v_model.iter_mut() {
-                self.ctx
-                    .bindings_helper
-                    .transform_v_model(v_model, scope_to_use, patch_hints);
-            }
-
-            // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L700
-            // custom dirs may use beforeUpdate so they need to force blocks
-            // to ensure before-update gets called before children update
-            if !directives.custom.is_empty() {
-                has_runtime_directives = true;
-
-                if has_children {
-                    should_use_block = true;
-                }
-            }
-
-            // Transform custom directives
-            for custom_directive in directives.custom.iter_mut() {
-                use crate::template::resolutions::maybe_resolve_directive;
-
-                if let Some(ref mut value) = custom_directive.value {
-                    self.ctx.bindings_helper.transform_expr(value, scope_to_use);
-                }
-                if let Some(StrOrExpr::Expr(ref mut argument)) = custom_directive.argument {
-                    self.ctx
-                        .bindings_helper
-                        .transform_expr(argument, scope_to_use);
-                }
-
-                // Try resolving it
-                maybe_resolve_directive(self.ctx, &custom_directive.name, scope_to_use);
-            }
-        }
-
-        // Merge conditional nodes and clean up whitespace
-        let node_transforms = self.ctx.node_transforms.clone();
-        node_transforms.pre_transform_children(
-            self.ctx,
-            &mut element_node.children,
-            element_kind,
-            scope_to_use,
-        );
-
-        // Patch flag for HTML elements which only contain interpolation and text,
-        // e.g. `<p>{{ msg }}</p>`.
-        // Does not apply to components or child-less elements
-        let mut is_children_text_only =
-            matches!(element_kind, ElementKind::Element) && !element_node.children.is_empty();
-        let mut has_dynamic_interpolation = false;
-
-        // Recursively visit children
-        for child in element_node.children.iter_mut() {
-            child.visit_mut_with(self);
-
-            match child {
-                // When Elements are present, TEXT patch flag does not apply
-                Node::Element(_) | Node::For(_) | Node::ConditionalSeq(_) => {
-                    is_children_text_only = false;
-                }
-
-                // TEXT patch flag only applies when there is an interpolation with a patch flag
-                Node::Interpolation(interpolation) => {
-                    has_dynamic_interpolation |= interpolation.patch_flag;
-                }
-
-                Node::Text(_, _) | Node::Comment(_, _) => {}
-            }
-        }
-
         // Add `ref_for` and `ref_key`
         if has_ref && self.v_for_scope {
             element_node
@@ -689,23 +385,6 @@ impl TemplateVisitor<'_> {
                 });
         }
         self.v_for_scope = old_v_for_scope;
-
-        // Apply other flags
-        // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L732
-        if !has_dynamic_keys && has_hydration_event_binding {
-            patch_hints.flags |= PatchFlags::NeedHydration;
-        }
-        if !should_use_block
-            && (patch_hints.flags.is_empty() || patch_hints.flags == PatchFlags::NeedHydration)
-            && (has_ref || has_vnode_hook || has_runtime_directives)
-        {
-            patch_hints.flags |= PatchFlags::NeedPatch;
-        }
-
-        // Apply TEXT patch flag
-        if is_children_text_only && has_dynamic_interpolation {
-            patch_hints.flags |= PatchFlags::Text;
-        }
 
         // Restore the parent scope
         self.current_scope = parent_scope;
@@ -739,7 +418,7 @@ mod tests {
 
     #[cfg(feature = "new-pipeline")]
     use crate::test_utils::element_from_tag;
-    use crate::test_utils::{js, to_str};
+    use crate::test_utils::{js, pat, to_str};
 
     use super::*;
 
@@ -1097,9 +776,9 @@ mod tests {
                         v_for: Some(VForDirective {
                             parse_result: Box::new(ForParseResult {
                                 source: js("item.items"),
-                                value: js("item"),
-                                key: Some(js("key")),
-                                index: Some(js("index")),
+                                value: pat("item"),
+                                key: Some(pat("key")),
+                                index: Some(pat("index")),
                                 finalized: false,
                                 finalized_is_dynamic: false,
                                 source_const_type: Default::default(),
@@ -1747,7 +1426,7 @@ mod tests {
                     directives!(v_if: Some(js("val")), v_for: Some(VForDirective {
                         parse_result: Box::new(ForParseResult {
                             source: js("3"),
-                            value: js("i"),
+                            value: pat("i"),
                             key: None,
                             index: None,
                             finalized: false,
@@ -1789,7 +1468,7 @@ mod tests {
                 Some(directives!(v_for: Some(VForDirective {
                     parse_result: Box::new(ForParseResult {
                         source: js("3"),
-                        value: js("j"),
+                        value: pat("j"),
                         key: None,
                         index: None,
                         finalized: false,
@@ -1828,7 +1507,7 @@ mod tests {
                     directives!(v_if: Some(js("val")), v_for: Some(VForDirective {
                         parse_result: Box::new(ForParseResult {
                             source: js("3"),
-                            value: js("i"),
+                            value: pat("i"),
                             key: None,
                             index: None,
                             finalized: false,
@@ -1842,7 +1521,7 @@ mod tests {
                 Some(directives!(v_for: Some(VForDirective {
                     parse_result: Box::new(ForParseResult {
                         source: js("3"),
-                        value: js("j"),
+                        value: pat("j"),
                         key: None,
                         index: None,
                         finalized: false,
@@ -2136,7 +1815,7 @@ mod tests {
                         v_for: Some(VForDirective {
                             parse_result: Box::new(ForParseResult {
                                 source,
-                                value: js("i"),
+                                value: pat("i"),
                                 key: None,
                                 index: None,
                                 finalized: false,

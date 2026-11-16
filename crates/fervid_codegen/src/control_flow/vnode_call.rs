@@ -596,7 +596,7 @@ mod tests {
     #[cfg(feature = "new-pipeline")]
     use swc_core::common::DUMMY_SP;
 
-    use crate::test_utils::{js, to_str};
+    use crate::test_utils::{js, pat, to_str};
 
     use super::*;
 
@@ -679,7 +679,7 @@ mod tests {
         assert_eq!(
             // <template v-for="item in items" v-slot:[item.name]>{{ item.value }}</template>
             transform_and_generate_slots(vec![v_for_slot()]),
-            "(_openBlock(),_createBlock(_component_Comp,null,_createSlots({_:2},[_renderList(_ctx.items,(item)=>({name:item.name,fn:_withCtx(()=>[_createTextVNode(_toDisplayString(item.value),1)])}))]),1024))"
+            "(_openBlock(),_createBlock(_component_Comp,null,_createSlots({_:2},[_renderList(_ctx.items,item=>({name:item.name,fn:_withCtx(()=>[_createTextVNode(_toDisplayString(item.value),1)])}))]),1024))"
         );
     }
 
@@ -771,7 +771,7 @@ mod tests {
                     v_for: Some(VForDirective {
                         parse_result: Box::new(ForParseResult {
                             source: js("items"),
-                            value: js("item"),
+                            value: pat("item"),
                             key: None,
                             index: None,
                             finalized: false,
