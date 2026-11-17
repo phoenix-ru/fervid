@@ -552,6 +552,7 @@ mod tests {
             let parsed = parse_v_for(
                 input,
                 Span::new(BytePos(offset), BytePos(offset + input.len() as u32)),
+                &Default::default(),
             )
             .unwrap_or_else(|error| panic!("failed {input:?}: {error:?}"));
             let slice =
@@ -603,9 +604,15 @@ mod tests {
 
     #[test]
     fn of_binding_with_missing_delimiter_keeps_generic_error() {
+        let comments = Default::default();
+
         for raw in ["of rows", "(value, of) rows", "value, of: Key rows"] {
-            let error = parse_v_for(raw, Span::new(BytePos(1), BytePos(1 + raw.len() as u32)))
-                .expect_err("missing delimiter");
+            let error = parse_v_for(
+                raw,
+                Span::new(BytePos(1), BytePos(1 + raw.len() as u32)),
+                &comments,
+            )
+            .expect_err("missing delimiter");
             assert_eq!(error.kind, ParseErrorKind::VForExpectedDelimiter, "{raw}");
         }
     }
@@ -666,9 +673,15 @@ mod tests {
 
     #[test]
     fn comment_only_omission_and_trailing_comments() {
+        let comments = Default::default();
+
         let raw = "(value, /* omitted, in here */ , index) in rows // tail";
-        let parsed = parse_v_for(raw, Span::new(BytePos(1), BytePos(1 + raw.len() as u32)))
-            .expect("valid comments");
+        let parsed = parse_v_for(
+            raw,
+            Span::new(BytePos(1), BytePos(1 + raw.len() as u32)),
+            &comments,
+        )
+        .expect("valid comments");
         assert!(parsed.key.is_none());
         assert!(parsed.index.is_some());
         assert!(parsed.source.is_ident());
@@ -677,13 +690,19 @@ mod tests {
     #[test]
     fn errors_stop_without_retrying_other_separators() {
         let raw = format!("({{ x = @ {} }}, key) in rows", " in ".repeat(1000));
-        let error = parse_v_for(&raw, Span::new(BytePos(1), BytePos(1 + raw.len() as u32)))
-            .expect_err("bad default");
+        let error = parse_v_for(
+            &raw,
+            Span::new(BytePos(1), BytePos(1 + raw.len() as u32)),
+            &Default::default(),
+        )
+        .expect_err("bad default");
         assert!(matches!(error.kind, ParseErrorKind::EcmaSyntaxError(_)))
     }
 
     #[test]
     fn rejects_prefix_success_and_malformed_aliases() {
+        let comments = Default::default();
+
         for raw in [
             "item in rows garbage",
             "(item.field, key) in rows",
@@ -702,7 +721,12 @@ mod tests {
             "(item? = x) in rows",
         ] {
             assert!(
-                parse_v_for(raw, Span::new(BytePos(1), BytePos(1 + raw.len() as u32))).is_err(),
+                parse_v_for(
+                    raw,
+                    Span::new(BytePos(1), BytePos(1 + raw.len() as u32)),
+                    &comments
+                )
+                .is_err(),
                 "accepted {raw:?}"
             );
         }
@@ -750,8 +774,12 @@ mod tests {
                 .any(|error| matches!(error.kind(), SyntaxError::NonLastRestParam))
         );
 
-        let error = parse_v_for(raw, Span::new(BytePos(1), BytePos(1 + raw.len() as u32)))
-            .expect_err("recovered alias error invalidates result");
+        let error = parse_v_for(
+            raw,
+            Span::new(BytePos(1), BytePos(1 + raw.len() as u32)),
+            &Default::default(),
+        )
+        .expect_err("recovered alias error invalidates result");
         assert_eq!(
             error.kind,
             ParseErrorKind::EcmaSyntaxError(Box::new(SyntaxError::NonLastRestParam))
@@ -783,8 +811,12 @@ mod tests {
         );
 
         let raw = "item in /x/gg";
-        let error = parse_v_for(raw, Span::new(BytePos(1), BytePos(1 + raw.len() as u32)))
-            .expect_err("EOF alone does not make a recovered expression valid");
+        let error = parse_v_for(
+            raw,
+            Span::new(BytePos(1), BytePos(1 + raw.len() as u32)),
+            &Default::default(),
+        )
+        .expect_err("EOF alone does not make a recovered expression valid");
         assert_eq!(
             error.kind,
             ParseErrorKind::EcmaSyntaxError(Box::new(SyntaxError::DuplicatedRegExpFlags('g'))),
@@ -803,8 +835,12 @@ mod tests {
         let mut p = Parser::new_from(lexer);
         assert!(p.parse_pat().is_err());
         assert_eq!(*p.input().cur(), Token::At);
-        let error = parse_v_for(raw, Span::new(BytePos(1), BytePos(1 + raw.len() as u32)))
-            .expect_err("fatal alias error");
+        let error = parse_v_for(
+            raw,
+            Span::new(BytePos(1), BytePos(1 + raw.len() as u32)),
+            &Default::default(),
+        )
+        .expect_err("fatal alias error");
         assert!(matches!(error.kind, ParseErrorKind::EcmaSyntaxError(_)))
     }
 
@@ -814,6 +850,7 @@ mod tests {
         let parsed = parse_v_for(
             raw,
             Span::new(BytePos(137), BytePos(137 + raw.len() as u32)),
+            &Default::default(),
         )
         .expect("valid TypeScript");
         let default = default_expression(&parsed.value);
@@ -861,8 +898,12 @@ mod tests {
     #[test]
     fn line_comment_delimiters_remain_trivia() {
         let raw = "item // , key in ignored\n in rows // tail";
-        let parsed = parse_v_for(raw, Span::new(BytePos(1), BytePos(1 + raw.len() as u32)))
-            .expect("comment contents must not become delimiters");
+        let parsed = parse_v_for(
+            raw,
+            Span::new(BytePos(1), BytePos(1 + raw.len() as u32)),
+            &Default::default(),
+        )
+        .expect("comment contents must not become delimiters");
         assert!(parsed.key.is_none());
         assert!(parsed.source.as_ident().is_some_and(|id| id.sym == "rows"));
     }
@@ -872,6 +913,7 @@ mod tests {
             let error = parse_v_for(
                 raw,
                 Span::new(BytePos(offset), BytePos(offset + raw.len() as u32)),
+                &Default::default(),
             )
             .expect_err("stray comma before apparent delimiter");
             let comma = offset + raw.find(',').expect("comma in input") as u32;
