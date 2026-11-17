@@ -255,6 +255,7 @@ fn is_js_space(ch: char) -> bool {
                 | '\u{202f}'
                 | '\u{205f}'
                 | '\u{3000}'
+                // cspell:disable-next-line
                 | '\u{feff}'
     )
 }
