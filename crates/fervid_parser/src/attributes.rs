@@ -457,10 +457,11 @@ impl SfcParser<'_, '_, '_> {
             "for" => {
                 let value = expect_value!();
 
-                let for_parse_result = match parse_v_for(value, span) {
+                let for_parse_result = match parse_v_for(value, span, &self.comments) {
                     Ok(result) => result,
                     Err(e) => {
-                        bail!(ParseErrorKind::VFor(Box::new(e)));
+                        // Not really a `js` error, but that macro is convenient here
+                        bail!(js, e);
                     }
                 };
 

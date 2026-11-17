@@ -1,57 +1,26 @@
 use fervid_core::ForParseResult;
 use swc_core::{
-    common::{Span, Spanned},
+    common::{Span, comments::SingleThreadedComments},
     ecma::ast::{AssignPat, Pat, RestPat},
 };
 use swc_ecma_lexer::common::parser::{
     Parser as Cursor, buffer::Buffer, expr::parse_assignment_expr,
     typescript::try_parse_ts_type_ann,
 };
-use swc_ecma_parser::{
-    Lexer, Parser, StringInput, Syntax, error::SyntaxError, input::Tokens, unstable::Token,
-};
+use swc_ecma_parser::{Lexer, Parser, StringInput, Syntax, input::Tokens, unstable::Token};
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum ErrorKind {
-    TooManyAliasSlots,
-    MissingValueAlias,
-    CommaAfterRestAlias,
-    UnexpectedCommaBeforeOf,
-    ExpectedClosingAliasParenthesis,
-    ExpectedDelimiter,
-    DelimiterRequiresWhitespace,
-    UnexpectedTokensAfterSource,
-    InvalidOptionalAlias,
-    RestAliasCannotBeOptional,
-    ExpectedBindingPattern,
-    RestAliasCannotHaveDefault,
-    OptionalAliasCannotHaveDefault,
-    SwcSyntax(SyntaxError),
-}
+use crate::{ParseError, error::ParseErrorKind};
 
-// TODO: Move into a generic error
-#[derive(Debug)]
-pub struct ParseVForError {
-    pub span: Span,
-    pub kind: ErrorKind,
-}
-
-impl From<swc_ecma_parser::error::Error> for ParseVForError {
-    fn from(error: swc_ecma_parser::error::Error) -> Self {
-        Self {
-            span: error.span(),
-            kind: ErrorKind::SwcSyntax(error.into_kind()),
-        }
-    }
-}
-
-pub fn parse_v_for(raw: &str, span: Span) -> Result<ForParseResult, ParseVForError> {
+pub fn parse_v_for(
+    raw: &str,
+    span: Span,
+    comments: &SingleThreadedComments,
+) -> Result<ForParseResult, ParseError> {
     let lexer = Lexer::new(
         Syntax::Typescript(Default::default()),
         Default::default(),
         StringInput::new(raw, span.lo, span.hi),
-        // TODO Pass root Comments
-        None,
+        Some(comments),
     );
     finish(&mut Parser::new_from(lexer), raw, span)
 }
@@ -60,17 +29,17 @@ fn finish<I: Tokens>(
     p: &mut Parser<I>,
     raw: &str,
     span: Span,
-) -> Result<ForParseResult, ParseVForError> {
+) -> Result<ForParseResult, ParseError> {
     let result = parse_body(p, raw, span).and_then(|result| {
         // Errors recovered by SWC are not accepted. This applies to cases like:
         // `/foo/gg` which has a duplicate RegEx flag. We require here that syntax is correct.
         if let Some(error) = p.take_errors().into_iter().next() {
-            Err(ParseVForError::from(error))
+            Err(ParseError::from(error))
         } else {
             Ok(result)
         }
     });
-    result.map_err(|failure| ParseVForError {
+    result.map_err(|failure| ParseError {
         span: failure.span,
         kind: failure.kind,
     })
@@ -80,14 +49,14 @@ fn parse_body<I: Tokens>(
     p: &mut Parser<I>,
     raw: &str,
     span: Span,
-) -> Result<ForParseResult, ParseVForError> {
+) -> Result<ForParseResult, ParseError> {
     let parenthesized = p.input_mut().eat(&Token::LParen);
     let mut aliases = Vec::with_capacity(3);
     let mut last_comma = None;
 
     loop {
         if aliases.len() == 3 {
-            return Err(fail(p, ErrorKind::TooManyAliasSlots));
+            return Err(fail(p, ParseErrorKind::VForTooManyAliasSlots));
         }
         let cur = *p.input().cur();
         let empty = cur == Token::Comma
@@ -95,7 +64,7 @@ fn parse_body<I: Tokens>(
             || (!parenthesized && cur == Token::In && !aliases.is_empty());
         if empty {
             if aliases.is_empty() {
-                return Err(fail(p, ErrorKind::MissingValueAlias));
+                return Err(fail(p, ParseErrorKind::VForMissingValueAlias));
             }
             aliases.push(None);
         } else {
@@ -110,7 +79,7 @@ fn parse_body<I: Tokens>(
             .and_then(Option::as_deref)
             .is_some_and(Pat::is_rest)
         {
-            return Err(fail(p, ErrorKind::CommaAfterRestAlias));
+            return Err(fail(p, ParseErrorKind::VForCommaAfterRestAlias));
         }
         last_comma = Some(p.input().cur_span());
         p.input_mut().bump();
@@ -136,21 +105,25 @@ fn parse_body<I: Tokens>(
                     ident.id.sym == "of" && ident.type_ann.is_none() && !ident.id.optional
                 });
             if last_is_plain_of {
-                return Err(ParseVForError {
+                return Err(ParseError {
                     span: comma,
-                    kind: ErrorKind::UnexpectedCommaBeforeOf,
+                    kind: ParseErrorKind::VForUnexpectedCommaBeforeOf,
                 });
             }
         }
     }
 
     if parenthesized {
-        expect(p, Token::RParen, ErrorKind::ExpectedClosingAliasParenthesis)?;
+        expect(
+            p,
+            Token::RParen,
+            ParseErrorKind::VForExpectedClosingAliasParenthesis,
+        )?;
     }
 
     // Check delimiter and whitespace around it
     if !matches!(*p.input().cur(), Token::In | Token::Of) {
-        return Err(fail(p, ErrorKind::ExpectedDelimiter));
+        return Err(fail(p, ParseErrorKind::VForExpectedDelimiter));
     }
     let delimiter = p.input().cur_span();
     let lo = delimiter.lo.0.saturating_sub(span.lo.0) as usize;
@@ -165,19 +138,19 @@ fn parse_body<I: Tokens>(
             .and_then(|s| s.chars().next())
             .is_some_and(is_js_space)
     {
-        return Err(fail(p, ErrorKind::DelimiterRequiresWhitespace));
+        return Err(fail(p, ParseErrorKind::VForDelimiterRequiresWhitespace));
     }
     p.input_mut().bump();
 
     // Parse source as Expr
     let source = p.allow_in_expr(|p| p.parse_expr())?;
     if *p.input().cur() != Token::Eof {
-        return Err(fail(p, ErrorKind::UnexpectedTokensAfterSource));
+        return Err(fail(p, ParseErrorKind::VForUnexpectedTokensAfterSource));
     }
 
     let mut aliases = aliases.into_iter();
     let Some(Some(value)) = aliases.next() else {
-        return Err(fail(p, ErrorKind::MissingValueAlias));
+        return Err(fail(p, ParseErrorKind::VForMissingValueAlias));
     };
     Ok(ForParseResult {
         source,
@@ -190,10 +163,7 @@ fn parse_body<I: Tokens>(
     })
 }
 
-fn parse_alias<I: Tokens>(
-    p: &mut Parser<I>,
-    parenthesized: bool,
-) -> Result<Box<Pat>, ParseVForError> {
+fn parse_alias<I: Tokens>(p: &mut Parser<I>, parenthesized: bool) -> Result<Box<Pat>, ParseError> {
     let start = p.cur_pos();
     let rest = p.input_mut().eat(&Token::DotDotDot);
     let dot3_token = p.input().prev_span();
@@ -206,10 +176,10 @@ fn parse_alias<I: Tokens>(
             Pat::Ident(ident) => ident.id.optional = true,
             Pat::Array(array) => array.optional = true,
             Pat::Object(object) => object.optional = true,
-            _ => return Err(fail(p, ErrorKind::InvalidOptionalAlias)),
+            _ => return Err(fail(p, ParseErrorKind::VForInvalidOptionalAlias)),
         }
         if rest {
-            return Err(fail(p, ErrorKind::RestAliasCannotBeOptional));
+            return Err(fail(p, ParseErrorKind::VForRestAliasCannotBeOptional));
         }
     }
 
@@ -234,16 +204,16 @@ fn parse_alias<I: Tokens>(
                 object.type_ann = type_ann;
                 object.span.hi = end;
             }
-            _ => return Err(fail(p, ErrorKind::ExpectedBindingPattern)),
+            _ => return Err(fail(p, ParseErrorKind::VForExpectedBindingPattern)),
         }
     }
 
     if p.input_mut().eat(&Token::Eq) {
         if rest {
-            return Err(fail(p, ErrorKind::RestAliasCannotHaveDefault));
+            return Err(fail(p, ParseErrorKind::VForRestAliasCannotHaveDefault));
         }
         if optional {
-            return Err(fail(p, ErrorKind::OptionalAliasCannotHaveDefault));
+            return Err(fail(p, ParseErrorKind::VForOptionalAliasCannotHaveDefault));
         }
         // Guide SWC parser about whether `in` should be consumed during parsing of assignment
         // expression, or not. We use the heuristic of alias being parenthesized - if it is,
@@ -268,7 +238,7 @@ fn parse_alias<I: Tokens>(
     }
     // Stop on recovered alias errors before doing unrelated source work
     if let Some(error) = p.take_errors().into_iter().next() {
-        return Err(ParseVForError::from(error));
+        return Err(ParseError::from(error));
     }
     Ok(Box::new(pattern))
 }
@@ -292,8 +262,8 @@ fn is_js_space(ch: char) -> bool {
 fn expect<I: Tokens>(
     p: &mut Parser<I>,
     token: Token,
-    kind: ErrorKind,
-) -> Result<(), ParseVForError> {
+    kind: ParseErrorKind,
+) -> Result<(), ParseError> {
     if p.input_mut().eat(&token) {
         Ok(())
     } else {
@@ -301,8 +271,8 @@ fn expect<I: Tokens>(
     }
 }
 
-fn fail<I: Tokens>(p: &Parser<I>, kind: ErrorKind) -> ParseVForError {
-    ParseVForError {
+fn fail<I: Tokens>(p: &Parser<I>, kind: ParseErrorKind) -> ParseError {
+    ParseError {
         span: p.input().cur_span(),
         kind,
     }
@@ -310,7 +280,7 @@ fn fail<I: Tokens>(p: &Parser<I>, kind: ErrorKind) -> ParseVForError {
 
 #[cfg(test)]
 mod tests {
-    use swc_core::common::BytePos;
+    use swc_core::common::{BytePos, Spanned};
 
     use super::*;
 
@@ -635,7 +605,7 @@ mod tests {
         for raw in ["of rows", "(value, of) rows", "value, of: Key rows"] {
             let error = parse_v_for(raw, Span::new(BytePos(1), BytePos(1 + raw.len() as u32)))
                 .expect_err("missing delimiter");
-            assert_eq!(error.kind, ErrorKind::ExpectedDelimiter, "{raw}");
+            assert_eq!(error.kind, ParseErrorKind::VForExpectedDelimiter, "{raw}");
         }
     }
 
@@ -708,7 +678,7 @@ mod tests {
         let raw = format!("({{ x = @ {} }}, key) in rows", " in ".repeat(1000));
         let error = parse_v_for(&raw, Span::new(BytePos(1), BytePos(1 + raw.len() as u32)))
             .expect_err("bad default");
-        assert!(matches!(error.kind, ErrorKind::SwcSyntax(_)))
+        assert!(matches!(error.kind, ParseErrorKind::EcmaSyntaxError(_)))
     }
 
     #[test]
@@ -783,7 +753,7 @@ mod tests {
             .expect_err("recovered alias error invalidates result");
         assert_eq!(
             error.kind,
-            ErrorKind::SwcSyntax(SyntaxError::NonLastRestParam)
+            ParseErrorKind::EcmaSyntaxError(Box::new(SyntaxError::NonLastRestParam))
         );
     }
 
@@ -816,7 +786,7 @@ mod tests {
             .expect_err("EOF alone does not make a recovered expression valid");
         assert_eq!(
             error.kind,
-            ErrorKind::SwcSyntax(SyntaxError::DuplicatedRegExpFlags('g')),
+            ParseErrorKind::EcmaSyntaxError(Box::new(SyntaxError::DuplicatedRegExpFlags('g'))),
         );
     }
 
@@ -834,7 +804,7 @@ mod tests {
         assert_eq!(*p.input().cur(), Token::At);
         let error = parse_v_for(raw, Span::new(BytePos(1), BytePos(1 + raw.len() as u32)))
             .expect_err("fatal alias error");
-        assert!(matches!(error.kind, ErrorKind::SwcSyntax(_)))
+        assert!(matches!(error.kind, ParseErrorKind::EcmaSyntaxError(_)))
     }
 
     #[test]
@@ -904,7 +874,7 @@ mod tests {
             )
             .expect_err("stray comma before apparent delimiter");
             let comma = offset + raw.find(',').expect("comma in input") as u32;
-            assert_eq!(error.kind, ErrorKind::UnexpectedCommaBeforeOf);
+            assert_eq!(error.kind, ParseErrorKind::VForUnexpectedCommaBeforeOf);
             assert_eq!(error.span, Span::new(BytePos(comma), BytePos(comma + 1)));
         }
     }
