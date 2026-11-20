@@ -3,7 +3,6 @@ use fervid_transform::BindingsHelper;
 #[derive(Debug, Default)]
 pub struct CodegenContext {
     pub bindings_helper: BindingsHelper,
-    pub is_cache_disabled: bool,
     pub next_cache_index: u8,
 }
 

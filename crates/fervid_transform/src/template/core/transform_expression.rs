@@ -38,8 +38,10 @@ fn transform_element_expressions(
     for prop in &mut element.starting_tag.attributes {
         match prop {
             AttributeOrBinding::VBind(dir) => {
-                ctx.bindings_helper
-                    .transform_expr(&mut dir.value, scope_to_use);
+                dir.const_type = ctx
+                    .bindings_helper
+                    .transform_expr(&mut dir.value, scope_to_use)
+                    .const_type;
 
                 if let Some(StrOrExpr::Expr(arg)) = &mut dir.argument {
                     ctx.bindings_helper.transform_expr(arg, scope_to_use);
@@ -76,12 +78,6 @@ fn transform_element_expressions(
         maybe_transform!(v_memo);
         maybe_transform!(v_show);
         maybe_transform!(v_text);
-
-        // TODO: This needs to be considered together with v-model transform
-        // for v_model in directives.v_model.iter_mut() {
-        //     ctx.bindings_helper
-        //         .transform_v_model(v_model, scope_to_use, patch_hints);
-        // }
 
         if let Some(v_slot) = directives.v_slot.as_mut() {
             // Transform `v-slot` argument if it is dynamic

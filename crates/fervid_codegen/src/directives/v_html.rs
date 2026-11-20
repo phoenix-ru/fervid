@@ -27,10 +27,13 @@ impl CodegenContext {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{ElementKind, ElementNode, IntoIdent, StartingTag, VueDirectives};
-    use swc_core::ecma::ast::BinExpr;
-
-    use super::*;
+    use fervid_core::{
+        ElementKind, ElementNode, IntoIdent, StartingTag, VueDirectives, fervid_atom,
+    };
+    use swc_core::{
+        common::DUMMY_SP,
+        ecma::ast::{BinExpr, Expr},
+    };
 
     #[test]
     fn it_generates_v_html_on_component() {
@@ -57,7 +60,7 @@ mod tests {
                 span: DUMMY_SP,
                 codegen_node: None,
             },
-            r#"_createVNode(_component_test_component,{innerHTML:foo+bar})"#,
+            r#"_createVNode(_component_test_component,{innerHTML:foo+bar},null,8,["innerHTML"])"#,
             false,
         )
     }
@@ -87,20 +90,16 @@ mod tests {
                 span: DUMMY_SP,
                 codegen_node: None,
             },
-            r#"_createElementVNode("h1",{innerHTML:foo+bar})"#,
+            r#"_createElementVNode("h1",{innerHTML:foo+bar},null,8,["innerHTML"])"#,
             false,
         )
     }
 
     fn test_out(input: ElementNode, expected: &str, wrap_in_block: bool) {
-        let is_component = matches!(input.tag_type, ElementKind::Component);
-
-        let mut ctx = CodegenContext::default();
-        let out = if is_component {
-            ctx.generate_component_vnode(&input, wrap_in_block)
-        } else {
-            ctx.generate_element_vnode(&input, wrap_in_block)
-        };
+        let out = crate::test_utils::generate_prepared_node(
+            fervid_core::Node::Element(input),
+            wrap_in_block,
+        );
         assert_eq!(crate::test_utils::to_str(out), expected)
     }
 }

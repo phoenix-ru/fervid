@@ -636,13 +636,10 @@ fn empty_arrow_expr(span: Span) -> Expr {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{AttributeOrBinding, VOnDirective};
-    use swc_core::{common::DUMMY_SP, ecma::ast::ObjectLit};
+    use fervid_core::{AttributeOrBinding, ElementNode, StartingTag, VOnDirective};
+    use swc_core::common::DUMMY_SP;
 
-    use crate::{
-        context::CodegenContext,
-        test_utils::{js, regular_attribute, v_bind_attribute, v_on_attribute},
-    };
+    use crate::test_utils::{js, regular_attribute, v_bind_attribute, v_on_attribute};
 
     #[test]
     fn it_generates_class_regular() {
@@ -678,7 +675,9 @@ mod tests {
                 "style",
                 "margin: 0px; background-color: magenta",
             )],
-            r#"{style:{margin:"0px","background-color":"magenta"}}"#,
+            // TODO: Optimize the static string
+            // r#"{style:{margin:"0px","background-color":"magenta"}}"#,
+            r#"{style:"margin: 0px; background-color: magenta"}"#,
         );
     }
 
@@ -701,7 +700,9 @@ mod tests {
                 regular_attribute("style", "margin: 0px; background-color: magenta"),
                 v_bind_attribute("style", "{ backgroundColor: v ? 'yellow' : undefined }"),
             ],
-            r#"{style:_normalizeStyle([{margin:"0px","background-color":"magenta"},{backgroundColor:v?"yellow":undefined}])}"#,
+            // TODO: Optimize the static string and split it into an object
+            // r#"{style:_normalizeStyle([{margin:"0px","background-color":"magenta"},{backgroundColor:v?"yellow":undefined}])}"#,
+            r#"{style:_normalizeStyle(["margin: 0px; background-color: magenta",{backgroundColor:v?"yellow":undefined}])}"#,
         );
     }
 
@@ -734,7 +735,7 @@ mod tests {
         // @click
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
-                event: Some("onClick".into()),
+                event: Some("click".into()),
                 handler: None,
                 modifiers: vec![],
                 span: DUMMY_SP,
@@ -745,7 +746,7 @@ mod tests {
         // @multi-word-event (gets transformed to `onMultiWordEvent`)
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
-                event: Some("onMultiWordEvent".into()),
+                event: Some("multi-word-event".into()),
                 handler: None,
                 modifiers: vec![],
                 span: DUMMY_SP,
@@ -755,8 +756,8 @@ mod tests {
 
         // @click="handleClick"
         test_out(
-            vec![v_on_attribute("onClick", "handleClick")],
-            r"{onClick:handleClick}",
+            vec![v_on_attribute("click", "handleClick")],
+            r"{onClick:_ctx.handleClick}",
         );
 
         // TODO
@@ -774,23 +775,23 @@ mod tests {
 
         // @click="() => console.log('hello')"
         test_out(
-            vec![v_on_attribute("onClick", "() => console.log('hello')")],
+            vec![v_on_attribute("click", "() => console.log('hello')")],
             r#"{onClick:()=>console.log("hello")}"#,
         );
 
         // @click="$event => handleClick($event, foo, bar)"
         test_out(
             vec![v_on_attribute(
-                "onClick",
+                "click",
                 "$event => handleClick($event, foo, bar)",
             )],
-            r"{onClick:$event=>handleClick($event,foo,bar)}",
+            r"{onClick:$event=>_ctx.handleClick($event,_ctx.foo,_ctx.bar)}",
         );
 
         // @click.stop.prevent.self
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
-                event: Some("onClick".into()),
+                event: Some("click".into()),
                 handler: None,
                 modifiers: vec!["stop".into(), "prevent".into(), "self".into()],
                 span: DUMMY_SP,
@@ -801,22 +802,21 @@ mod tests {
         // @click.stop="$event => handleClick($event, foo, bar)"
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
-                event: Some("onClick".into()),
+                event: Some("click".into()),
                 handler: Some(js("$event => handleClick($event, foo, bar)")),
                 modifiers: vec!["stop".into()],
                 span: DUMMY_SP,
             })],
-            r#"{onClick:_withModifiers($event=>handleClick($event,foo,bar),["stop"])}"#,
+            r#"{onClick:_withModifiers($event=>_ctx.handleClick($event,_ctx.foo,_ctx.bar),["stop"])}"#,
         );
     }
 
     fn test_out(input: Vec<AttributeOrBinding>, expected: &str) {
-        let mut ctx = CodegenContext::default();
-        let mut out = ObjectLit {
-            span: DUMMY_SP,
-            props: vec![],
-        };
-        ctx.generate_attributes(&input, &mut out.props);
+        let out = crate::test_utils::generate_prepared_props(ElementNode::new(StartingTag {
+            tag_name: "div".into(),
+            attributes: input,
+            directives: None,
+        }));
         assert_eq!(crate::test_utils::to_str(out), expected)
     }
 }

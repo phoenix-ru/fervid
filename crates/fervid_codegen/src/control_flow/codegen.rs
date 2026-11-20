@@ -1,5 +1,5 @@
 use fervid_core::{
-    CacheMarker, CacheMarkers, ElementKind, ElementNode, IntoIdent, Node, VueImports, fervid_atom,
+    CacheMarker, CacheMarkers, ElementNode, IntoIdent, Node, VueImports, fervid_atom,
 };
 use smallvec::SmallVec;
 use swc_core::{
@@ -48,6 +48,7 @@ impl CodegenContext {
             let set_block_tracking = self
                 .get_and_add_import_ident(VueImports::SetBlockTracking)
                 .into_ident();
+
             // _setBlockTracking(value) or _setBlockTracking(value, true)
             let set_tracking = |value: f64, in_v_once: bool| {
                 let mut args = vec![ExprOrSpread {
@@ -75,6 +76,7 @@ impl CodegenContext {
                     type_args: None,
                 }))
             };
+
             // (_cache[index] = value).cacheIndex = index
             let assign_cache_index = Box::new(Expr::Assign(AssignExpr {
                 span: DUMMY_SP,
@@ -166,91 +168,15 @@ impl CodegenContext {
         element_node: &ElementNode,
         wrap_in_block: bool,
     ) -> Expr {
-        // `v-once` logic is common for all
-        #[cfg(not(feature = "new-pipeline"))]
-        let has_v_once = element_node
-            .starting_tag
-            .directives
-            .as_ref()
-            .and_then(|directives| directives.v_once)
-            .is_some();
-        #[cfg(feature = "new-pipeline")]
-        let has_v_once = element_node.codegen_node.is_none()
-            && element_node
-                .starting_tag
-                .directives
-                .as_ref()
-                .and_then(|directives| directives.v_once)
-                .is_some();
-
-        // Disable caching if `v-once` is present
-        let old_is_cache_disabled = self.is_cache_disabled;
-        if has_v_once {
-            self.is_cache_disabled = true;
-        }
-
-        // Generate the relevant render code depending on ElementKind
-        let mut result = {
-            #[cfg(feature = "new-pipeline")]
-            if let Some(codegen_node) = element_node.codegen_node.as_deref() {
-                self.generate_element_codegen_node(element_node, codegen_node, wrap_in_block)
-            } else {
-                match element_node.tag_type {
-                    ElementKind::Builtin(builtin_type) => {
-                        self.generate_builtin(element_node, builtin_type)
-                    }
-                    ElementKind::Element | ElementKind::Template => {
-                        self.generate_element_vnode(element_node, wrap_in_block)
-                    }
-                    ElementKind::Component => {
-                        self.generate_component_vnode(element_node, wrap_in_block)
-                    }
-                }
-            }
-
-            #[cfg(not(feature = "new-pipeline"))]
-            match element_node.tag_type {
-                ElementKind::Builtin(builtin_type) => {
-                    self.generate_builtin(element_node, builtin_type)
-                }
-                ElementKind::Element | ElementKind::Template => {
-                    self.generate_element_vnode(element_node, wrap_in_block)
-                }
-                ElementKind::Component => {
-                    self.generate_component_vnode(element_node, wrap_in_block)
-                }
-            }
+        let Some(codegen_node) = element_node.codegen_node.as_deref() else {
+            debug_assert!(false, "codegen_node was None for {:?}", element_node);
+            return Expr::Invalid(swc_core::ecma::ast::Invalid {
+                span: element_node.span,
+            });
         };
 
-        // Generate directives operating on render code
-        #[cfg(not(feature = "new-pipeline"))]
-        if let Some(ref directives) = element_node.starting_tag.directives {
-            // This block generates `v-for` and `v-memo`.
-            // These are dependent on each other, therefore need to be generated like that.
-            match (directives.v_for.as_ref(), directives.v_memo.as_ref()) {
-                (None, None) => {}
-                (None, Some(v_memo)) => {
-                    result = self.generate_v_memo(v_memo.to_owned(), Box::new(result));
-                }
-                (Some(v_for), None) => {
-                    result = self.generate_v_for(v_for, Box::new(result));
-                }
-                (Some(v_for), Some(v_memo)) => {
-                    result =
-                        self.generate_v_for_memoized(v_for, Box::new(result), v_memo.to_owned());
-                }
-            }
-        }
-
-        // Generate `v-once` if needed (also operates on render code)
-        if has_v_once {
-            result = self.generate_v_once(result);
-
-            // Restore caching
-            self.is_cache_disabled = old_is_cache_disabled;
-        }
-
-        result
+        // Generate the relevant render code depending on ElementKind
+        self.generate_element_codegen_node(element_node, codegen_node, wrap_in_block)
     }
 
     /// Generates a sequence of nodes taken from an iterator.
@@ -445,4 +371,50 @@ fn join_exprs_to_concatenation(exprs: &mut TextNodesConcatenationVec, span: Span
     }
 
     expr
+}
+
+#[cfg(test)]
+mod tests {
+    use fervid_core::{CacheMarker, CacheMarkers};
+
+    use crate::{CodegenContext, test_utils::js};
+
+    #[test]
+    fn it_generates_v_once() {
+        let mut ctx = CodegenContext::default();
+
+        // Mock a render expression
+        let item_render_expr = js("_createElementVNode(\"div\")");
+        let markers = CacheMarkers::from(CacheMarker::NeedPauseTracking | CacheMarker::InVOnce);
+
+        // First `v-once`
+        let index = ctx.allocate_next_cache_entry();
+        let v_once_expr = ctx.wrap_cache_expression(index, *item_render_expr.to_owned(), markers);
+        assert_eq!(
+            crate::test_utils::to_str(v_once_expr),
+            "_cache[0]||(_setBlockTracking(-1,true),(_cache[0]=_createElementVNode(\"div\")).cacheIndex=0,_setBlockTracking(1),_cache[0])"
+        );
+
+        // Second `v-once` with increased cache index
+        let index = ctx.allocate_next_cache_entry();
+        let v_once_expr = ctx.wrap_cache_expression(index, *item_render_expr, markers);
+        assert_eq!(
+            crate::test_utils::to_str(v_once_expr),
+            "_cache[1]||(_setBlockTracking(-1,true),(_cache[1]=_createElementVNode(\"div\")).cacheIndex=1,_setBlockTracking(1),_cache[1])"
+        );
+    }
+
+    #[test]
+    fn it_generates_spread_array_cache() {
+        let mut ctx = CodegenContext::default();
+        let index = ctx.allocate_next_cache_entry();
+        let markers = CacheMarkers::from(CacheMarker::NeedArraySpread);
+
+        let cache = ctx.wrap_cache_expression(index, *js("items"), markers);
+
+        assert_eq!(
+            crate::test_utils::to_str(cache),
+            "[...(_cache[0]||(_cache[0]=items))]"
+        );
+    }
 }

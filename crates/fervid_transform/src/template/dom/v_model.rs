@@ -57,6 +57,13 @@ pub fn transform_v_model(
         let mut is_invalid_type = false;
         let mut runtime_directive_span = DUMMY_SP;
 
+        // These cases need special handling of v-model
+        // input type=* -> vModelText
+        // input type="radio" -> vModelRadio
+        // input type="checkbox" -> vModelCheckbox
+        // input :type=* -> vModelDynamic
+        // select -> vModelSelect
+        // textarea -> vModelText
         if tag == "input" || is_custom_element {
             let mut found = false;
 
@@ -114,6 +121,7 @@ pub fn transform_v_model(
                         // Don't break here and try to find a narrower match
                     }
 
+                    // By default VModelText is used
                     _ => {}
                 }
             }

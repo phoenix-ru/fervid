@@ -1,6 +1,6 @@
 use fervid_core::{
-    ForCodegenNodeMemo, ForNode, ForParseResult, IntoIdent, Node, PatchFlags, VForDirective,
-    VueImports, fervid_atom,
+    ForCodegenNodeMemo, ForNode, ForParseResult, IntoIdent, Node, PatchFlags, VueImports,
+    fervid_atom,
 };
 use fervid_transform::template::utils::maybe_parenthesize;
 use swc_core::{
@@ -13,7 +13,7 @@ use swc_core::{
     },
 };
 
-use crate::CodegenContext;
+use crate::{CodegenContext, utils::expr_arg};
 
 pub(crate) fn create_for_loop_params(result: &ForParseResult, minimum_len: usize) -> Vec<Pat> {
     let params_len = if result.index.is_some() {
@@ -53,6 +53,8 @@ pub(crate) fn create_for_loop_params(result: &ForParseResult, minimum_len: usize
 }
 
 impl CodegenContext {
+    /// Generates `(openBlock(true), createElementBlock(Fragment, null, renderList(<list>, (<item>) => (<expr>)), <patch flag>))`.
+    /// The second `null` param can also be a branch key, e.g. `{ key: 0 }`
     pub fn generate_for_node(&mut self, for_node: &ForNode) -> Expr {
         // TODO: Rework properly
         let codegen_node = for_node
@@ -165,6 +167,11 @@ impl CodegenContext {
 
         // 3.2. Build the Fragment itself.
         // Note: this is separate from Fragment which is built for multi-child for
+        // `_createElementBlock` args:
+        // 1. `Fragment`;
+        // 2. `null` (or branch key `{ key: <number> }`);
+        // 3. `renderList(<...>)`;
+        // 4. Patch flag.
         let fragment = Expr::Call(CallExpr {
             span,
             ctxt: Default::default(),
@@ -248,240 +255,7 @@ impl CodegenContext {
         self.wrap_in_open_block(fragment, span)
     }
 
-    /// Generates `(openBlock(true), createElementBlock(Fragment, null, renderList(<list>, (<item>) => (<expr>)), <patch flag>))`.
-    /// The second `null` param can also be a branch key, e.g. `{ key: 0 }`
-    pub fn generate_v_for(&mut self, v_for: &VForDirective, item_render_expr: Box<Expr>) -> Expr {
-        let span = v_for.span;
-
-        // Arrow function which renders each individual item
-        let render_list_arrow = Expr::Arrow(ArrowExpr {
-            span,
-            ctxt: Default::default(),
-            params: create_for_loop_params(&v_for.parse_result, 1),
-            body: Box::new(BlockStmtOrExpr::Expr(item_render_expr)),
-            is_async: false,
-            is_generator: false,
-            type_params: None,
-            return_type: None,
-        });
-
-        // `_renderList` args
-        // 1. List itself, which is `v_for.parse_result.source`;
-        // 2. Arrow function for each item, where argument is `v_for.iterator`
-        //    and return is the passes `expr`;
-        let render_list_args = vec![
-            ExprOrSpread {
-                spread: None,
-                expr: v_for.parse_result.source.to_owned(),
-            },
-            ExprOrSpread {
-                spread: None,
-                expr: Box::new(render_list_arrow),
-            },
-        ];
-
-        // `_renderList(iterable, render_list_arrow)`
-        let render_list_call_expr = Expr::Call(CallExpr {
-            span,
-            ctxt: Default::default(),
-            callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                span,
-                ctxt: Default::default(),
-                sym: self.get_and_add_import_ident(VueImports::RenderList),
-                optional: false,
-            }))),
-            args: render_list_args,
-            type_args: None,
-        });
-
-        // `_createElementBlock` args:
-        // 1. `Fragment`;
-        // 2. `null` (or `{ key: <number> }` in some rare cases);
-        // 3. `renderList(<...>)`;
-        // 4. Patch flag.
-        let create_element_block_args = vec![
-            ExprOrSpread {
-                spread: None,
-                expr: Box::new(Expr::Ident(Ident {
-                    span,
-                    ctxt: Default::default(),
-                    sym: self.get_and_add_import_ident(VueImports::Fragment),
-                    optional: false,
-                })),
-            },
-            // Note - `{ key: <number> }` is not supported here
-            ExprOrSpread {
-                spread: None,
-                expr: Box::new(Expr::Lit(Lit::Null(Null { span }))),
-            },
-            ExprOrSpread {
-                spread: None,
-                expr: Box::new(render_list_call_expr),
-            },
-            ExprOrSpread {
-                spread: None,
-                expr: Box::new(Expr::Lit(Lit::Num(Number {
-                    span,
-                    value: v_for.patch_flags.bits().into(),
-                    raw: None,
-                }))),
-            },
-        ];
-
-        let create_element_block = Expr::Call(CallExpr {
-            span,
-            ctxt: Default::default(),
-            callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                span,
-                ctxt: Default::default(),
-                sym: self.get_and_add_import_ident(VueImports::CreateElementBlock),
-                optional: false,
-            }))),
-            args: create_element_block_args,
-            type_args: None,
-        });
-
-        self.wrap_in_open_block(create_element_block, span)
-    }
-
-    /// Generates `v-for` in combination with `v-memo`.
-    ///
-    /// ## Example
-    /// IN: `<div v-for="i in 3" v-memo="[]" :key="i"></div>`
-    ///
-    /// OUT:
-    /// ```js
-    /// (_openBlock(), _createElementBlock(_Fragment, null, _renderList(3, (i, __, ___, _cached) => {
-    ///   const _memo = ([])
-    ///   if (_cached && _cached.el && _cached.key === i && _isMemoSame(_cached, _memo)) return _cached
-    ///   const _item = (_openBlock(), _createElementBlock("div", { key: i }))
-    ///   _item.memo = _memo
-    ///   return _item
-    /// }, _cache, 4), 64 /* STABLE_FRAGMENT */))
-    /// ```
-    ///
-    /// The second `null` param can also be a branch key, e.g. `{ key: 0 }`.
-    pub fn generate_v_for_memoized(
-        &mut self,
-        v_for: &VForDirective,
-        item_render_expr: Box<Expr>,
-        memo_expr: Box<Expr>,
-    ) -> Expr {
-        // Prepare
-        let span = v_for.span;
-        let cache_idx = self.allocate_next_cache_entry();
-
-        // 1.1. `_renderList` first argument - iterable
-        let render_list_iterable = ExprOrSpread {
-            spread: None,
-            expr: v_for.parse_result.source.to_owned(),
-        };
-
-        // 1.2. `_renderList` second argument - the memoized arrow function
-        let render_list_arrow = ExprOrSpread {
-            spread: None,
-            expr: self.generate_memoized_render_arrow(
-                create_for_loop_params(&v_for.parse_result, 3),
-                item_render_expr,
-                // Memo key is unsupported here
-                ForCodegenNodeMemo {
-                    expr: memo_expr,
-                    key: None,
-                },
-            ),
-        };
-
-        // 1.3. `_renderList` third argument - `_cache`
-        let render_list_cache = ExprOrSpread {
-            spread: None,
-            expr: Box::new(Expr::Ident(fervid_atom!("_cache").into_ident())),
-        };
-
-        // 1.4. `_renderList` fourth argument - cache index
-        let render_list_cache_idx = ExprOrSpread {
-            spread: None,
-            expr: Box::new(Expr::Lit(Lit::Num(Number {
-                span,
-                value: cache_idx.into(),
-                raw: None,
-            }))),
-        };
-
-        // 1.5. Generate `_renderList` call
-        let render_list = Box::new(Expr::Call(CallExpr {
-            span,
-            ctxt: Default::default(),
-            callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                span,
-                ctxt: Default::default(),
-                sym: self.get_and_add_import_ident(VueImports::RenderList),
-                optional: false,
-            }))),
-            args: vec![
-                render_list_iterable,
-                render_list_arrow,
-                render_list_cache,
-                render_list_cache_idx,
-            ],
-            type_args: None,
-        }));
-
-        // 2.1. `_Fragment`
-        let fragment_ident = ExprOrSpread {
-            spread: None,
-            expr: Box::new(Expr::Ident(Ident {
-                span,
-                ctxt: Default::default(),
-                sym: self.get_and_add_import_ident(VueImports::Fragment),
-                optional: false,
-            })),
-        };
-
-        // 2.2. `null` (or `{ key: <number> }` in some rare cases)
-        let fragment_attrs = ExprOrSpread {
-            spread: None,
-            expr: Box::new(Expr::Lit(Lit::Null(Null { span }))),
-        };
-
-        // 2.3. Fragment render function - just convert to ExprOrSpread
-        let fragment_render = ExprOrSpread {
-            spread: None,
-            expr: render_list,
-        };
-
-        // 2.4. Fragment patch flag
-        let fragment_patch_flag = ExprOrSpread {
-            spread: None,
-            expr: Box::new(Expr::Lit(Lit::Num(Number {
-                span,
-                value: v_for.patch_flags.bits().into(),
-                raw: None,
-            }))),
-        };
-
-        // 2.5. Generate `_createElementBlock`
-        let create_element_block = Expr::Call(CallExpr {
-            span,
-            ctxt: Default::default(),
-            callee: Callee::Expr(Box::new(Expr::Ident(Ident {
-                span,
-                ctxt: Default::default(),
-                sym: self.get_and_add_import_ident(VueImports::CreateElementBlock),
-                optional: false,
-            }))),
-            args: vec![
-                fragment_ident,
-                fragment_attrs,
-                fragment_render,
-                fragment_patch_flag,
-            ],
-            type_args: None,
-        });
-
-        self.wrap_in_open_block(create_element_block, span)
-    }
-
-    /// Generates the arrow function for [generate_v_for_memoized].
+    /// Generates the arrow function for [generate_for_node].
     ///
     /// ## Example
     /// IN: `<div v-for="i in 3" v-memo="[]" :key="i"></div>`
@@ -677,13 +451,6 @@ impl CodegenContext {
     }
 }
 
-fn expr_arg(expr: Expr) -> ExprOrSpread {
-    ExprOrSpread {
-        spread: None,
-        expr: Box::new(expr),
-    }
-}
-
 fn key_object(key: Expr, span: Span) -> Expr {
     Expr::Object(ObjectLit {
         span,
@@ -701,11 +468,10 @@ fn key_object(key: Expr, span: Span) -> Expr {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "new-pipeline")]
     use fervid_core::{
         AttributeOrBinding, BindingTypes, BuiltinType, ElementCodegenValue, ForCodegenNodeMemo,
-        SfcDescriptor, SfcTemplateBlock, TemplateGenerationMode, VBindDirective, VNodeCall,
-        VNodeCallTag, VueDirectives,
+        SfcDescriptor, SfcTemplateBlock, TemplateGenerationMode, VBindDirective, VForDirective,
+        VNodeCall, VNodeCallTag, VueDirectives,
     };
     use fervid_core::{
         CacheMarker, ElementKind, ElementNode, ForCodegenNode, ForNode, ForParseResult, Node,
@@ -718,7 +484,6 @@ mod tests {
 
     #[test]
     fn it_generates_all_v_for_params() {
-        let mut ctx = CodegenContext::default();
         let v_for = VForDirective {
             parse_result: Box::new(ForParseResult {
                 source: js("items"),
@@ -733,12 +498,9 @@ mod tests {
             span: DUMMY_SP,
         };
 
-        let res = ctx.generate_v_for(&v_for, js("value"));
+        let res = for_params_arrow(&v_for.parse_result);
 
-        assert_eq!(
-            crate::test_utils::to_str(res),
-            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(items,(value,key,index)=>value),256))"
-        );
+        assert_eq!(crate::test_utils::to_str(res), "(value,key,index)=>value");
 
         let v_for = VForDirective {
             parse_result: Box::new(ForParseResult {
@@ -754,12 +516,9 @@ mod tests {
             span: DUMMY_SP,
         };
 
-        let res = ctx.generate_v_for(&v_for, js("value"));
+        let res = for_params_arrow(&v_for.parse_result);
 
-        assert_eq!(
-            crate::test_utils::to_str(res),
-            "(_openBlock(),_createElementBlock(_Fragment,null,_renderList(items,(value,__,index)=>value),256))"
-        );
+        assert_eq!(crate::test_utils::to_str(res), "(value,__,index)=>value");
     }
 
     #[test]
@@ -795,7 +554,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn v_if_v_for_keeps_branch_and_item_keys_separate() {
         // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vFor.spec.ts#L1033-L1067
@@ -833,7 +591,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn memoized_for_node_checks_key_only_when_present() {
         // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L58-L85
@@ -901,7 +658,6 @@ mod tests {
         assert!(output.contains("},_cache,0)"), "{output}");
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn memo_on_root_and_component_uses_vnode_factory() {
         // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L11-L21
@@ -921,7 +677,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn memo_on_element_preserves_dynamic_key() {
         // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L24-L29
@@ -939,7 +694,6 @@ mod tests {
         assert!(output.contains("{key:_ctx.updateKey}"), "{output}");
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn memo_inside_v_if_keeps_branch_wrapper() {
         // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L49-L56
@@ -958,7 +712,6 @@ mod tests {
         assert!(output.contains("_ctx.ok?_withMemo([_ctx.x]"), "{output}");
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn memo_on_v_if_and_v_else_keeps_both_wrappers() {
         // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L49-L56
@@ -996,7 +749,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn nested_memo_uses_separate_cache_entries() {
         // <div v-memo="[outer]"><span v-memo="[inner]" /></div>
@@ -1014,7 +766,6 @@ mod tests {
         assert!(output.contains("_cache,1)"), "{output}");
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn memo_nested_in_v_for_keeps_child_dependency_scope() {
         // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L31-L43
@@ -1063,7 +814,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn memo_on_v_for_compares_processed_key() {
         // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L58-L85
@@ -1085,7 +835,6 @@ mod tests {
         assert!(output.contains("},_cache,0)"), "{output}");
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn memo_on_v_for_parenthesizes_conditional_key() {
         // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L78-L86
@@ -1102,7 +851,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn memo_on_template_v_for_keeps_carrier_expression() {
         // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vMemo.spec.ts#L88-L106
@@ -1133,7 +881,6 @@ mod tests {
         assert!(output.contains("{key:_ctx.get(item)}"), "{output}");
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn memo_on_template_v_for_with_multiple_children_caches_fragment() {
         // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/src/transforms/vFor.ts#L166-L180
@@ -1170,7 +917,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn memo_element(tag: &str, kind: ElementKind, memo: &str) -> Node {
         let mut node = element_with_kind(tag, kind, vec![]);
         let Node::Element(element) = &mut node else {
@@ -1183,7 +929,6 @@ mod tests {
         node
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn memo_for_element(tag: &str, kind: ElementKind, memo: &str, key: Option<&str>) -> Node {
         let mut node = memo_element(tag, kind, memo);
         let Node::Element(element) = &mut node else {
@@ -1260,7 +1005,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn it_generates_transformed_for_node() {
         let Node::Element(mut root) = element("div") else {
@@ -1313,7 +1057,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn it_generates_need_patch_for_stable_v_for_child() {
         let Node::Element(mut root) = element("div") else {
@@ -1377,7 +1120,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn setup_constant_keyed_loop_uses_stable_fragment() {
         // Additional SFC regression. Vue reference for constant v-for sources:
@@ -1390,7 +1132,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn parenthesized_setup_constant_keyed_loop_uses_stable_fragment() {
         // Fervid extension: parentheses preserve source stability. Vue 3.5.45 uses KEYED_FRAGMENT (128)
@@ -1402,7 +1143,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn literal_array_keyed_loop_uses_stable_fragment() {
         // <span v-for="i in [1, 2, 3]" :key="i">hey</span>
@@ -1412,7 +1152,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn literal_arithmetic_keyed_loop_uses_stable_fragment() {
         // <span v-for="i in 1 + 2" :key="i">hey</span>
@@ -1422,7 +1161,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn pure_global_call_keyed_loop_uses_stable_fragment() {
         // Fervid extension: Number('2') always returns 2. Vue 3.5.45 uses KEYED_FRAGMENT (128)
@@ -1433,7 +1171,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn setup_ref_keyed_loop_keeps_dynamic_fragment() {
         // Additional dynamic control: const items = ref([1, 2, 3])
@@ -1444,7 +1181,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn global_call_keyed_loop_keeps_dynamic_fragment() {
         // <span v-for="i in Math.floor(Math.random() * 3)" :key="i">hey</span>
@@ -1456,7 +1192,6 @@ mod tests {
 
     // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vFor.spec.ts#L921-L1030
     // Built-in reference: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/transformElement.spec.ts#L444-L559
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn keyed_template_with_single_plain_element_injects_typed_key() {
         // <template v-for="item in items" :key="item.id"><div /></template>
@@ -1472,7 +1207,6 @@ mod tests {
 
     // Vue parser classifies only structural directives as fragment templates:
     // https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/src/parser.ts#L767-L780
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn keyed_template_with_non_structural_template_child_keeps_native_tag() {
         // <template v-for="item in items" :key="item.id"><template v-cloak><div /></template></template>
@@ -1512,7 +1246,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn keyed_template_with_single_component_injects_typed_key() {
         // <template v-for="item in items" :key="item.id"><Comp /></template>
@@ -1529,7 +1262,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn keyed_template_with_single_slot_uses_sixth_argument() {
         // <template v-for="item in items" :key="item.id"><slot /></template>
@@ -1554,7 +1286,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn keyed_template_with_teleport_injects_into_typed_vnode() {
         // <template v-for="item in items" :key="item.id"><Teleport to="body" /></template>
@@ -1579,7 +1310,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn keyed_template_with_dynamic_component_resolves_is() {
         // <template v-for="item in items" :key="item.id"><component :is="which" /></template>
@@ -1602,7 +1332,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn keyed_template_with_other_builtins_keeps_typed_key() {
         // <template v-for="item in items" :key="item.id"><Suspense /></template>
@@ -1637,7 +1366,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn keyed_template_with_teleport_children_preserves_array() {
         // <template v-for="item in items" :key="item.id"><Teleport to="body"><div /></Teleport></template>
@@ -1667,7 +1395,6 @@ mod tests {
         assert!(output.contains("_createElementVNode(\"div\")"), "{output}");
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn keyed_template_with_keep_alive_preserves_raw_child_and_patch_flag() {
         // <template v-for="item in items" :key="item.id"><KeepAlive><Comp /></KeepAlive></template>
@@ -1692,7 +1419,6 @@ mod tests {
         assert!(output.contains("_createVNode(_component_Comp)"), "{output}");
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn keyed_template_with_slot_building_builtin_preserves_default_slot() {
         // <template v-for="item in items" :key="item.id"><Suspense><div /></Suspense></template>
@@ -1727,15 +1453,12 @@ mod tests {
                 "{tag}"
             );
             assert!(
-                output.contains(&format!(
-                    "_createBlock({helper},{{key:item.id}},{{\"default\":"
-                )),
+                output.contains(&format!("_createBlock({helper},{{key:item.id}},{{default:")),
                 "{tag}: {output}"
             );
         }
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn keyed_template_with_multiple_children_keeps_fragment_key() {
         // <template v-for="item in items" :key="item.id">hello<span /></template>
@@ -1759,12 +1482,10 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn generate_keyed_template_child(child: Node) -> (Node, String) {
         generate_keyed_template_children(vec![child])
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn generate_keyed_template_children(children: Vec<Node>) -> (Node, String) {
         let root = element_with_kind(
             "template",
@@ -1797,7 +1518,6 @@ mod tests {
         transform_and_generate_node(Node::Element(root))
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn transform_and_generate_node(root: Node) -> (Node, String) {
         let mut template = SfcTemplateBlock {
             lang: "html".into(),
@@ -1835,7 +1555,6 @@ mod tests {
         (root, output)
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn keyed_template_vnode(node: &Node) -> &VNodeCall {
         let Node::For(for_node) = node else {
             panic!("expected ForNode")
@@ -1863,7 +1582,6 @@ mod tests {
         vnode
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn element_with_kind(
         tag: &str,
         kind: ElementKind,
@@ -1885,25 +1603,24 @@ mod tests {
         let mut ctx = CodegenContext::default();
 
         // `<div v-for="item in 3" v-memo="[msg]"></div>`
-        let v_for = VForDirective {
-            parse_result: Box::new(ForParseResult {
-                source: js("3"),
-                value: pat("item"),
-                key: None,
-                index: None,
-                finalized: false,
-                finalized_is_dynamic: false,
-                source_const_type: Default::default(),
-            }),
-            patch_flags: PatchFlags::StableFragment.into(),
-            span: DUMMY_SP,
-        };
-
-        let res = ctx.generate_v_for_memoized(
-            &v_for,
-            js("_createElementVNode(\"div\")"),
-            js("[msg.value]"),
+        let mut v_for = for_node(
+            js("3"),
+            vec![element("div")],
+            PatchFlags::StableFragment,
+            false,
+            false,
+            None,
         );
+        v_for
+            .codegen_node
+            .as_mut()
+            .expect("memoized loop must have codegen metadata")
+            .memo = Some(ForCodegenNodeMemo {
+            expr: js("[msg.value]"),
+            key: None,
+        });
+
+        let res = ctx.generate_for_node(&v_for);
 
         assert_eq!(
             crate::test_utils::to_str(res),
@@ -1911,14 +1628,31 @@ mod tests {
         );
     }
 
+    fn for_params_arrow(parse_result: &ForParseResult) -> Expr {
+        Expr::Arrow(ArrowExpr {
+            span: DUMMY_SP,
+            ctxt: Default::default(),
+            params: create_for_loop_params(parse_result, 1),
+            body: Box::new(BlockStmtOrExpr::Expr(js("value"))),
+            is_async: false,
+            is_generator: false,
+            type_params: None,
+            return_type: None,
+        })
+    }
+
     fn for_node(
         source: Box<Expr>,
-        children: Vec<Node>,
+        mut children: Vec<Node>,
         patch_flag: PatchFlags,
         disable_tracking: bool,
         is_template: bool,
         key: Option<Box<Expr>>,
     ) -> ForNode {
+        let mut ctx = crate::test_utils::transform_context();
+        for child in &mut children {
+            crate::test_utils::prepare_codegen(child, &mut ctx);
+        }
         ForNode {
             parse_result: Box::new(ForParseResult {
                 source,
@@ -1960,7 +1694,6 @@ mod tests {
         })
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn generate_setup_keyed_loop(source: &str, binding: Option<(&str, BindingTypes)>) -> String {
         let Node::Element(mut child) = element("span") else {
             panic!("loop child should be an element");

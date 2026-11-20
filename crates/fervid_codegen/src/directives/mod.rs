@@ -15,7 +15,6 @@ pub(crate) mod v_for;
 mod v_html;
 mod v_memo;
 mod v_model;
-mod v_once;
 mod v_text;
 
 impl CodegenContext {

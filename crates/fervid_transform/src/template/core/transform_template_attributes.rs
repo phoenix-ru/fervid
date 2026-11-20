@@ -95,7 +95,6 @@ mod tests {
         AttributeOrBinding, ElementKind, ForParseResult, Node, VBindDirective, VCustomDirective,
         VForDirective, VModelDirective, VOnDirective, VueDirectives,
     };
-    #[cfg(feature = "new-pipeline")]
     use fervid_core::{SfcTemplateBlock, VSlotDirective};
     use swc_core::common::{BytePos, DUMMY_SP, Span};
 
@@ -318,7 +317,6 @@ mod tests {
     }
 
     // The exception for a v-for key does not preserve other template attributes
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn template_v_for_key_does_not_preserve_other_attributes() {
         // <template v-for="item in items" :key="item.id" id="ignored"><div/></template>
@@ -340,7 +338,6 @@ mod tests {
     }
 
     // v-slot carrier does not render its ordinary attributes either
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn template_v_slot_discards_regular_attributes() {
         // <Comp><template v-slot:default id="ignored"><div/></template></Comp>

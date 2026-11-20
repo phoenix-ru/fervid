@@ -1,3 +1,5 @@
+use core::fmt::NumBuffer;
+
 use fervid_core::{
     AttributeOrBinding, BuiltinType, ElementNode, FervidAtom, StrOrExpr, VUE_BUILTINS,
 };
@@ -128,13 +130,16 @@ pub fn to_valid_asset_id(name: &str, asset_type: &str) -> String {
     out.push_str(asset_type);
     out.push('_');
 
+    let mut buf = NumBuffer::<u32>::new();
+
     for ch in name.chars() {
         if ch.is_ascii_alphanumeric() || ch == '_' {
             out.push(ch);
         } else if ch == '-' {
             out.push('_');
         } else {
-            out.push_str(&(ch as u32).to_string());
+            let s = (ch as u32).format_into(&mut buf);
+            out.push_str(s);
         }
     }
 

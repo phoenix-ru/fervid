@@ -9,15 +9,10 @@ PRETTIER_VERSION=3.6.2
 
 mkdir -p "$OUTPUT_DIR"
 
-echo "Compiling old pipeline"
+echo "Compiling Fervid"
 cargo run --quiet --manifest-path "$ROOT_DIR/Cargo.toml" -p fervid -- "$FIXTURE" --mode prod \
-    > "$OUTPUT_DIR/old-pipeline.js" \
-    2> "$OUTPUT_DIR/old-pipeline.stderr.txt"
-
-echo "Compiling new pipeline"
-cargo run --quiet --manifest-path "$ROOT_DIR/Cargo.toml" -p fervid --features new-pipeline -- "$FIXTURE" --mode prod \
-    > "$OUTPUT_DIR/new-pipeline.js" \
-    2> "$OUTPUT_DIR/new-pipeline.stderr.txt"
+    > "$OUTPUT_DIR/fervid.js" \
+    2> "$OUTPUT_DIR/fervid.stderr.txt"
 
 echo "Compiling Vue reference"
 NODE_ENV=production FIXTURE="$FIXTURE" pnpm --dir "$ROOT_DIR/crates/fervid_napi" exec node -e '
@@ -40,10 +35,8 @@ echo "Formatting outputs with Prettier $PRETTIER_VERSION"
     cd "$OUTPUT_DIR"
     pnpm dlx "prettier@$PRETTIER_VERSION" --parser babel vue-reference.js \
         > vue-reference.pretty.js
-    pnpm dlx "prettier@$PRETTIER_VERSION" --parser babel old-pipeline.js \
-        > old-pipeline.pretty.js
-    pnpm dlx "prettier@$PRETTIER_VERSION" --parser babel new-pipeline.js \
-        > new-pipeline.pretty.js
+    pnpm dlx "prettier@$PRETTIER_VERSION" --parser babel fervid.js \
+        > fervid.pretty.js
 )
 
 write_diff() {
@@ -69,22 +62,14 @@ write_diff() {
 echo "Writing diffs"
 write_diff \
     vue-reference.pretty.js \
-    new-pipeline.pretty.js \
+    fervid.pretty.js \
     "$OUTPUT_DIR/vue-reference.pretty.js" \
-    "$OUTPUT_DIR/new-pipeline.pretty.js" \
-    "$OUTPUT_DIR/vue-vs-new.pretty.diff"
-
-write_diff \
-    old-pipeline.pretty.js \
-    new-pipeline.pretty.js \
-    "$OUTPUT_DIR/old-pipeline.pretty.js" \
-    "$OUTPUT_DIR/new-pipeline.pretty.js" \
-    "$OUTPUT_DIR/old-vs-new.pretty.diff"
+    "$OUTPUT_DIR/fervid.pretty.js" \
+    "$OUTPUT_DIR/vue-vs-fervid.pretty.diff"
 
 echo
 echo "Generated:"
-echo "  $OUTPUT_DIR/vue-vs-new.pretty.diff"
-echo "  $OUTPUT_DIR/old-vs-new.pretty.diff"
+echo "  $OUTPUT_DIR/vue-vs-fervid.pretty.diff"
 echo
 echo "Open with:"
-echo "  bat --language=diff --paging=always $OUTPUT_DIR/vue-vs-new.pretty.diff"
+echo "  bat --language=diff --paging=always $OUTPUT_DIR/vue-vs-fervid.pretty.diff"

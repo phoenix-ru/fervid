@@ -40,33 +40,46 @@ pub struct VModelTransformState {
     pub argument: Option<StrOrExpr>,
 }
 
+/// Adapted from https://github.com/vuejs/core/blob/24fccb4ee4139d41df0e395bce96ce7fbb6a50a9/packages/compiler-core/src/transforms/vModel.ts#L23-L156
 pub fn transform_v_model_base(
     ctx: &mut TransformSfcContext,
     state: &TransformNodeState,
     v_model: &VModelDirective,
     node: &ElementNode,
 ) -> Option<VModelTransformState> {
+    // Note: expression is always defined on `v_model`, guaranteed by the parser
+
     let scope = state.current_scope;
     let expr_span = v_model.value.span();
 
-    // Like vuejs-core `bindingMetadata[rawExp]``, only inspect direct identifiers
+    // Check the binding type of the expression.
+    // Like vuejs-core `bindingMetadata[rawExp]`, only inspect direct identifiers
     let binding_type = v_model
         .value
         .as_ident()
         .map(|ident| ctx.bindings_helper.get_var_binding_type(scope, &ident.sym));
 
+    // Check incorrect usages
     let mut incorrect_usage: Option<TemplateErrorKind> = None;
 
     match binding_type {
+        // Using v-model on props
         Some(BindingTypes::Props | BindingTypes::PropsAliased) => {
             incorrect_usage = Some(TemplateErrorKind::VModelOnProps);
         }
+
+        // Using v-model on const binding
         Some(BindingTypes::LiteralConst | BindingTypes::SetupConst) => {
             incorrect_usage = Some(TemplateErrorKind::VModelOnConst);
         }
+
+        // Using v-model on a scope variable
         Some(BindingTypes::TemplateLocal) => {
             incorrect_usage = Some(TemplateErrorKind::VModelOnScopeVariable);
         }
+
+        // Using on an incorrect target (e.g. when non-inline mode and not a member expression in
+        // vuejs sense - see `is_model_member_expression`)
         Some(
             BindingTypes::SetupLet
             | BindingTypes::SetupRef
@@ -301,64 +314,202 @@ mod tests {
         SetupBinding, TemplateScope, TransformSfcContext,
         error::{TemplateErrorKind, TransformError},
         template::{
-            directive_transforms::DirectiveTransformResult, node_transforms::TransformNodeState,
+            core::v_model::transform_v_model, directive_transforms::DirectiveTransformResult,
+            node_transforms::TransformNodeState,
         },
         test_utils::{
             AssertType, element_from_tag, js, js_child_node_to_str, property_to_str, to_str,
         },
     };
 
-    use super::transform_v_model;
+    #[test]
+    fn it_transforms_v_model() {
+        let mut ctx = TransformSfcContext::anonymous();
+        ctx.cache_handlers = false;
+        let node = element_from_tag("input");
+        let helper = &mut ctx.bindings_helper;
 
-    fn directive(value: &str, argument: Option<StrOrExpr>, modifiers: &[&str]) -> VModelDirective {
-        VModelDirective {
-            argument,
-            value: js(value),
-            update_handler: None,
-            modifiers: modifiers
-                .iter()
-                .map(|modifier| (*modifier).into())
-                .collect(),
-            span: DUMMY_SP,
+        // const Ref = ref('foo')
+        // const MaybeRef = useSomething()
+        // const Const = 123
+        // let Let = 123
+        // const Reactive = reactive({})
+        helper.setup_bindings.push(SetupBinding::new(
+            fervid_atom!("Ref"),
+            BindingTypes::SetupRef,
+        ));
+        helper.setup_bindings.push(SetupBinding::new(
+            fervid_atom!("MaybeRef"),
+            BindingTypes::SetupMaybeRef,
+        ));
+        helper.setup_bindings.push(SetupBinding::new(
+            fervid_atom!("Const"),
+            BindingTypes::SetupConst,
+        ));
+        helper.setup_bindings.push(SetupBinding::new(
+            fervid_atom!("Let"),
+            BindingTypes::SetupLet,
+        ));
+        helper.setup_bindings.push(SetupBinding::new(
+            fervid_atom!("Reactive"),
+            BindingTypes::SetupReactiveConst,
+        ));
+
+        macro_rules! test {
+            ($value: literal, $expected_value: literal, $expected_handler: literal) => {
+                let result = transform(&mut ctx, &directive($value, None, &[]), &node);
+                let [model, update] = result.props.as_slice() else {
+                    panic!("core v-model should produce value and update properties")
+                };
+                assert_eq!(
+                    property_to_str(model, AssertType::ExpressionNode),
+                    $expected_value,
+                    "model value for {}",
+                    $value
+                );
+                assert_eq!(
+                    property_to_str(update, AssertType::ExpressionNode),
+                    $expected_handler,
+                    "update handler for {}",
+                    $value
+                );
+                assert!(ctx.errors.is_empty(), "unexpected errors for {}", $value);
+            };
+            ($value: literal, $expected_error: expr) => {
+                assert!(
+                    transform_v_model(
+                        &mut ctx,
+                        &TransformNodeState::default(),
+                        &directive($value, None, &[]),
+                        &node,
+                    )
+                    .is_none(),
+                    "read-only target {} should not produce model props",
+                    $value
+                );
+                assert_error(&ctx, $expected_error);
+                ctx.errors.clear();
+            };
         }
-    }
 
-    fn transform(
-        ctx: &mut TransformSfcContext,
-        directive: &VModelDirective,
-        node: &fervid_core::ElementNode,
-    ) -> DirectiveTransformResult {
-        let state = TransformNodeState::default();
-        transform_v_model(ctx, &state, directive, node)
-            .expect("v-model with a valid expression should produce a result")
-    }
+        // Syntax is like that:
+        // first element is `$expr` in `v-model="$expr"`;
+        // second is the transformed value;
+        // third is the transformed update handler.
 
-    fn static_key(property: &Property) -> &str {
-        let ExpressionPropNameNode::SimpleExpression(key) = &property.key else {
-            panic!("static v-model key should use a simple expression")
-        };
-        assert!(key.is_static);
-        key.ast.sym.as_ref()
-    }
-
-    fn dynamic_key(property: &Property) -> String {
-        let ExpressionPropNameNode::CompoundExpression(key) = &property.key else {
-            panic!("dynamic v-model key should use a compound expression")
-        };
-        let PropName::Computed(key) = &key.ast else {
-            panic!("dynamic v-model key should use a computed property name")
-        };
-        to_str(key.expr.as_ref())
-    }
-
-    fn assert_error(ctx: &TransformSfcContext, expected: TemplateErrorKind) {
-        let [TransformError::TemplateError(error)] = ctx.errors.as_slice() else {
-            panic!("expected exactly one template error")
-        };
-        assert_eq!(
-            std::mem::discriminant(&error.kind),
-            std::mem::discriminant(&expected)
+        // DEV DIRECT
+        test!("Ref", "$setup.Ref", "$event=>$setup.Ref=$event");
+        test!(
+            "MaybeRef",
+            "$setup.MaybeRef",
+            "$event=>$setup.MaybeRef=$event"
         );
+        // Adaptation from the expression-only test: core transform rejects const targets
+        test!("Const", TemplateErrorKind::VModelOnConst);
+        test!("Let", "$setup.Let", "$event=>$setup.Let=$event");
+        test!(
+            "Reactive",
+            "$setup.Reactive",
+            "$event=>$setup.Reactive=$event"
+        ); // TODO must err
+        test!("Unknown", "_ctx.Unknown", "$event=>_ctx.Unknown=$event");
+
+        // DEV INDIRECT
+        test!("Ref.x", "$setup.Ref.x", "$event=>$setup.Ref.x=$event");
+        test!(
+            "MaybeRef.x",
+            "$setup.MaybeRef.x",
+            "$event=>$setup.MaybeRef.x=$event"
+        );
+        test!("Const.x", "$setup.Const.x", "$event=>$setup.Const.x=$event");
+        test!("Let.x", "$setup.Let.x", "$event=>$setup.Let.x=$event");
+        test!(
+            "Reactive.x",
+            "$setup.Reactive.x",
+            "$event=>$setup.Reactive.x=$event"
+        );
+        test!(
+            "Unknown.x",
+            "_ctx.Unknown.x",
+            "$event=>_ctx.Unknown.x=$event"
+        );
+
+        // PROD DIRECT
+        ctx.bindings_helper.is_prod = true;
+        ctx.bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
+        test!("Ref", "Ref.value", "$event=>Ref.value=$event");
+        test!(
+            "MaybeRef",
+            "_unref(MaybeRef)",
+            // This is the official spec, but it is inconsistent with the `v-on` transform
+            "$event=>_isRef(MaybeRef)?MaybeRef.value=$event:null"
+        );
+        test!("Const", TemplateErrorKind::VModelOnConst);
+        test!(
+            "Let",
+            "_unref(Let)",
+            "$event=>_isRef(Let)?Let.value=$event:Let=$event"
+        );
+        test!("Reactive", "Reactive", "$event=>Reactive=$event"); // TODO must err
+        test!("Unknown", "_ctx.Unknown", "$event=>_ctx.Unknown=$event");
+
+        // PROD INDIRECT
+        test!("Ref.x", "Ref.value.x", "$event=>Ref.value.x=$event");
+        test!(
+            "MaybeRef.x",
+            "_unref(MaybeRef).x",
+            "$event=>_unref(MaybeRef).x=$event"
+        );
+        test!("Const.x", "Const.x", "$event=>Const.x=$event");
+        test!("Let.x", "_unref(Let).x", "$event=>_unref(Let).x=$event");
+        test!("Reactive.x", "Reactive.x", "$event=>Reactive.x=$event");
+        test!(
+            "Unknown.x",
+            "_ctx.Unknown.x",
+            "$event=>_ctx.Unknown.x=$event"
+        );
+    }
+
+    #[test]
+    fn it_transforms_v_model_arg() {
+        let mut ctx = TransformSfcContext::anonymous();
+        ctx.cache_handlers = false;
+        let node = element_from_tag("input");
+
+        // const Ref = ref('foo')
+        ctx.bindings_helper.setup_bindings.push(SetupBinding::new(
+            fervid_atom!("Ref"),
+            BindingTypes::SetupRef,
+        ));
+
+        macro_rules! test {
+            ($argument: literal, $expected: literal) => {
+                let result = transform(
+                    &mut ctx,
+                    &directive("dummy", Some(StrOrExpr::Expr(js($argument))), &[]),
+                    &node,
+                );
+                let [model, _] = result.props.as_slice() else {
+                    panic!("core v-model should produce value and update properties")
+                };
+                assert_eq!(dynamic_key(model), $expected, "argument {}", $argument);
+                assert!(ctx.errors.is_empty(), "unexpected errors for {}", $argument);
+            };
+        }
+
+        // The first is `$expr` in `v-model:[$expr]="dummy"`, the second is expected
+
+        // DEV
+        test!("Ref", "$setup.Ref");
+        test!("Unknown", "_ctx.Unknown");
+        test!("\"string\"", "\"string\"");
+
+        // PROD
+        ctx.bindings_helper.is_prod = true;
+        ctx.bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
+        test!("Ref", "Ref.value");
+        test!("Unknown", "_ctx.Unknown");
+        test!("\"string\"", "\"string\"");
     }
 
     #[test]
@@ -590,5 +741,56 @@ mod tests {
             transform_v_model(&mut ctx, &state, &directive("item", None, &[]), &node).is_none()
         );
         assert_error(&ctx, TemplateErrorKind::VModelOnScopeVariable);
+    }
+
+    fn directive(value: &str, argument: Option<StrOrExpr>, modifiers: &[&str]) -> VModelDirective {
+        VModelDirective {
+            argument,
+            value: js(value),
+            update_handler: None,
+            modifiers: modifiers
+                .iter()
+                .map(|modifier| (*modifier).into())
+                .collect(),
+            span: DUMMY_SP,
+        }
+    }
+
+    fn transform(
+        ctx: &mut TransformSfcContext,
+        directive: &VModelDirective,
+        node: &fervid_core::ElementNode,
+    ) -> DirectiveTransformResult {
+        let state = TransformNodeState::default();
+        transform_v_model(ctx, &state, directive, node)
+            .expect("v-model with a valid expression should produce a result")
+    }
+
+    fn static_key(property: &Property) -> &str {
+        let ExpressionPropNameNode::SimpleExpression(key) = &property.key else {
+            panic!("static v-model key should use a simple expression")
+        };
+        assert!(key.is_static);
+        key.ast.sym.as_ref()
+    }
+
+    fn dynamic_key(property: &Property) -> String {
+        let ExpressionPropNameNode::CompoundExpression(key) = &property.key else {
+            panic!("dynamic v-model key should use a compound expression")
+        };
+        let PropName::Computed(key) = &key.ast else {
+            panic!("dynamic v-model key should use a computed property name")
+        };
+        to_str(key.expr.as_ref())
+    }
+
+    fn assert_error(ctx: &TransformSfcContext, expected: TemplateErrorKind) {
+        let [TransformError::TemplateError(error)] = ctx.errors.as_slice() else {
+            panic!("expected exactly one template error")
+        };
+        assert_eq!(
+            std::mem::discriminant(&error.kind),
+            std::mem::discriminant(&expected)
+        );
     }
 }

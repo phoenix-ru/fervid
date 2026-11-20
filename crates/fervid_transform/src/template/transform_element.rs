@@ -214,7 +214,10 @@ pub fn post_transform_element_node(
             }
             vnode_children = Some(VNodeChildren::Slots(slots));
         } else if node.children.len() == 1
-            && !matches!(vnode_tag, VNodeCallTag::Builtin(BuiltinType::Teleport))
+            && !matches!(
+                vnode_tag,
+                VNodeCallTag::Builtin(BuiltinType::Teleport | BuiltinType::KeepAlive)
+            )
         {
             let child = &node.children[0];
             // Note: Official implementation additionally checks for COMPOUND_EXPRESSION here
@@ -295,11 +298,15 @@ fn resolve_component_type(
 ) -> VNodeCallTag {
     let mut tag = Cow::Borrowed(&node.starting_tag.tag_name);
 
-    // 1. Dynamic component
+    // 1. Dynamic `<component>` builtin
     let is_explicit_dynamic = is_component_tag(&node.starting_tag);
+
+    // Find the `is` or `:is` attribute of the `<component>`
     let is_prop = find_prop(node, "is", false, true);
+
     if let Some(is_prop) = is_prop {
         if is_explicit_dynamic {
+            // Expression to put as the first argument to `resolveDynamicComponent()`
             let mut exp: Option<ExpressionNode> = None;
             if let AttributeOrBinding::RegularAttribute { value, span, .. } = is_prop {
                 exp = value.as_ref().map(|value| {
@@ -321,6 +328,7 @@ fn resolve_component_type(
                 // and transformation, but Fervid already expands the shorthands during parsing
             }
 
+            // resolveDynamicComponent(is_attribute)
             if let Some(exp) = exp {
                 return VNodeCallTag::CallExpression(create_call_expression(
                     ctx.bindings_helper
@@ -359,6 +367,7 @@ fn resolve_component_type(
     }
 
     // 4 & 5 common
+    // _component_ prefix plus tag name
     let tag_ident = FervidAtom::from(to_valid_asset_id(&tag, "component")).into_ident();
     ctx.bindings_helper.helper(VueImports::ResolveComponent);
 
@@ -398,9 +407,9 @@ fn resolve_component_setup_reference(
     tag_name: &FervidAtom,
     scope_to_use: u32,
 ) -> Option<Box<Expr>> {
-    // Check the existing resolutions.
+    // Check the existing (cached) resolutions.
     // Do nothing if found, regardless if it was previously resolved or not,
-    // because codegen will handle the runtime resolution.
+    // because the caller should handle the runtime resolution.
     match ctx.bindings_helper.components.get(tag_name) {
         Some(ComponentBinding::Resolved(resolved)) => return Some(resolved.to_owned()),
         Some(ComponentBinding::RuntimeResolved(resolved, _)) => {

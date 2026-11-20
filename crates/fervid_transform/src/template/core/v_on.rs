@@ -4,13 +4,13 @@ use fervid_core::{
     BindingTypes, CompoundExpressionNode, CompoundExpressionPropNameNode, ConstantTypes,
     ElementKind, ElementNode, ExpressionNode, ExpressionPropNameNode, FervidAtom, IntoIdent,
     JsChildNode, Property, SimpleExpressionPropNameNode, StrOrExpr, VOnDirective, VueImports,
-    create_cache_expression,
+    create_cache_expression, fervid_atom,
 };
 use swc_core::{
     common::{DUMMY_SP, Span},
     ecma::ast::{
-        ArrowExpr, BlockStmt, BlockStmtOrExpr, CallExpr, Callee, ComputedPropName, Expr,
-        ExprOrSpread, IdentName, OptChainBase, PropName,
+        ArrowExpr, BinExpr, BinaryOp, BindingIdent, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
+        ComputedPropName, Expr, ExprOrSpread, IdentName, OptChainBase, Pat, PropName, RestPat,
     },
 };
 
@@ -22,7 +22,6 @@ use crate::{
         expr_transform::BindingsHelperTransform,
         node_transforms::TransformNodeState,
         utils::{to_pascal_case, wrap_in_event_arrow},
-        v_on::wrap_in_args_arrow,
     },
 };
 
@@ -334,6 +333,64 @@ fn empty_handler() -> Box<Expr> {
     }))
 }
 
+/// Wraps in `(...args) => _ctx.smth && _ctx.smth(...args)`.
+///
+/// `needs_check` signifies if `&&` check is needed
+fn wrap_in_args_arrow(mut expr: Box<Expr>, needs_check: bool) -> Box<Expr> {
+    let check = if needs_check {
+        Some(expr.to_owned())
+    } else {
+        None
+    };
+
+    let args_ident = fervid_atom!("args").into_ident();
+
+    // Modify to call expression
+    expr = Box::new(Expr::Call(CallExpr {
+        span: DUMMY_SP,
+        ctxt: Default::default(),
+        callee: Callee::Expr(expr),
+        args: vec![ExprOrSpread {
+            spread: Some(DUMMY_SP),
+            expr: Box::new(Expr::Ident(args_ident.to_owned())),
+        }],
+        type_args: None,
+    }));
+
+    // Add a check if needed
+    if let Some(check_expr) = check {
+        expr = Box::new(Expr::Bin(BinExpr {
+            span: DUMMY_SP,
+            op: BinaryOp::LogicalAnd,
+            left: check_expr,
+            right: expr,
+        }));
+    }
+
+    // ...args
+    let args_pat = Pat::Rest(RestPat {
+        span: DUMMY_SP,
+        dot3_token: DUMMY_SP,
+        arg: Box::new(Pat::Ident(BindingIdent {
+            id: args_ident,
+            type_ann: None,
+        })),
+        type_ann: None,
+    });
+
+    // Return arrow
+    Box::new(Expr::Arrow(ArrowExpr {
+        span: DUMMY_SP,
+        ctxt: Default::default(),
+        params: vec![args_pat],
+        body: Box::new(BlockStmtOrExpr::Expr(expr)),
+        is_async: false,
+        is_generator: false,
+        type_params: None,
+        return_type: None,
+    }))
+}
+
 fn wrap_with_cache_expr(value: JsChildNode) -> JsChildNode {
     JsChildNode::CacheExpression(Box::new(create_cache_expression(value, Default::default())))
 }
@@ -341,24 +398,24 @@ fn wrap_with_cache_expr(value: JsChildNode) -> JsChildNode {
 #[cfg(test)]
 mod tests {
     use fervid_core::{
-        ElementKind, ExpressionPropNameNode, Node, Property, StrOrExpr, VOnDirective, VueImports,
-        fervid_atom,
+        BindingTypes, ElementKind, ExpressionPropNameNode, Node, Property, StrOrExpr,
+        TemplateGenerationMode, VOnDirective, VueImports, fervid_atom,
     };
     use swc_core::{common::DUMMY_SP, ecma::ast::PropName};
 
     use crate::{
-        TransformSfcContext,
+        SetupBinding, TransformSfcContext,
         error::{TemplateErrorKind, TransformError},
         template::{
             directive_transforms::DirectiveTransformResult,
             expr_transform::BindingsHelperTransform, node_transforms::TransformNodeState,
         },
         test_utils::{
-            AssertType, element_from_tag, element_with_children, js, property_to_str, to_str,
+            AssertType, element_from_tag, element_with_children, js, property_to_str, to_str, ts,
         },
     };
 
-    use super::transform_v_on;
+    use super::{transform_v_on, transform_v_on_base};
 
     /*
      * TODO tests when cache IR/options/scope analysis exist:
@@ -378,49 +435,350 @@ mod tests {
      * - cached click has no unnecessary patch flag
      */
 
-    fn transform(
-        event: StrOrExpr,
-        handler: Option<&str>,
-        modifiers: &[&str],
-        node: &fervid_core::ElementNode,
-    ) -> (TransformSfcContext, DirectiveTransformResult) {
-        let mut ctx = TransformSfcContext::anonymous();
-        ctx.cache_handlers = false;
-        let state = TransformNodeState::default();
-
-        let mut directive = VOnDirective {
-            event: Some(event),
-            handler: handler.map(js),
-            modifiers: modifiers
-                .iter()
-                .map(|modifier| (*modifier).into())
-                .collect(),
-            span: DUMMY_SP,
-        };
-        if let Some(StrOrExpr::Expr(event)) = directive.event.as_mut() {
-            ctx.bindings_helper.transform_expr(event, 0);
+    #[test]
+    fn it_transforms_static_event() {
+        macro_rules! test {
+            ($from: literal, $to: literal) => {{
+                assert_eq!(static_event_name($from), $to);
+            }};
         }
-        let result = transform_v_on(&mut ctx, &state, &directive, node)
-            .expect("v-on with an event argument should produce a result");
-        (ctx, result)
+
+        test!("update:model-value", "onUpdate:modelValue");
+        test!("update:modelValue", "on:update:modelValue");
+        test!("update!model-value", "onUpdate!modelValue");
+        test!("update!!model-value", "onUpdate!!modelValue");
+        test!("update-model-value", "onUpdateModelValue");
+        test!("vue:update", "onVnodeUpdate");
+        test!("vue:updateFoo", "onVnodeUpdateFoo");
+        test!("click", "onClick");
+        test!("multi-word-event", "onMultiWordEvent");
     }
 
-    fn only_property(result: &DirectiveTransformResult) -> &Property {
-        assert!(result.runtime_directive.is_none());
-        assert!(!result.remove_children);
-        let [property] = result.props.as_slice() else {
-            panic!("v-on should produce exactly one property")
+    // @evt="$in"
+    macro_rules! test_with {
+        ($ctx: ident, $in: literal, $expected: literal) => {
+            let v_on = VOnDirective {
+                event: Some("evt".into()),
+                handler: Some(ts($in)),
+                modifiers: vec![],
+                span: DUMMY_SP,
+            };
+            let result = transform_v_on_base(
+                &mut $ctx,
+                &TransformNodeState::default(),
+                &v_on,
+                &element_from_tag("div"),
+            )
+            .expect("v-on with an event argument should produce a result")
+            .result;
+            let [property] = result.props.as_slice() else {
+                panic!("v-on should produce exactly one property")
+            };
+            // Inspect handler before finish_v_on adds cache IR
+            assert_eq!(
+                $expected,
+                property_to_str(property, AssertType::ExpressionNode),
+                "handler for {}",
+                $in
+            );
         };
-        assert!(property.key.is_handler_key());
-        property
     }
 
-    fn static_key(property: &Property) -> &str {
-        let ExpressionPropNameNode::SimpleExpression(key) = &property.key else {
-            panic!("static v-on argument should produce a simple property key")
-        };
-        assert!(key.is_static);
-        key.ast.sym.as_ref()
+    #[test]
+    fn it_transforms_handler() {
+        // `const foo = ref()`
+        // `function func() {}`
+        let mut ctx = with_bindings(vec![
+            SetupBinding::new(fervid_atom!("foo"), BindingTypes::SetupRef),
+            SetupBinding::new(fervid_atom!("func"), BindingTypes::SetupConst),
+        ]);
+        macro_rules! test {
+            ($in: literal, $expected: literal) => {
+                test_with!(ctx, $in, $expected)
+            };
+        }
+
+        // Explicit and known ref
+
+        // Arrow
+        test!("() => foo = 2", "()=>foo.value=2");
+        test!("$event => foo = 2", "$event=>foo.value=2");
+        test!("$event => foo = $event", "$event=>foo.value=$event");
+        test!("v => foo = v", "v=>foo.value=v");
+        test!("(v1, v2) => foo += v1 * v2", "(v1,v2)=>foo.value+=v1*v2");
+
+        // Function
+        test!("function () { foo = 2 }", "function(){foo.value=2;}");
+        test!(
+            "function assignFoo () { foo = 2 }",
+            "function assignFoo(){foo.value=2;}"
+        );
+        test!(
+            "function ($event) { foo = 2 }",
+            "function($event){foo.value=2;}"
+        );
+        test!(
+            "function ($event) { foo = $event }",
+            "function($event){foo.value=$event;}"
+        );
+        test!("function (v) { foo = v }", "function(v){foo.value=v;}");
+        test!(
+            "function (v1, v2) { foo += v1 * v2 }",
+            "function(v1,v2){foo.value+=v1*v2;}"
+        );
+
+        // Implicit $event
+        test!("foo = 2", "$event=>foo.value=2");
+        test!("foo = 2", "$event=>foo.value=2");
+        test!("foo = $event", "$event=>foo.value=$event");
+
+        // Different handler expressions:
+
+        // resolved binding
+        test!("func", "func");
+
+        // unresolved binding
+        test!("bar", "(...args)=>_ctx.bar&&_ctx.bar(...args)");
+
+        // member expr
+        test!(
+            "foo.bar",
+            "(...args)=>foo.value.bar&&foo.value.bar(...args)"
+        );
+        test!("bar.baz", "(...args)=>_ctx.bar.baz&&_ctx.bar.baz(...args)");
+
+        // paren expr
+        test!("(foo)", "(...args)=>(foo.value)&&(foo.value)(...args)");
+        test!("(bar)", "(...args)=>(_ctx.bar)&&(_ctx.bar)(...args)");
+
+        // ts non-null
+        test!("foo!", "(...args)=>foo.value!&&foo.value!(...args)");
+        test!("bar!", "(...args)=>_ctx.bar!&&_ctx.bar!(...args)");
+
+        // optional chaining
+        test!(
+            "foo?.bar",
+            "(...args)=>foo.value?.bar&&foo.value?.bar(...args)"
+        );
+        test!(
+            "bar?.baz",
+            "(...args)=>_ctx.bar?.baz&&_ctx.bar?.baz(...args)"
+        );
+
+        // call
+        test!("func()", "$event=>func()");
+        test!("func($event)", "$event=>func($event)");
+        test!("foo($event)", "$event=>foo.value($event)");
+
+        // array
+        test!("[foo, bar]", "$event=>[foo.value,_ctx.bar]");
+
+        // this
+        test!("this", "$event=>this");
+
+        // object
+        // FIXME this is a bug in SWC stringifier (it should add parens):
+        // or maybe it's not a bug, depends on if you interpret it as a Stmt or as an Expr
+        // test!("{}", "$event=>({})");
+        test!("{}", "$event=>{}");
+
+        // unary
+        test!("!foo", "$event=>!foo.value");
+
+        // binary
+        test!("foo || bar", "$event=>foo.value||_ctx.bar");
+
+        // update
+        test!("foo++", "$event=>foo.value++");
+
+        // assign
+        test!("foo += bar", "$event=>foo.value+=_ctx.bar");
+
+        // new
+        test!("new func", "$event=>new func");
+        test!("new foo", "$event=>new foo.value");
+        test!("new bar", "$event=>new _ctx.bar");
+
+        // seq
+        test!("foo, bar", "$event=>foo.value,_ctx.bar");
+
+        // condition
+        test!("foo ? bar : baz", "$event=>foo.value?_ctx.bar:_ctx.baz");
+
+        // literal
+        test!("123.45", "$event=>123.45");
+        test!("'foo'", "$event=>\"foo\"");
+        test!("true", "$event=>true");
+
+        // template
+        test!("`bar ${baz}`", "$event=>`bar ${_ctx.baz}`");
+
+        // tagged template
+        test!("foo`bar ${baz}`", "$event=>foo.value`bar ${_ctx.baz}`");
+
+        // class
+        test!("class FooBar {}", "$event=>class FooBar{}");
+    }
+
+    // https://github.com/vuejs/core/blob/fef2acb2049fce3407dff17fe8af1836b97dfd73/packages/compiler-sfc/__tests__/compileScript.spec.ts#L495-L543
+    #[test]
+    fn template_assignment_expression_codegen() {
+        // ```ts
+        // const count = ref(0)
+        // const maybe = foo()
+        // let lett = 1
+        // let v = ref(1)
+        // ```
+        let mut ctx = with_bindings(vec![
+            SetupBinding::new(fervid_atom!("count"), BindingTypes::SetupRef),
+            SetupBinding::new(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
+            SetupBinding::new(fervid_atom!("lett"), BindingTypes::SetupLet),
+            SetupBinding::new(fervid_atom!("v"), BindingTypes::SetupLet),
+        ]);
+        macro_rules! test {
+            ($in: literal, $expected: literal) => {
+                test_with!(ctx, $in, $expected)
+            };
+        }
+
+        // <div @click="count = 1"/>
+        test!("count = 1", "$event=>count.value=1");
+
+        // <div @click="maybe = count"/>
+        test!(
+            "maybe = count",
+            // This is the official spec, but it is inconsistent with the `v-model` transform
+            "$event=>maybe.value=count.value"
+        );
+
+        // <div @click="lett = count"/>
+        test!(
+            "lett = count",
+            "$event=>_isRef(lett)?lett.value=count.value:lett=count.value"
+        );
+
+        // <div @click="v += 1"/>
+        test!("v += 1", "$event=>_isRef(v)?v.value+=1:v+=1");
+
+        // <div @click="v -= 1"/>
+        test!("v -= 1", "$event=>_isRef(v)?v.value-=1:v-=1");
+
+        // <div @click="() => {
+        //     let a = '' + lett
+        //     v = a
+        // }"/>
+        test!(
+            "() => {
+                let a = '' + lett
+                v = a
+            }",
+            r#"()=>{let a=""+_unref(lett);_isRef(v)?v.value=a:v=a;}"#
+        );
+
+        // <div @click="() => {
+        //     // nested scopes
+        //     (()=>{
+        //     let x = a
+        //     (()=>{
+        //         let z = x
+        //         let z2 = z
+        //     })
+        //     let lz = z
+        //     })
+        //     v = a
+        // }"/>
+        test!(
+            "() => {
+                // nested scopes
+                (()=>{
+                    let x = a
+                    (()=>{
+                        let z = x
+                        let z2 = z
+                    })
+                    let lz = z
+                })
+                v = a
+            }",
+            "()=>{(()=>{let x=_ctx.a(()=>{let z=x;let z2=z;});let lz=_ctx.z;});_isRef(v)?v.value=_ctx.a:v=_ctx.a;}"
+        );
+    }
+
+    // https://github.com/vuejs/core/blob/fef2acb2049fce3407dff17fe8af1836b97dfd73/packages/compiler-sfc/__tests__/compileScript.spec.ts#L545-L574
+    #[test]
+    fn template_update_expression_codegen() {
+        // ```ts
+        // const count = ref(0)
+        // const maybe = foo()
+        // let lett = 1
+        // ```
+        let mut ctx = with_bindings(vec![
+            SetupBinding::new(fervid_atom!("count"), BindingTypes::SetupRef),
+            SetupBinding::new(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
+            SetupBinding::new(fervid_atom!("lett"), BindingTypes::SetupLet),
+        ]);
+        macro_rules! test {
+            ($in: literal, $expected: literal) => {
+                test_with!(ctx, $in, $expected)
+            };
+        }
+
+        // <div @click="count++"/>
+        test!("count++", "$event=>count.value++");
+
+        // <div @click="--count"/>
+        test!("--count", "$event=>--count.value");
+
+        // <div @click="maybe++"/>
+        test!("maybe++", "$event=>maybe.value++");
+
+        // <div @click="--maybe"/>
+        test!("--maybe", "$event=>--maybe.value");
+
+        // <div @click="lett++"/>
+        test!("lett++", "$event=>_isRef(lett)?lett.value++:lett++");
+
+        // <div @click="--lett"/>
+        test!("--lett", "$event=>_isRef(lett)?--lett.value:--lett");
+    }
+
+    // https://github.com/vuejs/core/blob/fef2acb2049fce3407dff17fe8af1836b97dfd73/packages/compiler-sfc/__tests__/compileScript.spec.ts#L576-L600
+    #[test]
+    fn template_destructure_assignment_codegen() {
+        // ```ts
+        // const val = {}
+        // const count = ref(0)
+        // const maybe = foo()
+        // let lett = 1
+        // ```
+        let mut ctx = with_bindings(vec![
+            SetupBinding::new(fervid_atom!("val"), BindingTypes::SetupConst),
+            SetupBinding::new(fervid_atom!("count"), BindingTypes::SetupRef),
+            SetupBinding::new(fervid_atom!("maybe"), BindingTypes::SetupMaybeRef),
+            SetupBinding::new(fervid_atom!("lett"), BindingTypes::SetupLet),
+            SetupBinding::new(fervid_atom!("item"), BindingTypes::TemplateLocal),
+        ]);
+        macro_rules! test {
+            ($in: literal, $expected: literal) => {
+                test_with!(ctx, $in, $expected)
+            };
+        }
+
+        // Not a destructure, but an instant indicator if something is off
+        test!("count = val", "$event=>count.value=val");
+
+        // Template-local case
+        // <div v-for="item in list"><div @click="({ item } = val)"/></div>
+        test!("({ item } = val)", "$event=>({item}=val)");
+
+        // <div @click="({ count } = val)"/>
+        test!("({ count } = val)", "$event=>({count:count.value}=val)");
+
+        // <div @click="[maybe] = val"/>
+        test!("[maybe] = val", "$event=>[maybe.value]=val");
+
+        // <div @click="({ lett } = val)"/>
+        test!("({ lett } = val)", "$event=>({lett:lett}=val)");
     }
 
     #[test]
@@ -672,5 +1030,62 @@ mod tests {
             [TransformError::TemplateError(error)]
                 if matches!(error.kind, TemplateErrorKind::VOnNoExpression)
         ));
+    }
+
+    fn transform(
+        event: StrOrExpr,
+        handler: Option<&str>,
+        modifiers: &[&str],
+        node: &fervid_core::ElementNode,
+    ) -> (TransformSfcContext, DirectiveTransformResult) {
+        let mut ctx = TransformSfcContext::anonymous();
+        ctx.cache_handlers = false;
+        let state = TransformNodeState::default();
+
+        let mut directive = VOnDirective {
+            event: Some(event),
+            handler: handler.map(js),
+            modifiers: modifiers
+                .iter()
+                .map(|modifier| (*modifier).into())
+                .collect(),
+            span: DUMMY_SP,
+        };
+        if let Some(StrOrExpr::Expr(event)) = directive.event.as_mut() {
+            ctx.bindings_helper.transform_expr(event, 0);
+        }
+        let result = transform_v_on(&mut ctx, &state, &directive, node)
+            .expect("v-on with an event argument should produce a result");
+        (ctx, result)
+    }
+
+    fn only_property(result: &DirectiveTransformResult) -> &Property {
+        assert!(result.runtime_directive.is_none());
+        assert!(!result.remove_children);
+        let [property] = result.props.as_slice() else {
+            panic!("v-on should produce exactly one property")
+        };
+        assert!(property.key.is_handler_key());
+        property
+    }
+
+    fn static_key(property: &Property) -> &str {
+        let ExpressionPropNameNode::SimpleExpression(key) = &property.key else {
+            panic!("static v-on argument should produce a simple property key")
+        };
+        assert!(key.is_static);
+        key.ast.sym.as_ref()
+    }
+
+    fn static_event_name(event: &str) -> String {
+        let (_, result) = transform(event.into(), Some("handler"), &[], &element_from_tag("div"));
+        static_key(only_property(&result)).to_owned()
+    }
+
+    fn with_bindings(bindings: Vec<SetupBinding>) -> TransformSfcContext {
+        let mut ctx = TransformSfcContext::anonymous();
+        ctx.bindings_helper.setup_bindings.extend(bindings);
+        ctx.bindings_helper.template_generation_mode = TemplateGenerationMode::Inline;
+        ctx
     }
 }

@@ -28,7 +28,7 @@ impl<'n> Iterator for SlottedIterator<'n> {
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.nodes.len(), Some(self.nodes.len()))
+        (0, Some(self.nodes.len().saturating_sub(self.idx)))
     }
 }
 
@@ -48,14 +48,6 @@ impl<'n> SlottedIterator<'n> {
         } else {
             SlottedIteratorMode::Default
         };
-    }
-
-    /// Switches the iteration mode if peek() yields None
-    #[inline]
-    pub fn toggle_mode_if_peek_is_none(&mut self) {
-        if self.peek().is_none() {
-            self.toggle_mode();
-        }
     }
 
     /// Is iteration mode Default

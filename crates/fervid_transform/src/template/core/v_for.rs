@@ -519,7 +519,7 @@ pub fn finalize_for_parse_result(
     result.finalized = true;
 }
 
-#[cfg(all(test, feature = "new-pipeline"))]
+#[cfg(test)]
 mod tests {
     // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/__tests__/transforms/vFor.spec.ts#L921-L1030
     use fervid_core::{
@@ -533,91 +533,6 @@ mod tests {
     use crate::test_utils::{element_from_tag, js, to_str};
 
     use super::*;
-
-    fn ident(name: &str) -> Box<Expr> {
-        Box::new(Expr::Ident(
-            fervid_core::FervidAtom::from(name).into_ident(),
-        ))
-    }
-    fn pat_ident(name: &str) -> Box<Pat> {
-        Box::new(Pat::Ident(BindingIdent {
-            id: fervid_core::FervidAtom::from(name).into_ident(),
-            type_ann: None,
-        }))
-    }
-
-    fn loop_with_child(codegen: ElementCodegenValue) -> Node {
-        let mut child = ElementNode::new_with_children_and_type(
-            StartingTag {
-                tag_name: "div".into(),
-                attributes: vec![],
-                directives: None,
-            },
-            vec![],
-            ElementKind::Element,
-        );
-        child.codegen_node = Some(Box::new(ElementCodegenNode {
-            value: codegen,
-            cache: Default::default(),
-        }));
-        Node::For(ForNode {
-            parse_result: Box::new(ForParseResult {
-                source: ident("items"),
-                value: pat_ident("item"),
-                key: None,
-                index: None,
-                finalized: true,
-                finalized_is_dynamic: true,
-                source_const_type: Default::default(),
-            }),
-            children: vec![Node::Element(child)],
-            template_scope: 0,
-            codegen_node: Some(Box::new(ForCodegenNode {
-                patch_flags: PatchFlags::KeyedFragment.into(),
-                disable_tracking: true,
-                is_template: true,
-                key: Some(ident("item")),
-                cache: Default::default(),
-                memo: None,
-                branch_key: None,
-            })),
-            span: DUMMY_SP,
-        })
-    }
-
-    fn post_transform(node: &mut Node) {
-        post_transform_with_memo(node, false);
-    }
-
-    fn post_transform_with_memo(node: &mut Node, has_memo: bool) {
-        let mut ctx = TransformSfcContext::anonymous();
-        ctx.directive_scopes.v_for = 1;
-        let mut state = TransformNodeState {
-            for_scope: Some(0),
-            v_memo: has_memo,
-            ..Default::default()
-        };
-        post_transform_for(&mut ctx, &mut state, node);
-        assert_eq!(ctx.directive_scopes.v_for, 0);
-    }
-
-    fn memoized_child(memo: &str) -> ElementCodegenValue {
-        ElementCodegenValue::WithMemoCall(Box::new(WithMemoCall {
-            expr: js(memo),
-            vnode_call: VNodeCall {
-                tag: VNodeCallTag::Expr(js("'div'")),
-                props: None,
-                children: None,
-                patch_hints: PatchHints::default(),
-                directives: None,
-                needs_patch: false,
-                is_block_required: false,
-                is_block: false,
-                disable_tracking: false,
-                is_component: false,
-            },
-        }))
-    }
 
     #[test]
     fn find_for_key_moves_template_key_and_preserves_rendered_element_key() {
@@ -960,5 +875,90 @@ mod tests {
             for_node.codegen_node.as_ref().and_then(|codegen| codegen.key.as_deref()),
             Some(Expr::Ident(key)) if key.sym == "item"
         ));
+    }
+
+    fn ident(name: &str) -> Box<Expr> {
+        Box::new(Expr::Ident(
+            fervid_core::FervidAtom::from(name).into_ident(),
+        ))
+    }
+    fn pat_ident(name: &str) -> Box<Pat> {
+        Box::new(Pat::Ident(BindingIdent {
+            id: fervid_core::FervidAtom::from(name).into_ident(),
+            type_ann: None,
+        }))
+    }
+
+    fn loop_with_child(codegen: ElementCodegenValue) -> Node {
+        let mut child = ElementNode::new_with_children_and_type(
+            StartingTag {
+                tag_name: "div".into(),
+                attributes: vec![],
+                directives: None,
+            },
+            vec![],
+            ElementKind::Element,
+        );
+        child.codegen_node = Some(Box::new(ElementCodegenNode {
+            value: codegen,
+            cache: Default::default(),
+        }));
+        Node::For(ForNode {
+            parse_result: Box::new(ForParseResult {
+                source: ident("items"),
+                value: pat_ident("item"),
+                key: None,
+                index: None,
+                finalized: true,
+                finalized_is_dynamic: true,
+                source_const_type: Default::default(),
+            }),
+            children: vec![Node::Element(child)],
+            template_scope: 0,
+            codegen_node: Some(Box::new(ForCodegenNode {
+                patch_flags: PatchFlags::KeyedFragment.into(),
+                disable_tracking: true,
+                is_template: true,
+                key: Some(ident("item")),
+                cache: Default::default(),
+                memo: None,
+                branch_key: None,
+            })),
+            span: DUMMY_SP,
+        })
+    }
+
+    fn post_transform(node: &mut Node) {
+        post_transform_with_memo(node, false);
+    }
+
+    fn post_transform_with_memo(node: &mut Node, has_memo: bool) {
+        let mut ctx = TransformSfcContext::anonymous();
+        ctx.directive_scopes.v_for = 1;
+        let mut state = TransformNodeState {
+            for_scope: Some(0),
+            v_memo: has_memo,
+            ..Default::default()
+        };
+        post_transform_for(&mut ctx, &mut state, node);
+        assert_eq!(ctx.directive_scopes.v_for, 0);
+    }
+
+    fn memoized_child(memo: &str) -> ElementCodegenValue {
+        ElementCodegenValue::WithMemoCall(Box::new(WithMemoCall {
+            expr: js(memo),
+            vnode_call: VNodeCall {
+                tag: VNodeCallTag::Expr(js("'div'")),
+                props: None,
+                children: None,
+                patch_hints: PatchHints::default(),
+                directives: None,
+                needs_patch: false,
+                is_block_required: false,
+                is_block: false,
+                disable_tracking: false,
+                is_component: false,
+            },
+        }))
     }
 }

@@ -1,6 +1,5 @@
 use fervid_core::{
-    BindingTypes, ConstantTypes, FervidAtom, IntoIdent, PatchFlags, PatchHints, StrOrExpr,
-    VModelDirective, VueImports, fervid_atom, is_valid_propname,
+    BindingTypes, ConstantTypes, FervidAtom, IntoIdent, VueImports, fervid_atom, is_valid_propname,
 };
 use swc_core::{
     common::DUMMY_SP,
@@ -89,12 +88,6 @@ pub struct VModelExpressionTransformResult {
 pub trait BindingsHelperTransform {
     fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> BindingTransformMetadata;
     fn transform_pat(&mut self, pat: &mut Pat, scope_to_use: u32) -> BindingTransformMetadata;
-    fn transform_v_model(
-        &mut self,
-        v_model: &mut VModelDirective,
-        scope_to_use: u32,
-        patch_hints: &mut PatchHints,
-    );
     fn get_var_binding_type(&mut self, starting_scope: u32, variable: &FervidAtom) -> BindingTypes;
 }
 
@@ -106,46 +99,6 @@ impl BindingsHelperTransform for BindingsHelper {
 
     fn transform_pat(&mut self, pat: &mut Pat, scope_to_use: u32) -> BindingTransformMetadata {
         transform_pat(self, pat, scope_to_use)
-    }
-
-    /// Transforms `v-model` directive by producing
-    /// `:value` expression and
-    /// `@update:value` handler (`$event => modelValue = $event`).
-    fn transform_v_model(
-        &mut self,
-        v_model: &mut VModelDirective,
-        scope_to_use: u32,
-        patch_hints: &mut PatchHints,
-    ) {
-        let Some(transformed) = transform_v_model_expression(self, &v_model.value, scope_to_use)
-        else {
-            // TODO Report malformed v-model expression
-            return;
-        };
-
-        v_model.value = transformed.value;
-        v_model.update_handler = Some(transformed.update_handler);
-
-        match v_model.argument {
-            Some(StrOrExpr::Expr(ref mut expr)) => {
-                self.transform_expr(expr, scope_to_use);
-                patch_hints.flags |= PatchFlags::FullProps;
-            }
-
-            Some(StrOrExpr::Str(ref argument)) => {
-                patch_hints.flags |= PatchFlags::Props;
-                patch_hints.props.push(argument.value.to_owned());
-            }
-
-            None => {
-                patch_hints.flags |= PatchFlags::Props;
-                patch_hints.props.push(fervid_atom!("modelValue"));
-            }
-        }
-
-        // TODO Check that SetupConst or SetupReactiveConst are not used as a `v-model` value. Report hard error in this case.
-        // TODO Check in general in all cases
-        // DOCTEXT: Disallow `SetupConst` or `SetupReactiveConst` to be used as a `v-model` value or as an assignment target.
     }
 
     fn get_var_binding_type(&mut self, starting_scope: u32, variable: &FervidAtom) -> BindingTypes {
@@ -1352,12 +1305,8 @@ mod tests {
         template::{expr_transform::BindingsHelperTransform, js_builtins::JS_BUILTINS},
         test_utils::{parser::parse_javascript_expr, to_str, ts},
     };
-    use fervid_core::{
-        BindingTypes, ConstantTypes, FervidAtom, PatchHints, StrOrExpr, TemplateGenerationMode,
-        VModelDirective,
-    };
+    use fervid_core::{BindingTypes, ConstantTypes, FervidAtom, TemplateGenerationMode};
     use smallvec::SmallVec;
-    use swc_core::common::DUMMY_SP;
 
     #[test]
     fn it_acknowledges_builtins() {
@@ -1550,175 +1499,6 @@ mod tests {
 
             assert_eq!(to_str(&expr), expected);
         }
-    }
-
-    #[test]
-    fn it_transforms_v_model() {
-        let mut helper = BindingsHelper::default();
-
-        // const Ref = ref('foo')
-        // const MaybeRef = useSomething()
-        // const Const = 123
-        // let Let = 123
-        // const Reactive = reactive({})
-        helper.setup_bindings.push(SetupBinding::new(
-            FervidAtom::from("Ref"),
-            BindingTypes::SetupRef,
-        ));
-        helper.setup_bindings.push(SetupBinding::new(
-            FervidAtom::from("MaybeRef"),
-            BindingTypes::SetupMaybeRef,
-        ));
-        helper.setup_bindings.push(SetupBinding::new(
-            FervidAtom::from("Const"),
-            BindingTypes::SetupConst,
-        ));
-        helper.setup_bindings.push(SetupBinding::new(
-            FervidAtom::from("Let"),
-            BindingTypes::SetupLet,
-        ));
-        helper.setup_bindings.push(SetupBinding::new(
-            FervidAtom::from("Reactive"),
-            BindingTypes::SetupReactiveConst,
-        ));
-
-        macro_rules! test {
-            ($value: literal, $expected_value: literal, $expected_handler: literal) => {
-                let mut v_model = VModelDirective {
-                    argument: None,
-                    value: js($value),
-                    update_handler: None,
-                    modifiers: vec![],
-                    span: DUMMY_SP,
-                };
-                let mut patch_hints = PatchHints::default();
-                helper.transform_v_model(&mut v_model, 0, &mut patch_hints);
-                assert_eq!(to_str(&v_model.value), $expected_value);
-                assert_eq!(
-                    to_str(&v_model.update_handler.expect("Handler cannot be None")),
-                    $expected_handler
-                );
-            };
-        }
-
-        // Syntax is like that:
-        // first element is `$expr` in `v-model="$expr"`;
-        // second is the transformed value;
-        // third is the transformed update handler.
-
-        // DEV DIRECT
-        test!("Ref", "$setup.Ref", "$event=>$setup.Ref=$event");
-        test!(
-            "MaybeRef",
-            "$setup.MaybeRef",
-            "$event=>$setup.MaybeRef=$event"
-        ); // TODO must err?
-        test!("Const", "$setup.Const", "$event=>$setup.Const=$event"); // TODO must err
-        test!("Let", "$setup.Let", "$event=>$setup.Let=$event");
-        test!(
-            "Reactive",
-            "$setup.Reactive",
-            "$event=>$setup.Reactive=$event"
-        ); // TODO must err
-        test!("Unknown", "_ctx.Unknown", "$event=>_ctx.Unknown=$event");
-
-        // DEV INDIRECT
-        test!("Ref.x", "$setup.Ref.x", "$event=>$setup.Ref.x=$event");
-        test!(
-            "MaybeRef.x",
-            "$setup.MaybeRef.x",
-            "$event=>$setup.MaybeRef.x=$event"
-        );
-        test!("Const.x", "$setup.Const.x", "$event=>$setup.Const.x=$event");
-        test!("Let.x", "$setup.Let.x", "$event=>$setup.Let.x=$event");
-        test!(
-            "Reactive.x",
-            "$setup.Reactive.x",
-            "$event=>$setup.Reactive.x=$event"
-        );
-        test!(
-            "Unknown.x",
-            "_ctx.Unknown.x",
-            "$event=>_ctx.Unknown.x=$event"
-        );
-
-        // PROD DIRECT
-        helper.is_prod = true;
-        helper.template_generation_mode = TemplateGenerationMode::Inline;
-        test!("Ref", "Ref.value", "$event=>Ref.value=$event");
-        test!(
-            "MaybeRef",
-            "_unref(MaybeRef)",
-            // This is the official spec, but it is inconsistent with the `v-on` transform
-            "$event=>_isRef(MaybeRef)?MaybeRef.value=$event:null"
-        );
-        test!("Const", "Const", "$event=>Const=$event"); // TODO must err
-        test!(
-            "Let",
-            "_unref(Let)",
-            "$event=>_isRef(Let)?Let.value=$event:Let=$event"
-        );
-        test!("Reactive", "Reactive", "$event=>Reactive=$event"); // TODO must err
-        test!("Unknown", "_ctx.Unknown", "$event=>_ctx.Unknown=$event");
-
-        // PROD INDIRECT
-        test!("Ref.x", "Ref.value.x", "$event=>Ref.value.x=$event");
-        test!(
-            "MaybeRef.x",
-            "_unref(MaybeRef).x",
-            "$event=>_unref(MaybeRef).x=$event"
-        );
-        test!("Const.x", "Const.x", "$event=>Const.x=$event");
-        test!("Let.x", "_unref(Let).x", "$event=>_unref(Let).x=$event");
-        test!("Reactive.x", "Reactive.x", "$event=>Reactive.x=$event");
-        test!(
-            "Unknown.x",
-            "_ctx.Unknown.x",
-            "$event=>_ctx.Unknown.x=$event"
-        );
-    }
-
-    #[test]
-    fn it_transforms_v_model_arg() {
-        let mut helper = BindingsHelper::default();
-
-        // const Ref = ref('foo')
-        helper.setup_bindings.push(SetupBinding::new(
-            FervidAtom::from("Ref"),
-            BindingTypes::SetupRef,
-        ));
-
-        macro_rules! test {
-            ($argument: literal, $expected: literal) => {
-                let mut v_model = VModelDirective {
-                    argument: Some(StrOrExpr::Expr(js($argument))),
-                    value: js("dummy"),
-                    update_handler: None,
-                    modifiers: vec![],
-                    span: DUMMY_SP,
-                };
-                let mut patch_hints = PatchHints::default();
-                helper.transform_v_model(&mut v_model, 0, &mut patch_hints);
-                let Some(StrOrExpr::Expr(arg_expr)) = v_model.argument else {
-                    unreachable!("This is something unexpected")
-                };
-                assert_eq!(to_str(&arg_expr), $expected);
-            };
-        }
-
-        // The first is `$expr` in `v-model:[$expr]="dummy"`, the second is expected
-
-        // DEV
-        test!("Ref", "$setup.Ref");
-        test!("Unknown", "_ctx.Unknown");
-        test!("\"string\"", "\"string\"");
-
-        // PROD
-        helper.is_prod = true;
-        helper.template_generation_mode = TemplateGenerationMode::Inline;
-        test!("Ref", "Ref.value");
-        test!("Unknown", "_ctx.Unknown");
-        test!("\"string\"", "\"string\"");
     }
 
     #[test]

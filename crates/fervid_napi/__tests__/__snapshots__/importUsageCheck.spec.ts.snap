@@ -12,7 +12,7 @@ export default _defineComponent({
             _createCommentVNode(" {{ b<Bar>() }} "),
             _createTextVNode(" " + _toDisplayString(($setup.b as Bar)()) + " " + _toDisplayString($setup.Baz) + " ", 1),
             _createVNode(_component_Comp, null, {
-                "default": _withCtx(({ data })=>[
+                default: _withCtx(({ data })=>[
                         _createTextVNode(_toDisplayString(data), 1)
                     ]),
                 _: 1 /* STABLE */
@@ -69,7 +69,7 @@ export default _defineComponent({
 
 exports[`components 1`] = `
 "import { FooBar, FooBaz, FooQux, foo } from './x';
-import { createElementBlock as _createElementBlock, createTextVNode as _createTextVNode, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
+import { createElementBlock as _createElementBlock, createTextVNode as _createTextVNode, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, openBlock as _openBlock } from "vue";
 export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
@@ -126,7 +126,7 @@ export default _defineComponent({
 
 exports[`dynamic arguments 1`] = `
 "import { FooBar, foo, bar, unused, baz, msg } from './x';
-import { createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, normalizeProps as _normalizeProps, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
+import { createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, normalizeProps as _normalizeProps, openBlock as _openBlock } from "vue";
 export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
@@ -196,7 +196,7 @@ export default _defineComponent({
 
 exports[`last tag 1`] = `
 "import { FooBaz, Last } from './x';
-import { createElementBlock as _createElementBlock, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
+import { createElementBlock as _createElementBlock, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, openBlock as _openBlock } from "vue";
 export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
@@ -222,7 +222,7 @@ export default _defineComponent({
 
 exports[`namespace / dot component usage 1`] = `
 "import * as Foo from './foo';
-import { createBlock as _createBlock, defineComponent as _defineComponent, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
+import { createBlock as _createBlock, defineComponent as _defineComponent, openBlock as _openBlock } from "vue";
 export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
@@ -242,7 +242,7 @@ export default _defineComponent({
 
 exports[`namespace / dot component usage lowercase 1`] = `
 "import * as Foo from './foo';
-import { createBlock as _createBlock, defineComponent as _defineComponent, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
+import { createBlock as _createBlock, defineComponent as _defineComponent, openBlock as _openBlock } from "vue";
 export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {
@@ -324,7 +324,7 @@ export default _defineComponent({
 
 exports[`template ref 1`] = `
 "import { foo, bar, Baz } from './foo';
-import { createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, openBlock as _openBlock, resolveComponent as _resolveComponent } from "vue";
+import { createElementBlock as _createElementBlock, createElementVNode as _createElementVNode, createVNode as _createVNode, defineComponent as _defineComponent, Fragment as _Fragment, openBlock as _openBlock } from "vue";
 export default _defineComponent({
     __name: "anonymous",
     render (_ctx, _cache, $props, $setup, $data, $options) {

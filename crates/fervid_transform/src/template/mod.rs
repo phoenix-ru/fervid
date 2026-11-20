@@ -10,6 +10,4 @@ pub mod node_transforms;
 pub mod resolutions;
 pub mod transform_element;
 pub mod utils;
-pub mod v_model;
-pub mod v_on;
 pub use ast_transform::transform_and_record_template;

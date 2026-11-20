@@ -1,33 +1,12 @@
-#[cfg(not(feature = "new-pipeline"))]
 use fervid_core::{
-    AttributeOrBinding, BindingTypes, BuiltinType, FervidAtom, IntoIdent, TemplateGenerationMode,
-    VBindDirective,
+    ConditionalNodeSequence, ElementCodegenNode, ElementCodegenValue, ElementKind, ElementNode,
+    ForNode, Node, PatchFlags, PatchHints, SfcTemplateBlock, StartingTag, VNodeCall, VNodeCallTag,
+    VNodeChildren, fervid_atom,
 };
-use fervid_core::{
-    ConditionalNodeSequence, ElementKind, ElementNode, ForNode, Interpolation, Node, PatchFlags,
-    PatchHints, SfcTemplateBlock, StartingTag, fervid_atom,
-};
-#[cfg(not(feature = "new-pipeline"))]
-use fervid_core::{StrOrExpr, VSlotDirective, check_attribute_name};
 use smallvec::SmallVec;
-#[cfg(not(feature = "new-pipeline"))]
-use swc_core::{
-    common::DUMMY_SP,
-    ecma::ast::{Bool, Expr, Lit},
-};
 
-use crate::{
-    TemplateScope, TransformSfcContext,
-    template::{
-        core::scope_tracking::{enter_element_scope, restore_element_scope_snapshot},
-        node_transforms::NodeTransforms,
-    },
-};
+use crate::{TemplateScope, TransformSfcContext, template::node_transforms::NodeTransforms};
 
-#[cfg(not(feature = "new-pipeline"))]
-use super::asset_urls::transform_asset_urls;
-#[cfg(not(feature = "new-pipeline"))]
-use super::collect_vars::collect_variables;
 use super::expr_transform::BindingsHelperTransform;
 
 pub struct TemplateVisitor<'s> {
@@ -46,7 +25,6 @@ pub fn transform_and_record_template(
     template: &mut SfcTemplateBlock,
     ctx: &mut TransformSfcContext,
 ) {
-    #[cfg(feature = "new-pipeline")]
     if ctx.bindings_helper.template_scopes.is_empty() {
         ctx.bindings_helper.template_scopes.push(TemplateScope {
             variables: SmallVec::new(),
@@ -91,9 +69,23 @@ pub fn transform_and_record_template(
             },
             children: all_roots,
             template_scope: 0,
-            patch_hints,
+            patch_hints: patch_hints.clone(),
             span: template.span,
-            codegen_node: None,
+            codegen_node: Some(Box::new(ElementCodegenNode {
+                value: ElementCodegenValue::VNodeCall(Box::new(VNodeCall {
+                    tag: VNodeCallTag::Fragment,
+                    props: None,
+                    children: Some(VNodeChildren::UseElementChildren),
+                    patch_hints,
+                    directives: None,
+                    needs_patch: false,
+                    is_block_required: true,
+                    is_block: true,
+                    disable_tracking: false,
+                    is_component: false,
+                })),
+                cache: Default::default(),
+            })),
         });
         template.roots.push(new_root);
     }
@@ -110,8 +102,6 @@ trait Visitor {
     fn visit_element_node(&mut self, element_node: &mut ElementNode);
     fn visit_for_node(&mut self, for_node: &mut ForNode);
     fn visit_conditional_node(&mut self, conditional_node: &mut ConditionalNodeSequence);
-    #[cfg_attr(feature = "new-pipeline", allow(dead_code))]
-    fn visit_interpolation(&mut self, interpolation: &mut Interpolation);
 }
 
 trait VisitMut {
@@ -120,51 +110,51 @@ trait VisitMut {
 
 impl Visitor for TemplateVisitor<'_> {
     fn visit_node(&mut self, node: &mut Node) {
-        #[cfg(feature = "new-pipeline")]
-        {
-            let parent_scope = self.current_scope;
-            let node_transforms = self.ctx.node_transforms.clone();
-            let mut state = node_transforms.pre_transform_node(self.ctx, node, parent_scope);
-            self.current_scope = state.current_scope;
+        let parent_scope = self.current_scope;
+        let node_transforms = self.ctx.node_transforms.clone();
+        let mut state = node_transforms.pre_transform_node(self.ctx, node, parent_scope);
+        self.current_scope = state.current_scope;
 
-            // SFC asset transforms run after compiler node transforms
-            // Transform asset URLs (e.g. `src` in `<img src="">`) when the option is enabled (yes by default)
-            if let Node::Element(element_node) = node {
-                super::asset_urls::transform_asset_urls(element_node, self.ctx);
-            }
-
-            match node {
-                Node::Element(element) => self.visit_element_node(element),
-                Node::For(for_node) => self.visit_for_node(for_node),
-                Node::ConditionalSeq(conditional) => self.visit_conditional_node(conditional),
-                Node::Interpolation(_interpolation) => {
-                    // self.visit_interpolation(interpolation)
-                }
-                Node::Text(_, _) | Node::Comment(_, _) => {}
-            }
-
-            node_transforms.post_transform_node(self.ctx, node, &mut state);
-
-            // Reset scope
-            self.current_scope = parent_scope;
+        // SFC asset transforms run after compiler node transforms
+        // Transform asset URLs (e.g. `src` in `<img src="">`) when the option is enabled (yes by default)
+        if let Node::Element(element_node) = node {
+            super::asset_urls::transform_asset_urls(element_node, self.ctx);
         }
 
-        #[cfg(not(feature = "new-pipeline"))]
         match node {
-            Node::Element(el) => self.visit_element_node(el),
+            Node::Element(element) => self.visit_element_node(element),
             Node::For(for_node) => self.visit_for_node(for_node),
-            Node::ConditionalSeq(cond) => self.visit_conditional_node(cond),
-            Node::Interpolation(interpolation) => self.visit_interpolation(interpolation),
-            _ => {}
+            Node::ConditionalSeq(conditional) => self.visit_conditional_node(conditional),
+            Node::Interpolation(_) => {
+                // Transform happens in pre_transform_expression
+            }
+            Node::Text(_, _) | Node::Comment(_, _) => {}
         }
+
+        node_transforms.post_transform_node(self.ctx, node, &mut state);
+
+        // Reset scope
+        self.current_scope = parent_scope;
     }
 
     fn visit_element_node(&mut self, element_node: &mut ElementNode) {
-        #[cfg(feature = "new-pipeline")]
-        return self.visit_element_node_new(element_node);
+        let parent_scope = self.current_scope;
+        element_node.template_scope = parent_scope;
 
-        #[cfg(not(feature = "new-pipeline"))]
-        return self.visit_element_node_old(element_node);
+        // Cloning transforms is fine here due to the structure being optimized for it
+        let node_transforms = self.ctx.node_transforms.clone();
+        node_transforms.pre_transform_children(
+            self.ctx,
+            &mut element_node.children,
+            element_node.tag_type,
+            self.current_scope,
+        );
+
+        for child in element_node.children.iter_mut() {
+            child.visit_mut_with(self);
+        }
+
+        self.current_scope = parent_scope;
     }
 
     fn visit_conditional_node(&mut self, conditional_node: &mut ConditionalNodeSequence) {
@@ -215,18 +205,6 @@ impl Visitor for TemplateVisitor<'_> {
         self.current_scope = old_scope;
         self.v_for_scope = old_v_for_scope;
     }
-
-    fn visit_interpolation(&mut self, interpolation: &mut Interpolation) {
-        interpolation.template_scope = self.current_scope;
-
-        let has_js = self
-            .ctx
-            .bindings_helper
-            .transform_expr(&mut interpolation.value, self.current_scope)
-            .has_js_bindings;
-
-        interpolation.patch_flag = has_js;
-    }
 }
 
 impl TemplateVisitor<'_> {
@@ -236,158 +214,6 @@ impl TemplateVisitor<'_> {
             current_scope: 0,
             v_for_scope: false,
         }
-    }
-
-    #[allow(unused)]
-    fn visit_element_node_new(&mut self, element_node: &mut ElementNode) {
-        // TODO: enter_element_scope does more than it should,
-        // move transform_for and track_slot_scopes out of it
-
-        // `v-for` has special behavior with `ref`
-        let scope_snapshot = enter_element_scope(
-            self.ctx,
-            element_node,
-            &mut self.current_scope,
-            &mut self.v_for_scope,
-        );
-
-        // Cloning transforms is fine here due to the structure being optimized for it
-        let node_transforms = self.ctx.node_transforms.clone();
-        node_transforms.pre_transform_children(
-            self.ctx,
-            &mut element_node.children,
-            element_node.tag_type,
-            self.current_scope,
-        );
-
-        for child in element_node.children.iter_mut() {
-            child.visit_mut_with(self);
-        }
-
-        restore_element_scope_snapshot(
-            self.ctx,
-            scope_snapshot,
-            &mut self.current_scope,
-            &mut self.v_for_scope,
-        );
-    }
-
-    #[cfg(not(feature = "new-pipeline"))]
-    fn visit_element_node_old(&mut self, element_node: &mut ElementNode) {
-        // Mark the node with a correct type (element, component or built-in)
-        let element_kind = element_node.tag_type;
-        let is_component = matches!(element_kind, ElementKind::Component);
-
-        // Patch hints
-        // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L406
-        let has_children = !element_node.children.is_empty();
-        let mut has_dynamic_keys = false;
-        let mut has_hydration_event_binding = false;
-        let mut has_ref = false;
-        let mut has_runtime_directives = false;
-        let mut has_vnode_hook = false;
-        let mut ref_key = Option::<FervidAtom>::None;
-        let mut should_use_block = false;
-
-        // Transform the VBind and VOn attributes, apply asset URLs transform
-        for attr in element_node.starting_tag.attributes.iter_mut() {
-            let patch_hints = &mut element_node.patch_hints;
-            match attr {
-                // Transform the regular `ref` in `inline` mode
-                AttributeOrBinding::RegularAttribute { name, value, span } if name == "ref" => {
-                    has_ref = true;
-
-                    // Get the binding type regardless of template generation mode to mark the ref as "used".
-                    // This is the importUsageCheck behavior of the official compiler
-                    let binding_type = if let Some(value) = value
-                        && !value.is_empty()
-                    {
-                        self.ctx
-                            .bindings_helper
-                            .get_var_binding_type(scope_to_use, value)
-                    } else {
-                        BindingTypes::Unresolved
-                    };
-
-                    // https://github.com/vuejs/core/blob/ee4cd78a06e6aa92b12564e527d131d1064c2cd0/packages/compiler-core/src/transforms/transformElement.ts#L506
-                    // In inline mode there is no setupState object, so we can't use string
-                    // keys to set the ref. Instead, we need to transform it to pass the
-                    // actual ref.
-                    if let Some(value) = value
-                        && !value.is_empty()
-                        && matches!(
-                            self.ctx.bindings_helper.template_generation_mode,
-                            TemplateGenerationMode::Inline
-                        )
-                        && matches!(
-                            binding_type,
-                            BindingTypes::SetupLet
-                                | BindingTypes::SetupRef
-                                | BindingTypes::SetupMaybeRef
-                                | BindingTypes::Imported
-                        )
-                    {
-                        use swc_core::ecma::ast::Str;
-
-                        let span = span.to_owned();
-                        let value = value.to_owned();
-                        ref_key = Some(value.to_owned());
-
-                        let _ = std::mem::replace(
-                            attr,
-                            AttributeOrBinding::VBind(VBindDirective {
-                                argument: Some(StrOrExpr::Str(Str {
-                                    span,
-                                    value: fervid_atom!("ref"),
-                                    raw: None,
-                                })),
-                                value: Box::new(Expr::Ident(value.into_ident_spanned(span))),
-                                is_camel: false,
-                                is_prop: false,
-                                is_attr: false,
-                                span,
-                                const_type: fervid_core::ConstantTypes::NotConstant,
-                            }),
-                        );
-                    }
-                }
-
-                _ => {}
-            }
-        }
-
-        // Add `ref_for` and `ref_key`
-        if has_ref && self.v_for_scope {
-            element_node
-                .starting_tag
-                .attributes
-                .push(AttributeOrBinding::VBind(VBindDirective {
-                    argument: Some(fervid_atom!("ref_for").into()),
-                    value: Box::new(Expr::Lit(Lit::Bool(Bool {
-                        span: DUMMY_SP,
-                        value: true,
-                    }))),
-                    is_camel: false,
-                    is_prop: false,
-                    is_attr: false,
-                    span: DUMMY_SP,
-                    const_type: fervid_core::ConstantTypes::NotConstant,
-                }));
-        }
-        if let Some(ref_key) = ref_key {
-            element_node
-                .starting_tag
-                .attributes
-                .push(AttributeOrBinding::RegularAttribute {
-                    name: fervid_atom!("ref_key"),
-                    value: Some(ref_key),
-                    span: DUMMY_SP,
-                });
-        }
-        self.v_for_scope = old_v_for_scope;
-
-        // Restore the parent scope
-        self.current_scope = parent_scope;
     }
 }
 
@@ -399,24 +225,20 @@ impl VisitMut for Node {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "new-pipeline")]
     use fervid_core::{
-        AttributeOrBinding, ElementCodegenValue, ExpressionNode, JsChildNode, PropsExpression,
-        StrOrExpr, VBindDirective, VCustomDirective, VOnDirective, VueImports,
+        AttributeOrBinding, ElementCodegenValue, ExpressionNode, Interpolation, JsChildNode,
+        PropsExpression, StrOrExpr, VBindDirective, VCustomDirective, VOnDirective, VueImports,
     };
     use fervid_core::{
         Conditional, ElementKind, ForParseResult, Node, PatchHints, VForDirective, VueDirectives,
     };
     use swc_core::common::DUMMY_SP;
-    #[cfg(feature = "new-pipeline")]
     use swc_core::{
         common::{BytePos, Span},
         ecma::ast::{EsVersion, Pat},
     };
-    #[cfg(feature = "new-pipeline")]
     use swc_ecma_parser::{Lexer, Parser, StringInput, Syntax, TsSyntax};
 
-    #[cfg(feature = "new-pipeline")]
     use crate::test_utils::element_from_tag;
     use crate::test_utils::{js, pat, to_str};
 
@@ -759,7 +581,6 @@ mod tests {
         assert_eq!(2, root.children.len());
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn it_tracks_v_for_aliases_on_template_slots() {
         let swc_core::ecma::ast::Expr::Ident(slot_prop) = *js("row") else {
@@ -841,7 +662,6 @@ mod tests {
         assert_eq!(0, ctx.directive_scopes.v_slot);
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn it_transforms_v_slot_pattern_default_expressions_in_parent_scope() {
         let (slot_props, body) = transform_component_slot("{ value = outer }", "value + outer");
@@ -850,7 +670,6 @@ mod tests {
         assert_eq!("value+_ctx.outer", body);
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn it_transforms_v_slot_pattern_computed_keys_in_parent_scope() {
         let (slot_props, body) = transform_component_slot("{ [key]: value }", "value + key");
@@ -859,7 +678,6 @@ mod tests {
         assert_eq!("value+_ctx.key", body);
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn it_transforms_nested_v_slot_pattern_defaults_in_parent_scope() {
         let (slot_props, body) =
@@ -869,7 +687,6 @@ mod tests {
         assert_eq!("bar+rest+_ctx.baz", body);
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn it_transforms_array_v_slot_pattern_defaults_in_parent_scope() {
         let (slot_props, body) = transform_component_slot("[item = fallback]", "item + fallback");
@@ -878,7 +695,6 @@ mod tests {
         assert_eq!("item+_ctx.fallback", body);
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn it_builds_props_for_directive_only_elements() {
         let mut sfc_template = SfcTemplateBlock {
@@ -933,7 +749,6 @@ mod tests {
     }
 
     // https://github.com/vuejs/core/tree/d2c458be2542a628878cbfbdfebcb53b65d3e9f3/packages/compiler-dom/__tests__/transforms
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn it_transforms_v_html_and_removes_children() {
         let mut template = directive_element(
@@ -967,7 +782,6 @@ mod tests {
         ));
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn it_transforms_v_text_and_removes_children() {
         let mut template = directive_element(
@@ -1005,7 +819,6 @@ mod tests {
         ));
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn it_transforms_v_show_to_runtime_directive() {
         let mut template = directive_element(
@@ -1035,7 +848,6 @@ mod tests {
         assert!(ctx.errors.is_empty());
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn it_erases_v_cloak_without_affecting_children() {
         let mut template = directive_element(
@@ -1056,7 +868,6 @@ mod tests {
         assert!(vnode_call.patch_hints.props.is_empty());
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn dynamic_v_on_uses_full_props_without_normalizing_handler_key() {
         let mut template = v_on_element(
@@ -1096,7 +907,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn vnode_hook_uses_need_patch() {
         let mut template = v_on_element(
@@ -1117,7 +927,6 @@ mod tests {
         assert!(vnode_call.patch_hints.flags.contains(PatchFlags::NeedPatch));
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn duplicate_static_v_on_handlers_are_deduped_into_array() {
         let mut template = v_on_element(
@@ -1151,7 +960,6 @@ mod tests {
         };
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn argumentless_v_on_marks_element_handlers_only() {
         for (tag_name, tag_type, expected_arg_count) in [
@@ -1199,7 +1007,6 @@ mod tests {
     }
 
     // https://github.com/vuejs/core/blob/02421cdbc4da5dd2eaf39e6c51aa790f9310db62/packages/compiler-core/__tests__/transforms/transformElement.spec.ts#L1037-L1134
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn it_preserves_lifecycle_requirements_in_stable_v_for() {
         let mut static_ref = for_element(
@@ -1271,7 +1078,6 @@ mod tests {
         assert!(!vnode_call.patch_hints.flags.contains(PatchFlags::NeedPatch));
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn it_preserves_before_update_blocks_in_stable_v_for() {
         for event in ["vue:before-update", "vue:beforeUpdate"] {
@@ -1301,7 +1107,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn it_keeps_dynamic_v_for_children_as_blocks() {
         let mut template = for_element(js("items"), vec![], vec![], vec![]);
@@ -1442,10 +1247,7 @@ mod tests {
             );
 
             // Folded to `<p v-if="val" v-for="i in 3">text</p>`
-            #[cfg(feature = "new-pipeline")]
             let cond_node = expect_for_element(&cond.if_node.node);
-            #[cfg(not(feature = "new-pipeline"))]
-            let cond_node = expect_element(&cond.if_node.node);
 
             assert!(cond_node.starting_tag.tag_name == "p");
             assert!(
@@ -1455,10 +1257,7 @@ mod tests {
                     .is_some_and(|v| matches!(v, Node::Text(_, _)))
             );
             let directives = cond_node.starting_tag.directives.as_ref();
-            #[cfg(feature = "new-pipeline")]
             assert!(directives.is_some_and(|d| d.v_for.is_none()));
-            #[cfg(not(feature = "new-pipeline"))]
-            assert!(directives.is_some_and(|d| d.v_for.is_some()));
         };
 
         // <template v-if="val"><p v-for="j in 3">text</p></template>
@@ -1482,10 +1281,7 @@ mod tests {
             );
 
             // Folded to `<p v-if="val" v-for="i in 3">text</p>`
-            #[cfg(feature = "new-pipeline")]
             let cond_node = expect_for_element(&cond.if_node.node);
-            #[cfg(not(feature = "new-pipeline"))]
-            let cond_node = expect_element(&cond.if_node.node);
             assert!(cond_node.starting_tag.tag_name == "p");
             assert!(
                 cond_node
@@ -1494,10 +1290,7 @@ mod tests {
                     .is_some_and(|v| matches!(v, Node::Text(_, _)))
             );
             let directives = cond_node.starting_tag.directives.as_ref();
-            #[cfg(feature = "new-pipeline")]
             assert!(directives.is_some_and(|d| d.v_for.is_none()));
-            #[cfg(not(feature = "new-pipeline"))]
-            assert!(directives.is_some_and(|d| d.v_for.is_some()));
         };
 
         // <template v-if="val" v-for="i in 3"><p v-for="j in 3">text</p></template>
@@ -1534,53 +1327,24 @@ mod tests {
                 false,
             );
 
-            // Not folded
-            #[cfg(not(feature = "new-pipeline"))]
-            {
-                let cond_node = expect_element(&cond.if_node.node);
-                assert!(cond_node.starting_tag.tag_name == "template");
-                assert!(
-                    cond_node
-                        .starting_tag
-                        .directives
-                        .as_ref()
-                        .is_some_and(|d| d.v_for.is_some())
-                );
+            let Node::For(outer_for) = &cond.if_node.node else {
+                panic!("Expected outer ForNode")
+            };
+            let [Node::For(inner_for)] = outer_for.children.as_slice() else {
+                panic!("Expected inner ForNode")
+            };
+            let [Node::Element(first_child)] = inner_for.children.as_slice() else {
+                panic!("Expected one Element child")
+            };
 
-                let Some(Node::Element(first_child)) = cond_node.children.first() else {
-                    panic!("First child should be an element")
-                };
-                assert!(first_child.starting_tag.tag_name == "p");
-                assert!(
-                    first_child
-                        .starting_tag
-                        .directives
-                        .as_ref()
-                        .is_some_and(|d| d.v_for.is_some())
-                );
-            }
-
-            #[cfg(feature = "new-pipeline")]
-            {
-                let Node::For(outer_for) = &cond.if_node.node else {
-                    panic!("Expected outer ForNode")
-                };
-                let [Node::For(inner_for)] = outer_for.children.as_slice() else {
-                    panic!("Expected inner ForNode")
-                };
-                let [Node::Element(first_child)] = inner_for.children.as_slice() else {
-                    panic!("Expected one Element child")
-                };
-
-                assert!(first_child.starting_tag.tag_name == "p");
-                assert!(
-                    first_child
-                        .starting_tag
-                        .directives
-                        .as_ref()
-                        .is_some_and(|d| d.v_for.is_none())
-                );
-            }
+            assert!(first_child.starting_tag.tag_name == "p");
+            assert!(
+                first_child
+                    .starting_tag
+                    .directives
+                    .as_ref()
+                    .is_some_and(|d| d.v_for.is_none())
+            );
         };
 
         // <div v-if="false"></div>
@@ -1636,7 +1400,6 @@ mod tests {
         element
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn expect_for_element(node: &Node) -> &ElementNode {
         let Node::For(for_node) = node else {
             panic!("Expected ForNode")
@@ -1647,7 +1410,6 @@ mod tests {
         element
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn expect_for_vnode(node: &Node) -> &fervid_core::VNodeCall {
         let element = expect_for_element(node);
         let Some(codegen_node) = element.codegen_node.as_deref() else {
@@ -1659,7 +1421,6 @@ mod tests {
         vnode_call
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn expect_element_vnode(node: &Node) -> (&ElementNode, &fervid_core::VNodeCall) {
         let element = expect_element(node);
         let Some(codegen_node) = element.codegen_node.as_deref() else {
@@ -1671,7 +1432,6 @@ mod tests {
         (element, vnode_call)
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn expect_object_prop<'a>(
         vnode_call: &'a fervid_core::VNodeCall,
         expected_name: &str,
@@ -1689,7 +1449,6 @@ mod tests {
         prop
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn directive_element(directives: VueDirectives, children: Vec<Node>) -> SfcTemplateBlock {
         SfcTemplateBlock {
             lang: "html".into(),
@@ -1710,7 +1469,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn transform_component_slot(slot_props: &str, child_expr: &str) -> (String, String) {
         let mut sfc_template = SfcTemplateBlock {
             lang: "html".into(),
@@ -1763,7 +1521,6 @@ mod tests {
         (to_str(slot_props.as_ref()), to_str(&interpolation.value))
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn parse_slot_props(raw: &str) -> Pat {
         let span = Span::new(BytePos(0), BytePos(raw.len() as u32));
         let lexer = Lexer::new(
@@ -1778,7 +1535,6 @@ mod tests {
             .expect("slot props pattern should parse")
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn v_on_element(
         tag_name: &str,
         tag_type: ElementKind,
@@ -1798,7 +1554,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn for_element(
         source: Box<swc_core::ecma::ast::Expr>,
         attributes: Vec<AttributeOrBinding>,

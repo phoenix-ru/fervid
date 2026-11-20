@@ -622,7 +622,6 @@ fn is_same_key(a: &AttributeOrBinding, b: &AttributeOrBinding) -> bool {
 #[cfg(test)]
 mod tests {
     use fervid_core::{AttributeOrBinding, VBindDirective, VueDirectives};
-    #[cfg(feature = "new-pipeline")]
     use fervid_core::{ElementCodegenValue, SfcTemplateBlock};
 
     use crate::{
@@ -684,7 +683,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L98-L114
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn component_v_if() {
         // <Component v-if="ok"></Component>
@@ -802,7 +800,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L214-L222
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn should_prefix_v_if_condition() {
         // <div v-if="ok"/>

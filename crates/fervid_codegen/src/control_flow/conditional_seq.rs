@@ -96,7 +96,6 @@ fn should_wrap_in_block(node: &Node) -> bool {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "new-pipeline")]
     use fervid_core::{
         AttributeOrBinding, BuiltinType, SfcDescriptor, SfcTemplateBlock, VBindDirective,
         VCustomDirective, VOnDirective, VueDirectives,
@@ -324,7 +323,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L98-L114
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn component_v_if() {
         // <Component v-if="ok"></Component>
@@ -347,7 +345,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L180-L212
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn comment_between_branches() {
         // <div v-if="ok"/>
@@ -380,7 +377,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L466-L481
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn basic_v_if() {
         // <div v-if="ok"/>
@@ -397,7 +393,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L483-L503
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn template_v_if() {
         // <template v-if="ok"><div/>hello<p/></template>
@@ -419,7 +414,6 @@ mod tests {
     }
 
     // Additional single-text variant of Vue's template v-if test above
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn template_v_if_with_single_text() {
         // <template v-if="ok">hello</template>
@@ -430,7 +424,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L505-L523
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn template_v_if_with_single_slot_child() {
         // <template v-if="ok"><slot/></template>
@@ -441,7 +434,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L525-L543
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn v_if_on_slot() {
         // <slot v-if="ok"></slot>
@@ -452,7 +444,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L545-L570
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn v_if_on_slot_with_v_bind() {
         // <slot v-if="ok" v-bind="items"></slot>
@@ -464,7 +455,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L572-L587
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn v_if_else() {
         // <div v-if="ok"/><p v-else/>
@@ -490,7 +480,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L589-L605
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn v_if_else_if() {
         // <div v-if="ok"/><p v-else-if="orNot"/>
@@ -516,7 +505,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L607-L635
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn v_if_else_if_else() {
         // <div v-if="ok"/><p v-else-if="orNot"/><template v-else>fine</template>
@@ -543,7 +531,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L637-L660
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn multiple_v_if_that_are_sibling_nodes_should_have_different_keys() {
         // <div v-if="ok"/><p v-if="orNot"/>
@@ -569,7 +556,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L662-L697
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn increasing_key_v_if_else_if_else() {
         // <div v-if="ok"/><p v-else/><div v-if="another"/><p v-else-if="orNot"/><p v-else/>
@@ -616,7 +602,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L699-L718
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn key_injection_only_v_bind() {
         // <div v-if="ok" v-bind="obj"/>
@@ -634,7 +619,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L720-L736
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn key_injection_before_v_bind() {
         // <div v-if="ok" id="foo" v-bind="obj"/>
@@ -652,7 +636,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L738-L754
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn key_injection_after_v_bind() {
         // <div v-if="ok" v-bind="obj" id="foo"/>
@@ -670,7 +653,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L756-L763
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn key_injection_with_custom_directive() {
         // <div v-if="ok" v-foo />
@@ -694,7 +676,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L765-L781
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn avoid_duplicate_keys() {
         // <div v-if="ok" key="custom_key" v-bind="obj"/>
@@ -712,7 +693,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L783-L802
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn with_spaces_between_branches() {
         // <div v-if="ok"/> <div v-else-if="no"/> <div v-else/>
@@ -747,7 +727,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L804-L848
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn with_comments() {
         // <template v-if="ok">
@@ -771,7 +750,6 @@ mod tests {
     // https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/src/transforms/vIf.ts#L130-L139
     // Vue also emits an empty fallback comment in production
     // https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/src/transforms/vIf.ts#L224-L234
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn should_parse_correctly_with_comments_true_in_prod() {
         // <template v-if="ok">
@@ -791,7 +769,6 @@ mod tests {
     }
 
     // Vue test: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/__tests__/transforms/vIf.spec.ts#L872-L890
-    #[cfg(feature = "new-pipeline")]
     #[test]
     fn v_on_with_v_if() {
         // <button v-on="{ click: clickEvent }" v-if="true">w/ v-if</button>
@@ -820,7 +797,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn transform_and_generate_template_if(children: Vec<Node>) -> String {
         transform_and_generate_roots(vec![Node::Element(
             ElementNode::new_with_children_and_type(
@@ -838,7 +814,6 @@ mod tests {
         )])
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn conditional_template_else(children: Vec<Node>) -> Node {
         Node::Element(ElementNode::new_with_children_and_type(
             StartingTag {
@@ -854,7 +829,6 @@ mod tests {
         ))
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn template_if_with_comments() -> Node {
         let mut nested_if = conditional_element(
             "div",
@@ -900,12 +874,10 @@ mod tests {
         ))
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn conditional_element(tag_name: &str, directives: VueDirectives) -> Node {
         conditional_element_with_attributes(tag_name, directives, vec![])
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn conditional_element_with_attributes(
         tag_name: &str,
         directives: VueDirectives,
@@ -918,7 +890,6 @@ mod tests {
         }))
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn slot_outlet(attributes: Vec<AttributeOrBinding>, v_if: bool) -> Node {
         let mut node = conditional_element_with_attributes(
             "slot",
@@ -935,7 +906,6 @@ mod tests {
         node
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn regular_attribute(name: &str, value: &str) -> AttributeOrBinding {
         AttributeOrBinding::RegularAttribute {
             name: name.into(),
@@ -944,17 +914,14 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn spread_obj() -> AttributeOrBinding {
         AttributeOrBinding::VBind(VBindDirective::new(None, js("obj")))
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn transform_and_generate_roots(roots: Vec<Node>) -> String {
         transform_and_generate_roots_in_mode(roots, false)
     }
 
-    #[cfg(feature = "new-pipeline")]
     fn transform_and_generate_roots_in_mode(roots: Vec<Node>, is_prod: bool) -> String {
         let mut template = SfcTemplateBlock {
             lang: "html".into(),
@@ -992,8 +959,7 @@ mod tests {
     }
 
     fn test_out(input: ConditionalNodeSequence, expected: &str) {
-        let mut ctx = CodegenContext::default();
-        let out = ctx.generate_conditional_seq(&input);
+        let out = crate::test_utils::generate_prepared_node(Node::ConditionalSeq(input), false);
         assert_eq!(crate::test_utils::to_str(out), expected)
     }
 }

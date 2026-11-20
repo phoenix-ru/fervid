@@ -1,5 +1,10 @@
 use std::fmt::{Error, Write};
 
+use swc_core::{
+    common::DUMMY_SP,
+    ecma::ast::{Expr, ExprOrSpread, Lit, Null},
+};
+
 pub fn to_camelcase(s: &str, buf: &mut impl Write) -> Result<(), Error> {
     for (idx, word) in s.split('-').enumerate() {
         if idx == 0 {
@@ -20,4 +25,16 @@ pub fn to_camelcase(s: &str, buf: &mut impl Write) -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+pub fn expr_arg(expr: Expr) -> ExprOrSpread {
+    ExprOrSpread {
+        spread: None,
+        expr: Box::new(expr),
+    }
+}
+
+/// Produces a `null` expression
+pub fn null_expr() -> Expr {
+    Expr::Lit(Lit::Null(Null { span: DUMMY_SP }))
 }

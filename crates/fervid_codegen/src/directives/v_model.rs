@@ -108,38 +108,6 @@ impl CodegenContext {
             ))),
         }))));
     }
-
-    /// Generates the `v-model` for an element.
-    /// This generates the update handler
-    pub fn generate_v_model_for_element(
-        &self,
-        v_model: &VModelDirective,
-        out: &mut Vec<PropOrSpread>,
-    ) {
-        let span = v_model.span;
-        let mut buf = String::new();
-
-        // 1. Get bound attribute.
-        // `v-model="smth"` is same as `v-model:modelValue="smth"`
-        let bound_attribute = v_model
-            .argument
-            .to_owned()
-            .unwrap_or_else(|| "modelValue".into());
-
-        // 2. Generate event handler propname
-        let event_handler_propname =
-            generate_v_model_handler_propname(&bound_attribute, &mut buf, span);
-
-        // 3. Push the update handler code,
-        // e.g. `v-model="smth"` -> `"onUpdate:modelValue": $event => ((_ctx.smth) = $event)`
-        // TODO Cache like so `_cache[1] || (_cache[1] = `
-        if let Some(ref update_handler) = v_model.update_handler {
-            out.push(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
-                key: event_handler_propname,
-                value: update_handler.to_owned(),
-            }))));
-        }
-    }
 }
 
 /// Generates the propname for `v-model` update handler.
@@ -198,11 +166,12 @@ fn generate_v_model_modifiers(modifiers: &[FervidAtom], span: Span) -> ObjectLit
 
 #[cfg(test)]
 mod tests {
-    use swc_core::{common::DUMMY_SP, ecma::ast::ObjectLit};
+    use fervid_core::{
+        ElementKind, ElementNode, StartingTag, StrOrExpr, VModelDirective, VueDirectives,
+    };
+    use swc_core::common::DUMMY_SP;
 
     use crate::test_utils::js;
-
-    use super::*;
 
     #[test]
     fn it_generates_basic_usage() {
@@ -211,11 +180,11 @@ mod tests {
             vec![VModelDirective {
                 argument: None,
                 value: js("foo"),
-                update_handler: js("$event=>((foo)=$event)").into(),
+                update_handler: None,
                 modifiers: Vec::new(),
                 span: DUMMY_SP,
             }],
-            r#"{modelValue:foo,"onUpdate:modelValue":$event=>((foo)=$event)}"#,
+            r#"{modelValue:_ctx.foo,"onUpdate:modelValue":$event=>_ctx.foo=$event}"#,
         );
     }
 
@@ -226,11 +195,11 @@ mod tests {
             vec![VModelDirective {
                 argument: Some("simple".into()),
                 value: js("foo"),
-                update_handler: js("$event=>((foo)=$event)").into(),
+                update_handler: None,
                 modifiers: Vec::new(),
                 span: DUMMY_SP,
             }],
-            r#"{simple:foo,"onUpdate:simple":$event=>((foo)=$event)}"#,
+            r#"{simple:_ctx.foo,"onUpdate:simple":$event=>_ctx.foo=$event}"#,
         );
 
         // v-model:modelValue="bar"
@@ -238,11 +207,11 @@ mod tests {
             vec![VModelDirective {
                 argument: Some("modelValue".into()),
                 value: js("bar"),
-                update_handler: js("$event=>((bar)=$event)").into(),
+                update_handler: None,
                 modifiers: Vec::new(),
                 span: DUMMY_SP,
             }],
-            r#"{modelValue:bar,"onUpdate:modelValue":$event=>((bar)=$event)}"#,
+            r#"{modelValue:_ctx.bar,"onUpdate:modelValue":$event=>_ctx.bar=$event}"#,
         );
 
         // v-model:model-value="baz"
@@ -250,11 +219,11 @@ mod tests {
             vec![VModelDirective {
                 argument: Some("model-value".into()),
                 value: js("baz"),
-                update_handler: js("$event=>((baz)=$event)").into(),
+                update_handler: None,
                 modifiers: Vec::new(),
                 span: DUMMY_SP,
             }],
-            r#"{"model-value":baz,"onUpdate:modelValue":$event=>((baz)=$event)}"#,
+            r#"{"model-value":_ctx.baz,"onUpdate:modelValue":$event=>_ctx.baz=$event}"#,
         );
     }
 
@@ -265,11 +234,11 @@ mod tests {
             vec![VModelDirective {
                 argument: None,
                 value: js("foo"),
-                update_handler: js("$event=>((foo)=$event)").into(),
+                update_handler: None,
                 modifiers: vec!["lazy".into(), "trim".into()],
                 span: DUMMY_SP,
             }],
-            r#"{modelValue:foo,"onUpdate:modelValue":$event=>((foo)=$event),modelModifiers:{lazy:true,trim:true}}"#,
+            r#"{modelValue:_ctx.foo,"onUpdate:modelValue":$event=>_ctx.foo=$event,modelModifiers:{lazy:true,trim:true}}"#,
         );
 
         // v-model.custom-modifier="foo"
@@ -277,11 +246,11 @@ mod tests {
             vec![VModelDirective {
                 argument: None,
                 value: js("foo"),
-                update_handler: js("$event=>((foo)=$event)").into(),
+                update_handler: None,
                 modifiers: vec!["custom-modifier".into()],
                 span: DUMMY_SP,
             }],
-            r#"{modelValue:foo,"onUpdate:modelValue":$event=>((foo)=$event),modelModifiers:{"custom-modifier":true}}"#,
+            r#"{modelValue:_ctx.foo,"onUpdate:modelValue":$event=>_ctx.foo=$event,modelModifiers:{"custom-modifier":true}}"#,
         );
 
         // v-model:foo-bar.custom-modifier="bazQux"
@@ -289,11 +258,11 @@ mod tests {
             vec![VModelDirective {
                 argument: Some("foo-bar".into()),
                 value: js("bazQux"),
-                update_handler: js("$event=>((bazQux)=$event)").into(),
+                update_handler: None,
                 modifiers: vec!["custom-modifier".into()],
                 span: DUMMY_SP,
             }],
-            r#"{"foo-bar":bazQux,"onUpdate:fooBar":$event=>((bazQux)=$event),"foo-barModifiers":{"custom-modifier":true}}"#,
+            r#"{"foo-bar":_ctx.bazQux,"onUpdate:fooBar":$event=>_ctx.bazQux=$event,"foo-barModifiers":{"custom-modifier":true}}"#,
         );
     }
 
@@ -304,11 +273,11 @@ mod tests {
             vec![VModelDirective {
                 argument: Some(StrOrExpr::Expr(js("foo"))),
                 value: js("bar"),
-                update_handler: js("$event=>((bar)=$event)").into(),
+                update_handler: None,
                 modifiers: Vec::new(),
                 span: DUMMY_SP,
             }],
-            r#"{[foo]:bar,["onUpdate:"+foo]:$event=>((bar)=$event)}"#,
+            r#"_normalizeProps({[_ctx.foo]:_ctx.bar,["onUpdate:"+_ctx.foo]:$event=>_ctx.bar=$event})"#,
         );
 
         // v-model:[foo].baz="bar"
@@ -316,23 +285,28 @@ mod tests {
             vec![VModelDirective {
                 argument: Some(StrOrExpr::Expr(js("foo"))),
                 value: js("bar"),
-                update_handler: js("$event=>((bar)=$event)").into(),
+                update_handler: None,
                 modifiers: vec!["baz".into()],
                 span: DUMMY_SP,
             }],
-            r#"{[foo]:bar,["onUpdate:"+foo]:$event=>((bar)=$event),[foo+"Modifiers"]:{baz:true}}"#,
+            r#"_normalizeProps({[_ctx.foo]:_ctx.bar,["onUpdate:"+_ctx.foo]:$event=>_ctx.bar=$event,[_ctx.foo+"Modifiers"]:{baz:true}})"#,
         );
     }
 
     fn test_out(input: Vec<VModelDirective>, expected: &str) {
-        let ctx = CodegenContext::default();
-        let mut out = ObjectLit {
-            span: DUMMY_SP,
-            props: vec![],
-        };
-        for v_model in input.iter() {
-            ctx.generate_v_model_for_component(v_model, &mut out.props);
-        }
+        let node = ElementNode::new_with_children_and_type(
+            StartingTag {
+                tag_name: "Comp".into(),
+                attributes: vec![],
+                directives: Some(Box::new(VueDirectives {
+                    v_model: input,
+                    ..Default::default()
+                })),
+            },
+            vec![],
+            ElementKind::Component,
+        );
+        let out = crate::test_utils::generate_prepared_props(node);
         assert_eq!(crate::test_utils::to_str(out), expected)
     }
 }
