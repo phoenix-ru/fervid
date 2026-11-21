@@ -206,6 +206,7 @@ test('TS annotations', () => {
     <template>
       {{ a as Foo }}
       <!-- {{ b<Bar>() }} -->
+      {{ (b as Bar)() }}
       {{ Baz }}
       <Comp v-slot="{ data }: Qux">{{ data }}</Comp>
       <div v-for="{ z = x as Qux } in list as Fred"/>

@@ -23,12 +23,10 @@ use crate::{
         setup::utils::to_runtime_type_string,
         utils::{collect_obj_fields, collect_string_arr},
     },
-};
-
-use super::{
-    macros::{TransformMacroResult, VarDeclHelper},
     utils::unwrap_ts_node_expr,
 };
+
+use super::macros::{TransformMacroResult, VarDeclHelper};
 
 #[derive(Default)]
 struct DefineProps {

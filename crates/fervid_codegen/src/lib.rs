@@ -7,17 +7,15 @@ extern crate lazy_static;
 
 mod atoms;
 mod attributes;
-mod builtins;
 mod comments;
-mod components;
 mod context;
 mod control_flow;
 mod directives;
-mod elements;
 mod imports;
 mod interpolation;
 mod text;
 mod utils;
+mod vnode;
 
 #[cfg(test)]
 mod test_utils;

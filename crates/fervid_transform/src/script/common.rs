@@ -177,7 +177,7 @@ pub fn extract_variables_from_pat(pat: &Pat, out: &mut Vec<SetupBinding>, is_con
         }
 
         // `...bar` in `const [foo, ...bar] = []` or in `const { foo, ..bar } = {}`
-        Pat::Rest(rest_destr) => collect_rest_pat(rest_destr, out),
+        Pat::Rest(rest_destr) => collect_rest_pat(rest_destr, out, is_const),
 
         // `foo` in `const { foo } = {}`
         Pat::Object(obj_destr) => {
@@ -200,7 +200,7 @@ pub fn extract_variables_from_pat(pat: &Pat, out: &mut Vec<SetupBinding>, is_con
                     )),
 
                     // `bar` in `const { foo, ...bar } = {}`
-                    ObjectPatProp::Rest(rest_destr) => collect_rest_pat(rest_destr, out),
+                    ObjectPatProp::Rest(rest_destr) => collect_rest_pat(rest_destr, out, is_const),
                 }
             }
         }
@@ -213,16 +213,89 @@ pub fn extract_variables_from_pat(pat: &Pat, out: &mut Vec<SetupBinding>, is_con
     }
 }
 
-#[inline]
-fn collect_rest_pat(rest_pat: &RestPat, out: &mut Vec<SetupBinding>) {
-    // Only `...ident` is supported.
-    // Current Vue js compiler has a bug, it returns `undefined` for `...[bar]`
-    if let Some(ident) = rest_pat.arg.as_ident() {
-        // Binding type is always `SetupConst` because of the nature of rest operator
+/// Collects variables from a `...rest` pattern, including cases like `[...arr]`, `{ ...obj }`.
+/// Current Vue js compiler has a bug here for script collection, it returns `undefined` for `const [...[bar]] = smth`
+fn collect_rest_pat(rest_pat: &RestPat, out: &mut Vec<SetupBinding>, is_const: bool) {
+    if let Pat::Ident(ident) = rest_pat.arg.as_ref() {
+        // Binding type is always can be either `SetupConst` or `SetupLet` because
+        // rest on ident creates a new array/object
+        let binding_type = if is_const {
+            BindingTypes::SetupConst
+        } else {
+            BindingTypes::SetupLet
+        };
+
         out.push(SetupBinding::new_spanned(
             ident.sym.to_owned(),
-            BindingTypes::SetupConst,
+            binding_type,
             ident.span,
         ))
-    };
+    } else {
+        extract_variables_from_pat(&rest_pat.arg, out, is_const);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_variables_from_pat;
+    use crate::test_utils::pat;
+    use fervid_core::BindingTypes;
+
+    #[test]
+    fn direct_rest_bindings_distinguish_const_and_mutable_declarations() {
+        for pattern in ["[...rest]", "{ ...rest }"] {
+            assert_bindings(pattern, true, &[("rest", BindingTypes::SetupConst)]);
+            assert_bindings(pattern, false, &[("rest", BindingTypes::SetupLet)]);
+        }
+    }
+
+    // Fervid improvement: collect nested rest bindings instead of porting vuejs-core `undefined` bug (see
+    // [collect_rest_pat] for context)
+    // https://github.com/vuejs/core/blob/8b479a89445868d474f17e2d837765e7c9ece5e4/packages/compiler-sfc/src/compileScript.ts#L1240-L1311
+    #[test]
+    fn nested_rest_elements_remain_maybe_refs_while_rest_containers_are_constant() {
+        // const [head, ...[value, ...tail]] = source
+        assert_bindings(
+            "[head, ...[value, ...tail]]",
+            true,
+            &[
+                ("head", BindingTypes::SetupMaybeRef),
+                ("value", BindingTypes::SetupMaybeRef),
+                ("tail", BindingTypes::SetupConst),
+            ],
+        );
+        // let/var [head, ...[value, ...tail]] = source
+        assert_bindings(
+            "[head, ...[value, ...tail]]",
+            false,
+            &[
+                ("head", BindingTypes::SetupLet),
+                ("value", BindingTypes::SetupLet),
+                ("tail", BindingTypes::SetupLet),
+            ],
+        );
+    }
+
+    #[test]
+    fn nested_rest_object_patterns_collect_bindings_not_expression_references() {
+        // const [...{ length, [key]: value = fallback }] = source
+        assert_bindings(
+            "[...{ length, [key]: value = fallback }]",
+            true,
+            &[
+                ("length", BindingTypes::SetupMaybeRef),
+                ("value", BindingTypes::SetupMaybeRef),
+            ],
+        );
+    }
+
+    fn assert_bindings(pattern: &str, is_const: bool, expected: &[(&str, BindingTypes)]) {
+        let mut bindings = Vec::new();
+        extract_variables_from_pat(&pat(pattern), &mut bindings, is_const);
+        let actual: Vec<_> = bindings
+            .iter()
+            .map(|binding| (binding.sym.as_str(), binding.binding_type))
+            .collect();
+        assert_eq!(actual, expected, "pattern={pattern}, is_const={is_const}");
+    }
 }

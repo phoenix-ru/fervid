@@ -1,6 +1,7 @@
 use fervid_core::{
-    AttributeOrBinding, ElementNode, FervidAtom, Interpolation, Node, PatchHints, SfcTemplateBlock,
-    StartingTag, VueDirectives, fervid_atom, is_html_tag,
+    AttributeOrBinding, ElementKind, ElementNode, FervidAtom, Interpolation, Node, PatchHints,
+    SfcTemplateBlock, StartingTag, VUE_BUILTINS, VueDirectives, check_attribute_name, fervid_atom,
+    is_html_tag,
 };
 use swc_core::common::{BytePos, Span};
 use swc_ecma_parser::{Syntax, TsSyntax};
@@ -105,6 +106,8 @@ impl SfcParser<'_, '_, '_> {
             self.is_pre = true;
         }
 
+        let tag_type = recognize_element_kind(&tag_name, &attributes, directives.as_deref());
+
         let starting_tag = StartingTag {
             tag_name,
             attributes,
@@ -112,12 +115,13 @@ impl SfcParser<'_, '_, '_> {
         };
 
         let result = Node::Element(ElementNode {
-            kind: fervid_core::ElementKind::Element,
+            tag_type,
             starting_tag,
             children: self.process_element_children(children),
             template_scope: 0,
             patch_hints: PatchHints::default(),
             span: element.span,
+            codegen_node: None,
         });
 
         self.is_pre = old_is_pre;
@@ -276,11 +280,147 @@ impl SfcParser<'_, '_, '_> {
     }
 }
 
+fn recognize_element_kind(
+    tag_name: &FervidAtom,
+    attributes: &[AttributeOrBinding],
+    directives: Option<&VueDirectives>,
+) -> ElementKind {
+    if tag_name == "template"
+        && directives.is_some_and(|d| {
+            d.v_if.is_some()
+                || d.v_else.is_some()
+                || d.v_else_if.is_some()
+                || d.v_for.is_some()
+                || d.v_slot.is_some()
+        })
+    {
+        return ElementKind::Template;
+    }
+
+    // First, check for a built-in
+    if let Some(builtin_type) = VUE_BUILTINS.get(tag_name) {
+        // Special case for `<component>`. If it does not have `is`, this is not a built-in
+        if tag_name.eq("component") {
+            let has_is = attributes
+                .iter()
+                .any(|attr| check_attribute_name(attr, "is"));
+
+            if !has_is {
+                return ElementKind::Component;
+            }
+        }
+
+        return ElementKind::Builtin(*builtin_type);
+    }
+
+    // Then check if this is an HTML tag
+    if is_html_tag(tag_name) {
+        ElementKind::Element
+    } else {
+        ElementKind::Component
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use swc_core::ecma::ast::Expr;
 
     use super::*;
+
+    /// Special case: `<component>` without `is` attribute is not a builtin
+    #[test]
+    fn it_distinguishes_component_builtin_and_not() {
+        assert!(matches!(
+            recognize_element_kind(&fervid_atom!("component"), &[], None),
+            ElementKind::Component
+        ));
+    }
+
+    // Adapted from https://github.com/vuejs/core/blob/5a8aa0b2ba575e098cbb63b396e9bcb751eb3a0f/packages/compiler-core/__tests__/parse.spec.ts#L557-L564
+    #[test]
+    fn it_marks_template_element_with_directives_as_template() {
+        let mut errors = Vec::new();
+        let mut parser = SfcParser::new(
+            r#"<template><template v-if="ok"></template></template>"#,
+            &mut errors,
+        );
+
+        let parsed = parser.parse_sfc().expect("Should parse");
+        let template = parsed.template.expect("Should have template");
+        let Node::Element(element) = template.roots.first().expect("Should have one root") else {
+            panic!("Root is not an element")
+        };
+
+        assert!(matches!(element.tag_type, ElementKind::Template));
+    }
+
+    // Adapted from https://github.com/vuejs/core/blob/5a8aa0b2ba575e098cbb63b396e9bcb751eb3a0f/packages/compiler-core/__tests__/parse.spec.ts#L566-L573
+    #[test]
+    fn it_marks_template_element_without_directives_as_element() {
+        let mut errors = Vec::new();
+        let mut parser =
+            SfcParser::new(r#"<template><template></template></template>"#, &mut errors);
+
+        let parsed = parser.parse_sfc().expect("Should parse");
+        let template = parsed.template.expect("Should have template");
+        let Node::Element(element) = template.roots.first().expect("Should have one root") else {
+            panic!("Root is not an element")
+        };
+
+        assert!(matches!(element.tag_type, ElementKind::Element));
+    }
+
+    // Vue source: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/src/parser.ts#L638-L648
+    // Structural template directives: https://github.com/vuejs/core/blob/bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c/packages/compiler-core/src/parser.ts#L767-L780
+    #[test]
+    fn it_marks_template_with_v_cloak_as_element() {
+        // <template><template v-cloak><div /></template></template>
+        let mut errors = Vec::new();
+        let mut parser = SfcParser::new(
+            "<template><template v-cloak><div /></template></template>",
+            &mut errors,
+        );
+        let parsed = parser.parse_sfc().expect("template should parse");
+        let template = parsed.template.expect("SFC should contain a template");
+        let [Node::Element(element)] = template.roots.as_slice() else {
+            panic!("SFC template should have one element child")
+        };
+
+        assert!(matches!(element.tag_type, ElementKind::Element));
+        assert!(
+            element
+                .starting_tag
+                .directives
+                .as_ref()
+                .is_some_and(|d| d.v_cloak.is_some())
+        );
+        assert!(errors.is_empty(), "{errors:#?}");
+    }
+
+    #[test]
+    fn it_marks_template_with_v_pre_as_element() {
+        // <template><template v-pre><div /></template></template>
+        let mut errors = Vec::new();
+        let mut parser = SfcParser::new(
+            "<template><template v-pre><div /></template></template>",
+            &mut errors,
+        );
+        let parsed = parser.parse_sfc().expect("template should parse");
+        let template = parsed.template.expect("SFC should contain a template");
+        let [Node::Element(element)] = template.roots.as_slice() else {
+            panic!("SFC template should have one element child")
+        };
+
+        assert!(matches!(element.tag_type, ElementKind::Element));
+        assert!(
+            element
+                .starting_tag
+                .directives
+                .as_ref()
+                .is_some_and(|d| d.v_pre.is_some())
+        );
+        assert!(errors.is_empty(), "{errors:#?}");
+    }
 
     #[test]
     fn it_acknowledges_v_pre() {
@@ -310,7 +450,7 @@ mod tests {
         assert_eq!(1, first_div.starting_tag.attributes.len());
         assert!(matches!(
             first_div.starting_tag.attributes.first(),
-            Some(AttributeOrBinding::RegularAttribute { name, value, .. }) if name == ":parse-this" && value == "false"
+            Some(AttributeOrBinding::RegularAttribute { name, value: Some(value), .. }) if name == ":parse-this" && value == "false"
         ));
 
         // Check the <h1>
@@ -335,11 +475,11 @@ mod tests {
         let input_attr_1 = input.starting_tag.attributes.first().unwrap();
         let input_attr_2 = input.starting_tag.attributes.get(1).unwrap();
         assert!(
-            matches!(input_attr_1, AttributeOrBinding::RegularAttribute { name, value, .. } if name == "v-model" && value == "msg")
+            matches!(input_attr_1, AttributeOrBinding::RegularAttribute { name, value: Some(value), .. } if name == "v-model" && value == "msg")
         );
         assert!(
             // Second v-pre should not be recognized as a directive, because it is inside the first
-            matches!(input_attr_2, AttributeOrBinding::RegularAttribute { name, value, .. } if name == "v-pre" && value.is_empty())
+            matches!(input_attr_2, AttributeOrBinding::RegularAttribute { name, value: None, .. } if name == "v-pre")
         );
     }
 

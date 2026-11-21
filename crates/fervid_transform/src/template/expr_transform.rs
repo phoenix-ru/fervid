@@ -1,16 +1,16 @@
 use fervid_core::{
-    BindingTypes, FervidAtom, IntoIdent, PatchFlags, PatchHints, StrOrExpr, TemplateGenerationMode,
-    VModelDirective, VueImports, fervid_atom, is_valid_propname,
+    BindingTypes, ConstantTypes, FervidAtom, IntoIdent, VueImports, fervid_atom, is_valid_propname,
 };
 use swc_core::{
     common::DUMMY_SP,
     ecma::{
         ast::{
-            ArrayLit, ArrayPat, AssignExpr, AssignOp, AssignTarget, AssignTargetPat, BindingIdent,
-            BlockStmt, CallExpr, Callee, ComputedPropName, CondExpr, Decl, Expr, ExprOrSpread,
-            Ident, IdentName, KeyValuePatProp, KeyValueProp, Lit, MemberExpr, MemberProp, Null,
-            ObjectLit, ObjectPat, ObjectPatProp, Pat, Prop, PropName, PropOrSpread,
-            SimpleAssignTarget, Stmt, Str, UpdateExpr, UpdateOp,
+            ArrayPat, ArrowExpr, AssignExpr, AssignOp, AssignTarget, AssignTargetPat, BindingIdent,
+            BlockStmt, BlockStmtOrExpr, CallExpr, Callee, ComputedPropName, CondExpr, Decl, Expr,
+            ExprOrSpread, Ident, IdentName, KeyValuePatProp, KeyValueProp, Lit, MemberExpr,
+            MemberProp, Null, ObjectLit, ObjectPat, ObjectPatProp, OptChainBase, Pat, Prop,
+            PropName, PropOrSpread, SimpleAssignTarget, Stmt, Str, TsKeywordType,
+            TsKeywordTypeKind, TsType, TsTypeAnn, UnaryOp, UpdateExpr, UpdateOp,
         },
         visit::{VisitMut, VisitMutWith},
     },
@@ -21,12 +21,13 @@ use crate::{
     template::js_builtins::JS_BUILTINS,
 };
 
-use super::utils::wrap_in_event_arrow;
-
 struct TransformVisitor<'s> {
     current_scope: u32,
     bindings_helper: &'s mut BindingsHelper,
     has_js_bindings: bool,
+    has_template_scope_ref: bool,
+    const_type: ConstantTypes,
+    root_is_wrapped_identifier: bool,
     is_inline: bool,
 
     /// In ({ x } = y)
@@ -65,137 +66,52 @@ pub enum IdentTransformStrategy {
     RewriteWithMemberExpr(MemberExpr),
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct BindingTransformMetadata {
+    pub has_js_bindings: bool,
+    pub has_template_scope_ref: bool,
+    /// The lowest `ConstantTypes` encountered during transform.
+    /// This starts at `CanStringify` and goes all the way down to `NotConstant`
+    /// when it encounters potentially dynamic operations, like calls or member access.
+    /// The algorithm is very conservative but still lets compiler optimize more
+    /// cases than vuejs-core. For example, `(someConst)` will get `CanSkipPatch`
+    /// compared to vuejs-core.
+    pub const_type: ConstantTypes,
+}
+
+pub struct VModelExpressionTransformResult {
+    pub value: Box<Expr>,
+    pub update_handler: Box<Expr>,
+    pub has_template_scope_ref: bool,
+}
+
 pub trait BindingsHelperTransform {
-    fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> bool;
-    fn transform_v_model(
-        &mut self,
-        v_model: &mut VModelDirective,
-        scope_to_use: u32,
-        patch_hints: &mut PatchHints,
-    );
+    fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> BindingTransformMetadata;
+    fn transform_pat(&mut self, pat: &mut Pat, scope_to_use: u32) -> BindingTransformMetadata;
     fn get_var_binding_type(&mut self, starting_scope: u32, variable: &FervidAtom) -> BindingTypes;
 }
 
 impl BindingsHelperTransform for BindingsHelper {
     /// Transforms the template expression
-    fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> bool {
-        let is_inline = matches!(
-            self.template_generation_mode,
-            TemplateGenerationMode::Inline
-        );
-        let mut visitor = TransformVisitor {
-            current_scope: scope_to_use,
-            bindings_helper: self,
-            has_js_bindings: false,
-            is_inline,
-            is_in_assign_target: false,
-            is_in_destructure_assign: false,
-            is_v_model_transform: false,
-            local_vars: Vec::new(),
-            update_expr_helper: None,
-            should_consume_update_expr: false,
-        };
-        expr.visit_mut_with(&mut visitor);
-
-        visitor.has_js_bindings
+    fn transform_expr(&mut self, expr: &mut Expr, scope_to_use: u32) -> BindingTransformMetadata {
+        transform_expr_with_mode(self, expr, scope_to_use, false)
     }
 
-    /// Transforms `v-model` directive by producing
-    /// `:value` expression and
-    /// `@update:value` handler (`$event => modelValue = $event`).
-    fn transform_v_model(
-        &mut self,
-        v_model: &mut VModelDirective,
-        scope_to_use: u32,
-        patch_hints: &mut PatchHints,
-    ) {
-        // 0. Ensure that `v-model` value is a valid AssignTarget
-        let Some(assign_target) = convert_expr_to_assign_target((*v_model.value).to_owned()) else {
-            // TODO Error
-            return;
-        };
-
-        // 1. Create handler: wrap in `$event => value = $event`
-        let event_expr = Box::new(Expr::Ident(FervidAtom::from("$event").into_ident()));
-        let mut handler = wrap_in_event_arrow(wrap_in_assignment(
-            assign_target,
-            event_expr,
-            AssignOp::Assign,
-        ));
-
-        // 2. Transform handler
-        {
-            let is_inline = matches!(
-                self.template_generation_mode,
-                TemplateGenerationMode::Inline
-            );
-            let mut visitor = TransformVisitor {
-                current_scope: scope_to_use,
-                bindings_helper: self,
-                has_js_bindings: false,
-                is_inline,
-                is_in_assign_target: false,
-                is_in_destructure_assign: false,
-                is_v_model_transform: true,
-                local_vars: Vec::new(),
-                update_expr_helper: None,
-                should_consume_update_expr: false,
-            };
-            handler.visit_mut_with(&mut visitor);
-        }
-
-        // 3. Assign handler
-        v_model.update_handler = Some(handler);
-
-        // 4. Transform value
-        self.transform_expr(&mut v_model.value, scope_to_use);
-
-        // 5. (Optional) Transform dynamic argument and set patch hints
-        match v_model.argument {
-            Some(StrOrExpr::Expr(ref mut expr)) => {
-                self.transform_expr(expr, scope_to_use);
-                patch_hints.flags |= PatchFlags::FullProps;
-            }
-
-            Some(StrOrExpr::Str(ref argument)) => {
-                patch_hints.flags |= PatchFlags::Props;
-                patch_hints.props.push(argument.to_owned());
-            }
-
-            None => {
-                patch_hints.flags |= PatchFlags::Props;
-                patch_hints.props.push(fervid_atom!("modelValue"));
-            }
-        }
-
-        // TODO Check that SetupConst or SetupReactiveConst are not used as a `v-model` value. Report hard error in this case.
-        // TODO Check in general in all cases
-        // DOCTEXT: Disallow `SetupConst` or `SetupReactiveConst` to be used as a `v-model` value or as an assignment target.
+    fn transform_pat(&mut self, pat: &mut Pat, scope_to_use: u32) -> BindingTransformMetadata {
+        transform_pat(self, pat, scope_to_use)
     }
 
     fn get_var_binding_type(&mut self, starting_scope: u32, variable: &FervidAtom) -> BindingTypes {
+        // TODO Shadowing js globals is not supported (warn when user has declared one?)
         if JS_BUILTINS.contains(variable) {
             return BindingTypes::JsGlobal;
         }
 
-        let mut current_scope_index = starting_scope;
-
-        // Check template scope
-        while let Some(current_scope) = self.template_scopes.get(current_scope_index as usize) {
-            // Check variable existence in the current scope
-            let found = current_scope.variables.iter().find(|it| *it == variable);
-
-            if found.is_some() {
-                return BindingTypes::TemplateLocal;
-            }
-
-            // Check if we reached the root scope, it will have itself as a parent
-            if current_scope.parent == current_scope_index {
-                break;
-            }
-
-            // Go to parent
-            current_scope_index = current_scope.parent;
+        if matches!(
+            self.find_in_template_scopes(starting_scope, variable),
+            BindingTypes::TemplateLocal
+        ) {
+            return BindingTypes::TemplateLocal;
         }
 
         // Check hash-map for convenience (we may have found the reference previously)
@@ -204,11 +120,12 @@ impl BindingsHelperTransform for BindingsHelper {
             return binding_type.to_owned();
         }
 
-        // Check setup bindings (both `<script setup>` and `setup()`)
-        let setup_bindings = self.setup_bindings.iter().chain(
+        // Check setup bindings (both `<script setup>` and `setup()`).
+        // Reverse iterators so that later bindings can shadow earlier ones
+        let setup_bindings = self.setup_bindings.iter().rev().chain(
             self.options_api_bindings
                 .as_ref()
-                .map_or_else(|| [].iter(), |v| v.setup.iter()),
+                .map_or_else(|| [].iter().rev(), |v| v.setup.iter().rev()),
         );
         for binding in setup_bindings {
             if binding.sym == variable_atom {
@@ -251,8 +168,250 @@ impl BindingsHelperTransform for BindingsHelper {
     }
 }
 
+fn transform_expr_with_mode(
+    bindings_helper: &mut BindingsHelper,
+    expr: &mut Expr,
+    scope_to_use: u32,
+    is_v_model_transform: bool,
+) -> BindingTransformMetadata {
+    let is_inline = bindings_helper.template_generation_mode.is_inline();
+
+    let mut visitor = TransformVisitor {
+        current_scope: scope_to_use,
+        bindings_helper,
+        has_js_bindings: false,
+        has_template_scope_ref: false,
+        const_type: ConstantTypes::CanStringify,
+        root_is_wrapped_identifier: is_wrapped_identifier(expr),
+        is_inline,
+        is_in_assign_target: false,
+        is_in_destructure_assign: false,
+        is_v_model_transform,
+        local_vars: Vec::new(),
+        update_expr_helper: None,
+        should_consume_update_expr: false,
+    };
+    expr.visit_mut_with(&mut visitor);
+
+    BindingTransformMetadata {
+        has_js_bindings: visitor.has_js_bindings,
+        has_template_scope_ref: visitor.has_template_scope_ref,
+        const_type: visitor.const_type,
+    }
+}
+
+fn transform_pat(
+    bindings_helper: &mut BindingsHelper,
+    pat: &mut Pat,
+    scope_to_use: u32,
+) -> BindingTransformMetadata {
+    let is_inline = bindings_helper.template_generation_mode.is_inline();
+
+    let mut visitor = TransformVisitor {
+        current_scope: scope_to_use,
+        bindings_helper,
+        has_js_bindings: false,
+        has_template_scope_ref: false,
+        const_type: ConstantTypes::CanStringify,
+        root_is_wrapped_identifier: false,
+        is_inline,
+        is_in_assign_target: false,
+        is_in_destructure_assign: false,
+        is_v_model_transform: false,
+        local_vars: Vec::new(),
+        update_expr_helper: None,
+        should_consume_update_expr: false,
+    };
+
+    extract_variables_from_pat(pat, &mut visitor.local_vars, true);
+    visitor.visit_parameter_pattern(pat);
+
+    BindingTransformMetadata {
+        has_js_bindings: visitor.has_js_bindings,
+        has_template_scope_ref: visitor.has_template_scope_ref,
+        const_type: visitor.const_type,
+    }
+}
+
+pub fn transform_v_model_expression(
+    bindings_helper: &mut BindingsHelper,
+    value: &Expr,
+    scope_to_use: u32,
+) -> Option<VModelExpressionTransformResult> {
+    // 0. Ensure that `v-model` value is a valid AssignTarget
+    let assign_target = convert_expr_to_assign_target(value.to_owned())?;
+
+    // 1. Create handler. Wrap in `$event => value = $event`
+    let event_expr = Box::new(Expr::Ident(fervid_atom!("$event").into_ident()));
+    let mut update_handler = wrap_in_model_event_arrow(
+        wrap_in_assignment(assign_target, event_expr, AssignOp::Assign),
+        bindings_helper.is_ts,
+    );
+
+    transform_expr_with_mode(bindings_helper, &mut update_handler, scope_to_use, true);
+
+    let mut transformed_value = value.to_owned();
+    let metadata =
+        transform_expr_with_mode(bindings_helper, &mut transformed_value, scope_to_use, false);
+
+    Some(VModelExpressionTransformResult {
+        value: Box::new(transformed_value),
+        update_handler,
+        has_template_scope_ref: metadata.has_template_scope_ref,
+    })
+}
+
+impl BindingsHelper {
+    pub fn find_in_template_scopes(&self, starting_scope: u32, atom: &FervidAtom) -> BindingTypes {
+        let mut current_scope_index = starting_scope;
+
+        // Check template scope
+        while let Some(current_scope) = self.template_scopes.get(current_scope_index as usize) {
+            // Check variable existence in the current scope
+            let found = current_scope.variables.iter().find(|it| *it == atom);
+
+            if found.is_some() {
+                return BindingTypes::TemplateLocal;
+            }
+
+            // Check if we reached the root scope, it will have itself as a parent
+            if current_scope.parent == current_scope_index {
+                break;
+            }
+
+            // Go to parent
+            current_scope_index = current_scope.parent;
+        }
+
+        BindingTypes::Unresolved
+    }
+}
+
+/// The callee is known to be a built-in, so its name needs no identifier rewrite.
+/// Only allow calls whose return value stays the same for constant arguments.
+/// This uses a whitelist of deterministic global functions and `Math` calls, mostly from
+/// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects
+fn is_pure_global_call(call: &CallExpr, helper: &mut BindingsHelper, scope: u32) -> bool {
+    let Callee::Expr(callee) = &call.callee else {
+        return false;
+    };
+
+    let global = match callee.as_ref() {
+        Expr::Ident(ident)
+            if matches!(
+                ident.sym.as_ref(),
+                "Number"
+                    | "String"
+                    | "Boolean"
+                    | "parseInt"
+                    | "parseFloat"
+                    | "isFinite"
+                    | "isNaN"
+                    | "encodeURI"
+                    | "encodeURIComponent"
+                    | "decodeURI"
+                    | "decodeURIComponent"
+            ) =>
+        {
+            &ident.sym
+        }
+        Expr::Member(member) if matches!(&member.prop, MemberProp::Ident(method) if matches!(method.sym.as_ref(), "abs" | "ceil" | "floor" | "max" | "min" | "trunc" | "round" | "sign" | "sqrt" | "pow" | "hypot")) =>
+        {
+            let Expr::Ident(object) = member.obj.as_ref() else {
+                return false;
+            };
+            if object.sym != "Math" {
+                return false;
+            }
+            &object.sym
+        }
+        _ => return false,
+    };
+
+    matches!(
+        helper.get_var_binding_type(scope, global),
+        BindingTypes::JsGlobal
+    )
+}
+
+/// Checks whether Expr is really just a wrapper around Ident,
+/// e.g. `justIdent`, `ident as SomeType`, `(ident)`.
+fn is_wrapped_identifier(expr: &Expr) -> bool {
+    let mut inner = expr;
+    loop {
+        inner = match inner {
+            Expr::Ident(_) => return true,
+            Expr::Paren(wrapper) => &wrapper.expr,
+            Expr::TsAs(wrapper) => &wrapper.expr,
+            Expr::TsSatisfies(wrapper) => &wrapper.expr,
+            Expr::TsNonNull(wrapper) => &wrapper.expr,
+            Expr::TsTypeAssertion(wrapper) => &wrapper.expr,
+            Expr::TsConstAssertion(wrapper) => &wrapper.expr,
+            Expr::TsInstantiation(wrapper) => &wrapper.expr,
+            _ => return false,
+        };
+    }
+}
+
 impl<'s> VisitMut for TransformVisitor<'s> {
     fn visit_mut_expr(&mut self, expr: &mut Expr) {
+        // Inspect original nodes before rewriting identifiers into members or unref calls
+        let pure_call = self.const_type != ConstantTypes::NotConstant
+            && matches!(expr, Expr::Call(call)
+                if is_pure_global_call(call, self.bindings_helper, self.current_scope));
+
+        // Detect const_type by downgrading if a potentially dynamic operation was detected
+        if self.const_type != ConstantTypes::NotConstant {
+            match expr {
+                Expr::Lit(_) => {}
+                Expr::Ident(ident) => {
+                    let binding = self
+                        .bindings_helper
+                        .get_var_binding_type(self.current_scope, &ident.sym);
+                    if self.root_is_wrapped_identifier
+                        && matches!(
+                            binding,
+                            BindingTypes::SetupConst | BindingTypes::LiteralConst
+                        )
+                    {
+                        self.const_type = ConstantTypes::CanSkipPatch;
+                    } else {
+                        self.const_type = ConstantTypes::NotConstant;
+                    }
+                }
+                Expr::Call(_) if pure_call => {
+                    self.const_type = self.const_type.min(ConstantTypes::CanSkipPatch);
+                }
+                Expr::Unary(unary) if unary.op == UnaryOp::Delete => {
+                    self.const_type = ConstantTypes::NotConstant;
+                }
+                Expr::Array(_)
+                | Expr::Object(_)
+                | Expr::Unary(_)
+                | Expr::Bin(_)
+                | Expr::Cond(_)
+                | Expr::Seq(_)
+                | Expr::Tpl(_)
+                | Expr::Paren(_)
+                | Expr::TsAs(_)
+                | Expr::TsSatisfies(_)
+                | Expr::TsNonNull(_)
+                | Expr::TsTypeAssertion(_)
+                | Expr::TsConstAssertion(_)
+                | Expr::TsInstantiation(_) => {}
+                Expr::Call(_)
+                | Expr::Member(_)
+                | Expr::OptChain(_)
+                | Expr::Assign(_)
+                | Expr::Update(_)
+                | Expr::New(_)
+                | Expr::Await(_)
+                | Expr::Yield(_)
+                | Expr::TaggedTpl(_) => self.const_type = ConstantTypes::NotConstant,
+                _ => self.const_type = ConstantTypes::NotConstant,
+            }
+        }
+
         let ident: &mut Ident = match expr {
             // Special treatment for assignment expression
             Expr::Assign(assign_expr) => {
@@ -275,7 +434,10 @@ impl<'s> VisitMut for TransformVisitor<'s> {
 
                         if matches!(binding_type, BindingTypes::SetupLet)
                             || self.is_v_model_transform
-                                && matches!(binding_type, BindingTypes::SetupMaybeRef)
+                                && matches!(
+                                    binding_type,
+                                    BindingTypes::SetupMaybeRef | BindingTypes::Imported
+                                )
                         {
                             Some((ident, binding_type))
                         } else {
@@ -316,11 +478,16 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     extract_variables_from_pat(param, &mut self.local_vars, true);
                 }
 
+                // Visit the arrow params
+                for param in &mut arrow_expr.params {
+                    self.visit_parameter_pattern(param);
+                }
+
                 // Transform the arrow body
                 arrow_expr.body.visit_mut_with(self);
 
                 // Clear the temporary variables
-                self.local_vars.drain(old_len..);
+                self.local_vars.truncate(old_len);
 
                 return;
             }
@@ -328,6 +495,17 @@ impl<'s> VisitMut for TransformVisitor<'s> {
             // Regular functions need params collection as well
             Expr::Fn(fn_expr) => {
                 let old_len = self.local_vars.len();
+
+                // For a named function remember its name as well.
+                // This allows for recursion
+                if let Some(ref name) = fn_expr.ident {
+                    self.local_vars.push(SetupBinding::new_spanned(
+                        name.sym.to_owned(),
+                        BindingTypes::TemplateLocal,
+                        name.span,
+                    ));
+                }
+
                 let func = &mut fn_expr.function;
 
                 // Add the temporary variables
@@ -336,11 +514,16 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     extract_variables_from_pat(&param.pat, &mut self.local_vars, true);
                 }
 
+                // Visit the function params
+                for param in &mut func.params {
+                    self.visit_parameter_pattern(&mut param.pat);
+                }
+
                 // Transform the function body
                 func.body.visit_mut_with(self);
 
                 // Clear the temporary variables
-                self.local_vars.drain(old_len..);
+                self.local_vars.truncate(old_len);
 
                 return;
             }
@@ -366,7 +549,9 @@ impl<'s> VisitMut for TransformVisitor<'s> {
 
             // Call expression, type arguments should not be taken into account
             Expr::Call(call_expr) => {
-                call_expr.callee.visit_mut_with(self);
+                if !pure_call {
+                    call_expr.callee.visit_mut_with(self);
+                }
                 for arg in call_expr.args.iter_mut() {
                     arg.visit_mut_with(self);
                 }
@@ -446,7 +631,11 @@ impl<'s> VisitMut for TransformVisitor<'s> {
 
     fn visit_mut_member_expr(&mut self, n: &mut MemberExpr) {
         if n.obj.is_ident() {
-            n.obj.visit_mut_with(self)
+            n.obj.visit_mut_with(self);
+
+            if let MemberProp::Computed(ref mut computed) = n.prop {
+                computed.expr.visit_mut_with(self);
+            }
         } else {
             n.visit_mut_children_with(self);
         }
@@ -456,32 +645,58 @@ impl<'s> VisitMut for TransformVisitor<'s> {
         for prop in n.props.iter_mut() {
             match prop {
                 PropOrSpread::Prop(prop) => {
-                    // For shorthand, expand it and visit the value part
-                    if let Some(shorthand) = prop.as_mut_shorthand() {
-                        let prop_name = PropName::Ident(IdentName {
-                            span: shorthand.span,
-                            sym: shorthand.sym.to_owned(),
-                        });
+                    match prop.as_mut() {
+                        // For shorthand, expand it and visit the value part
+                        Prop::Shorthand(shorthand) => {
+                            let prop_name = PropName::Ident(IdentName {
+                                span: shorthand.span,
+                                sym: shorthand.sym.to_owned(),
+                            });
 
-                        let mut value_expr = Expr::Ident(shorthand.to_owned());
-                        value_expr.visit_mut_with(self);
+                            let mut value_expr = Expr::Ident(shorthand.to_owned());
+                            value_expr.visit_mut_with(self);
 
-                        *prop = Prop::KeyValue(KeyValueProp {
-                            key: prop_name,
-                            value: Box::new(value_expr),
-                        })
-                        .into();
-                        self.has_js_bindings = true;
-                    } else if let Some(keyvalue) = prop.as_mut_key_value() {
-                        keyvalue.value.visit_mut_with(self);
+                            *prop = Prop::KeyValue(KeyValueProp {
+                                key: prop_name,
+                                value: Box::new(value_expr),
+                            })
+                            .into();
+                            self.has_js_bindings = true;
+                        }
+                        Prop::KeyValue(key_value) => {
+                            if matches!(key_value.key, PropName::Computed(_)) {
+                                self.const_type = ConstantTypes::NotConstant;
+                            }
+                            key_value.value.visit_mut_with(self);
+                        }
+
+                        // SWC says that Prop::Assign is invalid for ObjectLit,
+                        // which is true normally, but not when we are working with params
+                        // to directives like v-for
+                        // TODO: Move that transform to Pat and not Expr
+                        Prop::Assign(assign_prop) => {
+                            assign_prop.value.visit_mut_with(self);
+                        }
+
+                        _ => {
+                            self.const_type = ConstantTypes::NotConstant;
+                        }
                     }
                 }
 
                 PropOrSpread::Spread(spread) => {
+                    self.const_type = ConstantTypes::NotConstant;
                     spread.visit_mut_with(self);
                 }
             }
         }
+    }
+
+    fn visit_mut_expr_or_spread(&mut self, n: &mut ExprOrSpread) {
+        if n.spread.is_some() {
+            self.const_type = ConstantTypes::NotConstant;
+        }
+        n.expr.visit_mut_with(self);
     }
 
     // Visit the block as with respect to the variables
@@ -748,6 +963,7 @@ impl TransformVisitor<'_> {
         // Template local binding doesn't need any processing
         if let BindingTypes::TemplateLocal = binding_type {
             self.has_js_bindings = true;
+            self.has_template_scope_ref = true;
             return IdentTransformStrategy::LeaveUnchanged;
         }
 
@@ -812,6 +1028,7 @@ impl TransformVisitor<'_> {
                 | BindingTypes::SetupReactiveConst
                 | BindingTypes::SetupMaybeRef
                 | BindingTypes::SetupRef
+                | BindingTypes::Imported
         ) {
             self.has_js_bindings = true;
         }
@@ -841,6 +1058,75 @@ impl TransformVisitor<'_> {
             _ => IdentTransformStrategy::LeaveUnchanged,
         }
     }
+
+    /// Equivalent of `asParams` transform inside vuejs-core,
+    /// but adapted to work with the existing visitor.
+    ///
+    /// This should normally happen after param pattern variables were collected.
+    /// The reason for that is that JS first reads param names, and only then
+    /// processes their initialization. For example, this snippet:
+    /// ```typescript
+    /// const v = "outer";
+    /// function f(x = v, v = "inner") { return x; }
+    /// f()
+    /// ```
+    /// Actually produces `ReferenceError: Cannot access 'v' before initialization`,
+    /// but works when you provide the value:
+    /// ```typescript
+    /// f("value")
+    /// ```
+    /// That in turn means that we should also first collect parameter names,
+    /// and only then do our transformation (i.e. call this function after collection).
+    fn visit_parameter_pattern(&mut self, pat: &mut Pat) {
+        match pat {
+            Pat::Ident(_) | Pat::Invalid(_) => {}
+
+            Pat::Array(array) => {
+                for element in array.elems.iter_mut().flatten() {
+                    self.visit_parameter_pattern(element);
+                }
+            }
+
+            Pat::Rest(rest) => {
+                self.visit_parameter_pattern(&mut rest.arg);
+            }
+
+            Pat::Assign(assign) => {
+                self.visit_parameter_pattern(&mut assign.left);
+                assign.right.visit_mut_with(self);
+            }
+
+            Pat::Object(object) => {
+                for property in &mut object.props {
+                    match property {
+                        // For key-value pat (`{ x: y }`), transform the value
+                        // and the key if it is computed (`{ [x]: y }`)
+                        ObjectPatProp::KeyValue(property) => {
+                            if let PropName::Computed(key) = &mut property.key {
+                                key.expr.visit_mut_with(self);
+                            }
+                            self.visit_parameter_pattern(&mut property.value);
+                        }
+
+                        // For assign object pat (`{ x = y }`), only transform the value
+                        ObjectPatProp::Assign(property) => {
+                            if let Some(value) = &mut property.value {
+                                value.visit_mut_with(self);
+                            }
+                        }
+
+                        ObjectPatProp::Rest(rest) => {
+                            self.visit_parameter_pattern(&mut rest.arg);
+                        }
+                    }
+                }
+            }
+
+            Pat::Expr(expr) => {
+                expr.visit_mut_with(self);
+            }
+        }
+    }
 }
 
 /// Gets the variable prefix depending on if we are compiling the template in inline mode.
@@ -868,14 +1154,16 @@ pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<Fervid
         BindingTypes::Options => Some(FervidAtom::from("$options")),
         BindingTypes::TemplateLocal
         | BindingTypes::JsGlobal
-        | BindingTypes::LiteralConst
-        | BindingTypes::Component
-        | BindingTypes::Imported => None,
+        | BindingTypes::Component => None,
         BindingTypes::SetupConst
         | BindingTypes::SetupLet
         | BindingTypes::SetupMaybeRef
         | BindingTypes::SetupReactiveConst
-        | BindingTypes::SetupRef => Some(FervidAtom::from("$setup")),
+        | BindingTypes::SetupRef
+        // TODO: LiteralConst should be moved to the module top,
+        // check if it should still be referenced as `$setup` then
+        | BindingTypes::LiteralConst
+        | BindingTypes::Imported => Some(FervidAtom::from("$setup")),
         BindingTypes::Unresolved => Some(FervidAtom::from("_ctx")),
         BindingTypes::PropsAliased => unimplemented!(),
     }
@@ -1011,17 +1299,61 @@ fn wrap_in_assignment(lhs: AssignTarget, rhs_expr: Box<Expr>, op: AssignOp) -> B
     }))
 }
 
+fn wrap_in_model_event_arrow(expr: Box<Expr>, is_ts: bool) -> Box<Expr> {
+    let type_ann = is_ts.then(|| {
+        Box::new(TsTypeAnn {
+            span: DUMMY_SP,
+            type_ann: Box::new(TsType::TsKeywordType(TsKeywordType {
+                span: DUMMY_SP,
+                kind: TsKeywordTypeKind::TsAnyKeyword,
+            })),
+        })
+    });
+
+    // $event or $event: any
+    let event = Pat::Ident(BindingIdent {
+        id: FervidAtom::from("$event").into_ident(),
+        type_ann,
+    });
+
+    Box::new(Expr::Arrow(ArrowExpr {
+        span: DUMMY_SP,
+        ctxt: Default::default(),
+        params: vec![event],
+        body: Box::new(BlockStmtOrExpr::Expr(expr)),
+        is_async: false,
+        is_generator: false,
+        type_params: None,
+        return_type: None,
+    }))
+}
+
+pub fn is_model_member_expression(expr: &Expr) -> bool {
+    match expr {
+        Expr::Ident(ident) => ident.sym != "undefined",
+        Expr::Member(_) => true,
+        Expr::OptChain(chain) => {
+            // Member check is to match vuejs-core
+            // https://github.com/vuejs/core/blob/a2b40db9a83b36ed9da3a16403cf8f040262d73f/packages/compiler-core/src/utils.ts#L179
+            matches!(chain.base.as_ref(), OptChainBase::Member(_))
+        }
+        Expr::Paren(paren) => is_model_member_expression(&paren.expr),
+        Expr::TsNonNull(non_null) => is_model_member_expression(&non_null.expr),
+        Expr::TsAs(ts_as) => is_model_member_expression(&ts_as.expr),
+        Expr::TsInstantiation(instantiation) => is_model_member_expression(&instantiation.expr),
+        Expr::TsSatisfies(satisfies) => is_model_member_expression(&satisfies.expr),
+        Expr::TsTypeAssertion(assertion) => is_model_member_expression(&assertion.expr),
+        _ => false,
+    }
+}
+
 fn convert_expr_to_assign_target(expr: Expr) -> Option<AssignTarget> {
+    if !is_model_member_expression(&expr) {
+        return None;
+    }
+
     // Because AssignTarget is strongly typed, we have to map from `Expr` to `AssignTarget`
     match expr {
-        Expr::Array(arr) => Some(AssignTarget::Pat(AssignTargetPat::Array(
-            convert_arr_lit_to_pat(arr),
-        ))),
-
-        Expr::Object(obj) => Some(AssignTarget::Pat(AssignTargetPat::Object(
-            convert_obj_lit_to_pat(obj),
-        ))),
-
         Expr::Ident(ident) => Some(AssignTarget::Simple(SimpleAssignTarget::Ident(
             BindingIdent {
                 id: ident,
@@ -1054,26 +1386,15 @@ fn convert_expr_to_assign_target(expr: Expr) -> Option<AssignTarget> {
     }
 }
 
-fn convert_arr_lit_to_pat(_arr_lit: ArrayLit) -> ArrayPat {
-    todo!()
-}
-
-fn convert_obj_lit_to_pat(_obj_lit: ObjectLit) -> ObjectPat {
-    todo!()
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{
         BindingsHelper, SetupBinding, TemplateScope,
         template::{expr_transform::BindingsHelperTransform, js_builtins::JS_BUILTINS},
-        test_utils::{parser::parse_javascript_expr, to_str},
+        test_utils::{js, pat, to_str, ts},
     };
-    use fervid_core::{
-        BindingTypes, FervidAtom, PatchHints, StrOrExpr, TemplateGenerationMode, VModelDirective,
-    };
+    use fervid_core::{BindingTypes, ConstantTypes, FervidAtom, TemplateGenerationMode};
     use smallvec::SmallVec;
-    use swc_core::common::DUMMY_SP;
 
     #[test]
     fn it_acknowledges_builtins() {
@@ -1094,6 +1415,130 @@ mod tests {
                 helper.get_var_binding_type(0, &FervidAtom::from(*builtin))
             );
         }
+    }
+
+    #[test]
+    fn it_keeps_newer_standard_globals_unprefixed() {
+        let mut helper = BindingsHelper::default();
+
+        for name in [
+            "Float16Array",
+            "SuppressedError",
+            "DisposableStack",
+            "AsyncDisposableStack",
+        ] {
+            assert_eq!(
+                helper.get_var_binding_type(0, &FervidAtom::from(name)),
+                BindingTypes::JsGlobal,
+                "{name}"
+            );
+            let mut expression = js(name);
+            helper.transform_expr(&mut expression, 0);
+            assert_eq!(to_str(&expression), name);
+        }
+    }
+
+    #[test]
+    fn it_classifies_constant_sources_and_dynamic_controls() {
+        let mut helper = BindingsHelper {
+            template_generation_mode: TemplateGenerationMode::Inline,
+            ..Default::default()
+        };
+        helper.setup_bindings.extend([
+            SetupBinding::new(FervidAtom::from("list"), BindingTypes::SetupConst),
+            SetupBinding::new(FervidAtom::from("label"), BindingTypes::LiteralConst),
+            SetupBinding::new(FervidAtom::from("items"), BindingTypes::SetupRef),
+            SetupBinding::new(
+                FervidAtom::from("reactiveList"),
+                BindingTypes::SetupReactiveConst,
+            ),
+        ]);
+
+        for (source, expected_type, has_js_bindings) in [
+            ("3", ConstantTypes::CanStringify, false),
+            ("[1, 2, 3]", ConstantTypes::CanStringify, false),
+            ("{ a: 1 }", ConstantTypes::CanStringify, false),
+            ("1 + 2", ConstantTypes::CanStringify, false),
+            ("`constant`", ConstantTypes::CanStringify, false),
+            ("list", ConstantTypes::CanSkipPatch, false),
+            ("label", ConstantTypes::CanSkipPatch, false),
+            ("Number('1')", ConstantTypes::CanSkipPatch, false),
+            ("Math.max(1, 2)", ConstantTypes::CanSkipPatch, false),
+            ("Math.round(2.7)", ConstantTypes::CanSkipPatch, false),
+            ("parseInt('2', 10)", ConstantTypes::CanSkipPatch, false),
+            ("encodeURI('a b')", ConstantTypes::CanSkipPatch, false),
+            ("items", ConstantTypes::NotConstant, true),
+            ("reactiveList", ConstantTypes::NotConstant, true),
+            ("Math.random()", ConstantTypes::NotConstant, false),
+            ("parseInt(items)", ConstantTypes::NotConstant, true),
+            ("Math.round(items)", ConstantTypes::NotConstant, true),
+            ("Date.now()", ConstantTypes::NotConstant, false),
+            ("list.slice()", ConstantTypes::NotConstant, false),
+            ("list.length", ConstantTypes::NotConstant, false),
+            ("list || []", ConstantTypes::NotConstant, false),
+            ("[list]", ConstantTypes::NotConstant, false),
+            ("[...list]", ConstantTypes::NotConstant, false),
+            ("[...[1, 2]]", ConstantTypes::NotConstant, false),
+            ("{ ...list }", ConstantTypes::NotConstant, false),
+            ("{ [list]: 1 }", ConstantTypes::NotConstant, false),
+            ("Number(items)", ConstantTypes::NotConstant, true),
+            ("getList()", ConstantTypes::NotConstant, true),
+            ("(list)", ConstantTypes::CanSkipPatch, false),
+            ("((list))", ConstantTypes::CanSkipPatch, false),
+            ("(list || [])", ConstantTypes::NotConstant, false),
+        ] {
+            let mut expression = js(source);
+            let metadata = helper.transform_expr(&mut expression, 0);
+            assert_eq!(metadata.const_type, expected_type, "{source}");
+            assert_eq!(metadata.has_js_bindings, has_js_bindings, "{source}");
+        }
+
+        helper.template_scopes.push(TemplateScope {
+            variables: SmallVec::from_vec(vec![FervidAtom::from("list")]),
+            parent: 0,
+        });
+        let mut shadowed = js("list");
+        let metadata = helper.transform_expr(&mut shadowed, 0);
+        assert_eq!(metadata.const_type, ConstantTypes::NotConstant);
+        assert!(metadata.has_template_scope_ref);
+    }
+
+    #[test]
+    fn it_classifies_setup_constants_before_render_function_prefixing() {
+        let mut helper = BindingsHelper::default();
+        helper.setup_bindings.push(SetupBinding::new(
+            FervidAtom::from("list"),
+            BindingTypes::SetupConst,
+        ));
+        let mut expression = js("list");
+
+        let metadata = helper.transform_expr(&mut expression, 0);
+
+        assert_eq!(metadata.const_type, ConstantTypes::CanSkipPatch);
+        assert!(metadata.has_js_bindings);
+        assert_eq!(to_str(&expression), "$setup.list");
+    }
+
+    #[test]
+    fn it_classifies_transparent_typescript_wrappers() {
+        let mut helper = BindingsHelper {
+            template_generation_mode: TemplateGenerationMode::Inline,
+            ..Default::default()
+        };
+        helper.setup_bindings.extend([
+            SetupBinding::new(FervidAtom::from("list"), BindingTypes::SetupConst),
+            SetupBinding::new(FervidAtom::from("items"), BindingTypes::SetupRef),
+        ]);
+
+        for source in ["list as number[]", "list!", "(list as number[])!"] {
+            let mut expression = ts(source);
+            let metadata = helper.transform_expr(&mut expression, 0);
+            assert_eq!(metadata.const_type, ConstantTypes::CanSkipPatch, "{source}");
+        }
+
+        let mut dynamic = ts("items as number[]");
+        let metadata = helper.transform_expr(&mut dynamic, 0);
+        assert_eq!(metadata.const_type, ConstantTypes::NotConstant);
     }
 
     #[test]
@@ -1128,173 +1573,106 @@ mod tests {
         );
     }
 
+    // Additional parameter-scope tests checked against vuejs compiler-sfc 3.5.45
+    // https://github.com/vuejs/core/blob/8b479a89445868d474f17e2d837765e7c9ece5e4/packages/compiler-core/src/babelUtils.ts#L197-L325
     #[test]
-    fn it_transforms_v_model() {
-        let mut helper = BindingsHelper::default();
-
-        // const Ref = ref('foo')
-        // const MaybeRef = useSomething()
-        // const Const = 123
-        // let Let = 123
-        // const Reactive = reactive({})
-        helper.setup_bindings.push(SetupBinding::new(
-            FervidAtom::from("Ref"),
-            BindingTypes::SetupRef,
-        ));
-        helper.setup_bindings.push(SetupBinding::new(
-            FervidAtom::from("MaybeRef"),
-            BindingTypes::SetupMaybeRef,
-        ));
-        helper.setup_bindings.push(SetupBinding::new(
-            FervidAtom::from("Const"),
-            BindingTypes::SetupConst,
-        ));
-        helper.setup_bindings.push(SetupBinding::new(
-            FervidAtom::from("Let"),
-            BindingTypes::SetupLet,
-        ));
-        helper.setup_bindings.push(SetupBinding::new(
-            FervidAtom::from("Reactive"),
-            BindingTypes::SetupReactiveConst,
-        ));
-
-        macro_rules! test {
-            ($value: literal, $expected_value: literal, $expected_handler: literal) => {
-                let mut v_model = VModelDirective {
-                    argument: None,
-                    value: js($value),
-                    update_handler: None,
-                    modifiers: vec![],
-                    span: DUMMY_SP,
-                };
-                let mut patch_hints = PatchHints::default();
-                helper.transform_v_model(&mut v_model, 0, &mut patch_hints);
-                assert_eq!(to_str(&v_model.value), $expected_value);
-                assert_eq!(
-                    to_str(&v_model.update_handler.expect("Handler cannot be None")),
-                    $expected_handler
-                );
-            };
-        }
-
-        // Syntax is like that:
-        // first element is `$expr` in `v-model="$expr"`;
-        // second is the transformed value;
-        // third is the transformed update handler.
-
-        // DEV DIRECT
-        test!("Ref", "$setup.Ref", "$event=>$setup.Ref=$event");
-        test!(
-            "MaybeRef",
-            "$setup.MaybeRef",
-            "$event=>$setup.MaybeRef=$event"
-        ); // TODO must err?
-        test!("Const", "$setup.Const", "$event=>$setup.Const=$event"); // TODO must err
-        test!("Let", "$setup.Let", "$event=>$setup.Let=$event");
-        test!(
-            "Reactive",
-            "$setup.Reactive",
-            "$event=>$setup.Reactive=$event"
-        ); // TODO must err
-        test!("Unknown", "_ctx.Unknown", "$event=>_ctx.Unknown=$event");
-
-        // DEV INDIRECT
-        test!("Ref.x", "$setup.Ref.x", "$event=>$setup.Ref.x=$event");
-        test!(
-            "MaybeRef.x",
-            "$setup.MaybeRef.x",
-            "$event=>$setup.MaybeRef.x=$event"
-        );
-        test!("Const.x", "$setup.Const.x", "$event=>$setup.Const.x=$event");
-        test!("Let.x", "$setup.Let.x", "$event=>$setup.Let.x=$event");
-        test!(
-            "Reactive.x",
-            "$setup.Reactive.x",
-            "$event=>$setup.Reactive.x=$event"
-        );
-        test!(
-            "Unknown.x",
-            "_ctx.Unknown.x",
-            "$event=>_ctx.Unknown.x=$event"
-        );
-
-        // PROD DIRECT
-        helper.is_prod = true;
-        helper.template_generation_mode = TemplateGenerationMode::Inline;
-        test!("Ref", "Ref.value", "$event=>Ref.value=$event");
-        test!(
-            "MaybeRef",
-            "_unref(MaybeRef)",
-            // This is the official spec, but it is inconsistent with the `v-on` transform
-            "$event=>_isRef(MaybeRef)?MaybeRef.value=$event:null"
-        );
-        test!("Const", "Const", "$event=>Const=$event"); // TODO must err
-        test!(
-            "Let",
-            "_unref(Let)",
-            "$event=>_isRef(Let)?Let.value=$event:Let=$event"
-        );
-        test!("Reactive", "Reactive", "$event=>Reactive=$event"); // TODO must err
-        test!("Unknown", "_ctx.Unknown", "$event=>_ctx.Unknown=$event");
-
-        // PROD INDIRECT
-        test!("Ref.x", "Ref.value.x", "$event=>Ref.value.x=$event");
-        test!(
-            "MaybeRef.x",
-            "_unref(MaybeRef).x",
-            "$event=>_unref(MaybeRef).x=$event"
-        );
-        test!("Const.x", "Const.x", "$event=>Const.x=$event");
-        test!("Let.x", "_unref(Let).x", "$event=>_unref(Let).x=$event");
-        test!("Reactive.x", "Reactive.x", "$event=>Reactive.x=$event");
-        test!(
-            "Unknown.x",
-            "_ctx.Unknown.x",
-            "$event=>_ctx.Unknown.x=$event"
+    fn it_transforms_nested_function_parameter_defaults() {
+        assert_expression_transform(
+            "function (x = name, y = x, z = function(v) { return y + bar - v }, v = foo) {}",
+            "function(x=_ctx.name,y=x,z=function(v){return y+_ctx.bar-v;},v=_ctx.foo){}",
         );
     }
 
     #[test]
-    fn it_transforms_v_model_arg() {
+    fn it_collects_all_arrow_parameters_before_defaults() {
+        // A direct read preserves the local binding's temporal dead zone
+        assert_expression_transform("(x = v, v = foo) => x + v", "(x=v,v=_ctx.foo)=>x+v");
+        // A closure reads the same binding after parameter initialization
+        assert_expression_transform("(x = () => v, v = foo) => x()", "(x=()=>v,v=_ctx.foo)=>x()");
+    }
+
+    #[test]
+    fn it_restores_parameter_and_function_name_scopes() {
+        assert_expression_transform(
+            "(function recur(x = recur) { return recur(x) }, recur)",
+            "(function recur(x=recur){return recur(x);},_ctx.recur)",
+        );
+        assert_expression_transform("((x = outer) => x, x)", "((x=_ctx.outer)=>x,_ctx.x)");
+    }
+
+    #[test]
+    fn it_keeps_function_body_bindings_out_of_parameter_defaults() {
+        assert_expression_transform(
+            "function (x = foo) { const foo = 1; return x + foo }",
+            "function(x=_ctx.foo){const foo=1;return x+foo;}",
+        );
+    }
+
+    #[test]
+    fn it_transforms_parameter_computed_keys_and_nested_defaults() {
+        assert_expression_transform(
+            "({ [key]: value = fallback, nested: [item = value], ...rest }) => value + item + rest + key",
+            "({[_ctx.key]:value=_ctx.fallback,nested:[item=value],...rest})=>value+item+rest+_ctx.key",
+        );
+    }
+
+    #[test]
+    fn it_tracks_nested_array_rest_arrow_parameters() {
+        assert_expression_transform("(...[foo = outer]) => foo", "(...[foo=_ctx.outer])=>foo");
+    }
+
+    #[test]
+    fn it_tracks_nested_array_rest_function_parameters() {
+        assert_expression_transform(
+            "function ([...[foo]]) { return foo + outer }",
+            "function([...[foo]]){return foo+_ctx.outer;}",
+        );
+    }
+
+    #[test]
+    fn it_tracks_object_pattern_inside_array_rest_parameters() {
+        assert_expression_transform(
+            "([...{ length }]) => length + outer",
+            "([...{length}])=>length+_ctx.outer",
+        );
+    }
+
+    #[test]
+    fn it_tracks_nested_rest_bindings_in_function_body() {
+        assert_expression_transform(
+            "() => { const [...[foo]] = items; return foo + outer }",
+            "()=>{const[...[foo]]=_ctx.items;return foo+_ctx.outer;}",
+        );
+    }
+
+    #[test]
+    fn it_tracks_nested_rest_bindings_in_root_parameter_pattern() {
         let mut helper = BindingsHelper::default();
 
-        // const Ref = ref('foo')
-        helper.setup_bindings.push(SetupBinding::new(
-            FervidAtom::from("Ref"),
-            BindingTypes::SetupRef,
-        ));
+        let mut pattern = pat("[...[foo = outer, bar = foo]]");
+        helper.transform_pat(&mut pattern, 0);
+        assert_eq!(to_str(&pattern), "[...[foo=_ctx.outer,bar=foo]]");
 
-        macro_rules! test {
-            ($argument: literal, $expected: literal) => {
-                let mut v_model = VModelDirective {
-                    argument: Some(StrOrExpr::Expr(js($argument))),
-                    value: js("dummy"),
-                    update_handler: None,
-                    modifiers: vec![],
-                    span: DUMMY_SP,
-                };
-                let mut patch_hints = PatchHints::default();
-                helper.transform_v_model(&mut v_model, 0, &mut patch_hints);
-                let Some(StrOrExpr::Expr(arg_expr)) = v_model.argument else {
-                    unreachable!("This is something unexpected")
-                };
-                assert_eq!(to_str(&arg_expr), $expected);
-            };
+        // Root parameter locals must not leak into a subsequent expression transform
+        let mut outside = js("foo");
+        helper.transform_expr(&mut outside, 0);
+        assert_eq!(to_str(&outside), "_ctx.foo");
+    }
+
+    #[test]
+    fn it_transforms_computed_member_keys() {
+        let mut helper = BindingsHelper::default();
+
+        for (input, expected) in [
+            ("foo[bar]", "_ctx.foo[_ctx.bar]"),
+            ("foo[bar][baz]", "_ctx.foo[_ctx.bar][_ctx.baz]"),
+            ("foo.bar", "_ctx.foo.bar"),
+        ] {
+            let mut expr = js(input);
+            helper.transform_expr(&mut expr, 0);
+
+            assert_eq!(to_str(&expr), expected);
         }
-
-        // The first is `$expr` in `v-model:[$expr]="dummy"`, the second is expected
-
-        // DEV
-        test!("Ref", "$setup.Ref");
-        test!("Unknown", "_ctx.Unknown");
-        test!("\"string\"", "\"string\"");
-
-        // PROD
-        helper.is_prod = true;
-        helper.template_generation_mode = TemplateGenerationMode::Inline;
-        test!("Ref", "Ref.value");
-        test!("Unknown", "_ctx.Unknown");
-        test!("\"string\"", "\"string\"");
     }
 
     #[test]
@@ -1468,9 +1846,41 @@ mod tests {
         println!("Elapsed total: {:?}", st0.elapsed())
     }
 
-    fn js(input: &str) -> Box<swc_core::ecma::ast::Expr> {
-        parse_javascript_expr(input, 0, Default::default())
-            .expect("js expects the input to be parseable")
-            .0
+    #[test]
+    fn it_works_with_imported() {
+        let mut helper = BindingsHelper {
+            template_generation_mode: TemplateGenerationMode::Inline,
+            ..Default::default()
+        };
+
+        // import imported from './somewhere'
+        helper.setup_bindings.push(SetupBinding::new(
+            FervidAtom::from("imported"),
+            BindingTypes::Imported,
+        ));
+
+        macro_rules! test {
+            ($expr: literal, $expected: literal) => {
+                let mut expr = js($expr);
+                helper.transform_expr(&mut expr, 0);
+
+                assert_eq!(to_str(&expr), $expected);
+            };
+        }
+
+        test!("imported", "_unref(imported)");
+        test!("imported.value", "_unref(imported).value");
+
+        helper.template_generation_mode = TemplateGenerationMode::RenderFn;
+
+        test!("imported", "$setup.imported");
+        test!("imported.value", "$setup.imported.value");
+    }
+
+    fn assert_expression_transform(input: &str, expected: &str) {
+        let mut helper = BindingsHelper::default();
+        let mut expression = js(input);
+        helper.transform_expr(&mut expression, 0);
+        assert_eq!(to_str(&expression), expected, "{input}");
     }
 }

@@ -1017,4 +1017,47 @@ mod tests {
         expect_no_error!("export type Foo = Bar | Baz");
         expect_no_error!("export interface Foo {}");
     }
+
+    #[test]
+    fn rest_binding_classification_survives_script_setup_analysis() {
+        // Nested bindings intentionally improve on Vue's SFC collector; normal rest keeps Vue semantics
+        for (source, expected) in [
+            (
+                "const [...rest] = source",
+                vec![("rest", BindingTypes::SetupConst)],
+            ),
+            (
+                "let [...rest] = source",
+                vec![("rest", BindingTypes::SetupLet)],
+            ),
+            (
+                "var {...rest} = source",
+                vec![("rest", BindingTypes::SetupLet)],
+            ),
+            (
+                "const [...[value]] = source",
+                vec![("value", BindingTypes::SetupMaybeRef)],
+            ),
+            (
+                "let [...[value]] = source",
+                vec![("value", BindingTypes::SetupLet)],
+            ),
+            (
+                "const [head, ...[value, ...tail]] = source",
+                vec![
+                    ("head", BindingTypes::SetupMaybeRef),
+                    ("value", BindingTypes::SetupMaybeRef),
+                    ("tail", BindingTypes::SetupConst),
+                ],
+            ),
+        ] {
+            for bindings in [analyze_js_bindings(source), analyze_ts_bindings(source)] {
+                let actual: Vec<_> = bindings
+                    .iter()
+                    .map(|binding| (binding.sym.as_str(), binding.binding_type))
+                    .collect();
+                assert_eq!(actual, expected, "{source}");
+            }
+        }
+    }
 }

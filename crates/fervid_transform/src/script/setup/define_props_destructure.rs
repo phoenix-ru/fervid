@@ -24,9 +24,8 @@ use crate::{
         resolve_type::TypeResolveContext,
         utils::{is_call_of, resolve_object_key},
     },
+    utils::unwrap_ts_node_expr,
 };
-
-use super::utils::unwrap_ts_node_expr;
 
 // TODO This is a difference with the official compiler:
 // - official compiler does separate collection (called `process`) and processing (called `extract`) loops;
@@ -880,6 +879,42 @@ mod tests {
         let compiled = to_str(&module);
         assert!(!compiled.contains("const {"));
         assert!(compiled.contains("console.log(__props.msg)"));
+    }
+
+    #[test]
+    fn nested_rest_bindings_shadow_destructured_props_only_inside_local_scope() {
+        for (declaration, expected) in [
+            (
+                "const read = (...[foo]) => foo;",
+                "const read=(...[foo])=>foo;console.log(__props.foo);",
+            ),
+            (
+                "const read = function (...[foo]) { return foo };",
+                "const read=function(...[foo]){return foo;};console.log(__props.foo);",
+            ),
+            (
+                "function read() { const [...[foo]] = source; return foo }",
+                "function read(){const[...[foo]]=source;return foo;}console.log(__props.foo);",
+            ),
+        ] {
+            let mut ctx = new_ctx();
+            let mut errors = vec![];
+            let mut module = ts_module(&format!(
+                "const {{ foo }} = defineProps<{{ foo: number }}>();{declaration}console.log(foo);"
+            ));
+
+            collect_macros(&mut ctx, &module, &mut errors);
+            transform_destructured_props(&mut ctx, &mut [], &mut module.body, &mut errors);
+
+            assert!(errors.is_empty(), "{errors:#?}");
+            // This test pass simply rewrites references,
+            // while script setup transformation removes the macro declaration
+            assert_eq!(
+                to_str(&module),
+                format!("const{{foo:foo}}=defineProps<{{foo:number;}}>();{expected}"),
+                "{declaration}"
+            );
+        }
     }
 
     fn new_ctx() -> TypeResolveContext {

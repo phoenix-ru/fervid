@@ -27,6 +27,8 @@
 //!   scope_id: "filehash",
 //!   filename: "input.vue",
 //!   transform_asset_urls: fervid_transform::TransformAssetUrlsConfig::default(),
+//!   directive_transforms: Default::default(),
+//!   node_transforms: Default::default(),
 //! };
 //! let transform_result = fervid_transform::transform_sfc(sfc, transform_options, &mut transform_errors);
 //!
@@ -147,6 +149,11 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
     // TODO Research if it's better to compute that on the caller site or here
     let file_hash = compute_scope_id(source);
 
+    // Get the correct transforms
+    // TODO
+    let directive_transforms = Default::default();
+    let node_transforms = Default::default();
+
     // Transform
     let mut transform_errors = Vec::new();
     let transform_options = TransformSfcOptions {
@@ -156,6 +163,8 @@ pub fn compile(source: &str, options: CompileOptions) -> Result<CompileResult, C
         scope_id: &file_hash,
         filename: &options.filename,
         transform_asset_urls: options.transform_asset_urls.unwrap_or_default(),
+        directive_transforms,
+        node_transforms,
     };
     let transform_result = transform_sfc(sfc, transform_options, &mut transform_errors);
     all_errors.extend(transform_errors.into_iter().map(From::from));
@@ -248,6 +257,8 @@ pub fn compile_sync_naive(source: &str, is_prod: bool) -> Result<String, String>
         scope_id: &file_hash,
         filename: "anonymous.vue",
         transform_asset_urls: TransformAssetUrlsConfig::default(),
+        directive_transforms: Default::default(),
+        node_transforms: Default::default(),
     };
     let transform_result = transform_sfc(sfc, transform_options, &mut transform_errors);
 

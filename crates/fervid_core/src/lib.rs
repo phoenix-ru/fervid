@@ -1,4 +1,5 @@
 mod all_html_tags;
+mod ast;
 mod bindings;
 pub mod error;
 mod sfc;
@@ -9,6 +10,7 @@ mod vue_builtins;
 mod vue_imports;
 
 pub use all_html_tags::is_html_tag;
+pub use ast::*;
 pub use bindings::*;
 pub use sfc::*;
 pub use structs::*;

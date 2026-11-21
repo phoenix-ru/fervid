@@ -6,7 +6,7 @@ use fervid_core::{
 };
 use swc_core::{
     common::{BytePos, Span},
-    ecma::ast::Expr,
+    ecma::ast::Str,
 };
 use swc_ecma_parser::Syntax;
 use swc_html_ast::Attribute;
@@ -14,6 +14,7 @@ use swc_html_ast::Attribute;
 use crate::{
     SfcParser,
     error::{ParseError, ParseErrorKind},
+    v_for::parse_v_for,
 };
 
 impl SfcParser<'_, '_, '_> {
@@ -299,7 +300,20 @@ impl SfcParser<'_, '_, '_> {
         let argument = match (argument_name, is_argument_dynamic) {
             ("", _) => None,
 
-            (static_name, false) => Some(StrOrExpr::Str(FervidAtom::from(static_name))),
+            (static_name, false) => {
+                let argument_start = static_name.as_ptr() as usize - raw_name.as_ptr() as usize;
+                let span_lo = raw_attribute.span.lo.0 + argument_start as u32;
+                let span = Span {
+                    lo: BytePos(span_lo),
+                    hi: BytePos(span_lo + static_name.len() as u32),
+                };
+
+                Some(StrOrExpr::Str(Str {
+                    span,
+                    value: static_name.into(),
+                    raw: None,
+                }))
+            }
 
             (dynamic_name, true) => {
                 let attr_lo = raw_attribute.span.lo.0;
@@ -381,7 +395,7 @@ impl SfcParser<'_, '_, '_> {
                         // This only works for static arguments
                         if let Some(StrOrExpr::Str(ref s)) = argument {
                             let mut out = String::with_capacity(raw_name.len());
-                            to_camel_case(s, &mut out);
+                            to_camel_case(&s.value, &mut out);
                             Cow::Owned(out)
                         } else {
                             bail!(ParseErrorKind::DirectiveSyntax);
@@ -403,6 +417,7 @@ impl SfcParser<'_, '_, '_> {
                     is_prop,
                     is_attr,
                     span,
+                    const_type: fervid_core::ConstantTypes::NotConstant,
                 }));
             }
 
@@ -442,41 +457,28 @@ impl SfcParser<'_, '_, '_> {
             "for" => {
                 let value = expect_value!();
 
-                let Some(((itervar, itervar_span), (iterable, iterable_span))) =
-                    split_itervar_and_iterable(value, span)
-                else {
-                    bail!(ParseErrorKind::DirectiveSyntax);
+                let for_parse_result = match parse_v_for(value, span, &self.comments) {
+                    Ok(result) => result,
+                    Err(e) => {
+                        // Not really a `js` error, but that macro is convenient here
+                        bail!(js, e);
+                    }
                 };
 
-                match self.parse_expr(itervar, ts!(), itervar_span) {
-                    Ok(itervar) => match self.parse_expr(iterable, ts!(), iterable_span) {
-                        Ok(iterable) => {
-                            push_directive!(
-                                v_for,
-                                VForDirective {
-                                    iterable,
-                                    itervar,
-                                    patch_flags: Default::default(),
-                                    span
-                                }
-                            );
-                        }
-                        Result::Err(expr_err) => self.report_error(expr_err),
-                    },
-                    Result::Err(expr_err) => self.report_error(expr_err),
-                };
+                push_directive!(
+                    v_for,
+                    VForDirective {
+                        parse_result: Box::new(for_parse_result),
+                        patch_flags: Default::default(),
+                        span,
+                    }
+                );
             }
 
             "model" => {
                 let value = expect_value!();
 
                 if let Ok(model_binding) = self.parse_expr(value, ts!(), span) {
-                    // v-model value must be a valid JavaScript member expression
-                    if !matches!(*model_binding, Expr::Member(_) | Expr::Ident(_)) {
-                        // TODO Report an error
-                        bail!();
-                    }
-
                     let directives = get_directives!();
                     directives.v_model.push(VModelDirective {
                         argument,
@@ -547,6 +549,7 @@ impl SfcParser<'_, '_, '_> {
                         argument,
                         modifiers,
                         value: None,
+                        span: raw_attribute.span,
                     });
                     break 'custom;
                 };
@@ -560,6 +563,7 @@ impl SfcParser<'_, '_, '_> {
                             argument,
                             modifiers,
                             value: Some(parsed),
+                            span: raw_attribute.span,
                         });
                     }
                     Result::Err(expr_err) => self.report_error(expr_err),
@@ -576,56 +580,9 @@ impl SfcParser<'_, '_, '_> {
 pub fn create_regular_attribute(raw_attribute: Attribute) -> AttributeOrBinding {
     AttributeOrBinding::RegularAttribute {
         name: raw_attribute.name,
-        value: raw_attribute.value.unwrap_or_default(),
+        value: raw_attribute.value,
         span: raw_attribute.span,
     }
-}
-
-type ItervarOrIterable<'a> = (&'a str, Span);
-
-fn split_itervar_and_iterable(
-    raw: &str,
-    original_span: Span,
-) -> Option<(ItervarOrIterable<'_>, ItervarOrIterable<'_>)> {
-    // `item in iterable` or `item of iterable`
-    let split_idx = raw.find(" in ").or_else(|| raw.find(" of "))?;
-    const SPLIT_LEN: usize = " in ".len();
-
-    // Get the trimmed itervar and its span
-    let mut offset = original_span.lo.0;
-    let mut itervar = &raw[..split_idx];
-    let mut itervar_old_len = itervar.len();
-    itervar = itervar.trim_start();
-    let itervar_lo = BytePos(offset + (itervar_old_len - itervar.len()) as u32);
-    itervar_old_len = itervar.len();
-    itervar = itervar.trim_end();
-    let itervar_hi = BytePos(offset + (split_idx - (itervar_old_len - itervar.len())) as u32);
-
-    let iterable_start = split_idx + SPLIT_LEN;
-    offset += iterable_start as u32;
-
-    let mut iterable = &raw[iterable_start..];
-    let iterable_old_len = iterable.len();
-    iterable = iterable.trim_start();
-    let iterable_lo = BytePos(offset + (iterable_old_len - iterable.len()) as u32);
-    iterable = iterable.trim_end();
-    let iterable_hi = BytePos(iterable_lo.0 + iterable.len() as u32);
-
-    if itervar.is_empty() || iterable.is_empty() {
-        return None;
-    }
-
-    let new_span_itervar = Span {
-        lo: itervar_lo,
-        hi: itervar_hi,
-    };
-
-    let new_span_iterable = Span {
-        lo: iterable_lo,
-        hi: iterable_hi,
-    };
-
-    Some(((itervar, new_span_itervar), (iterable, new_span_iterable)))
 }
 
 /// `foo-bar-baz` -> `fooBarBaz`
@@ -652,6 +609,8 @@ fn to_camel_case(raw: &str, out: &mut String) {
 
 #[cfg(test)]
 mod tests {
+    use swc_core::ecma::ast::Pat;
+
     use super::*;
 
     #[test]
@@ -682,7 +641,7 @@ mod tests {
                 handler: Some(_),
                 modifiers,
                 ..
-            })) if s == "click" && modifiers.is_empty()
+            })) if s.value == "click" && modifiers.is_empty()
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding("@click", "handle"),
@@ -691,7 +650,7 @@ mod tests {
                 handler: Some(_),
                 modifiers,
                 ..
-            })) if s == "click" && modifiers.is_empty()
+            })) if s.value == "click" && modifiers.is_empty()
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding("@click.mod1.mod2", "handle"),
@@ -700,7 +659,7 @@ mod tests {
                 handler: Some(_),
                 modifiers,
                 ..
-            })) if s == "click" && modifiers.len() == 2
+            })) if s.value == "click" && modifiers.len() == 2
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding("@[click]", "handle"),
@@ -762,7 +721,7 @@ mod tests {
                 is_prop: false,
                 is_attr: false,
                 ..
-            })) if value.is_ident() && arg == "arg-name"
+            })) if value.is_ident() && arg.value == "arg-name"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(":arg-name", "value"),
@@ -773,7 +732,7 @@ mod tests {
                 is_prop: false,
                 is_attr: false,
                 ..
-            })) if value.is_ident() && arg == "arg-name"
+            })) if value.is_ident() && arg.value == "arg-name"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(":arg.mod1", "value"),
@@ -784,7 +743,7 @@ mod tests {
                 is_prop: false,
                 is_attr: false,
                 ..
-            })) if value.is_ident() && arg == "arg"
+            })) if value.is_ident() && arg.value == "arg"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(":arg.camel", "value"),
@@ -795,7 +754,7 @@ mod tests {
                 is_prop: false,
                 is_attr: false,
                 ..
-            })) if value.is_ident() && arg == "arg"
+            })) if value.is_ident() && arg.value == "arg"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(":arg.prop", "value"),
@@ -806,7 +765,7 @@ mod tests {
                 is_prop: true,
                 is_attr: false,
                 ..
-            })) if value.is_ident() && arg == "arg"
+            })) if value.is_ident() && arg.value == "arg"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(":arg.attr", "value"),
@@ -817,7 +776,7 @@ mod tests {
                 is_prop: false,
                 is_attr: true,
                 ..
-            })) if value.is_ident() && arg == "arg"
+            })) if value.is_ident() && arg.value == "arg"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(":arg.camel.attr.prop.mod", "value"),
@@ -828,7 +787,7 @@ mod tests {
                 is_prop: true,
                 is_attr: true,
                 ..
-            })) if value.is_ident() && arg == "arg"
+            })) if value.is_ident() && arg.value == "arg"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(".foo", "value"),
@@ -839,7 +798,7 @@ mod tests {
                 is_prop: true,
                 is_attr: false,
                 ..
-            })) if value.is_ident() && arg == "foo"
+            })) if value.is_ident() && arg.value == "foo"
         ));
         assert!(matches!(
             test_parse_into_attr_or_binding(":[arg]", "value"),
@@ -894,7 +853,7 @@ mod tests {
                 is_prop: false,
                 is_attr: false,
                 ..
-            })) if value.is_ident() && arg == "arg[name]"
+            })) if value.is_ident() && arg.value == "arg[name]"
         ));
     }
 
@@ -939,7 +898,7 @@ mod tests {
                 is_prop: false,
                 is_attr: false,
                 ..
-            })) if arg == "msg" && value.as_ident().is_some_and(|v| v.sym == "msg")
+            })) if arg.value == "msg" && value.as_ident().is_some_and(|v| v.sym == "msg")
         ));
         assert!(matches!(
             test_parse_into_bind(":foo-bar"),
@@ -950,8 +909,56 @@ mod tests {
                 is_prop: false,
                 is_attr: false,
                 ..
-            })) if arg == "foo-bar" && value.as_ident().is_some_and(|v| v.sym == "fooBar")
+            })) if arg.value == "foo-bar" && value.as_ident().is_some_and(|v| v.sym == "fooBar")
         ));
+    }
+
+    #[test]
+    fn it_tracks_static_argument_span() {
+        const SOURCE: &str = r#"<div v-bind:argument="value"></div>"#;
+
+        let mut errors = Vec::new();
+        let mut parser = SfcParser::new(SOURCE, &mut errors);
+        let mut attrs_or_bindings = Vec::new();
+        let mut vue_directives = None;
+
+        let result = parser.try_parse_directive(
+            Attribute {
+                span: Span {
+                    lo: BytePos(6),
+                    hi: BytePos(29),
+                },
+                namespace: None,
+                prefix: None,
+                name: FervidAtom::from("v-bind:argument"),
+                raw_name: None,
+                value: Some(FervidAtom::from("value")),
+                raw_value: None,
+            },
+            &mut attrs_or_bindings,
+            &mut vue_directives,
+        );
+
+        assert!(result.is_ok());
+        let Some(AttributeOrBinding::VBind(VBindDirective {
+            argument: Some(StrOrExpr::Str(argument)),
+            ..
+        })) = attrs_or_bindings.pop()
+        else {
+            panic!("Expected v-bind with a static argument")
+        };
+
+        assert_eq!(
+            argument.span,
+            Span {
+                lo: BytePos(13),
+                hi: BytePos(21),
+            }
+        );
+        assert_eq!(
+            &SOURCE[argument.span.lo.0 as usize - 1..argument.span.hi.0 as usize - 1],
+            "argument"
+        );
     }
 
     #[test]
@@ -980,7 +987,7 @@ mod tests {
             VSlotDirective {
                 slot_name: Some(StrOrExpr::Str(name)),
                 value: Some(value)
-            } if value.is_ident() && name == "default"
+            } if value.is_ident() && name.value == "default"
         ));
         assert!(matches!(
             test_parse_into_slot("v-slot:[slot]", "value"),
@@ -1008,7 +1015,7 @@ mod tests {
             VSlotDirective {
                 slot_name: Some(StrOrExpr::Str(name)),
                 value: Some(value)
-            } if value.is_ident() && name == "default"
+            } if value.is_ident() && name.value == "default"
         ));
         assert!(matches!(
             test_parse_into_slot("#[slot]", "value"),
@@ -1034,6 +1041,42 @@ mod tests {
     }
 
     #[test]
+    fn it_parses_v_for() {
+        let directives = test_parse_into_vue_directive("v-for", "(value, key, index) in source");
+        let result = directives
+            .v_for
+            .expect("v-for directive should exist")
+            .parse_result;
+
+        assert!(result.source.as_ident().is_some_and(|v| v.sym == "source"));
+        assert!(result.value.as_ident().is_some_and(|v| v.sym == "value"));
+        assert!(
+            result
+                .key
+                .as_deref()
+                .and_then(Pat::as_ident)
+                .is_some_and(|v| v.sym == "key")
+        );
+        assert!(
+            result
+                .index
+                .as_deref()
+                .and_then(Pat::as_ident)
+                .is_some_and(|v| v.sym == "index")
+        );
+        assert!(!result.finalized);
+
+        let directives = test_parse_into_vue_directive("v-for", "([a, b], i) of items");
+        let result = directives
+            .v_for
+            .expect("v-for directive should exist")
+            .parse_result;
+        assert!(result.value.is_array());
+        assert!(result.key.as_deref().is_some_and(Pat::is_ident));
+        assert!(result.index.is_none());
+    }
+
+    #[test]
     fn it_parses_custom_directive() {
         fn test_parse_into_custom(name: &str, value: &str) -> VCustomDirective {
             let mut directives = test_parse_into_vue_directive(name, value);
@@ -1049,7 +1092,8 @@ mod tests {
                 name,
                 argument: None,
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(20) },
             } if name == "custom-dir" && v.is_ident() && modifiers.is_empty()
         ));
         assert!(matches!(
@@ -1058,8 +1102,9 @@ mod tests {
                 name,
                 argument: Some(StrOrExpr::Str(arg)),
                 modifiers,
-                value: Some(v)
-            } if name == "custom" && arg == "arg-name" && v.is_ident() && modifiers.is_empty()
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(25) },
+            } if name == "custom" && arg.value == "arg-name" && v.is_ident() && modifiers.is_empty()
         ));
         assert!(matches!(
             test_parse_into_custom("v-custom:[arg-name]", "value"),
@@ -1067,7 +1112,8 @@ mod tests {
                 name,
                 argument: Some(StrOrExpr::Expr(arg)),
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(27) },
             } if name == "custom" && arg.is_bin() && v.is_ident() && modifiers.is_empty()
         ));
         assert!(matches!(
@@ -1076,7 +1122,8 @@ mod tests {
                 name,
                 argument: Some(StrOrExpr::Expr(arg)),
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(27) },
             } if name == "custom" && arg.is_member() && v.is_ident() && modifiers.is_empty()
         ));
         assert!(matches!(
@@ -1085,7 +1132,8 @@ mod tests {
                 name,
                 argument: Some(StrOrExpr::Expr(arg)),
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(28) },
             } if name == "custom" && arg.is_member() && v.is_ident() && modifiers.is_empty()
         ));
         assert!(matches!(
@@ -1094,8 +1142,9 @@ mod tests {
                 name,
                 argument: Some(StrOrExpr::Str(arg)),
                 modifiers,
-                value: Some(v)
-            } if name == "custom" && arg == "arg[name]" && v.is_ident() && modifiers.is_empty()
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(26) },
+            } if name == "custom" && arg.value == "arg[name]" && v.is_ident() && modifiers.is_empty()
         ));
         assert!(matches!(
             test_parse_into_custom("v-custom.mod1.mod2", "value"),
@@ -1103,7 +1152,8 @@ mod tests {
                 name,
                 argument: None,
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(26) },
             } if name == "custom" && v.is_ident() && modifiers.len() == 2
         ));
         assert!(matches!(
@@ -1112,7 +1162,8 @@ mod tests {
                 name,
                 argument: None,
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(28) },
             } if name == "custom" && v.is_ident() && modifiers.len() == 2
         ));
         assert!(matches!(
@@ -1121,8 +1172,9 @@ mod tests {
                 name,
                 argument: Some(StrOrExpr::Str(arg)),
                 modifiers,
-                value: Some(v)
-            } if name == "custom" && arg == "arg" && v.is_ident() && modifiers.len() == 1
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(25) },
+            } if name == "custom" && arg.value == "arg" && v.is_ident() && modifiers.len() == 1
         ));
         assert!(matches!(
             test_parse_into_custom("v-custom:[arg].mod1", "value"),
@@ -1130,42 +1182,10 @@ mod tests {
                 name,
                 argument: Some(StrOrExpr::Expr(arg)),
                 modifiers,
-                value: Some(v)
+                value: Some(v),
+                span: Span { lo: BytePos(1), hi: BytePos(27) },
             } if name == "custom" && arg.is_ident() && v.is_ident() && modifiers.len() == 1
         ));
-    }
-
-    #[test]
-    fn it_correctly_splits_itervar_iterable() {
-        macro_rules! check {
-            ($input: expr, $itervar: expr, $itervar_lo: expr, $itervar_hi: expr, $iterable: expr, $iterable_lo: expr, $iterable_hi: expr) => {
-                let input = $input;
-                let span = Span {
-                    lo: BytePos(1),
-                    hi: BytePos((input.len() + 1) as u32),
-                };
-
-                let Some(((itervar, itervar_span), (iterable, iterable_span))) =
-                    split_itervar_and_iterable(input, span)
-                else {
-                    panic!("Did not manage to split")
-                };
-                assert_eq!($itervar, itervar);
-                assert_eq!($itervar_lo, itervar_span.lo.0);
-                assert_eq!($itervar_hi, itervar_span.hi.0);
-                assert_eq!($iterable, iterable);
-                assert_eq!($iterable_lo, iterable_span.lo.0);
-                assert_eq!($iterable_hi, iterable_span.hi.0);
-            };
-        }
-
-        // Trivial (all `Span`s start from 1)
-        check!("item in list", "item", 1, 5, "list", 9, 13);
-        check!("item of list", "item", 1, 5, "list", 9, 13);
-        check!("i in 3", "i", 1, 2, "3", 6, 7);
-
-        // A bit harder
-        check!("   item   in \n \t  list   ", "item", 4, 8, "list", 19, 23);
     }
 
     fn test_parse_into_attr(name: &str, value: &str) {

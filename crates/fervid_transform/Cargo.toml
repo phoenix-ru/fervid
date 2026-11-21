@@ -24,6 +24,7 @@ itertools = "*"
 url = "2"
 percent-encoding = "*"
 indexmap = "2.10.0"
+enum_dispatch = "0.3.13"
 
 [dev-dependencies]
 swc_ecma_codegen = { workspace = true }

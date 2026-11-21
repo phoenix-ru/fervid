@@ -35,7 +35,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           # Sync with rust-toolchain.toml
-          toolchain: nightly-2025-04-16
+          toolchain: nightly-2026-07-16
       - name: Cache rust artifacts
         uses: Swatinem/rust-cache@v2
         with:

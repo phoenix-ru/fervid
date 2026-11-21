@@ -33,6 +33,7 @@ pub static JS_BUILTINS: Set<&'static str> = phf_set! {
     "EvalError",
     "RangeError",
     "ReferenceError",
+    "SuppressedError",
     "SyntaxError",
     "TypeError",
     "URIError",
@@ -55,6 +56,7 @@ pub static JS_BUILTINS: Set<&'static str> = phf_set! {
     "Uint32Array",
     "BigInt64Array",
     "BigUint64Array",
+    "Float16Array",
     "Float32Array",
     "Float64Array",
     // Keyed collections
@@ -80,6 +82,9 @@ pub static JS_BUILTINS: Set<&'static str> = phf_set! {
     "Generator",
     "AsyncGenerator",
     "AsyncFunction",
+    // Explicit resource management
+    "DisposableStack",
+    "AsyncDisposableStack",
     // Reflection
     "Reflect",
     "Proxy",

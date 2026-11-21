@@ -11,11 +11,14 @@ use crate::{AttributeOrBinding, FervidAtom, StrOrExpr, VBindDirective};
 /// Checks whether the attributes name is the same as `expected_name`
 #[inline]
 pub fn check_attribute_name(attr: &AttributeOrBinding, expected_name: &str) -> bool {
-    matches!(attr,
-        AttributeOrBinding::RegularAttribute { name, .. } |
-        AttributeOrBinding::VBind(VBindDirective { argument: Some(StrOrExpr::Str(name)), .. })
-        if name == expected_name
-    )
+    match attr {
+        AttributeOrBinding::RegularAttribute { name, .. } => name == expected_name,
+        AttributeOrBinding::VBind(VBindDirective {
+            argument: Some(StrOrExpr::Str(name)),
+            ..
+        }) => name.value == expected_name,
+        _ => false,
+    }
 }
 
 /// Adapted from SWC Ident::verify_symbol
@@ -71,7 +74,7 @@ pub fn atom_to_propname(sym: FervidAtom, span: Span) -> PropName {
 
 pub fn str_or_expr_to_propname(str_or_expr: StrOrExpr, span: Span) -> PropName {
     match str_or_expr {
-        StrOrExpr::Str(sym) => atom_to_propname(sym, span),
+        StrOrExpr::Str(s) => atom_to_propname(s.value, s.span),
         StrOrExpr::Expr(expr) => PropName::Computed(ComputedPropName { span, expr }),
     }
 }

@@ -639,3 +639,90 @@ impl Visit for IdentCollector {
         self.names.insert(ident.span.lo, ident.sym.clone());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use fervid_core::{
+        ElementNode, Node, SfcDescriptor, SfcTemplateBlock, StartingTag, VueDirectives,
+    };
+    use swc_core::common::DUMMY_SP;
+
+    use crate::{context::CodegenContext, test_utils::to_str};
+
+    // Vue source: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/src/transform.ts#L378-L400
+    #[test]
+    fn multiple_sfc_roots_generate_fragment_instead_of_template_element() {
+        // <template><div /><span /></template>
+        let mut template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![element("div"), element("span")],
+            span: DUMMY_SP,
+        };
+
+        transform_template(&mut template);
+
+        let mut codegen = CodegenContext::default();
+        let generated = codegen
+            .generate_sfc_template(&template)
+            .expect("multiple SFC roots should produce a Fragment");
+        assert_eq!(
+            to_str(generated),
+            "(_openBlock(),_createElementBlock(_Fragment,null,[_createElementVNode(\"div\"),_createElementVNode(\"span\")],64))"
+        );
+    }
+
+    // Vue parser reference: https://github.com/vuejs/core/blob/68f25a4a1957710de71731702bd42e05535f494b/packages/compiler-core/src/parser.ts#L638-L648
+    #[test]
+    fn native_template_root_keeps_template_element_tag() {
+        // <template><template v-cloak><div /></template></template>
+        let Node::Element(mut native_template) = element("template") else {
+            panic!("test helper should create an element");
+        };
+        native_template.starting_tag.directives = Some(Box::new(VueDirectives {
+            v_cloak: Some(()),
+            ..Default::default()
+        }));
+        native_template.children.push(element("div"));
+        let mut template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![Node::Element(native_template)],
+            span: DUMMY_SP,
+        };
+
+        transform_template(&mut template);
+
+        let mut codegen = CodegenContext::default();
+        let generated = codegen
+            .generate_sfc_template(&template)
+            .expect("native template root should produce an element");
+        assert_eq!(
+            to_str(generated),
+            "(_openBlock(),_createElementBlock(\"template\",null,[_createElementVNode(\"div\")]))"
+        );
+    }
+
+    fn transform_template(template: &mut SfcTemplateBlock) {
+        let descriptor = SfcDescriptor::default();
+        let options = fervid_transform::TransformSfcOptions {
+            is_prod: false,
+            is_ce: false,
+            props_destructure: Default::default(),
+            scope_id: "",
+            filename: "anonymous.vue",
+            transform_asset_urls: Default::default(),
+            directive_transforms: Default::default(),
+            node_transforms: Default::default(),
+        };
+        let mut ctx = fervid_transform::TransformSfcContext::new(&descriptor, &options);
+        fervid_transform::template::transform_and_record_template(template, &mut ctx);
+        assert!(ctx.errors.is_empty(), "{:#?}", ctx.errors);
+    }
+
+    fn element(tag_name: &str) -> Node {
+        Node::Element(ElementNode::new(StartingTag {
+            tag_name: tag_name.into(),
+            attributes: vec![],
+            directives: None,
+        }))
+    }
+}

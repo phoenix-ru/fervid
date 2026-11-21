@@ -1,1 +1,3 @@
 # Farm needs this file for building
+allowBuilds:
+  core-js: false

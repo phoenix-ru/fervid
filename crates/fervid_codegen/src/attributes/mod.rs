@@ -1,6 +1,6 @@
 use fervid_core::{
     AttributeOrBinding, FervidAtom, IntoIdent, StrOrExpr, VBindDirective, VOnDirective, VueImports,
-    fervid_atom, str_to_propname,
+    atom_to_propname, fervid_atom, str_to_propname,
 };
 use regex::Regex;
 use swc_core::{
@@ -48,6 +48,15 @@ pub struct GenerateAttributesResultHints<'i> {
     pub props_patch_flag: bool,
 }
 
+enum AttributePresence<'a> {
+    /// <div>
+    Absent,
+    /// <div foo>, <div foo="">
+    PresentNoValue(Span),
+    /// <div foo="bar">
+    PresentWithValue(&'a FervidAtom, Span),
+}
+
 impl CodegenContext {
     pub fn generate_attributes<'attr>(
         &mut self,
@@ -56,9 +65,9 @@ impl CodegenContext {
     ) -> GenerateAttributesResultHints<'attr> {
         // Special generation for `class` and `style` attributes,
         // as they can have both Regular and VDirective variants
-        let mut class_regular_attr: Option<(&FervidAtom, Span)> = None;
+        let mut class_regular_attr = AttributePresence::Absent;
         let mut class_bound: Option<(Box<Expr>, Span)> = None;
-        let mut style_regular_attr: Option<(&FervidAtom, Span)> = None;
+        let mut style_regular_attr = AttributePresence::Absent;
         let mut style_bound: Option<(Box<Expr>, Span)> = None;
 
         // Hints on what was processed and what to do next
@@ -69,25 +78,33 @@ impl CodegenContext {
                 // First, we check the special case: `class` and `style` attributes
                 // class
                 AttributeOrBinding::RegularAttribute { name, value, span } if name == "class" => {
-                    class_regular_attr = Some((value, *span));
+                    class_regular_attr = match value {
+                        Some(value) if !value.is_empty() => {
+                            AttributePresence::PresentWithValue(value, *span)
+                        }
+                        _ => AttributePresence::PresentNoValue(*span),
+                    };
                 }
 
                 // style
                 AttributeOrBinding::RegularAttribute { name, value, span } if name == "style" => {
-                    style_regular_attr = Some((value, *span));
+                    style_regular_attr = match value {
+                        Some(value) if !value.is_empty() => {
+                            AttributePresence::PresentWithValue(value, *span)
+                        }
+                        _ => AttributePresence::PresentNoValue(*span),
+                    };
                 }
 
                 // Any regular attribute will be added as an object entry,
                 // where key is attribute name and value is attribute value as string literal
                 AttributeOrBinding::RegularAttribute { name, value, span } => {
-                    // let raw = Some(Atom::from(value.as_ref()));
-
                     out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                         KeyValueProp {
                             key: str_to_propname(name, *span),
                             value: Box::from(Expr::Lit(Lit::Str(Str {
                                 span: span.to_owned(),
-                                value: value.to_owned(),
+                                value: value.to_owned().unwrap_or_default(),
                                 raw: None,
                             }))),
                         },
@@ -104,7 +121,7 @@ impl CodegenContext {
                     value,
                     span,
                     ..
-                }) if argument == "class" => {
+                }) if argument.value == "class" => {
                     class_bound = Some((value.to_owned(), *span));
                 }
 
@@ -114,7 +131,7 @@ impl CodegenContext {
                     value,
                     span,
                     ..
-                }) if argument == "style" => {
+                }) if argument.value == "style" => {
                     style_bound = Some((value.to_owned(), *span));
                 }
 
@@ -153,7 +170,7 @@ impl CodegenContext {
                         result_hints.props_patch_flag || was_transformed;
 
                     let key = match argument {
-                        StrOrExpr::Str(s) => str_to_propname(s, span),
+                        StrOrExpr::Str(s) => atom_to_propname(s.value.to_owned(), s.span),
                         StrOrExpr::Expr(expr) => {
                             // Dynamic prop needs a `_normalizeProps` call
                             // TODO Take from patch flags?
@@ -218,7 +235,7 @@ impl CodegenContext {
 
                     let handler_expr = if !modifiers.is_empty() {
                         let with_modifiers_import =
-                            self.get_and_add_import_ident(VueImports::WithModifiers);
+                            self.get_and_add_import_ident(VueImports::VOnWithModifiers);
 
                         // `_withModifiers(transformed, ["modifier"]))`
                         Box::new(Expr::Call(CallExpr {
@@ -270,7 +287,10 @@ impl CodegenContext {
                             // e.g. `onClick: _ctx.handleClick` or `onClick: _withModifiers(() => {}, ["stop"])
                             out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                                 KeyValueProp {
-                                    key: str_to_propname(event_name_str, span),
+                                    key: atom_to_propname(
+                                        event_name_str.value.to_owned(),
+                                        event_name_str.span,
+                                    ),
                                     value: handler_expr,
                                 },
                             ))));
@@ -302,10 +322,12 @@ impl CodegenContext {
     }
 
     /// Process `class` attribute. We may have a regular one, a bound one, both or neither.
-    /// Returns `true` when there were JavaScript bindings
+    /// Returns `true` when there were JavaScript bindings.
+    /// In comparison to vuejs-core, this does an extra optimization by skipping normalization
+    /// for empty regular `class` when bound `:class` is present.
     fn generate_class_bindings(
         &mut self,
-        class_regular_attr: Option<(&FervidAtom, Span)>,
+        class_regular_attr: AttributePresence,
         class_bound: Option<(Box<Expr>, Span)>,
         out: &mut Vec<PropOrSpread>,
     ) -> bool {
@@ -314,7 +336,10 @@ impl CodegenContext {
 
         match (class_regular_attr, class_bound) {
             // Both regular `class` and bound `:class`
-            (Some((regular_value, regular_span)), Some((bound_value, bound_span))) => {
+            (
+                AttributePresence::PresentWithValue(regular_value, regular_span),
+                Some((bound_value, bound_span)),
+            ) => {
                 // 1. []
                 // Normalize class with both `class` and `:class` needs an array
                 let mut normalize_array = ArrayLit {
@@ -362,8 +387,8 @@ impl CodegenContext {
                 has_js_bindings = was_transformed;
             }
 
-            // Just regular `class`
-            (Some((regular_value, span)), None) => {
+            // Just regular `class` with value
+            (AttributePresence::PresentWithValue(regular_value, span), None) => {
                 expr = Some(Expr::Lit(Lit::Str(Str {
                     raw: None, // Some(Atom::from(regular_value.as_ref())),
                     value: regular_value.to_owned(),
@@ -371,8 +396,20 @@ impl CodegenContext {
                 })));
             }
 
-            // Just bound `:class`
-            (None, Some((bound_value, span))) => {
+            // Just regular `class` without value
+            (AttributePresence::PresentNoValue(span), None) => {
+                expr = Some(Expr::Lit(Lit::Str(Str {
+                    raw: None,
+                    value: fervid_atom!(""),
+                    span,
+                })));
+            }
+
+            // Just bound `:class`, or bound `:class` and empty `class` without value
+            (
+                AttributePresence::PresentNoValue(_) | AttributePresence::Absent,
+                Some((bound_value, span)),
+            ) => {
                 // let was_transformed =
                 //     transform_scoped(&mut bound_value, &self.scope_helper, scope_to_use);
                 let was_transformed = true; // TODO
@@ -396,7 +433,7 @@ impl CodegenContext {
             }
 
             // Neither
-            (None, None) => {}
+            (AttributePresence::Absent, None) => {}
         }
 
         // Add `class` to attributes
@@ -419,7 +456,7 @@ impl CodegenContext {
     /// Returns `true` when there were JavaScript bindings
     fn generate_style_bindings(
         &mut self,
-        style_regular_attr: Option<(&FervidAtom, Span)>,
+        style_regular_attr: AttributePresence,
         style_bound: Option<(Box<Expr>, Span)>,
         out: &mut Vec<PropOrSpread>,
     ) -> bool {
@@ -428,7 +465,10 @@ impl CodegenContext {
 
         match (style_regular_attr, style_bound) {
             // Both `style` and `:style`
-            (Some((regular_value, regular_span)), Some((bound_value, bound_span))) => {
+            (
+                AttributePresence::PresentWithValue(regular_value, regular_span),
+                Some((bound_value, bound_span)),
+            ) => {
                 // 1. []
                 // normalizeStyle with both `style` and `:style` needs an array
                 let mut normalize_array = ArrayLit {
@@ -476,13 +516,27 @@ impl CodegenContext {
                 has_js_bindings = was_transformed;
             }
 
-            // `style`
-            (Some((regular_value, span)), None) => {
+            // Just regular `style` with value
+            (AttributePresence::PresentWithValue(regular_value, span), None) => {
                 expr = Some(Expr::Object(generate_regular_style(regular_value, span)));
             }
 
-            // `:style`
-            (None, Some((bound_value, span))) => {
+            // Just regular `style` without value.
+            // Generate an empty string since it is considered normalized:
+            // https://github.com/vuejs/core/blob/4ab865a848a1da3d10fb674f857e5fff13094644/packages/shared/src/normalizeProp.ts#L5-L25
+            (AttributePresence::PresentNoValue(span), None) => {
+                expr = Some(Expr::Lit(Lit::Str(Str {
+                    span,
+                    value: fervid_atom!(""),
+                    raw: None,
+                })));
+            }
+
+            // Just bound `:style`, or bound `:style` with an empty `style`
+            (
+                AttributePresence::PresentNoValue(_) | AttributePresence::Absent,
+                Some((bound_value, span)),
+            ) => {
                 // let was_transformed =
                 //     transform_scoped(&mut bound_value, &self.scope_helper, scope_to_use);
                 let was_transformed = true; // TODO
@@ -507,7 +561,7 @@ impl CodegenContext {
                 has_js_bindings = was_transformed;
             }
 
-            (None, None) => {}
+            (AttributePresence::Absent, None) => {}
         }
 
         // Add `style` to attributes
@@ -582,13 +636,10 @@ fn empty_arrow_expr(span: Span) -> Expr {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::{AttributeOrBinding, VOnDirective};
-    use swc_core::{common::DUMMY_SP, ecma::ast::ObjectLit};
+    use fervid_core::{AttributeOrBinding, ElementNode, StartingTag, VOnDirective};
+    use swc_core::common::DUMMY_SP;
 
-    use crate::{
-        context::CodegenContext,
-        test_utils::{js, regular_attribute, v_bind_attribute, v_on_attribute},
-    };
+    use crate::test_utils::{js, regular_attribute, v_bind_attribute, v_on_attribute};
 
     #[test]
     fn it_generates_class_regular() {
@@ -624,7 +675,9 @@ mod tests {
                 "style",
                 "margin: 0px; background-color: magenta",
             )],
-            r#"{style:{margin:"0px","background-color":"magenta"}}"#,
+            // TODO: Optimize the static string
+            // r#"{style:{margin:"0px","background-color":"magenta"}}"#,
+            r#"{style:"margin: 0px; background-color: magenta"}"#,
         );
     }
 
@@ -647,7 +700,9 @@ mod tests {
                 regular_attribute("style", "margin: 0px; background-color: magenta"),
                 v_bind_attribute("style", "{ backgroundColor: v ? 'yellow' : undefined }"),
             ],
-            r#"{style:_normalizeStyle([{margin:"0px","background-color":"magenta"},{backgroundColor:v?"yellow":undefined}])}"#,
+            // TODO: Optimize the static string and split it into an object
+            // r#"{style:_normalizeStyle([{margin:"0px","background-color":"magenta"},{backgroundColor:v?"yellow":undefined}])}"#,
+            r#"{style:_normalizeStyle(["margin: 0px; background-color: magenta",{backgroundColor:v?"yellow":undefined}])}"#,
         );
     }
 
@@ -680,7 +735,7 @@ mod tests {
         // @click
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
-                event: Some("onClick".into()),
+                event: Some("click".into()),
                 handler: None,
                 modifiers: vec![],
                 span: DUMMY_SP,
@@ -691,7 +746,7 @@ mod tests {
         // @multi-word-event (gets transformed to `onMultiWordEvent`)
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
-                event: Some("onMultiWordEvent".into()),
+                event: Some("multi-word-event".into()),
                 handler: None,
                 modifiers: vec![],
                 span: DUMMY_SP,
@@ -701,8 +756,8 @@ mod tests {
 
         // @click="handleClick"
         test_out(
-            vec![v_on_attribute("onClick", "handleClick")],
-            r"{onClick:handleClick}",
+            vec![v_on_attribute("click", "handleClick")],
+            r"{onClick:_ctx.handleClick}",
         );
 
         // TODO
@@ -720,23 +775,23 @@ mod tests {
 
         // @click="() => console.log('hello')"
         test_out(
-            vec![v_on_attribute("onClick", "() => console.log('hello')")],
+            vec![v_on_attribute("click", "() => console.log('hello')")],
             r#"{onClick:()=>console.log("hello")}"#,
         );
 
         // @click="$event => handleClick($event, foo, bar)"
         test_out(
             vec![v_on_attribute(
-                "onClick",
+                "click",
                 "$event => handleClick($event, foo, bar)",
             )],
-            r"{onClick:$event=>handleClick($event,foo,bar)}",
+            r"{onClick:$event=>_ctx.handleClick($event,_ctx.foo,_ctx.bar)}",
         );
 
         // @click.stop.prevent.self
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
-                event: Some("onClick".into()),
+                event: Some("click".into()),
                 handler: None,
                 modifiers: vec!["stop".into(), "prevent".into(), "self".into()],
                 span: DUMMY_SP,
@@ -747,22 +802,21 @@ mod tests {
         // @click.stop="$event => handleClick($event, foo, bar)"
         test_out(
             vec![AttributeOrBinding::VOn(VOnDirective {
-                event: Some("onClick".into()),
+                event: Some("click".into()),
                 handler: Some(js("$event => handleClick($event, foo, bar)")),
                 modifiers: vec!["stop".into()],
                 span: DUMMY_SP,
             })],
-            r#"{onClick:_withModifiers($event=>handleClick($event,foo,bar),["stop"])}"#,
+            r#"{onClick:_withModifiers($event=>_ctx.handleClick($event,_ctx.foo,_ctx.bar),["stop"])}"#,
         );
     }
 
     fn test_out(input: Vec<AttributeOrBinding>, expected: &str) {
-        let mut ctx = CodegenContext::default();
-        let mut out = ObjectLit {
-            span: DUMMY_SP,
-            props: vec![],
-        };
-        ctx.generate_attributes(&input, &mut out.props);
+        let out = crate::test_utils::generate_prepared_props(ElementNode::new(StartingTag {
+            tag_name: "div".into(),
+            attributes: input,
+            directives: None,
+        }));
         assert_eq!(crate::test_utils::to_str(out), expected)
     }
 }

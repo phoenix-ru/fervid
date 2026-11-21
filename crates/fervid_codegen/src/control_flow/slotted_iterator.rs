@@ -28,7 +28,7 @@ impl<'n> Iterator for SlottedIterator<'n> {
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.nodes.len(), Some(self.nodes.len()))
+        (0, Some(self.nodes.len().saturating_sub(self.idx)))
     }
 }
 
@@ -48,14 +48,6 @@ impl<'n> SlottedIterator<'n> {
         } else {
             SlottedIteratorMode::Default
         };
-    }
-
-    /// Switches the iteration mode if peek() yields None
-    #[inline]
-    pub fn toggle_mode_if_peek_is_none(&mut self) {
-        if self.peek().is_none() {
-            self.toggle_mode();
-        }
     }
 
     /// Is iteration mode Default
@@ -206,9 +198,10 @@ mod tests {
             },
             children: vec![Node::Text("This is an h1".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -225,9 +218,10 @@ mod tests {
             },
             children: vec![],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -249,9 +243,10 @@ mod tests {
             },
             children: vec![Node::Text("This is a component".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -265,9 +260,10 @@ mod tests {
             },
             children: vec![Node::Text("This is just a template".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -287,9 +283,10 @@ mod tests {
             },
             children: vec![Node::Text("This is a default template".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 
@@ -309,9 +306,10 @@ mod tests {
             },
             children: vec![Node::Text("This is a named template".into(), DUMMY_SP)],
             template_scope: 0,
-            kind: ElementKind::Element,
+            tag_type: ElementKind::Element,
             patch_hints: Default::default(),
             span: DUMMY_SP,
+            codegen_node: None,
         })
     }
 }
