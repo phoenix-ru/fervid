@@ -797,6 +797,56 @@ mod tests {
         );
     }
 
+    // Fervid regression: preserve branch-content caching; whole-condition v-once parity is separate
+    #[test]
+    fn it_preserves_conditional_template_once_cache() {
+        // <template v-if="ok" v-once><div>{{ value }}</div><span>end</span></template>
+        let mut div = ElementNode::new(StartingTag {
+            tag_name: "div".into(),
+            attributes: vec![],
+            directives: None,
+        });
+        div.children
+            .push(Node::Interpolation(fervid_core::Interpolation {
+                value: js("value"),
+                template_scope: 0,
+                patch_flag: false,
+                span: DUMMY_SP,
+            }));
+        let span = ElementNode::new_with_children(
+            StartingTag {
+                tag_name: "span".into(),
+                attributes: vec![],
+                directives: None,
+            },
+            vec![Node::Text("end".into(), DUMMY_SP)],
+        );
+        let input = Node::Element(ElementNode::new_with_children_and_type(
+            StartingTag {
+                tag_name: "template".into(),
+                attributes: vec![],
+                directives: Some(Box::new(VueDirectives {
+                    v_if: Some(js("ok")),
+                    v_once: Some(()),
+                    ..Default::default()
+                })),
+            },
+            vec![Node::Element(div), Node::Element(span)],
+            ElementKind::Template,
+        ));
+
+        for is_prod in [false, true] {
+            let comment = if is_prod { "" } else { "v-if" };
+            assert_eq!(
+                transform_and_generate_roots_in_mode(vec![input.clone()], is_prod),
+                format!(
+                    "_ctx.ok?_cache[0]||(_setBlockTracking(-1,true),(_cache[0]=(_openBlock(),_createElementBlock(_Fragment,{{key:0}},[_createElementVNode(\"div\",null,_toDisplayString(_ctx.value),1),_createElementVNode(\"span\",null,\"end\")],64))).cacheIndex=0,_setBlockTracking(1),_cache[0]):_createCommentVNode(\"{comment}\",true)"
+                ),
+                "is_prod={is_prod}"
+            );
+        }
+    }
+
     fn transform_and_generate_template_if(children: Vec<Node>) -> String {
         transform_and_generate_roots(vec![Node::Element(
             ElementNode::new_with_children_and_type(

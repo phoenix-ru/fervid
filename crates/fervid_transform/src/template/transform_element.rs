@@ -76,12 +76,10 @@ pub fn post_transform_element_node(
         return;
     };
 
-    let scope_to_use = state.current_scope;
-
     let (is_component, vnode_tag) = match node.tag_type {
         ElementKind::Template | ElementKind::Builtin(BuiltinType::Slot) => return,
         ElementKind::Component | ElementKind::Builtin(BuiltinType::Component) => {
-            (true, resolve_component_type(node, ctx, false, scope_to_use))
+            (true, resolve_component_type(node, ctx, false))
         }
         ElementKind::Builtin(builtin_type) => (true, VNodeCallTag::Builtin(builtin_type)),
         ElementKind::Element => (
@@ -294,7 +292,6 @@ fn resolve_component_type(
     node: &mut ElementNode,
     ctx: &mut TransformSfcContext,
     ssr: bool,
-    scope_to_use: u32,
 ) -> VNodeCallTag {
     let mut tag = Cow::Borrowed(&node.starting_tag.tag_name);
 
@@ -362,7 +359,7 @@ fn resolve_component_type(
 
     // 3. User component (from setup bindings)
     // Note: `resolve_component_setup_reference` already handles `.` inside component name
-    if let Some(resolved_from_setup) = resolve_component_setup_reference(ctx, &tag, scope_to_use) {
+    if let Some(resolved_from_setup) = resolve_component_setup_reference(ctx, &tag) {
         return VNodeCallTag::Expr(resolved_from_setup);
     }
 
@@ -405,7 +402,6 @@ fn resolve_component_type(
 fn resolve_component_setup_reference(
     ctx: &mut TransformSfcContext,
     tag_name: &FervidAtom,
-    scope_to_use: u32,
 ) -> Option<Box<Expr>> {
     // Check the existing (cached) resolutions.
     // Do nothing if found, regardless if it was previously resolved or not,
@@ -435,8 +431,8 @@ fn resolve_component_setup_reference(
         // TODO I am not sure about `Imported` though,
         // the official compiler sees them as if `SetupMaybeRef` and transforms.
         if !matches!(found.binding_type, BindingTypes::Component) {
-            ctx.bindings_helper
-                .transform_expr(&mut resolved_to, scope_to_use);
+            // Use root scope, because static components are resolved using setup bindings
+            ctx.bindings_helper.transform_expr(&mut resolved_to, 0);
         }
 
         // For namespaced components, add the second part (`Bar` in `<Foo.Bar>`)

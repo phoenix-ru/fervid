@@ -18,7 +18,7 @@ type TextNodesConcatenationVec = SmallVec<[Expr; 3]>;
 impl CodegenContext {
     pub(crate) fn wrap_cache_expression(
         &mut self,
-        index: u8,
+        index: u32,
         value: Expr,
         markers: CacheMarkers,
     ) -> Expr {
@@ -300,7 +300,7 @@ impl CodegenContext {
 
     /// Produce the index for a next `cache[idx]` entry.
     /// This is useful for a `v-once` or event handlers.
-    pub fn allocate_next_cache_entry(&mut self) -> u8 {
+    pub fn allocate_next_cache_entry(&mut self) -> u32 {
         let idx = self.next_cache_index;
         self.next_cache_index += 1;
         idx

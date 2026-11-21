@@ -118,7 +118,8 @@ pub fn transform_if(
         if let Some(v_if) = directives.v_if.take() {
             finish_seq!();
             let span = child_element.span;
-            let branch_node = deref_element!(child);
+            let mut branch_node = deref_element!(child);
+            prepare_branch_codegen(&mut branch_node);
             branch_keys.push(branch_key_source(&branch_node, next_key_base));
             seq = Some(ConditionalNodeSequence {
                 if_node: Box::new(Conditional {
@@ -154,13 +155,14 @@ pub fn transform_if(
             let was_template = matches!(child_element.tag_type, ElementKind::Template);
             let had_v_for = directives.v_for.is_some();
             let span = child_element.span;
-            let branch_node = attach_branch_comments(
+            let mut branch_node = attach_branch_comments(
                 deref_element!(child),
                 &mut comments,
                 was_template,
                 had_v_for,
                 span,
             );
+            prepare_branch_codegen(&mut branch_node);
             let key = branch_key_source(&branch_node, seq.key_base + seq.else_if_nodes.len() + 1);
             seq.else_if_nodes.push(Conditional {
                 condition: *v_else_if,
@@ -191,13 +193,14 @@ pub fn transform_if(
             let was_template = matches!(child_element.tag_type, ElementKind::Template);
             let had_v_for = directives.v_for.is_some();
             let span = child_element.span;
-            let branch_node = attach_branch_comments(
+            let mut branch_node = attach_branch_comments(
                 deref_element!(child),
                 &mut comments,
                 was_template,
                 had_v_for,
                 span,
             );
+            prepare_branch_codegen(&mut branch_node);
             let key = branch_key_source(&branch_node, seq.key_base + seq.else_if_nodes.len() + 1);
             seq.else_node = Some(Box::new(branch_node));
             branch_keys.push(key);
@@ -418,6 +421,25 @@ fn get_or_create_codegen_node(element_node: &mut ElementNode) -> Option<&mut Ele
         cache: Default::default(),
     }));
     element_node.codegen_node.as_deref_mut()
+}
+
+/// Insert codegen_node if missing
+fn prepare_branch_codegen(node: &mut Node) {
+    let Node::Element(element) = node else {
+        return;
+    };
+
+    // v-for owns structural replacement and its codegen metadata
+    if element
+        .starting_tag
+        .directives
+        .as_ref()
+        .is_some_and(|directives| directives.v_for.is_some())
+    {
+        return;
+    }
+
+    let _ = get_or_create_codegen_node(element);
 }
 
 /// Creates `key: 123` object Property
@@ -1480,6 +1502,130 @@ mod tests {
         assert_eq!(second.key_base, 2);
         assert_eq!(second.else_if_nodes.len(), 1);
         assert!(second.else_node.is_some());
+    }
+
+    // Each retained template branch needs metadata before its v-once exit
+    #[test]
+    fn caches_conditional_template_fragments_before_branch_key_injection() {
+        // <template v-if="ok" v-once><div/><span/></template>
+        // <template v-else-if="other" v-once><div/><span/></template>
+        // <template v-else v-once><div/><span/></template>
+        let mut template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: vec![
+                once_template_branch(VueDirectives {
+                    v_if: Some(js("ok")),
+                    ..Default::default()
+                }),
+                once_template_branch(VueDirectives {
+                    v_else_if: Some(js("other")),
+                    ..Default::default()
+                }),
+                once_template_branch(VueDirectives {
+                    v_else: Some(()),
+                    ..Default::default()
+                }),
+            ],
+            span: DUMMY_SP,
+        };
+        let mut ctx = TransformSfcContext::anonymous();
+
+        crate::template::transform_and_record_template(&mut template, &mut ctx);
+
+        assert!(ctx.errors.is_empty(), "{:#?}", ctx.errors);
+        assert_eq!(ctx.directive_scopes.v_once, 0);
+        let [Node::ConditionalSeq(seq)] = template.roots.as_slice() else {
+            panic!("template branches should form one conditional sequence");
+        };
+        let [else_if] = seq.else_if_nodes.as_slice() else {
+            panic!("conditional sequence should retain its else-if branch");
+        };
+        for branch in [
+            &seq.if_node.node,
+            &else_if.node,
+            seq.else_node
+                .as_deref()
+                .expect("sequence needs an else branch"),
+        ] {
+            let Node::Element(element) = branch else {
+                panic!("multi-child template branch should retain its carrier");
+            };
+            let codegen = element.codegen_node.as_ref().expect("branch needs codegen");
+            assert_eq!(
+                codegen.cache,
+                fervid_core::CacheMarker::NeedPauseTracking | fervid_core::CacheMarker::InVOnce
+            );
+            let ElementCodegenValue::VNodeCall(vnode) = &codegen.value else {
+                panic!("template branch should generate a Fragment");
+            };
+            assert!(matches!(vnode.tag, VNodeCallTag::Fragment));
+            assert!(vnode.is_block);
+            assert!(vnode.props.is_some(), "branch key should be injected");
+            assert_eq!(element.children.len(), 2);
+        }
+    }
+
+    #[test]
+    fn conditional_template_once_leaves_loop_codegen_to_structural_transform() {
+        // <template v-if="ok" v-for="item in items" v-once><div/><span/></template>
+        let mut children = vec![once_template_branch(VueDirectives {
+            v_if: Some(js("ok")),
+            v_for: Some(fervid_core::VForDirective {
+                parse_result: Box::new(fervid_core::ForParseResult {
+                    source: js("items"),
+                    value: crate::test_utils::pat("item"),
+                    key: None,
+                    index: None,
+                    finalized: false,
+                    finalized_is_dynamic: false,
+                    source_const_type: Default::default(),
+                }),
+                patch_flags: Default::default(),
+                span: DUMMY_SP,
+            }),
+            ..Default::default()
+        })];
+        let mut ctx = TransformSfcContext::anonymous();
+
+        transform_if(&mut ctx, &mut children, ElementKind::Element, 0);
+
+        let [Node::ConditionalSeq(seq)] = children.as_slice() else {
+            panic!("conditional template should form a sequence");
+        };
+        let Node::Element(carrier) = &seq.if_node.node else {
+            panic!("v-for replacement should not run during conditional folding");
+        };
+        assert!(carrier.codegen_node.is_none(), "v-for owns loop metadata");
+
+        let mut template = SfcTemplateBlock {
+            lang: "html".into(),
+            roots: children,
+            span: DUMMY_SP,
+        };
+        crate::template::transform_and_record_template(&mut template, &mut ctx);
+
+        assert!(ctx.errors.is_empty(), "{:#?}", ctx.errors);
+        assert_eq!(ctx.directive_scopes.v_once, 0);
+        assert_eq!(ctx.directive_scopes.v_for, 0);
+        let [Node::ConditionalSeq(seq)] = template.roots.as_slice() else {
+            panic!("conditional sequence should survive loop transformation");
+        };
+        let Node::For(for_node) = &seq.if_node.node else {
+            panic!("v-for should replace the template carrier");
+        };
+        let codegen = for_node.codegen_node.as_ref().expect("loop needs codegen");
+        assert_eq!(
+            codegen.cache,
+            fervid_core::CacheMarker::NeedPauseTracking | fervid_core::CacheMarker::InVOnce
+        );
+        assert!(codegen.is_template);
+        assert_eq!(codegen.branch_key, Some(0));
+        assert_eq!(for_node.children.len(), 2);
+    }
+
+    fn once_template_branch(mut directives: VueDirectives) -> Node {
+        directives.v_once = Some(());
+        template_branch(directives, vec![], vec![element("div"), element("span")])
     }
 
     fn assert_diagnostics(

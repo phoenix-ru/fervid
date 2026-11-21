@@ -1,5 +1,4 @@
 use fervid_core::{AttributeOrBinding, ElementNode, Node, StrOrExpr};
-use swc_core::ecma::ast::{ObjectPatProp, Pat, PropName};
 
 use crate::{
     TransformSfcContext,
@@ -86,7 +85,8 @@ fn transform_element_expressions(
                     .transform_expr(slot_name_expr, scope_to_use);
             }
             if let Some(ref mut v_slot_value) = v_slot.value {
-                transform_slot_param_pattern_expressions(ctx, v_slot_value, scope_to_use);
+                ctx.bindings_helper
+                    .transform_pat(v_slot_value, scope_to_use);
             }
         }
 
@@ -101,66 +101,6 @@ fn transform_element_expressions(
 
             // Try resolving it
             maybe_resolve_directive(ctx, &custom_directive.name, scope_to_use);
-        }
-    }
-}
-
-fn transform_slot_param_pattern_expressions(
-    ctx: &mut TransformSfcContext,
-    pat: &mut Pat,
-    scope_to_use: u32,
-) {
-    match pat {
-        Pat::Ident(_) | Pat::Invalid(_) => {}
-
-        Pat::Array(array) => {
-            for elem in array.elems.iter_mut().flatten() {
-                transform_slot_param_pattern_expressions(ctx, elem, scope_to_use);
-            }
-        }
-
-        Pat::Rest(rest) => {
-            transform_slot_param_pattern_expressions(ctx, &mut rest.arg, scope_to_use);
-        }
-
-        Pat::Object(object) => {
-            for prop in &mut object.props {
-                match prop {
-                    ObjectPatProp::KeyValue(key_value) => {
-                        if let PropName::Computed(computed) = &mut key_value.key {
-                            ctx.bindings_helper
-                                .transform_expr(&mut computed.expr, scope_to_use);
-                        }
-
-                        transform_slot_param_pattern_expressions(
-                            ctx,
-                            &mut key_value.value,
-                            scope_to_use,
-                        );
-                    }
-
-                    ObjectPatProp::Assign(assign) => {
-                        if let Some(default_value) = &mut assign.value {
-                            ctx.bindings_helper
-                                .transform_expr(default_value, scope_to_use);
-                        }
-                    }
-
-                    ObjectPatProp::Rest(rest) => {
-                        transform_slot_param_pattern_expressions(ctx, &mut rest.arg, scope_to_use);
-                    }
-                }
-            }
-        }
-
-        Pat::Assign(assign) => {
-            transform_slot_param_pattern_expressions(ctx, &mut assign.left, scope_to_use);
-            ctx.bindings_helper
-                .transform_expr(&mut assign.right, scope_to_use);
-        }
-
-        Pat::Expr(expr) => {
-            ctx.bindings_helper.transform_expr(expr, scope_to_use);
         }
     }
 }

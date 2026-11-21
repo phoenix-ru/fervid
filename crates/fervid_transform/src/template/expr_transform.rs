@@ -222,7 +222,9 @@ fn transform_pat(
         update_expr_helper: None,
         should_consume_update_expr: false,
     };
-    pat.visit_mut_with(&mut visitor);
+
+    extract_variables_from_pat(pat, &mut visitor.local_vars, true);
+    visitor.visit_parameter_pattern(pat);
 
     BindingTransformMetadata {
         has_js_bindings: visitor.has_js_bindings,
@@ -476,11 +478,16 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     extract_variables_from_pat(param, &mut self.local_vars, true);
                 }
 
+                // Visit the arrow params
+                for param in &mut arrow_expr.params {
+                    self.visit_parameter_pattern(param);
+                }
+
                 // Transform the arrow body
                 arrow_expr.body.visit_mut_with(self);
 
                 // Clear the temporary variables
-                self.local_vars.drain(old_len..);
+                self.local_vars.truncate(old_len);
 
                 return;
             }
@@ -488,11 +495,18 @@ impl<'s> VisitMut for TransformVisitor<'s> {
             // Regular functions need params collection as well
             Expr::Fn(fn_expr) => {
                 let old_len = self.local_vars.len();
-                let func = &mut fn_expr.function;
 
-                // TODO: This should actually process the values inside the pat
-                // For example `function (x = name) {}`
-                // should be transformed to `function (x = _ctx.name) {}`
+                // For a named function remember its name as well.
+                // This allows for recursion
+                if let Some(ref name) = fn_expr.ident {
+                    self.local_vars.push(SetupBinding::new_spanned(
+                        name.sym.to_owned(),
+                        BindingTypes::TemplateLocal,
+                        name.span,
+                    ));
+                }
+
+                let func = &mut fn_expr.function;
 
                 // Add the temporary variables
                 self.local_vars.reserve(func.params.len());
@@ -500,11 +514,16 @@ impl<'s> VisitMut for TransformVisitor<'s> {
                     extract_variables_from_pat(&param.pat, &mut self.local_vars, true);
                 }
 
+                // Visit the function params
+                for param in &mut func.params {
+                    self.visit_parameter_pattern(&mut param.pat);
+                }
+
                 // Transform the function body
                 func.body.visit_mut_with(self);
 
                 // Clear the temporary variables
-                self.local_vars.drain(old_len..);
+                self.local_vars.truncate(old_len);
 
                 return;
             }
@@ -1039,6 +1058,75 @@ impl TransformVisitor<'_> {
             _ => IdentTransformStrategy::LeaveUnchanged,
         }
     }
+
+    /// Equivalent of `asParams` transform inside vuejs-core,
+    /// but adapted to work with the existing visitor.
+    ///
+    /// This should normally happen after param pattern variables were collected.
+    /// The reason for that is that JS first reads param names, and only then
+    /// processes their initialization. For example, this snippet:
+    /// ```typescript
+    /// const v = "outer";
+    /// function f(x = v, v = "inner") { return x; }
+    /// f()
+    /// ```
+    /// Actually produces `ReferenceError: Cannot access 'v' before initialization`,
+    /// but works when you provide the value:
+    /// ```typescript
+    /// f("value")
+    /// ```
+    /// That in turn means that we should also first collect parameter names,
+    /// and only then do our transformation (i.e. call this function after collection).
+    fn visit_parameter_pattern(&mut self, pat: &mut Pat) {
+        match pat {
+            Pat::Ident(_) | Pat::Invalid(_) => {}
+
+            Pat::Array(array) => {
+                for element in array.elems.iter_mut().flatten() {
+                    self.visit_parameter_pattern(element);
+                }
+            }
+
+            Pat::Rest(rest) => {
+                self.visit_parameter_pattern(&mut rest.arg);
+            }
+
+            Pat::Assign(assign) => {
+                self.visit_parameter_pattern(&mut assign.left);
+                assign.right.visit_mut_with(self);
+            }
+
+            Pat::Object(object) => {
+                for property in &mut object.props {
+                    match property {
+                        // For key-value pat (`{ x: y }`), transform the value
+                        // and the key if it is computed (`{ [x]: y }`)
+                        ObjectPatProp::KeyValue(property) => {
+                            if let PropName::Computed(key) = &mut property.key {
+                                key.expr.visit_mut_with(self);
+                            }
+                            self.visit_parameter_pattern(&mut property.value);
+                        }
+
+                        // For assign object pat (`{ x = y }`), only transform the value
+                        ObjectPatProp::Assign(property) => {
+                            if let Some(value) = &mut property.value {
+                                value.visit_mut_with(self);
+                            }
+                        }
+
+                        ObjectPatProp::Rest(rest) => {
+                            self.visit_parameter_pattern(&mut rest.arg);
+                        }
+                    }
+                }
+            }
+
+            Pat::Expr(expr) => {
+                expr.visit_mut_with(self);
+            }
+        }
+    }
 }
 
 /// Gets the variable prefix depending on if we are compiling the template in inline mode.
@@ -1303,7 +1391,7 @@ mod tests {
     use crate::{
         BindingsHelper, SetupBinding, TemplateScope,
         template::{expr_transform::BindingsHelperTransform, js_builtins::JS_BUILTINS},
-        test_utils::{parser::parse_javascript_expr, to_str, ts},
+        test_utils::{js, pat, to_str, ts},
     };
     use fervid_core::{BindingTypes, ConstantTypes, FervidAtom, TemplateGenerationMode};
     use smallvec::SmallVec;
@@ -1483,6 +1571,92 @@ mod tests {
             "(x => doSmth(x), () => doSmth(x))",
             "(x=>_ctx.doSmth(x),()=>_ctx.doSmth(_ctx.x))"
         );
+    }
+
+    // Additional parameter-scope tests checked against vuejs compiler-sfc 3.5.45
+    // https://github.com/vuejs/core/blob/8b479a89445868d474f17e2d837765e7c9ece5e4/packages/compiler-core/src/babelUtils.ts#L197-L325
+    #[test]
+    fn it_transforms_nested_function_parameter_defaults() {
+        assert_expression_transform(
+            "function (x = name, y = x, z = function(v) { return y + bar - v }, v = foo) {}",
+            "function(x=_ctx.name,y=x,z=function(v){return y+_ctx.bar-v;},v=_ctx.foo){}",
+        );
+    }
+
+    #[test]
+    fn it_collects_all_arrow_parameters_before_defaults() {
+        // A direct read preserves the local binding's temporal dead zone
+        assert_expression_transform("(x = v, v = foo) => x + v", "(x=v,v=_ctx.foo)=>x+v");
+        // A closure reads the same binding after parameter initialization
+        assert_expression_transform("(x = () => v, v = foo) => x()", "(x=()=>v,v=_ctx.foo)=>x()");
+    }
+
+    #[test]
+    fn it_restores_parameter_and_function_name_scopes() {
+        assert_expression_transform(
+            "(function recur(x = recur) { return recur(x) }, recur)",
+            "(function recur(x=recur){return recur(x);},_ctx.recur)",
+        );
+        assert_expression_transform("((x = outer) => x, x)", "((x=_ctx.outer)=>x,_ctx.x)");
+    }
+
+    #[test]
+    fn it_keeps_function_body_bindings_out_of_parameter_defaults() {
+        assert_expression_transform(
+            "function (x = foo) { const foo = 1; return x + foo }",
+            "function(x=_ctx.foo){const foo=1;return x+foo;}",
+        );
+    }
+
+    #[test]
+    fn it_transforms_parameter_computed_keys_and_nested_defaults() {
+        assert_expression_transform(
+            "({ [key]: value = fallback, nested: [item = value], ...rest }) => value + item + rest + key",
+            "({[_ctx.key]:value=_ctx.fallback,nested:[item=value],...rest})=>value+item+rest+_ctx.key",
+        );
+    }
+
+    #[test]
+    fn it_tracks_nested_array_rest_arrow_parameters() {
+        assert_expression_transform("(...[foo = outer]) => foo", "(...[foo=_ctx.outer])=>foo");
+    }
+
+    #[test]
+    fn it_tracks_nested_array_rest_function_parameters() {
+        assert_expression_transform(
+            "function ([...[foo]]) { return foo + outer }",
+            "function([...[foo]]){return foo+_ctx.outer;}",
+        );
+    }
+
+    #[test]
+    fn it_tracks_object_pattern_inside_array_rest_parameters() {
+        assert_expression_transform(
+            "([...{ length }]) => length + outer",
+            "([...{length}])=>length+_ctx.outer",
+        );
+    }
+
+    #[test]
+    fn it_tracks_nested_rest_bindings_in_function_body() {
+        assert_expression_transform(
+            "() => { const [...[foo]] = items; return foo + outer }",
+            "()=>{const[...[foo]]=_ctx.items;return foo+_ctx.outer;}",
+        );
+    }
+
+    #[test]
+    fn it_tracks_nested_rest_bindings_in_root_parameter_pattern() {
+        let mut helper = BindingsHelper::default();
+
+        let mut pattern = pat("[...[foo = outer, bar = foo]]");
+        helper.transform_pat(&mut pattern, 0);
+        assert_eq!(to_str(&pattern), "[...[foo=_ctx.outer,bar=foo]]");
+
+        // Root parameter locals must not leak into a subsequent expression transform
+        let mut outside = js("foo");
+        helper.transform_expr(&mut outside, 0);
+        assert_eq!(to_str(&outside), "_ctx.foo");
     }
 
     #[test]
@@ -1703,9 +1877,10 @@ mod tests {
         test!("imported.value", "$setup.imported.value");
     }
 
-    fn js(input: &str) -> Box<swc_core::ecma::ast::Expr> {
-        parse_javascript_expr(input, 0, Default::default())
-            .expect("js expects the input to be parseable")
-            .0
+    fn assert_expression_transform(input: &str, expected: &str) {
+        let mut helper = BindingsHelper::default();
+        let mut expression = js(input);
+        helper.transform_expr(&mut expression, 0);
+        assert_eq!(to_str(&expression), expected, "{input}");
     }
 }

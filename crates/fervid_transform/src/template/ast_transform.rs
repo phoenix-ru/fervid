@@ -695,6 +695,107 @@ mod tests {
         assert_eq!("item+_ctx.fallback", body);
     }
 
+    // Additional scope tests, checked against vuejs compiler-sfc 3.5.45
+    // https://github.com/vuejs/core/blob/8b479a89445868d474f17e2d837765e7c9ece5e4/packages/compiler-core/src/transforms/transformExpression.ts#L272-L344
+    #[test]
+    fn it_preserves_v_slot_sibling_bindings_in_defaults() {
+        // <Comp v-slot="{ foo, bar = foo, baz = external }">{{ bar + baz }}</Comp>
+        let (slot_props, body) =
+            transform_component_slot("{ foo, bar = foo, baz = external }", "bar + baz");
+
+        assert_eq!(slot_props, "{foo,bar=foo,baz=_ctx.external}");
+        assert_eq!(body, "bar+baz");
+    }
+
+    #[test]
+    fn it_preserves_v_slot_later_bindings_in_defaults() {
+        // <Comp v-slot="{ first = later, later = outer }">{{ first + later }}</Comp>
+        // Keep the parameter-local reference, including JavaScript's temporal dead zone
+        let (slot_props, body) =
+            transform_component_slot("{ first = later, later = outer }", "first + later");
+
+        assert_eq!(slot_props, "{first=later,later=_ctx.outer}");
+        assert_eq!(body, "first+later");
+    }
+
+    #[test]
+    fn it_preserves_v_slot_bindings_in_computed_keys() {
+        // <Comp v-slot="{ [name]: value, name }">{{ value + name }}</Comp>
+        let (slot_props, body) =
+            transform_component_slot("{ [name]: value, name }", "value + name");
+
+        assert_eq!(slot_props, "{[name]:value,name}");
+        assert_eq!(body, "value+name");
+    }
+
+    #[test]
+    fn it_resolves_dynamic_slot_name_outside_parameter_scope() {
+        // <Comp #[name]="{ name }">{{ name + outside }}</Comp>
+        let (slot_name, slot_props, body) = transform_component_slot_with_name(
+            Some(StrOrExpr::Expr(js("name"))),
+            "{ name }",
+            "name + outside",
+        );
+
+        assert_eq!(slot_name.as_deref(), Some("_ctx.name"));
+        assert_eq!(slot_props, "{name}");
+        assert_eq!(body, "name+_ctx.outside");
+    }
+
+    #[test]
+    fn it_separates_dynamic_slot_name_from_parameter_default_scope() {
+        // <Comp #[name]="{ name, other = name, external = outside }">{{ other + external }}</Comp>
+        let (slot_name, slot_props, body) = transform_component_slot_with_name(
+            Some(StrOrExpr::Expr(js("name"))),
+            "{ name, other = name, external = outside }",
+            "other + external",
+        );
+
+        assert_eq!(slot_name.as_deref(), Some("_ctx.name"));
+        assert_eq!(slot_props, "{name,other=name,external=_ctx.outside}");
+        assert_eq!(body, "other+external");
+    }
+
+    #[test]
+    fn it_resolves_static_setup_components_independently_of_nested_slot_scopes() {
+        // <script setup>const Foo = getComponent()</script>
+        // <Foo v-slot="{ Foo }"><Other v-slot="{ x }"><Foo/></Other></Foo>
+        for (mode, expected) in [
+            (fervid_core::TemplateGenerationMode::RenderFn, "$setup.Foo"),
+            (fervid_core::TemplateGenerationMode::Inline, "_unref(Foo)"),
+        ] {
+            let inner = component_with_slot("Foo", None, vec![]);
+            let middle = component_with_slot("Other", Some("{ x }"), vec![inner]);
+            let mut template = SfcTemplateBlock {
+                lang: "html".into(),
+                roots: vec![component_with_slot("Foo", Some("{ Foo }"), vec![middle])],
+                span: DUMMY_SP,
+            };
+            let mut ctx = TransformSfcContext::anonymous();
+            ctx.bindings_helper.template_generation_mode = mode;
+            ctx.bindings_helper
+                .setup_bindings
+                .push(crate::SetupBinding::new(
+                    "Foo".into(),
+                    fervid_core::BindingTypes::SetupMaybeRef,
+                ));
+
+            transform_and_record_template(&mut template, &mut ctx);
+
+            assert!(ctx.errors.is_empty(), "{:#?}", ctx.errors);
+            assert_eq!(ctx.directive_scopes.v_slot, 0);
+            let (outer, outer_vnode) = expect_element_vnode(&template.roots[0]);
+            let (middle, _) = expect_element_vnode(&outer.children[0]);
+            let (_, inner_vnode) = expect_element_vnode(&middle.children[0]);
+            for vnode in [outer_vnode, inner_vnode] {
+                let VNodeCallTag::Expr(tag) = &vnode.tag else {
+                    panic!("setup component should resolve to an expression");
+                };
+                assert_eq!(to_str(tag), expected);
+            }
+        }
+    }
+
     #[test]
     fn it_builds_props_for_directive_only_elements() {
         let mut sfc_template = SfcTemplateBlock {
@@ -1469,7 +1570,37 @@ mod tests {
         }
     }
 
+    fn component_with_slot(tag: &str, slot_props: Option<&str>, children: Vec<Node>) -> Node {
+        Node::Element(ElementNode::new_with_children_and_type(
+            StartingTag {
+                tag_name: tag.into(),
+                attributes: vec![],
+                directives: slot_props.map(|props| {
+                    Box::new(VueDirectives {
+                        v_slot: Some(fervid_core::VSlotDirective {
+                            slot_name: None,
+                            value: Some(Box::new(parse_slot_props(props))),
+                        }),
+                        ..Default::default()
+                    })
+                }),
+            },
+            children,
+            ElementKind::Component,
+        ))
+    }
+
     fn transform_component_slot(slot_props: &str, child_expr: &str) -> (String, String) {
+        let (_, slot_props, body) =
+            transform_component_slot_with_name(None, slot_props, child_expr);
+        (slot_props, body)
+    }
+
+    fn transform_component_slot_with_name(
+        slot_name: Option<StrOrExpr>,
+        slot_props: &str,
+        child_expr: &str,
+    ) -> (Option<String>, String, String) {
         let mut sfc_template = SfcTemplateBlock {
             lang: "html".into(),
             roots: vec![Node::Element(ElementNode {
@@ -1478,7 +1609,7 @@ mod tests {
                     attributes: vec![],
                     directives: Some(Box::new(VueDirectives {
                         v_slot: Some(fervid_core::VSlotDirective {
-                            slot_name: None,
+                            slot_name,
                             value: Some(Box::new(parse_slot_props(slot_props))),
                         }),
                         ..Default::default()
@@ -1499,7 +1630,9 @@ mod tests {
             span: DUMMY_SP,
         };
 
-        transform_and_record_template(&mut sfc_template, &mut TransformSfcContext::anonymous());
+        let mut ctx = TransformSfcContext::anonymous();
+        transform_and_record_template(&mut sfc_template, &mut ctx);
+        assert!(ctx.errors.is_empty(), "{:#?}", ctx.errors);
 
         let Node::Element(component) = &sfc_template.roots[0] else {
             panic!("Expected component root")
@@ -1509,6 +1642,14 @@ mod tests {
             .directives
             .as_ref()
             .expect("component should retain directives");
+        let slot = directives
+            .v_slot
+            .as_ref()
+            .expect("component should retain v-slot");
+        let slot_name = slot.slot_name.as_ref().map(|name| match name {
+            StrOrExpr::Str(name) => name.value.to_string(),
+            StrOrExpr::Expr(name) => to_str(name),
+        });
         let slot_props = directives
             .v_slot
             .as_ref()
@@ -1518,7 +1659,11 @@ mod tests {
             panic!("Expected one interpolation")
         };
 
-        (to_str(slot_props.as_ref()), to_str(&interpolation.value))
+        (
+            slot_name,
+            to_str(slot_props.as_ref()),
+            to_str(&interpolation.value),
+        )
     }
 
     fn parse_slot_props(raw: &str) -> Pat {
