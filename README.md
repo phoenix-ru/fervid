@@ -63,7 +63,9 @@ Yes, it is incredibly fast. In fact, below is a benchmark run for a [test compon
 
 <!-- Micro-benchmarking has been done using Criterion, code for benchmarks can be found in `benches` directory. -->
 Benchmarking in Node.js has been done using [`benny`](https://github.com/caderek/benny), slightly modified to take `libuv` threads into consideration.
-[Source code for a benchmark](crates/fervid_napi/benchmark/bench.ts).
+[Source code for a benchmark](crates/fervid_napi/benchmark/bench.mts).
+Build the optimized binding with `pnpm --dir crates/fervid_napi build`, then run
+`pnpm --dir crates/fervid_napi bench` on Node.js 22.18+ or Node.js 24.
 
 Better benchmarking is a TODO and has a lower priority compared to feature-completeness and usability in real-world scenarios, so **Pull Requests are welcome**.
 

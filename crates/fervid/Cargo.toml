@@ -18,17 +18,12 @@ fervid_core = { path="../fervid_core", version = "0.2" }
 # fervid_css = { path="../fervid_css", version = "0.0.1" }
 fervid_parser = { path="../fervid_parser", version = "0.2" }
 fervid_transform = { path="../fervid_transform", version = "0.2" }
-nom = "7"
-regex = "1"
-phf = { workspace = true }
-swc_ecma_codegen ={ workspace = true }
+nom = "8"
 swc_ecma_parser = { workspace = true }
 swc_core = { workspace = true, features = ["ecma_ast"] }
-lazy_static = { workspace = true }
-fxhash = { workspace = true }
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.8"
 
 [[bench]]
 name = "parser_bench"

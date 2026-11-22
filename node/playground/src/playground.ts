@@ -1,32 +1,36 @@
 import { Compiler } from '@fervid/napi-wasm32-wasi'
 
-import 'monaco-editor/esm/vs/editor/editor.all.js';
-import 'monaco-editor/esm/vs/language/html/monaco.contribution';
-import 'monaco-editor/esm/vs/basic-languages/monaco.contribution';
-import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
+import * as monaco from 'monaco-editor/editor/editor.api.js';
+import './monaco-features';
+import 'monaco-editor/languages/definitions/html/register.js';
+import 'monaco-editor/languages/definitions/css/register.js';
+import 'monaco-editor/languages/definitions/typescript/register.js';
+import 'monaco-editor/languages/definitions/javascript/register.js';
+import 'monaco-editor/languages/features/html/register.js';
+import 'monaco-editor/languages/features/typescript/register.js';
 
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
-import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
-import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
-import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
+import editorWorker from 'monaco-editor/editor/editor.worker.js?worker&url';
+import jsonWorker from 'monaco-editor/language/json/json.worker.js?worker&url';
+import cssWorker from 'monaco-editor/language/css/css.worker.js?worker&url';
+import htmlWorker from 'monaco-editor/language/html/html.worker.js?worker&url';
+import tsWorker from 'monaco-editor/language/typescript/ts.worker.js?worker&url';
 
 // @ts-ignore
 self.MonacoEnvironment = {
 	getWorker(_: any, label: string) {
 		if (label === 'json') {
-			return new jsonWorker();
+			return new Worker(jsonWorker, { type: 'module' });
 		}
 		if (label === 'css' || label === 'scss' || label === 'less') {
-			return new cssWorker();
+			return new Worker(cssWorker, { type: 'module' });
 		}
 		if (label === 'html' || label === 'handlebars' || label === 'razor') {
-			return new htmlWorker();
+			return new Worker(htmlWorker, { type: 'module' });
 		}
 		if (label === 'typescript' || label === 'javascript') {
-			return new tsWorker();
+			return new Worker(tsWorker, { type: 'module' });
 		}
-		return new editorWorker();
+		return new Worker(editorWorker, { type: 'module' });
 	}
 };
 

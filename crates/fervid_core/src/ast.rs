@@ -340,7 +340,7 @@ pub fn create_simple_expression_str(
     SimpleExpressionNode {
         ast: Box::new(Expr::Lit(Lit::Str(Str {
             span,
-            value: content,
+            value: content.into(),
             raw: None,
         }))),
         is_static,

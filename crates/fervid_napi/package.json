@@ -53,7 +53,7 @@
   "scripts": {
     "artifacts": "napi artifacts",
     "dev": "chmod +x watch.sh && cargo watch -w '../../crates' -i '*.js' -i '*.d.ts' -s './watch.sh'",
-    "bench": "node -r @swc-node/register benchmark/bench.ts",
+    "bench": "node benchmark/bench.mts",
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",
     "build:wasm": "pnpm build --target wasm32-wasip1-threads",
@@ -62,47 +62,28 @@
     "format:prettier": "prettier . -w",
     "format:toml": "taplo format",
     "format:rs": "cargo fmt",
-    "lint": "eslint . -c ./.eslintrc.yml",
+    "lint": "oxlint --type-aware --deny-warnings .",
     "prepublishOnly": "napi prepublish -t npm",
     "test": "vitest",
     "version": "napi version"
   },
   "devDependencies": {
-    "@babel/parser": "^7.28.0",
-    "@emnapi/core": "^1.8.1",
-    "@emnapi/runtime": "^1.8.1",
-    "@napi-rs/cli": "^3.5.1",
+    "@babel/parser": "^8.1.3",
+    "@emnapi/core": "^1.11.3",
+    "@emnapi/runtime": "^1.11.3",
+    "@napi-rs/cli": "3.5.1",
     "@napi-rs/wasm-runtime": "^1.2.7",
-    "@swc-node/register": "^1.10.10",
-    "@swc/core": "^1.13.3",
     "@taplo/cli": "^0.7.0",
-    "@types/node": "^24.10.13",
-    "@typescript-eslint/eslint-plugin": "^8.39.1",
-    "@typescript-eslint/parser": "^8.39.1",
-    "@vue/compiler-sfc": "^3.5.45",
+    "@types/node": "^24.19.2",
+    "@vue/compiler-sfc": "^3.5.46",
     "benny": "^3.7.1",
-    "chalk": "^5.5.0",
-    "eslint": "^9.33.0",
-    "eslint-config-prettier": "^9.1.2",
-    "eslint-plugin-import": "^2.32.0",
-    "eslint-plugin-prettier": "^5.5.4",
-    "husky": "^9.1.7",
     "kleur": "^4.1.5",
-    "lint-staged": "^16.2.7",
-    "prettier": "^3.6.2",
-    "typescript": "^5.5.4",
-    "vitest": "^4.0.18"
-  },
-  "lint-staged": {
-    "*.@(js|ts|tsx)": [
-      "eslint -c .eslintrc.yml --fix"
-    ],
-    "*.@(js|ts|tsx|yml|yaml|md|json)": [
-      "prettier --write"
-    ],
-    "*.toml": [
-      "taplo format"
-    ]
+    "oxlint": "1.94.0",
+    "oxlint-tsgolint": "7.0.2008",
+    "prettier": "^3.10.1",
+    "typescript": "5.9.3",
+    "vite": "7.3.8",
+    "vitest": "^5.1.1"
   },
   "prettier": {
     "printWidth": 120,

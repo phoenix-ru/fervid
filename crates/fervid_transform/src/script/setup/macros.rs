@@ -1,4 +1,4 @@
-use fervid_core::{IntoIdent, VueImports};
+use fervid_core::{IntoIdent, VueImports, fervid_atom};
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
@@ -9,10 +9,6 @@ use swc_core::{
 
 use crate::{
     SetupBinding, TransformSfcContext,
-    atoms::{
-        DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_MODEL, DEFINE_OPTIONS, DEFINE_PROPS, DEFINE_SLOTS,
-        EXPOSE_HELPER, MERGE_MODELS_HELPER, WITH_DEFAULTS,
-    },
     error::TransformError,
     script::{
         resolve_type::TypeResolveContext,
@@ -68,7 +64,7 @@ pub fn collect_macros(
             return false;
         };
 
-        if callee_expr_ident.sym == *DEFINE_PROPS {
+        if callee_expr_ident.sym == fervid_atom!("defineProps") {
             type_args.is_some()
         } else {
             false
@@ -104,9 +100,9 @@ pub fn collect_macros(
                         continue;
                     };
 
-                    let is_define_props = callee_ident.sym == *DEFINE_PROPS;
-                    let is_define_emits = callee_ident.sym == *DEFINE_EMITS;
-                    let is_with_defaults = callee_ident.sym == *WITH_DEFAULTS;
+                    let is_define_props = callee_ident.sym == fervid_atom!("defineProps");
+                    let is_define_emits = callee_ident.sym == fervid_atom!("defineEmits");
+                    let is_with_defaults = callee_ident.sym == fervid_atom!("withDefaults");
                     if !is_define_props && !is_define_emits && !is_with_defaults {
                         continue;
                     }
@@ -145,9 +141,9 @@ pub fn collect_macros(
                     continue;
                 };
 
-                let is_define_props = callee_ident.sym == *DEFINE_PROPS;
-                let is_define_emits = callee_ident.sym == *DEFINE_EMITS;
-                let is_with_defaults = callee_ident.sym == *WITH_DEFAULTS;
+                let is_define_props = callee_ident.sym == fervid_atom!("defineProps");
+                let is_define_emits = callee_ident.sym == fervid_atom!("defineEmits");
+                let is_with_defaults = callee_ident.sym == fervid_atom!("withDefaults");
                 if !is_define_props && !is_define_emits && !is_with_defaults {
                     continue;
                 }
@@ -240,20 +236,20 @@ pub fn transform_script_setup_macro_expr(
     // We do a bit of a juggle here to use `string_cache`s fast comparisons
     let sym = &callee_ident.sym;
     let span = call_expr.span;
-    if DEFINE_PROPS.eq(sym) {
+    if fervid_atom!("defineProps").eq(sym) {
         process_define_props(ctx, call_expr, var_decl, sfc_object_helper, errors)
-    } else if WITH_DEFAULTS.eq(sym) {
+    } else if fervid_atom!("withDefaults").eq(sym) {
         process_with_defaults(ctx, call_expr, var_decl, sfc_object_helper, errors)
-    } else if DEFINE_EMITS.eq(sym) {
+    } else if fervid_atom!("defineEmits").eq(sym) {
         process_define_emits(ctx, call_expr, var_decl, sfc_object_helper, errors)
-    } else if DEFINE_EXPOSE.eq(sym) {
+    } else if fervid_atom!("defineExpose").eq(sym) {
         sfc_object_helper.is_setup_expose_referenced = true;
 
         // __expose
         let new_callee_ident = Ident {
             span: callee_ident.span,
             ctxt: Default::default(),
-            sym: EXPOSE_HELPER.to_owned(),
+            sym: fervid_atom!("__expose"),
             optional: false,
         };
 
@@ -265,16 +261,16 @@ pub fn transform_script_setup_macro_expr(
             args: call_expr.args.to_owned(),
             type_args: None,
         }))))
-    } else if DEFINE_MODEL.eq(sym) {
+    } else if fervid_atom!("defineModel").eq(sym) {
         process_define_model(call_expr, var_decl, sfc_object_helper, bindings_helper)
-    } else if DEFINE_SLOTS.eq(sym) {
+    } else if fervid_atom!("defineSlots").eq(sym) {
         process_define_slots(
             call_expr,
             var_decl.is_some(),
             sfc_object_helper,
             bindings_helper,
         )
-    } else if DEFINE_OPTIONS.eq(sym) {
+    } else if fervid_atom!("defineOptions").eq(sym) {
         process_define_options(call_expr, var_decl.is_some(), sfc_object_helper, errors)
     } else {
         TransformMacroResult::NotAMacro
@@ -315,7 +311,7 @@ pub fn postprocess_macros(
             } else {
                 // Use `mergeModels` otherwise
                 ctx.bindings_helper.vue_imports |= VueImports::MergeModels;
-                let merge_models_ident = MERGE_MODELS_HELPER.to_owned();
+                let merge_models_ident = fervid_atom!("_mergeModels");
 
                 let new_props = Expr::Call(CallExpr {
                     span: DUMMY_SP,
@@ -366,7 +362,7 @@ pub fn postprocess_macros(
             } else {
                 // Use `mergeModels` otherwise
                 ctx.bindings_helper.vue_imports |= VueImports::MergeModels;
-                let merge_models_ident = MERGE_MODELS_HELPER.to_owned();
+                let merge_models_ident = fervid_atom!("_mergeModels");
 
                 let new_emits = Expr::Call(CallExpr {
                     span: DUMMY_SP,

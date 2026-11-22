@@ -1,3 +1,4 @@
 [toolchain]
-channel = "nightly-2026-07-16"
+# Match the toolchain used by Farm's native host, Rust plugin ABI is not stable across compilers
+channel = "nightly-2026-04-10"
 components = ["clippy", "rustfmt", "rust-src", "rustc-dev"]

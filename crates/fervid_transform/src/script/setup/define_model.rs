@@ -1,8 +1,9 @@
 use std::mem;
 
-use fervid_core::{BindingTypes, FervidAtom, VueImports, fervid_atom};
+use fervid_core::{BindingTypes, FervidAtom, VueImports, fervid_atom, wtf8_atom_to_atom};
 use itertools::Itertools;
 use swc_core::{
+    atoms::{Wtf8Atom, wtf8::Wtf8Buf},
     common::DUMMY_SP,
     ecma::ast::{
         Bool, CallExpr, Callee, Expr, ExprOrSpread, Ident, IdentName, KeyValueProp, Lit, ObjectLit,
@@ -12,7 +13,6 @@ use swc_core::{
 
 use crate::{
     BindingsHelper, SetupBinding, SfcDefineModel, SfcExportedObjectHelper,
-    atoms::{MODEL_VALUE, PROPS_HELPER, USE_MODEL_HELPER},
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::resolve_type::{TypeResolveContext, Types, TypesSet, infer_runtime_type_type},
 };
@@ -49,7 +49,7 @@ pub fn process_define_model(
     let use_model_ident = Ident {
         span,
         ctxt: Default::default(),
-        sym: USE_MODEL_HELPER.to_owned(),
+        sym: fervid_atom!("_useModel"),
         optional: false,
     };
 
@@ -67,7 +67,7 @@ pub fn process_define_model(
         expr: Box::new(Expr::Ident(Ident {
             span,
             ctxt: Default::default(),
-            sym: PROPS_HELPER.to_owned(),
+            sym: fervid_atom!("__props"),
             optional: false,
         })),
     });
@@ -98,7 +98,7 @@ pub fn process_define_model(
     bindings_helper
         .setup_bindings
         .push(SetupBinding::new_spanned(
-            model_name.value,
+            wtf8_atom_to_atom(&model_name.value),
             BindingTypes::Props,
             model_name.span,
         ));
@@ -138,7 +138,7 @@ fn read_define_model(
         () => {
             Str {
                 span: DUMMY_SP,
-                value: MODEL_VALUE.to_owned(),
+                value: fervid_atom!("modelValue").into(),
                 raw: None,
             }
         };
@@ -216,10 +216,10 @@ fn read_options(options: &ExprOrSpread) -> Option<(Vec<PropOrSpread>, Vec<PropOr
     let mut prop_options = Vec::with_capacity(obj.props.len());
     let mut use_model_options = Vec::with_capacity(2);
 
-    fn get_ident_computed(v: &PropName) -> (Option<&swc_core::atoms::Atom>, bool) {
+    fn get_ident_computed(v: &PropName) -> (Option<FervidAtom>, bool) {
         match v {
-            PropName::Ident(ident_name) => (Some(&ident_name.sym), false),
-            PropName::Str(s) => (Some(&s.value), false),
+            PropName::Ident(ident_name) => (Some(ident_name.sym.to_owned()), false),
+            PropName::Str(s) => (Some(wtf8_atom_to_atom(&s.value)), false),
             PropName::Num(_) => (None, false),
             PropName::Computed(_) => (None, true),
             PropName::BigInt(_) => (None, false),
@@ -233,7 +233,7 @@ fn read_options(options: &ExprOrSpread) -> Option<(Vec<PropOrSpread>, Vec<PropOr
         };
 
         let (ident, computed) = match prop.as_ref() {
-            Prop::Shorthand(ident) => (Some(&ident.sym), false),
+            Prop::Shorthand(ident) => (Some(ident.sym.to_owned()), false),
             Prop::KeyValue(key_value_prop) => get_ident_computed(&key_value_prop.key),
             Prop::Assign(_) => return None,
             Prop::Getter(getter_prop) => get_ident_computed(&getter_prop.key),
@@ -363,23 +363,30 @@ pub fn postprocess_models(
             }
         }
 
-        let model_update_evt_name = format!("update:{}", model.name.value);
+        // update:modelName
+        let model_name_len = model.name.value.len();
+        let mut model_update_evt_name = Wtf8Buf::with_capacity("update:".len() + model_name_len);
+        model_update_evt_name.push_str("update:");
+        model_update_evt_name.push_wtf8(&model.name.value);
 
         // Push a string literal into emits
         emits.push(Some(ExprOrSpread {
             spread: None,
             expr: Box::new(Expr::Lit(Lit::Str(Str {
                 span: DUMMY_SP,
-                value: FervidAtom::from(model_update_evt_name),
+                value: model_update_evt_name.into(),
                 raw: None,
             }))),
         }));
 
         // For modifiers
-        let modifier_name = if &model.name.value == "modelValue" {
-            fervid_atom!("modelModifiers")
+        let modifier_name: Wtf8Atom = if &model.name.value == "modelValue" {
+            fervid_atom!("modelModifiers").into()
         } else {
-            FervidAtom::from(format!("{}Modifiers", model.name.value))
+            let mut out = Wtf8Buf::with_capacity("Modifiers".len() + model_name_len);
+            out.push_wtf8(&model.name.value);
+            out.push_str("Modifiers");
+            out.into()
         };
 
         // Push an options object (or expr) into props

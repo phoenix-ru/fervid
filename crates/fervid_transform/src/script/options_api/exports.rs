@@ -1,5 +1,5 @@
 use crate::SetupBinding;
-use fervid_core::BindingTypes;
+use fervid_core::{BindingTypes, wtf8_atom_to_atom};
 use swc_core::ecma::ast::{ExportSpecifier, ModuleExportName, NamedExport};
 
 /// Collects exports from e.g. `export { foo, bar as baz } from 'qux'`
@@ -57,7 +57,7 @@ fn collect_module_export_name(
         )),
 
         ModuleExportName::Str(ns_export_str) => out.push(SetupBinding::new_spanned(
-            ns_export_str.value.to_owned(),
+            wtf8_atom_to_atom(&ns_export_str.value),
             binding_type,
             ns_export_str.span,
         )),

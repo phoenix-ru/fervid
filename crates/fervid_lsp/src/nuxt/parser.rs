@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
-use fervid_core::FervidAtom;
+use fervid_core::{FervidAtom, wtf8_atom_to_atom};
 use fxhash::FxHashMap;
 use swc_core::{
     common::{FileName, SourceMap},
@@ -123,7 +123,7 @@ fn parse_nuxt_imports_dts(
             continue;
         };
 
-        let specifier = src.value.to_owned();
+        let specifier = wtf8_atom_to_atom(&src.value);
 
         for s in &named.specifiers {
             match s {
@@ -154,7 +154,7 @@ fn parse_nuxt_imports_dts(
 /// Walk TS types to find `import("...")` path.
 fn find_first_import_type_path(ty: &TsType) -> Option<FervidAtom> {
     match ty {
-        TsType::TsImportType(import_ty) => Some(import_ty.arg.value.to_owned()),
+        TsType::TsImportType(import_ty) => Some(wtf8_atom_to_atom(&import_ty.arg.value)),
 
         TsType::TsTypeQuery(q) => {
             // typeof import("...").default often becomes a TsTypeQuery whose expr_name
@@ -212,7 +212,7 @@ fn find_first_import_type_path(ty: &TsType) -> Option<FervidAtom> {
 
 fn find_import_in_type_query(q: &TsTypeQuery) -> Option<FervidAtom> {
     match &q.expr_name {
-        TsTypeQueryExpr::Import(import_ty) => Some(import_ty.arg.value.to_owned()),
+        TsTypeQueryExpr::Import(import_ty) => Some(wtf8_atom_to_atom(&import_ty.arg.value)),
         TsTypeQueryExpr::TsEntityName(_) => None,
     }
 }
@@ -220,7 +220,7 @@ fn find_import_in_type_query(q: &TsTypeQuery) -> Option<FervidAtom> {
 fn module_export_name_to_string(n: &ModuleExportName) -> FervidAtom {
     match n {
         ModuleExportName::Ident(i) => i.sym.to_owned(),
-        ModuleExportName::Str(s) => s.value.to_owned(),
+        ModuleExportName::Str(s) => wtf8_atom_to_atom(&s.value),
     }
 }
 

@@ -3,7 +3,7 @@ use fervid_core::{
     VModelDirective, VOnDirective, VSlotDirective, VueDirectives,
 };
 use nom::{
-    Err, IResult,
+    Err, IResult, Parser,
     branch::alt,
     bytes::complete::{tag, take_till},
     character::complete::char,
@@ -80,7 +80,7 @@ fn parse_vanilla_attr<'i>(
     let (input, attr_name) = html_name(input)?;
 
     /* Support omitting a `=` char */
-    let eq: Result<(&str, char), nom::Err<nom::error::Error<_>>> = char('=')(input);
+    let eq: Result<(&str, char), nom::Err<nom::error::Error<_>>> = char('=').parse(input);
     match eq {
         // consider omitted attribute as attribute name itself (as current Vue compiler does)
         Err(_) => {
@@ -110,7 +110,7 @@ fn parse_vanilla_attr<'i>(
 }
 
 fn parse_attr_value(input: &str) -> IResult<&str, &str> {
-    delimited(char('"'), take_till(|c| c == '"'), char('"'))(input)
+    delimited(char('"'), take_till(|c| c == '"'), char('"')).parse(input)
 }
 
 /// Parses a directive in form of `v-directive-name:directive-attribute.modifier1.modifier2`
@@ -121,7 +121,7 @@ fn parse_directive<'i>(
     attributes: &mut Vec<AttributeOrBinding>,
     directives: &mut Option<Box<VueDirectives>>,
 ) -> IResult<&'i str, ()> {
-    let (input, prefix) = alt((tag("v-"), tag("@"), tag("#"), tag(":"), tag(".")))(input)?;
+    let (input, prefix) = alt((tag("v-"), tag("@"), tag("#"), tag(":"), tag("."))).parse(input)?;
 
     // https://vuejs.org/api/built-in-directives.html#v-bind
     let mut is_bind_prop = false;
@@ -177,7 +177,7 @@ fn parse_directive<'i>(
         let (input, arg) = if input.starts_with('[') {
             is_dynamic = true;
 
-            delimited(char('['), html_name, char(']'))(input)?
+            delimited(char('['), html_name, char(']')).parse(input)?
         } else {
             html_name(input)?
         };
@@ -195,8 +195,9 @@ fn parse_directive<'i>(
     }
 
     // Read modifiers
-    let (input, modifiers): (&str, Vec<&str>) =
-        many0(preceded(char('.'), html_name))(input).unwrap_or((input, vec![]));
+    let (input, modifiers): (&str, Vec<&str>) = many0(preceded(char('.'), html_name))
+        .parse(input)
+        .unwrap_or((input, vec![]));
 
     // Value
     let (input, value) = if !input.starts_with('=') {
@@ -210,7 +211,7 @@ fn parse_directive<'i>(
         () => {
             // TODO: this fails at a very unexpected location,
             // but maybe it needs to rewind back to the start
-            return fail(input);
+            return fail().parse(input);
         };
     }
 

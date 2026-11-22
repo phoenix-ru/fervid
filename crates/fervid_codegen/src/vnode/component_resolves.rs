@@ -44,7 +44,7 @@ impl CodegenContext {
                 spread: None,
                 expr: Box::new(Expr::Lit(Lit::Str(Str {
                     span: DUMMY_SP,
-                    value: (*component_name).to_owned(),
+                    value: (*component_name).to_owned().into(),
                     raw: None,
                 }))),
             });

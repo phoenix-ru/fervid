@@ -180,7 +180,7 @@ impl CodegenContext {
 
         // Write the argument or `void 0`
         let directive_arg_expr = match argument {
-            Some(StrOrExpr::Str(s)) => Box::new(Expr::Lit(Lit::Str(s.to_owned()))),
+            Some(StrOrExpr::Str(s)) => Box::new(Expr::Lit(Lit::Str(s.to_owned().into()))),
             Some(StrOrExpr::Expr(expr)) => expr.to_owned(),
             None => Box::new(void0()),
         };
@@ -301,7 +301,7 @@ impl CodegenContext {
                         spread: None,
                         expr: Box::new(Expr::Lit(Lit::Str(Str {
                             span: DUMMY_SP,
-                            value: (**directive_name).to_owned(),
+                            value: (**directive_name).to_owned().into(),
                             raw: None,
                         }))),
                     }],

@@ -32,7 +32,9 @@ impl CodegenContext {
                 span: DUMMY_SP,
                 ctxt: Default::default(),
                 params: vec![],
-                body: Box::new(swc_core::ecma::ast::BlockStmtOrExpr::Expr(item_render_expr)),
+                body: Box::new(swc_core::ecma::ast::ArrowFunctionBody::Expr(
+                    item_render_expr,
+                )),
                 is_async: false,
                 is_generator: false,
                 type_params: None,

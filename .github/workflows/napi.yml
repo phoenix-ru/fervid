@@ -93,8 +93,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           # Sync with rust-toolchain.toml
-          # toolchain: stable
-          toolchain: nightly-2026-07-16
+          toolchain: 1.100.0
           targets: ${{ matrix.settings.target }}
       - name: Cache cargo
         uses: actions/cache@v5
@@ -164,8 +163,8 @@ jobs:
             target: x86_64-apple-darwin
             architecture: x64
         node:
-          - "20"
           - "22"
+          - "24"
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v6
@@ -204,8 +203,12 @@ jobs:
           - aarch64-unknown-linux-musl
           - armv7-unknown-linux-gnueabihf
         node:
-          - "20"
           - "22"
+          - "24"
+        exclude:
+          # Official Node 24 images no longer ship ARMv7
+          - target: armv7-unknown-linux-gnueabihf
+            node: "24"
     runs-on: ${{ contains(matrix.target, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v6
@@ -288,7 +291,7 @@ jobs:
       - name: Test bindings
         run: pnpm test
         env:
-          NAPI_RS_FORCE_WASI: 1
+          NAPI_RS_FORCE_WASI: error
 
   publish:
     name: Publish

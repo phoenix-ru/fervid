@@ -8,6 +8,6 @@ version = "0.1.0"
 [dependencies]
 fervid_parser = {path = "../fervid_parser", version = "*"}
 swc_core = {workspace = true, features = ["common", "ecma_ast", "ecma_visit"]}
-swc_ecma_lints = {version = "21"}
-swc_ecma_transforms_base = {version = "24"}
-swc_error_reporters = {version = "16"}
+swc_ecma_lints = {version = "39"}
+swc_ecma_transforms_base = {version = "52"}
+swc_error_reporters = {version = "30"}

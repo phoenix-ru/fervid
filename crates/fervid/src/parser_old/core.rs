@@ -5,7 +5,7 @@ use nom::combinator::fail;
 use nom::error::{ErrorKind, ParseError};
 use nom::multi::many0;
 use nom::sequence::{delimited, preceded};
-use nom::{IResult, bytes::complete::tag, sequence::tuple};
+use nom::{IResult, Parser, bytes::complete::tag};
 use std::str;
 use swc_core::common::DUMMY_SP;
 use swc_core::ecma::ast::Module;
@@ -213,7 +213,7 @@ fn parse_root_block<'a>(
     }
 
     // Read style (basically same as script, but attributes are different)
-    let lang = lang.unwrap_or_else(|| FervidAtom::from("css"));
+    let lang = lang.unwrap_or_else(|| fervid_atom!("css"));
 
     let is_scoped = starting_tag.attributes.iter().any(|attr| {
         matches!(
@@ -249,13 +249,14 @@ fn parse_root_block<'a>(
 }
 
 fn parse_element_starting_tag(input: &str) -> IResult<&str, (StartingTag, bool)> {
-    let (input, (_, tag_name, (attributes, directives), _, ending_bracket)) = tuple((
+    let (input, (_, tag_name, (attributes, directives), _, ending_bracket)) = (
         tag("<"),
         html_name,
         parse_attributes,
         space0,
         alt((tag(">"), tag("/>"))),
-    ))(input)?;
+    )
+        .parse(input)?;
 
     #[cfg(feature = "dbg_print")]
     {
@@ -279,7 +280,7 @@ fn parse_element_starting_tag(input: &str) -> IResult<&str, (StartingTag, bool)>
 
 fn parse_element_end_tag(input: &str) -> IResult<&str, &str> {
     // eat any tag, because it may not match the start tag according to spec
-    delimited(tag("</"), html_name, preceded(space0, tag(">")))(input)
+    delimited(tag("</"), html_name, preceded(space0, tag(">"))).parse(input)
 }
 
 fn parse_interpolation_node(input: &str) -> IResult<&str, Node> {
@@ -288,7 +289,7 @@ fn parse_interpolation_node(input: &str) -> IResult<&str, Node> {
     // TODO Span
     let parsed = match parse_js(raw_expression, 0, 0) {
         Ok(parsed) => parsed,
-        Err(_) => return fail(input), // this ignores the bad interpolation (unconfirmed)
+        Err(_) => return fail().parse(input), // this ignores the bad interpolation (unconfirmed)
     };
 
     Ok((
@@ -357,7 +358,7 @@ pub fn parse_element_node(input: &str) -> IResult<&str, Node> {
 
 // parses {{ expression }}
 fn parse_dynamic_expression(input: &str) -> IResult<&str, &str> {
-    delimited(tag("{{"), take_until1("}}"), tag("}}"))(input)
+    delimited(tag("{{"), take_until1("}}"), tag("}}")).parse(input)
 }
 
 fn parse_text_node(input: &str) -> IResult<&str, Node> {
@@ -377,7 +378,7 @@ fn parse_text_node(input: &str) -> IResult<&str, Node> {
 
     /* Return error if input length is too short */
     if bytes_taken == 0 {
-        return fail(input);
+        return fail().parse(input);
     }
 
     let (text, input) = input.split_at(bytes_taken);
@@ -386,7 +387,7 @@ fn parse_text_node(input: &str) -> IResult<&str, Node> {
 }
 
 fn parse_comment_node(input: &str) -> IResult<&str, Node> {
-    let (input, comment) = delimited(tag("<!--"), take_until("-->"), tag("-->"))(input)?;
+    let (input, comment) = delimited(tag("<!--"), take_until("-->"), tag("-->")).parse(input)?;
 
     Ok((input, Node::Comment(comment.into(), DUMMY_SP)))
 }
@@ -397,5 +398,6 @@ fn parse_node_children(input: &str) -> IResult<&str, Vec<Node>> {
         parse_comment_node,
         parse_element_node,
         parse_text_node,
-    )))(input)
+    )))
+    .parse(input)
 }

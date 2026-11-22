@@ -1,11 +1,13 @@
 use fervid_core::{
-    BindingTypes, FervidAtom, IntoIdent, VueImports, atom_to_propname, fervid_atom, str_to_propname,
+    BindingTypes, IntoIdent, VueImports, fervid_atom, str_to_propname, wtf8_atom_matches_atom,
+    wtf8_atom_matches_number, wtf8_atom_to_propname,
 };
 use flagset::FlagSet;
 use swc_core::{
+    atoms::Wtf8Atom,
     common::{DUMMY_SP, Span, Spanned},
     ecma::ast::{
-        ArrayLit, ArrowExpr, BindingIdent, BlockStmtOrExpr, Bool, CallExpr, Callee, Expr,
+        ArrayLit, ArrowExpr, ArrowFunctionBody, BindingIdent, Bool, CallExpr, Callee, Expr,
         ExprOrSpread, GetterProp, IdentName, KeyValueProp, Lit, MethodProp, ObjectLit, ParenExpr,
         Pat, Prop, PropName, PropOrSpread, SetterProp, Str, TsType, VarDeclarator,
     },
@@ -13,7 +15,6 @@ use swc_core::{
 
 use crate::{
     PropsDestructureBinding, PropsDestructureConfig, SetupBinding, SfcExportedObjectHelper,
-    atoms::{DEFINE_PROPS, PROPS_HELPER},
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::{
         resolve_type::{
@@ -80,7 +81,8 @@ pub fn process_with_defaults(
         bail_no_define_props!()
     };
 
-    if !matches!(define_props_callee.as_ref(), Expr::Ident(i) if DEFINE_PROPS.eq(&i.sym)) {
+    if !matches!(define_props_callee.as_ref(), Expr::Ident(i) if fervid_atom!("defineProps").eq(&i.sym))
+    {
         bail_no_define_props!()
     };
 
@@ -219,7 +221,7 @@ fn process_define_props_impl(
             // __props
             create_props_rest_proxy_args.push(ExprOrSpread {
                 spread: None,
-                expr: Box::new(Expr::Ident(PROPS_HELPER.to_owned().into_ident())),
+                expr: Box::new(Expr::Ident(fervid_atom!("__props").into_ident())),
             });
 
             // Other (non-spread) destructured props, e.g. `['foo', 'bar']` in `const { foo, bar, ...rest } = defineProps()`
@@ -231,7 +233,7 @@ fn process_define_props_impl(
                     spread: None,
                     expr: Box::new(Expr::Lit(Lit::Str(Str {
                         span: DUMMY_SP,
-                        value: key.to_owned(),
+                        value: key.to_owned().into(),
                         raw: None,
                     }))),
                 }));
@@ -274,9 +276,7 @@ fn process_define_props_impl(
 
     // Return `__props` when in var mode
     TransformMacroResult::ValidMacro(Some(Box::new(Expr::Ident(
-        PROPS_HELPER
-            .to_owned()
-            .into_ident_spanned(define_props_span),
+        fervid_atom!("__props").into_ident_spanned(define_props_span),
     ))))
 }
 
@@ -368,7 +368,7 @@ fn gen_runtime_props(
 }
 
 struct PropTypeData {
-    key: FervidAtom,
+    key: Wtf8Atom,
     types: TypesSet,
     required: bool,
     skip_check: bool,
@@ -404,15 +404,16 @@ fn extract_runtime_props(
         ));
 
         // Register binding if not registered already
-        if !ctx
-            .bindings_helper
-            .setup_bindings
-            .iter()
-            .any(|it| it.sym == key)
+        if let Some(binding_key) = key.as_atom()
+            && !ctx
+                .bindings_helper
+                .setup_bindings
+                .iter()
+                .any(|it| it.sym == *binding_key)
         {
             ctx.bindings_helper
                 .setup_bindings
-                .push(SetupBinding::new(key, BindingTypes::Props));
+                .push(SetupBinding::new(binding_key.clone(), BindingTypes::Props));
         }
     }
 
@@ -486,7 +487,7 @@ fn gen_runtime_prop_from_type(
         .props_destructured_bindings
         .iter()
         .find_map(|(k, v)| {
-            if k != &key {
+            if !wtf8_atom_matches_atom(&key, k) {
                 return None;
             }
 
@@ -512,12 +513,12 @@ fn gen_runtime_prop_from_type(
             macro_rules! key_matches {
                 ($source: ident) => {
                     match $source.key {
-                        PropName::Ident(ref ident) => &key == &ident.sym,
-                        PropName::Str(ref s) => &key == &s.value,
-                        PropName::Num(ref n) => &key == &n.value.to_string(),
+                        PropName::Ident(ref ident) => wtf8_atom_matches_atom(&key, &ident.sym),
+                        PropName::Str(ref s) => key == s.value,
+                        PropName::Num(ref n) => wtf8_atom_matches_number(&key, n.value),
                         PropName::Computed(ref c) => match c.expr.as_ref() {
-                            Expr::Lit(Lit::Str(s)) => &key == &s.value,
-                            Expr::Lit(Lit::Num(n)) => &key == &n.value.to_string(),
+                            Expr::Lit(Lit::Str(s)) => key == s.value,
+                            Expr::Lit(Lit::Num(n)) => wtf8_atom_matches_number(&key, n.value),
                             _ => false,
                         },
                         PropName::BigInt(_) => false,
@@ -537,7 +538,7 @@ fn gen_runtime_prop_from_type(
                     }
                 }
                 Prop::Shorthand(shorthand) => {
-                    if key == shorthand.sym {
+                    if wtf8_atom_matches_atom(&key, &shorthand.sym) {
                         default = Some(Box::new(Prop::KeyValue(KeyValueProp {
                             key: default_prop_name,
                             value: Box::new(Expr::Ident(shorthand.to_owned())),
@@ -552,8 +553,7 @@ fn gen_runtime_prop_from_type(
                         default = Some(Box::new(Prop::Getter(GetterProp {
                             span: getter.span,
                             key: default_prop_name,
-                            type_ann: getter.type_ann.to_owned(),
-                            body: getter.body.to_owned(),
+                            function: getter.function.to_owned(),
                         })));
                         break;
                     }
@@ -563,9 +563,7 @@ fn gen_runtime_prop_from_type(
                         default = Some(Box::new(Prop::Setter(SetterProp {
                             span: setter.span,
                             key: default_prop_name,
-                            this_param: setter.this_param.to_owned(),
-                            param: setter.param.to_owned(),
-                            body: setter.body.to_owned(),
+                            function: setter.function.to_owned(),
                         })));
                         break;
                     }
@@ -602,7 +600,7 @@ fn gen_runtime_prop_from_type(
     }
 
     // TODO Better span is probably possible (preserve prop name span)
-    let key = atom_to_propname(key.to_owned(), DUMMY_SP);
+    let key = wtf8_atom_to_propname(key.to_owned(), DUMMY_SP);
 
     macro_rules! return_value {
         ($prop_object_fields: ident) => {
@@ -763,7 +761,7 @@ fn gen_destructured_default_value(
         };
 
         Box::new(Expr::Arrow(ArrowExpr {
-            body: Box::new(BlockStmtOrExpr::Expr(arrow_val)),
+            body: Box::new(ArrowFunctionBody::Expr(arrow_val)),
             ..Default::default()
         }))
     } else {

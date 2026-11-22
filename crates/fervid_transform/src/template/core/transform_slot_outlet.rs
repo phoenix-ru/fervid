@@ -1,6 +1,7 @@
 use fervid_core::{
     AttributeOrBinding, BuiltinType, ElementCodegenNode, ElementCodegenValue, ElementKind,
-    ElementNode, FervidAtom, Node, PropsExpression, SlotOutletCall, StrOrExpr, fervid_atom,
+    ElementNode, FervidAtom, Node, PropsExpression, SlotOutletCall, StaticStr, StrOrExpr,
+    fervid_atom,
 };
 use smallvec::SmallVec;
 
@@ -75,11 +76,14 @@ pub fn process_slot_outlet(
             AttributeOrBinding::RegularAttribute {
                 name,
                 value: Some(value),
-                ..
+                span,
             } => {
                 if name == "name" {
                     skipped_attribute_indices.push(index);
-                    slot_name = StrOrExpr::Str(value.to_owned().into());
+                    slot_name = StrOrExpr::Str(StaticStr {
+                        value: value.clone(),
+                        span: *span,
+                    });
                 } else {
                     let mut camelized = String::with_capacity(name.len());
                     to_camel_case(name, &mut camelized);

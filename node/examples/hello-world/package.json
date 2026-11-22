@@ -12,14 +12,12 @@
   "license": "MIT",
   "devDependencies": {
     "@fervid/unplugin": "workspace:*",
-    "html-webpack-plugin": "^5.6.3",
-    "rollup": "^4.46.2",
-    "unplugin": "^3.0.0",
-    "webpack": "^5.101.1",
-    "webpack-cli": "^6.0.1",
-    "webpack-dev-server": "^5.2.2"
+    "html-webpack-plugin": "^5.6.8",
+    "webpack": "^5.113.0",
+    "webpack-cli": "^7.3.1",
+    "webpack-dev-server": "^6.1.0"
   },
   "dependencies": {
-    "vue": "^3.5.18"
+    "vue": "^3.5.46"
   }
 }

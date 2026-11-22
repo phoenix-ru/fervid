@@ -1,13 +1,19 @@
 use fervid_core::ForParseResult;
 use swc_core::{
     common::{Span, comments::SingleThreadedComments},
-    ecma::ast::{AssignPat, Pat, RestPat},
+    ecma::ast::{AssignOp, AssignPat, Pat, RestPat},
 };
-use swc_ecma_lexer::common::parser::{
-    Parser as Cursor, buffer::Buffer, expr::parse_assignment_expr,
-    typescript::try_parse_ts_type_ann,
+use swc_ecma_lexer::{
+    Lexer, Parser, StringInput, Syntax,
+    common::{
+        input::Tokens,
+        parser::{
+            Parser as ParserTrait, buffer::Buffer as ParserBuffer, expr::parse_assignment_expr,
+            pat::parse_binding_pat_or_ident, typescript::try_parse_ts_type_ann,
+        },
+    },
+    token::{IdentLike, Keyword, KnownIdent, Token, TokenAndSpan, Word},
 };
-use swc_ecma_parser::{Lexer, Parser, StringInput, Syntax, input::Tokens, unstable::Token};
 
 use crate::{ParseError, error::ParseErrorKind};
 
@@ -25,7 +31,7 @@ pub fn parse_v_for(
     finish(&mut Parser::new_from(lexer), raw, span)
 }
 
-fn finish<I: Tokens>(
+fn finish<I: Tokens<TokenAndSpan>>(
     p: &mut Parser<I>,
     raw: &str,
     span: Span,
@@ -45,7 +51,7 @@ fn finish<I: Tokens>(
     })
 }
 
-fn parse_body<I: Tokens>(
+fn parse_body<I: Tokens<TokenAndSpan>>(
     p: &mut Parser<I>,
     raw: &str,
     span: Span,
@@ -58,10 +64,10 @@ fn parse_body<I: Tokens>(
         if aliases.len() == 3 {
             return Err(fail(p, ParseErrorKind::VForTooManyAliasSlots));
         }
-        let cur = *p.input().cur();
-        let empty = cur == Token::Comma
-            || (parenthesized && cur == Token::RParen)
-            || (!parenthesized && cur == Token::In && !aliases.is_empty());
+        let cur = p.input().cur();
+        let empty = cur == &Token::Comma
+            || (parenthesized && cur == &Token::RParen)
+            || (!parenthesized && is_in_token(cur) && !aliases.is_empty());
         if empty {
             if aliases.is_empty() {
                 return Err(fail(p, ParseErrorKind::VForMissingValueAlias));
@@ -71,7 +77,7 @@ fn parse_body<I: Tokens>(
             aliases.push(Some(parse_alias(p, parenthesized)?));
         }
 
-        if *p.input().cur() != Token::Comma {
+        if p.input().cur() != &Token::Comma {
             break;
         }
         if aliases
@@ -86,9 +92,9 @@ fn parse_body<I: Tokens>(
     }
 
     let at_alias_end = if parenthesized {
-        *p.input().cur() == Token::RParen
+        p.input().cur() == &Token::RParen
     } else {
-        matches!(*p.input().cur(), Token::In | Token::Of)
+        is_delimiter_token(p.input().cur())
     };
     if !at_alias_end {
         // `value, of rows` and `(value, of rows)` parse `of` as another binding
@@ -122,7 +128,7 @@ fn parse_body<I: Tokens>(
     }
 
     // Check delimiter and whitespace around it
-    if !matches!(*p.input().cur(), Token::In | Token::Of) {
+    if !is_delimiter_token(p.input().cur()) {
         return Err(fail(p, ParseErrorKind::VForExpectedDelimiter));
     }
     let delimiter = p.input().cur_span();
@@ -163,13 +169,16 @@ fn parse_body<I: Tokens>(
     })
 }
 
-fn parse_alias<I: Tokens>(p: &mut Parser<I>, parenthesized: bool) -> Result<Box<Pat>, ParseError> {
+fn parse_alias<I: Tokens<TokenAndSpan>>(
+    p: &mut Parser<I>,
+    parenthesized: bool,
+) -> Result<Box<Pat>, ParseError> {
     let start = p.cur_pos();
     let rest = p.input_mut().eat(&Token::DotDotDot);
     let dot3_token = p.input().prev_span();
 
     // SWC builds nested destructuring, computed keys and nested defaults directly
-    let mut pattern = p.parse_pat()?;
+    let mut pattern = parse_binding_pat_or_ident(p, false)?;
     let optional = p.input_mut().eat(&Token::QuestionMark);
     if optional {
         match &mut pattern {
@@ -208,7 +217,7 @@ fn parse_alias<I: Tokens>(p: &mut Parser<I>, parenthesized: bool) -> Result<Box<
         }
     }
 
-    if p.input_mut().eat(&Token::Eq) {
+    if p.input_mut().eat(&Token::AssignOp(AssignOp::Assign)) {
         if rest {
             return Err(fail(p, ParseErrorKind::VForRestAliasCannotHaveDefault));
         }
@@ -260,7 +269,22 @@ fn is_js_space(ch: char) -> bool {
     )
 }
 
-fn expect<I: Tokens>(
+fn is_in_token(token: &Token) -> bool {
+    matches!(token, Token::Word(Word::Keyword(Keyword::In)))
+}
+
+fn is_of_token(token: &Token) -> bool {
+    matches!(
+        token,
+        Token::Word(Word::Ident(IdentLike::Known(KnownIdent::Of)))
+    )
+}
+
+fn is_delimiter_token(token: &Token) -> bool {
+    is_in_token(token) || is_of_token(token)
+}
+
+fn expect<I: Tokens<TokenAndSpan>>(
     p: &mut Parser<I>,
     token: Token,
     kind: ParseErrorKind,
@@ -272,7 +296,7 @@ fn expect<I: Tokens>(
     }
 }
 
-fn fail<I: Tokens>(p: &Parser<I>, kind: ParseErrorKind) -> ParseError {
+fn fail<I: Tokens<TokenAndSpan>>(p: &Parser<I>, kind: ParseErrorKind) -> ParseError {
     ParseError {
         span: p.input().cur_span(),
         kind,
@@ -742,10 +766,14 @@ mod tests {
             None,
         );
         let mut p = Parser::new_from(lexer);
-        assert!(p.parse_pat().expect("binding identifier").is_ident());
+        assert!(
+            parse_binding_pat_or_ident(&mut p, false)
+                .expect("binding identifier")
+                .is_ident()
+        );
         assert_eq!(
-            *p.input().cur(),
-            Token::Eq,
+            p.input().cur(),
+            &Token::AssignOp(AssignOp::Assign),
             "root initializer remains unread"
         );
     }
@@ -763,11 +791,11 @@ mod tests {
         );
         let mut p = Parser::new_from(lexer);
         assert!(
-            p.parse_pat()
+            parse_binding_pat_or_ident(&mut p, false)
                 .expect("SWC recovers non-final object rest")
                 .is_object()
         );
-        assert_eq!(*p.input().cur(), Token::In);
+        assert_eq!(p.input().cur(), &Token::Word(Word::Keyword(Keyword::In)));
         assert!(
             p.take_errors()
                 .iter()
@@ -803,7 +831,7 @@ mod tests {
                 .expect("SWC recovers duplicate regex flags")
                 .is_lit()
         );
-        assert_eq!(*p.input().cur(), Token::Eof);
+        assert_eq!(p.input().cur(), &Token::Eof);
         assert!(
             p.take_errors()
                 .iter()
@@ -833,8 +861,8 @@ mod tests {
             None,
         );
         let mut p = Parser::new_from(lexer);
-        assert!(p.parse_pat().is_err());
-        assert_eq!(*p.input().cur(), Token::At);
+        assert!(parse_binding_pat_or_ident(&mut p, false).is_err());
+        assert_eq!(p.input().cur(), &Token::At);
         let error = parse_v_for(
             raw,
             Span::new(BytePos(1), BytePos(1 + raw.len() as u32)),

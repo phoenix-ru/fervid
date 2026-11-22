@@ -467,7 +467,7 @@ fn find_for_key(node: &mut ElementNode, allow_taking: bool) -> (bool, Option<Box
                 } else {
                     Some(Box::new(Expr::Lit(Lit::Str(Str {
                         span,
-                        value,
+                        value: value.into(),
                         raw: None,
                     }))))
                 }
@@ -481,7 +481,7 @@ fn find_for_key(node: &mut ElementNode, allow_taking: bool) -> (bool, Option<Box
                 } else {
                     Some(Box::new(Expr::Lit(Lit::Str(Str {
                         span: *span,
-                        value: value.to_owned(),
+                        value: value.to_owned().into(),
                         raw: None,
                     }))))
                 }

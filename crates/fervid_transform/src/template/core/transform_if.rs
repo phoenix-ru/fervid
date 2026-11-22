@@ -634,7 +634,7 @@ fn is_same_key(a: &AttributeOrBinding, b: &AttributeOrBinding) -> bool {
                 return false;
             };
 
-            s.value.as_str() == value.as_ref().map_or("", |value| value.as_str())
+            s.value.as_str() == value.as_deref()
         }
 
         _ => false,

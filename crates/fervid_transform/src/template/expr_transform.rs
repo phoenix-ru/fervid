@@ -5,12 +5,12 @@ use swc_core::{
     common::DUMMY_SP,
     ecma::{
         ast::{
-            ArrayPat, ArrowExpr, AssignExpr, AssignOp, AssignTarget, AssignTargetPat, BindingIdent,
-            BlockStmt, BlockStmtOrExpr, CallExpr, Callee, ComputedPropName, CondExpr, Decl, Expr,
-            ExprOrSpread, Ident, IdentName, KeyValuePatProp, KeyValueProp, Lit, MemberExpr,
-            MemberProp, Null, ObjectLit, ObjectPat, ObjectPatProp, OptChainBase, Pat, Prop,
-            PropName, PropOrSpread, SimpleAssignTarget, Stmt, Str, TsKeywordType,
-            TsKeywordTypeKind, TsType, TsTypeAnn, UnaryOp, UpdateExpr, UpdateOp,
+            ArrayPat, ArrowExpr, ArrowFunctionBody, AssignExpr, AssignOp, AssignTarget,
+            AssignTargetPat, BindingIdent, BlockStmt, CallExpr, Callee, ComputedPropName, CondExpr,
+            Decl, Expr, ExprOrSpread, FunctionBody, Ident, IdentName, KeyValuePatProp,
+            KeyValueProp, Lit, MemberExpr, MemberProp, Null, ObjectLit, ObjectPat, ObjectPatProp,
+            OptChainBase, Pat, Prop, PropName, PropOrSpread, SimpleAssignTarget, Stmt, Str,
+            TsKeywordType, TsKeywordTypeKind, TsType, TsTypeAnn, UnaryOp, UpdateExpr, UpdateOp,
         },
         visit::{VisitMut, VisitMutWith},
     },
@@ -699,43 +699,29 @@ impl<'s> VisitMut for TransformVisitor<'s> {
         n.expr.visit_mut_with(self);
     }
 
-    // Visit the block as with respect to the variables
+    fn visit_mut_function_body(&mut self, function_body: &mut FunctionBody) {
+        // All variables will be treated as block scope
+        let old_len = self.local_vars.len();
+
+        for stmt in function_body.stmts.iter_mut() {
+            self.visit_function_statement(stmt);
+        }
+
+        // Clear the temporary variables
+        self.local_vars.truncate(old_len);
+    }
+
+    /// Visit the block as with respect to the variables
     fn visit_mut_block_stmt(&mut self, block_stmt: &mut BlockStmt) {
         // All variables will be treated as block scope
         let old_len = self.local_vars.len();
 
         for stmt in block_stmt.stmts.iter_mut() {
-            // Add the temporary variables
-            if let Stmt::Decl(decl) = stmt {
-                match decl {
-                    Decl::Class(cls) => self.local_vars.push(SetupBinding::new_spanned(
-                        cls.ident.sym.to_owned(),
-                        BindingTypes::TemplateLocal,
-                        cls.ident.span,
-                    )),
-                    Decl::Fn(fn_decl) => self.local_vars.push(SetupBinding::new_spanned(
-                        fn_decl.ident.sym.to_owned(),
-                        BindingTypes::TemplateLocal,
-                        fn_decl.ident.span,
-                    )),
-                    Decl::Var(var_decl) => {
-                        for var_decl_it in var_decl.decls.iter() {
-                            extract_variables_from_pat(
-                                &var_decl_it.name,
-                                &mut self.local_vars,
-                                true,
-                            );
-                        }
-                    }
-                    _ => {}
-                }
-            }
-
-            stmt.visit_mut_with(self);
+            self.visit_function_statement(stmt);
         }
 
         // Clear the temporary variables
-        self.local_vars.drain(old_len..);
+        self.local_vars.truncate(old_len);
     }
 
     // This is a copy of `visit_mut_expr` because AssignTarget is more refined compared to Expr
@@ -992,7 +978,7 @@ impl TransformVisitor<'_> {
                     span: DUMMY_SP,
                     expr: Box::new(Expr::Lit(Lit::Str(Str {
                         span: DUMMY_SP,
-                        value: original_prop_name.to_owned(),
+                        value: original_prop_name.to_owned().into(),
                         raw: None,
                     }))),
                 })
@@ -1057,6 +1043,32 @@ impl TransformVisitor<'_> {
             | BindingTypes::LiteralConst => IdentTransformStrategy::LeaveUnchanged,
             _ => IdentTransformStrategy::LeaveUnchanged,
         }
+    }
+
+    fn visit_function_statement(&mut self, stmt: &mut Stmt) {
+        // Add the temporary variables
+        if let Stmt::Decl(decl) = stmt {
+            match decl {
+                Decl::Class(cls) => self.local_vars.push(SetupBinding::new_spanned(
+                    cls.ident.sym.to_owned(),
+                    BindingTypes::TemplateLocal,
+                    cls.ident.span,
+                )),
+                Decl::Fn(fn_decl) => self.local_vars.push(SetupBinding::new_spanned(
+                    fn_decl.ident.sym.to_owned(),
+                    BindingTypes::TemplateLocal,
+                    fn_decl.ident.span,
+                )),
+                Decl::Var(var_decl) => {
+                    for var_decl_it in var_decl.decls.iter() {
+                        extract_variables_from_pat(&var_decl_it.name, &mut self.local_vars, true);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        stmt.visit_mut_with(self);
     }
 
     /// Equivalent of `asParams` transform inside vuejs-core,
@@ -1140,18 +1152,18 @@ pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<Fervid
     if is_inline {
         return match binding_type {
             BindingTypes::Data | BindingTypes::Options | BindingTypes::Unresolved => {
-                Some(FervidAtom::from("_ctx"))
+                Some(fervid_atom!("_ctx"))
             }
-            BindingTypes::Props => Some(FervidAtom::from("__props")),
+            BindingTypes::Props => Some(fervid_atom!("__props")),
             // TODO This is not correct. The transform implementation must handle `unref`
             _ => None,
         };
     }
 
     match binding_type {
-        BindingTypes::Data => Some(FervidAtom::from("$data")),
-        BindingTypes::Props => Some(FervidAtom::from("$props")),
-        BindingTypes::Options => Some(FervidAtom::from("$options")),
+        BindingTypes::Data => Some(fervid_atom!("$data")),
+        BindingTypes::Props => Some(fervid_atom!("$props")),
+        BindingTypes::Options => Some(fervid_atom!("$options")),
         BindingTypes::TemplateLocal
         | BindingTypes::JsGlobal
         | BindingTypes::Component => None,
@@ -1163,8 +1175,8 @@ pub fn get_prefix(binding_type: &BindingTypes, is_inline: bool) -> Option<Fervid
         // TODO: LiteralConst should be moved to the module top,
         // check if it should still be referenced as `$setup` then
         | BindingTypes::LiteralConst
-        | BindingTypes::Imported => Some(FervidAtom::from("$setup")),
-        BindingTypes::Unresolved => Some(FervidAtom::from("_ctx")),
+        | BindingTypes::Imported => Some(fervid_atom!("$setup")),
+        BindingTypes::Unresolved => Some(fervid_atom!("_ctx")),
         BindingTypes::PropsAliased => unimplemented!(),
     }
 }
@@ -1206,7 +1218,7 @@ fn generate_is_ref_check_assignment(
         obj: ident_expr.to_owned(),
         prop: MemberProp::Ident(IdentName {
             span: DUMMY_SP,
-            sym: FervidAtom::from("value"),
+            sym: fervid_atom!("value"),
         }),
     }));
 
@@ -1260,7 +1272,7 @@ fn generate_is_ref_check_update(
         obj: ident_expr.to_owned(),
         prop: MemberProp::Ident(IdentName {
             span: DUMMY_SP,
-            sym: FervidAtom::from("value"),
+            sym: fervid_atom!("value"),
         }),
     }));
 
@@ -1312,7 +1324,7 @@ fn wrap_in_model_event_arrow(expr: Box<Expr>, is_ts: bool) -> Box<Expr> {
 
     // $event or $event: any
     let event = Pat::Ident(BindingIdent {
-        id: FervidAtom::from("$event").into_ident(),
+        id: fervid_atom!("$event").into_ident(),
         type_ann,
     });
 
@@ -1320,7 +1332,7 @@ fn wrap_in_model_event_arrow(expr: Box<Expr>, is_ts: bool) -> Box<Expr> {
         span: DUMMY_SP,
         ctxt: Default::default(),
         params: vec![event],
-        body: Box::new(BlockStmtOrExpr::Expr(expr)),
+        body: Box::new(ArrowFunctionBody::Expr(expr)),
         is_async: false,
         is_generator: false,
         type_params: None,
@@ -1393,7 +1405,9 @@ mod tests {
         template::{expr_transform::BindingsHelperTransform, js_builtins::JS_BUILTINS},
         test_utils::{js, pat, to_str, ts},
     };
-    use fervid_core::{BindingTypes, ConstantTypes, FervidAtom, TemplateGenerationMode};
+    use fervid_core::{
+        BindingTypes, ConstantTypes, FervidAtom, TemplateGenerationMode, fervid_atom,
+    };
     use smallvec::SmallVec;
 
     #[test]
@@ -1445,11 +1459,11 @@ mod tests {
             ..Default::default()
         };
         helper.setup_bindings.extend([
-            SetupBinding::new(FervidAtom::from("list"), BindingTypes::SetupConst),
-            SetupBinding::new(FervidAtom::from("label"), BindingTypes::LiteralConst),
-            SetupBinding::new(FervidAtom::from("items"), BindingTypes::SetupRef),
+            SetupBinding::new(fervid_atom!("list"), BindingTypes::SetupConst),
+            SetupBinding::new(fervid_atom!("label"), BindingTypes::LiteralConst),
+            SetupBinding::new(fervid_atom!("items"), BindingTypes::SetupRef),
             SetupBinding::new(
-                FervidAtom::from("reactiveList"),
+                fervid_atom!("reactiveList"),
                 BindingTypes::SetupReactiveConst,
             ),
         ]);
@@ -1494,7 +1508,7 @@ mod tests {
         }
 
         helper.template_scopes.push(TemplateScope {
-            variables: SmallVec::from_vec(vec![FervidAtom::from("list")]),
+            variables: SmallVec::from_vec(vec![fervid_atom!("list")]),
             parent: 0,
         });
         let mut shadowed = js("list");
@@ -1507,7 +1521,7 @@ mod tests {
     fn it_classifies_setup_constants_before_render_function_prefixing() {
         let mut helper = BindingsHelper::default();
         helper.setup_bindings.push(SetupBinding::new(
-            FervidAtom::from("list"),
+            fervid_atom!("list"),
             BindingTypes::SetupConst,
         ));
         let mut expression = js("list");
@@ -1526,8 +1540,8 @@ mod tests {
             ..Default::default()
         };
         helper.setup_bindings.extend([
-            SetupBinding::new(FervidAtom::from("list"), BindingTypes::SetupConst),
-            SetupBinding::new(FervidAtom::from("items"), BindingTypes::SetupRef),
+            SetupBinding::new(fervid_atom!("list"), BindingTypes::SetupConst),
+            SetupBinding::new(fervid_atom!("items"), BindingTypes::SetupRef),
         ]);
 
         for source in ["list as number[]", "list!", "(list as number[])!"] {
@@ -1677,28 +1691,28 @@ mod tests {
 
     #[test]
     fn it_works_with_template_scope_hierarchy() {
-        let v_root = FervidAtom::from("root");
+        let v_root = fervid_atom!("root");
         let root_scope = TemplateScope {
             parent: 0,
             variables: SmallVec::from(vec![v_root.to_owned()]),
         };
 
-        let v_child1 = FervidAtom::from("child1");
-        let v_child2 = FervidAtom::from("child2");
+        let v_child1 = fervid_atom!("child1");
+        let v_child2 = fervid_atom!("child2");
         let child_scope = TemplateScope {
             parent: 0,
             variables: SmallVec::from_vec(vec![v_child1.to_owned(), v_child2.to_owned()]),
         };
 
-        let v_grand1_1 = FervidAtom::from("grand1_1");
-        let v_grand1_2 = FervidAtom::from("grand1_2");
+        let v_grand1_1 = fervid_atom!("grand1_1");
+        let v_grand1_2 = fervid_atom!("grand1_2");
         let grandchild1_scope = TemplateScope {
             parent: 1,
             variables: SmallVec::from_vec(vec![v_grand1_1.to_owned(), v_grand1_2.to_owned()]),
         };
 
-        let v_grand2_1 = FervidAtom::from("grand2_1");
-        let v_grand2_2 = FervidAtom::from("grand2_2");
+        let v_grand2_1 = fervid_atom!("grand2_1");
+        let v_grand2_2 = fervid_atom!("grand2_2");
         let grandchild2_scope = TemplateScope {
             parent: 1,
             variables: SmallVec::from_vec(vec![v_grand2_1.to_owned(), v_grand2_2.to_owned()]),
@@ -1855,7 +1869,7 @@ mod tests {
 
         // import imported from './somewhere'
         helper.setup_bindings.push(SetupBinding::new(
-            FervidAtom::from("imported"),
+            fervid_atom!("imported"),
             BindingTypes::Imported,
         ));
 

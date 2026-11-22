@@ -1,8 +1,9 @@
-use fervid_core::{BindingTypes, FervidAtom};
+use fervid_core::{BindingTypes, fervid_atom};
 use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
 use itertools::{Either, Itertools};
 use swc_core::{
+    atoms::Wtf8Atom,
     common::{DUMMY_SP, Spanned},
     ecma::ast::{
         ArrayLit, CallExpr, Expr, ExprOrSpread, Ident, Lit, Str, TsFnOrConstructorType, TsFnParam,
@@ -12,7 +13,6 @@ use swc_core::{
 
 use crate::{
     SfcExportedObjectHelper, TypeOrDecl,
-    atoms::EMIT_HELPER,
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::resolve_type::{
         ResolvedElements, TypeResolveContext, resolve_type_elements, resolve_union_type,
@@ -92,7 +92,7 @@ pub fn process_define_emits(
         TransformMacroResult::ValidMacro(Some(Box::new(Expr::Ident(Ident {
             span: call_expr.span,
             ctxt: Default::default(),
-            sym: EMIT_HELPER.to_owned(),
+            sym: fervid_atom!("__emit"),
             optional: false,
         }))))
     } else {
@@ -105,8 +105,8 @@ pub fn process_define_emits(
 fn extract_runtime_emits(
     ctx: &mut TypeResolveContext,
     type_arg: &TsType,
-) -> Result<FxIndexSet<FervidAtom>, ScriptError> {
-    let mut emits = FxIndexSet::<FervidAtom>::default();
+) -> Result<FxIndexSet<Wtf8Atom>, ScriptError> {
+    let mut emits = FxIndexSet::<Wtf8Atom>::default();
 
     // Handle cases like `defineEmits<(e: 'foo' | 'bar') => void>()`
     if let TsType::TsFnOrConstructorType(TsFnOrConstructorType::TsFnType(ts_fn_type)) = type_arg {
@@ -162,7 +162,7 @@ fn extract_runtime_emits(
 fn extract_event_names(
     ctx: &mut TypeResolveContext,
     event_name: &TsFnParam,
-    emits: &mut FxIndexSet<FervidAtom>,
+    emits: &mut FxIndexSet<Wtf8Atom>,
 ) {
     let TsFnParam::Ident(ident) = event_name else {
         return;
@@ -185,16 +185,16 @@ fn extract_event_names(
             // No UnaryExpression
             match ts_lit_type.lit {
                 TsLit::Number(ref n) => {
-                    emits.insert(FervidAtom::from(n.value.to_string()));
+                    emits.insert(Wtf8Atom::from(n.value.to_string()));
                 }
                 TsLit::Str(ref s) => {
-                    emits.insert(s.value.to_owned());
+                    emits.insert(s.value.clone());
                 }
                 TsLit::Bool(ref b) => {
-                    emits.insert(FervidAtom::from(b.value.to_string()));
+                    emits.insert(Wtf8Atom::from(b.value.to_string()));
                 }
                 TsLit::BigInt(ref big_int) => {
-                    emits.insert(FervidAtom::from(big_int.value.to_string()));
+                    emits.insert(Wtf8Atom::from(big_int.value.to_string()));
                 }
                 TsLit::Tpl(_) => {}
             }

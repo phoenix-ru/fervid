@@ -1,5 +1,5 @@
 use nom::{
-    IResult,
+    IResult, Parser,
     bytes::complete::{take_while, take_while1},
 };
 
@@ -52,13 +52,13 @@ pub fn is_valid_name_char(x: char) -> bool {
 
 pub fn html_name(input: &str) -> IResult<&str, &str> {
     // todo control dashes?? allow unicode??
-    take_while1(|x: char| is_valid_name_char(x) || x == '-')(input)
+    take_while1(|x: char| is_valid_name_char(x) || x == '-').parse(input)
 }
 
 pub fn space1(input: &str) -> IResult<&str, &str> {
-    take_while1(is_space_char)(input)
+    take_while1(is_space_char).parse(input)
 }
 
 pub fn space0(input: &str) -> IResult<&str, &str> {
-    take_while(is_space_char)(input)
+    take_while(is_space_char).parse(input)
 }

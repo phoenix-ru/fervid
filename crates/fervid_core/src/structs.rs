@@ -10,12 +10,19 @@ use crate::{ConstantTypes, ElementCodegenNode, ForCodegenNode};
 
 pub type FervidAtom = Atom;
 
-// TODO Add some known atoms here with lazy evaluation?
+/// Creates an atom from a literal using SWC's inline storage and literal cache
 #[macro_export]
 macro_rules! fervid_atom {
     ($lit: literal) => {
-        fervid_core::FervidAtom::from($lit)
+        $crate::__swc_atom!($lit)
     };
+}
+#[macro_export]
+macro_rules! wtf8_atom {
+    ($lit: literal) => {{
+        let atom: $crate::__Wtf8Atom = ::core::convert::Into::into($crate::__swc_atom!($lit));
+        atom
+    }};
 }
 
 pub trait IntoIdent {
@@ -228,26 +235,59 @@ impl Spanned for AttributeOrBinding {
 /// Describes a type which can be either a static &str or a js Expr.
 /// This is mostly usable for dynamic binding scenarios.
 /// ## Example
-/// - `:foo="bar"` yields `StrOrExpr::Str(Str { value: "foo".into(), .. })`;
-/// - `:[baz]="qux"` yields `StrOrExpr::Expr(Box::new(Expr::Lit(Lit::Str(Str { value: "baz".into(), .. }))))`
+/// - `:foo="bar"` yields `StrOrExpr::Str(StaticStr { value: "foo".into(), .. })`;
+/// - `:[baz]="qux"` yields `StrOrExpr::Expr` containing the identifier `baz`
 #[derive(Debug, Clone)]
 pub enum StrOrExpr {
-    Str(Str),
+    Str(StaticStr),
     Expr(Box<Expr>),
+}
+
+#[derive(Debug, Clone)]
+pub struct StaticStr {
+    pub span: Span,
+    pub value: FervidAtom,
+}
+
+impl From<FervidAtom> for StaticStr {
+    fn from(value: FervidAtom) -> Self {
+        Self {
+            span: DUMMY_SP,
+            value,
+        }
+    }
+}
+
+impl From<&str> for StaticStr {
+    fn from(value: &str) -> Self {
+        FervidAtom::from(value).into()
+    }
+}
+
+impl From<StaticStr> for Str {
+    fn from(value: StaticStr) -> Self {
+        Self {
+            span: value.span,
+            value: value.value.into(),
+            raw: None,
+        }
+    }
 }
 
 impl<'s> From<&'s str> for StrOrExpr {
     fn from(value: &'s str) -> StrOrExpr {
-        StrOrExpr::Str(value.into())
+        StrOrExpr::Str(StaticStr {
+            value: value.into(),
+            span: DUMMY_SP,
+        })
     }
 }
 
 impl From<FervidAtom> for StrOrExpr {
     fn from(value: FervidAtom) -> StrOrExpr {
-        StrOrExpr::Str(Str {
+        StrOrExpr::Str(StaticStr {
             value,
             span: DUMMY_SP,
-            raw: None,
         })
     }
 }
@@ -255,7 +295,7 @@ impl From<FervidAtom> for StrOrExpr {
 impl From<StrOrExpr> for Expr {
     fn from(value: StrOrExpr) -> Self {
         match value {
-            StrOrExpr::Str(s) => Expr::Lit(Lit::Str(s)),
+            StrOrExpr::Str(s) => Expr::Lit(Lit::Str(s.into())),
             StrOrExpr::Expr(expr) => *expr,
         }
     }

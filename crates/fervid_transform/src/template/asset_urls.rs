@@ -1,8 +1,8 @@
-use std::{fmt::Write, path::PathBuf};
+use std::{fmt::Write, path::PathBuf, sync::LazyLock};
 
 use fervid_core::{
-    AttributeOrBinding, ConstantTypes, ElementNode, FervidAtom, StrOrExpr, VBindDirective,
-    fervid_atom,
+    AttributeOrBinding, ConstantTypes, ElementNode, FervidAtom, StaticStr, StrOrExpr,
+    VBindDirective, fervid_atom,
 };
 use swc_core::{
     common::{DUMMY_SP, Span},
@@ -18,13 +18,11 @@ use crate::{
     error::{TemplateError, TemplateErrorKind, TransformError},
 };
 
-lazy_static! {
-    pub static ref DEFAULT_OPTIONS: TransformAssetUrlsConfigOptions =
-        TransformAssetUrlsConfigOptions::default();
+pub static DEFAULT_OPTIONS: LazyLock<TransformAssetUrlsConfigOptions> =
+    LazyLock::new(TransformAssetUrlsConfigOptions::default);
 
-    // Adapted from https://github.com/kardeiz/pathetic/blob/3991836305b264aa7579de6ea81aed930cff172b/src/lib.rs#L66-L71
-    pub static ref BASE_URL: Url = "http://_".parse().expect("`http://_` is a valid `URL`");
-}
+// Adapted from https://github.com/kardeiz/pathetic/blob/3991836305b264aa7579de6ea81aed930cff172b/src/lib.rs#L66-L71
+pub static BASE_URL: LazyLock<Result<Url, url::ParseError>> = LazyLock::new(|| "http://_".parse());
 
 pub fn transform_asset_urls(element_node: &mut ElementNode, ctx: &mut TransformSfcContext) {
     match &ctx.transform_asset_urls {
@@ -190,10 +188,9 @@ fn transform_element_asset_urls(
         };
 
         *attr = AttributeOrBinding::VBind(VBindDirective {
-            argument: Some(StrOrExpr::Str(Str {
+            argument: Some(StrOrExpr::Str(StaticStr {
                 span: *span,
                 value: name.to_owned(),
-                raw: None,
             })),
             value: import_expr,
             is_camel: false,
@@ -214,7 +211,7 @@ fn get_import_expression(
     if path.is_empty() {
         return Ok(Box::new(Expr::Lit(Lit::Str(Str {
             span,
-            value: fervid_atom!(""),
+            value: fervid_atom!("").into(),
             raw: None,
         }))));
     }
@@ -250,7 +247,7 @@ fn get_import_expression(
             specifiers: vec![specifier],
             src: Box::new(Str {
                 span,
-                value: FervidAtom::from(decoded),
+                value: FervidAtom::from(decoded).into(),
                 raw: None,
             }),
             type_only: false,
@@ -273,7 +270,7 @@ fn get_import_expression(
         left: name_expr,
         right: Box::new(Expr::Lit(Lit::Str(Str {
             span,
-            value: FervidAtom::from(hash),
+            value: FervidAtom::from(hash).into(),
             raw: None,
         }))),
     }));
@@ -283,7 +280,10 @@ fn get_import_expression(
 }
 
 fn parse_url(url: &str) -> Result<Url, url::ParseError> {
-    BASE_URL.clone().join(strip_prefix(url))
+    BASE_URL
+        .as_ref()
+        .map_err(Clone::clone)?
+        .join(strip_prefix(url))
 }
 
 fn strip_prefix(url: &str) -> &str {

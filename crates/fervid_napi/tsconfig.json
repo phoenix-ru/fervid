@@ -1,14 +1,17 @@
 {
   "compilerOptions": {
-    "target": "ES2018",
+    "target": "ES2022",
     "strict": true,
-    "moduleResolution": "node",
-    "module": "CommonJS",
+    "moduleResolution": "Bundler",
+    "module": "ESNext",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"],
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true
   },
-  "include": ["."],
-  "exclude": ["node_modules"]
+  "include": ["__tests__/**/*.ts", "benchmark/**/*.mts", "vitest.config.ts"],
+  "exclude": ["node_modules", "artifacts", "npm", "coverage"]
 }

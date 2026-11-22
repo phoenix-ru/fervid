@@ -1,11 +1,9 @@
-use core::fmt::NumBuffer;
-
 use fervid_core::{
-    AttributeOrBinding, BuiltinType, ElementNode, FervidAtom, StrOrExpr, VUE_BUILTINS,
+    AttributeOrBinding, BuiltinType, ElementNode, StrOrExpr, VUE_BUILTINS, fervid_atom,
 };
 use swc_core::{
     common::DUMMY_SP,
-    ecma::ast::{ArrowExpr, BindingIdent, BlockStmtOrExpr, Expr, Ident, Lit, ParenExpr, Pat},
+    ecma::ast::{ArrowExpr, ArrowFunctionBody, BindingIdent, Expr, Ident, Lit, ParenExpr, Pat},
 };
 
 #[path = "utils/inject_prop.rs"]
@@ -130,7 +128,7 @@ pub fn to_valid_asset_id(name: &str, asset_type: &str) -> String {
     out.push_str(asset_type);
     out.push('_');
 
-    let mut buf = NumBuffer::<u32>::new();
+    let mut buf = itoa::Buffer::new();
 
     for ch in name.chars() {
         if ch.is_ascii_alphanumeric() || ch == '_' {
@@ -138,7 +136,7 @@ pub fn to_valid_asset_id(name: &str, asset_type: &str) -> String {
         } else if ch == '-' {
             out.push('_');
         } else {
-            let s = (ch as u32).format_into(&mut buf);
+            let s = buf.format(ch as u32);
             out.push_str(s);
         }
     }
@@ -153,7 +151,7 @@ pub fn wrap_in_event_arrow(expr: Box<Expr>) -> Box<Expr> {
         id: Ident {
             span: DUMMY_SP,
             ctxt: Default::default(),
-            sym: FervidAtom::from("$event"),
+            sym: fervid_atom!("$event"),
             optional: false,
         },
         type_ann: None,
@@ -163,7 +161,7 @@ pub fn wrap_in_event_arrow(expr: Box<Expr>) -> Box<Expr> {
         span: DUMMY_SP,
         ctxt: Default::default(),
         params: vec![evt_param],
-        body: Box::new(BlockStmtOrExpr::Expr(expr)),
+        body: Box::new(ArrowFunctionBody::Expr(expr)),
         is_async: false,
         is_generator: false,
         type_params: None,

@@ -14,15 +14,15 @@ flagset = { workspace = true }
 fervid_core = { path="../fervid_core", version = "0.2" }
 fervid_css = { path="../fervid_css", version = "0.2" }
 fxhash = { workspace = true }
-lazy_static = { workspace = true }
 phf = { workspace = true }
 smallvec = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 swc_core = { workspace = true, features = ["common", "ecma_ast", "ecma_visit"] }
-itertools = "*"
+itertools = "0.15"
+itoa = "1.0"
 url = "2"
-percent-encoding = "*"
+percent-encoding = "2.3"
 indexmap = "2.10.0"
 enum_dispatch = "0.3.13"
 

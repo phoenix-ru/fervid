@@ -18,3 +18,6 @@ pub use template::is_from_default_slot;
 pub use utils::*;
 pub use vue_builtins::VUE_BUILTINS;
 pub use vue_imports::{VueImports, VueImportsSet};
+
+#[doc(hidden)]
+pub use swc_core::atoms::{Wtf8Atom as __Wtf8Atom, atom as __swc_atom};

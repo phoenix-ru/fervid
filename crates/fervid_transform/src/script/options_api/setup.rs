@@ -1,24 +1,24 @@
 use fervid_core::BindingTypes;
-use swc_core::ecma::ast::{BlockStmt, Expr};
+use swc_core::ecma::ast::{Expr, FunctionBody};
 
 use crate::{
     OptionsApiBindings, SetupBinding,
-    script::utils::{collect_block_stmt_return_fields, collect_obj_fields, unroll_paren_seq},
+    script::utils::{collect_function_body_return_fields, collect_obj_fields, unroll_paren_seq},
 };
 
 /// Collects all the bindings from `setup`, e.g. `setup() { return { foo: 'bar', baz: 42 } }`
 ///
 /// https://vuejs.org/api/composition-api-setup.html
 #[inline]
-pub fn collect_setup_bindings_block_stmt(
-    block_stmt: &BlockStmt,
+pub fn collect_setup_bindings_function_body(
+    function_body: &FunctionBody,
     options_api_bindings: &mut OptionsApiBindings,
 ) {
     // TODO Implement the algorithm
     // But the current Vue SFC compiler is doing the same
 
     let mut tmp = Vec::new();
-    collect_block_stmt_return_fields(block_stmt, &mut tmp);
+    collect_function_body_return_fields(function_body, &mut tmp);
 
     options_api_bindings.setup.extend(
         tmp.into_iter()

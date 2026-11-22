@@ -3,21 +3,20 @@ use fervid_core::{
     atom_to_propname, fervid_atom, str_to_propname,
 };
 use regex::Regex;
+use std::sync::LazyLock;
 use swc_core::{
     common::{DUMMY_SP, Span, Spanned},
     ecma::ast::{
-        ArrayLit, ArrowExpr, BinExpr, BinaryOp, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
-        ComputedPropName, Expr, ExprOrSpread, Ident, IdentName, KeyValueProp, Lit, ObjectLit, Prop,
-        PropName, PropOrSpread, Str,
+        ArrayLit, ArrowExpr, ArrowFunctionBody, BinExpr, BinaryOp, CallExpr, Callee,
+        ComputedPropName, Expr, ExprOrSpread, FunctionBody, Ident, IdentName, KeyValueProp, Lit,
+        ObjectLit, Prop, PropName, PropOrSpread, Str,
     },
 };
 
 use crate::context::CodegenContext;
 
-lazy_static! {
-    static ref CSS_RE: Regex =
-        Regex::new(r"(?U)([a-zA-Z_-][a-zA-Z_0-9-]*):\s*(.+)(?:;|$)").unwrap();
-}
+static CSS_RE: LazyLock<Result<Regex, regex::Error>> =
+    LazyLock::new(|| Regex::new(r"(?U)([a-zA-Z_-][a-zA-Z_0-9-]*):\s*(.+)(?:;|$)"));
 
 /// Type alias for all the directives not handled as attributes.
 /// Only `v-on` and `v-bind` as well as `v-model` for components generate attribute code.
@@ -104,7 +103,7 @@ impl CodegenContext {
                             key: str_to_propname(name, *span),
                             value: Box::from(Expr::Lit(Lit::Str(Str {
                                 span: span.to_owned(),
-                                value: value.to_owned().unwrap_or_default(),
+                                value: value.to_owned().unwrap_or_default().into(),
                                 raw: None,
                             }))),
                         },
@@ -170,7 +169,7 @@ impl CodegenContext {
                         result_hints.props_patch_flag || was_transformed;
 
                     let key = match argument {
-                        StrOrExpr::Str(s) => atom_to_propname(s.value.to_owned(), s.span),
+                        StrOrExpr::Str(s) => atom_to_propname(s.value.clone(), s.span),
                         StrOrExpr::Expr(expr) => {
                             // Dynamic prop needs a `_normalizeProps` call
                             // TODO Take from patch flags?
@@ -185,7 +184,7 @@ impl CodegenContext {
                                     left: expr.to_owned(), // ?
                                     right: Box::from(Expr::Lit(Lit::Str(Str {
                                         span,
-                                        value: FervidAtom::from(""),
+                                        value: fervid_atom!("").into(),
                                         raw: None,
                                     }))),
                                 })),
@@ -226,7 +225,7 @@ impl CodegenContext {
                                 spread: None,
                                 expr: Box::from(Expr::Lit(Lit::Str(Str {
                                     span,
-                                    value: modifier.to_owned(),
+                                    value: modifier.to_owned().into(),
                                     raw: None,
                                 }))),
                             })
@@ -288,7 +287,7 @@ impl CodegenContext {
                             out.push(PropOrSpread::Prop(Box::from(Prop::KeyValue(
                                 KeyValueProp {
                                     key: atom_to_propname(
-                                        event_name_str.value.to_owned(),
+                                        event_name_str.value.clone(),
                                         event_name_str.span,
                                     ),
                                     value: handler_expr,
@@ -353,7 +352,7 @@ impl CodegenContext {
                     spread: None,
                     expr: Box::from(Expr::Lit(Lit::Str(Str {
                         span: regular_span,
-                        value: regular_value.to_owned(),
+                        value: regular_value.to_owned().into(),
                         raw: None, //Some(Atom::from(regular_value.as_ref())),
                     }))),
                 }));
@@ -391,7 +390,7 @@ impl CodegenContext {
             (AttributePresence::PresentWithValue(regular_value, span), None) => {
                 expr = Some(Expr::Lit(Lit::Str(Str {
                     raw: None, // Some(Atom::from(regular_value.as_ref())),
-                    value: regular_value.to_owned(),
+                    value: regular_value.to_owned().into(),
                     span,
                 })));
             }
@@ -400,7 +399,7 @@ impl CodegenContext {
             (AttributePresence::PresentNoValue(span), None) => {
                 expr = Some(Expr::Lit(Lit::Str(Str {
                     raw: None,
-                    value: fervid_atom!(""),
+                    value: fervid_atom!("").into(),
                     span,
                 })));
             }
@@ -527,7 +526,7 @@ impl CodegenContext {
             (AttributePresence::PresentNoValue(span), None) => {
                 expr = Some(Expr::Lit(Lit::Str(Str {
                     span,
-                    value: fervid_atom!(""),
+                    value: fervid_atom!("").into(),
                     raw: None,
                 })));
             }
@@ -587,7 +586,12 @@ fn generate_regular_style(style: &str, span: Span) -> ObjectLit {
         props: Vec::with_capacity(4), // pre-allocate more just in case
     };
 
-    for mat in CSS_RE.captures_iter(style) {
+    let Ok(regex) = CSS_RE.as_ref() else {
+        debug_assert!(false, "static CSS regex must compile");
+        return result;
+    };
+
+    for mat in regex.captures_iter(style) {
         let Some(style_name) = mat.get(1).map(|v| v.as_str().trim()) else {
             continue;
         };
@@ -622,9 +626,8 @@ fn empty_arrow_expr(span: Span) -> Expr {
         span,
         ctxt: Default::default(),
         params: vec![],
-        body: Box::from(BlockStmtOrExpr::BlockStmt(BlockStmt {
+        body: Box::from(ArrowFunctionBody::FunctionBody(FunctionBody {
             span,
-            ctxt: Default::default(),
             stmts: vec![],
         })),
         is_async: false,

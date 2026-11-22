@@ -1,4 +1,4 @@
-use fervid_core::{VNodeCall, fervid_atom};
+use fervid_core::{VNodeCall, fervid_atom, wtf8_atom_to_atom};
 use swc_core::{
     atoms::Atom,
     common::DUMMY_SP,
@@ -30,7 +30,7 @@ pub fn infer_name(exported_obj: &mut ObjectLit, filename: &str) {
             Prop::KeyValue(KeyValueProp { key, .. }) | Prop::Getter(GetterProp { key, .. }) => {
                 match key {
                     PropName::Ident(id) if is_valid_name_sym(&id.sym) => true,
-                    PropName::Str(s) if is_valid_name_sym(&s.value) => true,
+                    PropName::Str(s) if is_valid_name_sym(&wtf8_atom_to_atom(&s.value)) => true,
                     _ => false,
                 }
             }

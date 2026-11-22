@@ -8,10 +8,10 @@ use swc_core::{
     common::{BytePos, DUMMY_SP, FileName, SourceMap, source_map::SourceMapGenConfig, sync::Lrc},
     ecma::{
         ast::{
-            ArrowExpr, AssignExpr, BindingIdent, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
-            Decl, ExportDefaultExpr, Expr, ExprOrSpread, ExprStmt, Function, GetterProp, Ident,
-            IdentName, ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit, Param,
-            Pat, Prop, PropName, PropOrSpread, ReturnStmt, SetterProp, Stmt, Str, VarDecl,
+            ArrowExpr, ArrowFunctionBody, AssignExpr, BindingIdent, CallExpr, Callee, Decl,
+            ExportDefaultExpr, Expr, ExprOrSpread, ExprStmt, Function, FunctionBody, GetterProp,
+            Ident, IdentName, ImportDecl, MethodProp, Module, ModuleDecl, ModuleItem, ObjectLit,
+            Param, Pat, Prop, PropName, PropOrSpread, ReturnStmt, SetterProp, Stmt, Str, VarDecl,
             VarDeclKind, VarDeclarator,
         },
         visit::{Visit, VisitWith, noop_visit_type},
@@ -67,6 +67,7 @@ impl CodegenContext {
 
                     let setup_function = synthetic_setup_fn.get_or_insert_with(|| {
                         Box::new(Function {
+                            this_param: None,
                             params: vec![],
                             decorators: vec![],
                             span: DUMMY_SP,
@@ -79,9 +80,8 @@ impl CodegenContext {
                         })
                     });
 
-                    let setup_body = setup_function.body.get_or_insert_with(|| BlockStmt {
+                    let setup_body = setup_function.body.get_or_insert_with(|| FunctionBody {
                         span: DUMMY_SP,
-                        ctxt: Default::default(),
                         stmts: Vec::with_capacity(1),
                     });
 
@@ -121,7 +121,7 @@ impl CodegenContext {
                         .push(PropOrSpread::Prop(Box::new(Prop::Method(MethodProp {
                             key: PropName::Ident(IdentName {
                                 span: DUMMY_SP,
-                                sym: FervidAtom::from("render"),
+                                sym: fervid_atom!("render"),
                             }),
                             function: Box::new(render_fn),
                         }))));
@@ -152,7 +152,7 @@ impl CodegenContext {
                         .push(PropOrSpread::Prop(Box::new(Prop::Method(MethodProp {
                             key: PropName::Ident(IdentName {
                                 span: DUMMY_SP,
-                                sym: FervidAtom::from("setup"),
+                                sym: fervid_atom!("setup"),
                             }),
                             function: setup_fn,
                         }))));
@@ -229,7 +229,7 @@ impl CodegenContext {
                     specifiers: used_imports,
                     src: Box::new(Str {
                         span: DUMMY_SP,
-                        value: FervidAtom::from("vue"),
+                        value: fervid_atom!("vue").into(),
                         raw: None,
                     }),
                     type_only: false,
@@ -254,7 +254,7 @@ impl CodegenContext {
 
         let body = if directive_resolves.is_empty() && component_resolves.is_empty() {
             // We can directly return an expression from an arrow function
-            Box::new(BlockStmtOrExpr::Expr(Box::new(template_expr)))
+            Box::new(ArrowFunctionBody::Expr(Box::new(template_expr)))
         } else {
             //  We need to return a block for an arrow function
             let mut stmts: Vec<Stmt> = Vec::with_capacity(2);
@@ -275,9 +275,8 @@ impl CodegenContext {
                 span: DUMMY_SP,
             }));
 
-            Box::new(BlockStmtOrExpr::BlockStmt(BlockStmt {
+            Box::new(ArrowFunctionBody::FunctionBody(FunctionBody {
                 span: DUMMY_SP,
-                ctxt: Default::default(),
                 stmts,
             }))
         };
@@ -357,6 +356,7 @@ impl CodegenContext {
         }
 
         Function {
+            this_param: None,
             // Render function params
             params: vec![
                 param!("_ctx"),
@@ -369,9 +369,8 @@ impl CodegenContext {
             decorators: vec![],
             span: DUMMY_SP,
             ctxt: Default::default(),
-            body: Some(BlockStmt {
+            body: Some(FunctionBody {
                 span: DUMMY_SP,
-                ctxt: Default::default(),
                 stmts: fn_body_stmts,
             }),
             is_generator: false,
@@ -424,14 +423,23 @@ impl CodegenContext {
                     props.push(PropOrSpread::Prop(Box::new(Prop::Getter(GetterProp {
                         span: DUMMY_SP,
                         key: PropName::Ident(ident.to_owned().into()),
-                        type_ann: None,
-                        body: Some(BlockStmt {
+                        function: Box::new(Function {
+                            this_param: None,
+                            params: vec![],
+                            decorators: vec![],
                             span: DUMMY_SP,
                             ctxt: Default::default(),
-                            stmts: vec![Stmt::Return(ReturnStmt {
+                            body: Some(FunctionBody {
                                 span: DUMMY_SP,
-                                arg: Some(Box::new(Expr::Ident(ident))),
-                            })],
+                                stmts: vec![Stmt::Return(ReturnStmt {
+                                    span: DUMMY_SP,
+                                    arg: Some(Box::new(Expr::Ident(ident))),
+                                })],
+                            }),
+                            is_generator: false,
+                            is_async: false,
+                            type_params: None,
+                            return_type: None,
                         }),
                     }))));
                 }
@@ -450,14 +458,23 @@ impl CodegenContext {
                     props.push(PropOrSpread::Prop(Box::new(Prop::Getter(GetterProp {
                         span: DUMMY_SP,
                         key: PropName::Ident(ident.to_owned().into()),
-                        type_ann: None,
-                        body: Some(BlockStmt {
+                        function: Box::new(Function {
+                            this_param: None,
+                            params: vec![],
+                            decorators: vec![],
                             span: DUMMY_SP,
                             ctxt: Default::default(),
-                            stmts: vec![Stmt::Return(ReturnStmt {
+                            body: Some(FunctionBody {
                                 span: DUMMY_SP,
-                                arg: Some(Box::new(Expr::Ident(ident.to_owned()))),
-                            })],
+                                stmts: vec![Stmt::Return(ReturnStmt {
+                                    span: DUMMY_SP,
+                                    arg: Some(Box::new(Expr::Ident(ident.to_owned()))),
+                                })],
+                            }),
+                            is_generator: false,
+                            is_async: false,
+                            type_params: None,
+                            return_type: None,
                         }),
                     }))));
 
@@ -470,35 +487,47 @@ impl CodegenContext {
                     props.push(PropOrSpread::Prop(Box::new(Prop::Setter(SetterProp {
                         span: DUMMY_SP,
                         key: PropName::Ident(ident.to_owned().into()),
-                        this_param: None,
-                        param: Box::new(Pat::Ident(BindingIdent {
-                            id: Ident {
+                        function: Box::new(Function {
+                            this_param: None,
+                            params: vec![Param {
                                 span: DUMMY_SP,
-                                ctxt: Default::default(),
-                                sym: set_arg.to_owned(),
-                                optional: false,
-                            },
-                            type_ann: None,
-                        })),
-                        body: Some(BlockStmt {
+                                decorators: vec![],
+                                pat: Pat::Ident(BindingIdent {
+                                    id: Ident {
+                                        span: DUMMY_SP,
+                                        ctxt: Default::default(),
+                                        sym: set_arg.to_owned(),
+                                        optional: false,
+                                    },
+                                    type_ann: None,
+                                }),
+                            }],
+                            decorators: vec![],
                             span: DUMMY_SP,
                             ctxt: Default::default(),
-                            stmts: vec![Stmt::Expr(ExprStmt {
+                            body: Some(FunctionBody {
                                 span: DUMMY_SP,
-                                expr: Box::new(Expr::Assign(AssignExpr {
+                                stmts: vec![Stmt::Expr(ExprStmt {
                                     span: DUMMY_SP,
-                                    op: swc_core::ecma::ast::AssignOp::Assign,
-                                    left: swc_core::ecma::ast::AssignTarget::Simple(
-                                        swc_core::ecma::ast::SimpleAssignTarget::Ident(
-                                            BindingIdent {
-                                                id: ident,
-                                                type_ann: None,
-                                            },
+                                    expr: Box::new(Expr::Assign(AssignExpr {
+                                        span: DUMMY_SP,
+                                        op: swc_core::ecma::ast::AssignOp::Assign,
+                                        left: swc_core::ecma::ast::AssignTarget::Simple(
+                                            swc_core::ecma::ast::SimpleAssignTarget::Ident(
+                                                BindingIdent {
+                                                    id: ident,
+                                                    type_ann: None,
+                                                },
+                                            ),
                                         ),
-                                    ),
-                                    right: Box::new(Expr::Ident(set_arg.into_ident())),
-                                })),
-                            })],
+                                        right: Box::new(Expr::Ident(set_arg.into_ident())),
+                                    })),
+                                })],
+                            }),
+                            is_generator: false,
+                            is_async: false,
+                            type_params: None,
+                            return_type: None,
                         }),
                     }))));
                 }

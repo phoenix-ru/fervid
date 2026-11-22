@@ -1,8 +1,8 @@
 use crate::OptionsApiBindings;
-use swc_core::ecma::ast::{BlockStmt, Expr};
+use swc_core::ecma::ast::{Expr, FunctionBody};
 
 use crate::script::utils::{
-    collect_block_stmt_return_fields, collect_obj_fields, unroll_paren_seq,
+    collect_function_body_return_fields, collect_obj_fields, unroll_paren_seq,
 };
 
 /// Collects variables from `data`.
@@ -10,11 +10,11 @@ use crate::script::utils::{
 ///
 /// https://vuejs.org/api/options-state.html#data
 #[inline]
-pub fn collect_data_bindings_block_stmt(
-    block_stmt: &BlockStmt,
+pub fn collect_data_bindings_function_body(
+    function_body: &FunctionBody,
     options_api_bindings: &mut OptionsApiBindings,
 ) {
-    collect_block_stmt_return_fields(block_stmt, &mut options_api_bindings.data)
+    collect_function_body_return_fields(function_body, &mut options_api_bindings.data)
 }
 
 /// Collects variables from `data: () => ({ foo: 'bar' })`

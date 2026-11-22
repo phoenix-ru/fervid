@@ -4,7 +4,7 @@ use fervid_core::{
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
-        ArrayLit, ArrowExpr, BlockStmtOrExpr, CallExpr, Callee, Expr, ExprOrSpread, MemberExpr,
+        ArrayLit, ArrowExpr, ArrowFunctionBody, CallExpr, Callee, Expr, ExprOrSpread, MemberExpr,
         MemberProp, ObjectLit,
     },
 };
@@ -97,7 +97,7 @@ impl CodegenContext {
                     span: slot_outlet_call.span,
                     ctxt: Default::default(),
                     params: vec![],
-                    body: Box::new(BlockStmtOrExpr::Expr(Box::new(children))),
+                    body: Box::new(ArrowFunctionBody::Expr(Box::new(children))),
                     is_async: false,
                     is_generator: false,
                     type_params: None,

@@ -13,11 +13,12 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@farmfe/cli": "^1.0.5",
-    "@farmfe/core": "~1.2.0",
+    "@farmfe/cli": "2.0.0",
+    "@farmfe/core": "2.0.1",
     "farm-plugin-vue-fervid": "link:../../../crates/fervid_farmfe"
   },
   "dependencies": {
-    "vue": "^3.5.18"
-  }
+    "vue": "^3.5.46"
+  },
+  "packageManager": "pnpm@12.21.0"
 }

@@ -1,12 +1,11 @@
-use fervid_core::{BindingTypes, FervidAtom};
+use fervid_core::{BindingTypes, FervidAtom, fervid_atom, wtf8_atom_to_atom};
 use swc_core::ecma::ast::{
-    ArrayLit, ArrowExpr, BlockStmtOrExpr, Decl, Expr, Function, Lit, Module, ModuleDecl,
+    ArrayLit, ArrowExpr, ArrowFunctionBody, Decl, Expr, Function, Lit, Module, ModuleDecl,
     ModuleItem, ObjectLit, Prop, PropName, PropOrSpread, Stmt, Tpl, VarDeclKind,
 };
 
 use crate::{
     OptionsApiBindings, SetupBinding,
-    atoms::*,
     script::{
         common::{
             categorize_class, categorize_expr, categorize_fn_decl, enrich_binding_types,
@@ -20,7 +19,7 @@ use crate::{
 use super::{
     components::collect_components_object,
     computed::collect_computed_object,
-    data::{collect_data_bindings_block_stmt, collect_data_bindings_expr},
+    data::{collect_data_bindings_expr, collect_data_bindings_function_body},
     directives::collect_directives_object,
     emits::{collect_emits_bindings_array, collect_emits_bindings_object},
     exports::collect_exports_named,
@@ -28,7 +27,7 @@ use super::{
     inject::{collect_inject_bindings_array, collect_inject_bindings_object},
     methods::collect_methods_object,
     props::{collect_prop_bindings_array, collect_prop_bindings_object},
-    setup::{collect_setup_bindings_block_stmt, collect_setup_bindings_expr},
+    setup::{collect_setup_bindings_expr, collect_setup_bindings_function_body},
 };
 
 /// Analyzes all the fields of `export default` according to Options API.\
@@ -42,20 +41,20 @@ pub fn analyze_default_export(default_export: &ObjectLit, out: &mut OptionsApiBi
         match **prop {
             Prop::KeyValue(ref key_value) => {
                 let sym = match key_value.key {
-                    PropName::Ident(ref ident) => &ident.sym,
-                    PropName::Str(ref s) => &s.value,
+                    PropName::Ident(ref ident) => ident.sym.to_owned(),
+                    PropName::Str(ref s) => wtf8_atom_to_atom(&s.value),
                     _ => continue,
                 };
 
                 match *key_value.value {
-                    Expr::Array(ref array_lit) => handle_options_array(sym, array_lit, out),
-                    Expr::Object(ref obj_lit) => handle_options_obj(sym, obj_lit, out),
-                    Expr::Fn(ref fn_expr) => handle_options_function(sym, &fn_expr.function, out),
+                    Expr::Array(ref array_lit) => handle_options_array(&sym, array_lit, out),
+                    Expr::Object(ref obj_lit) => handle_options_obj(&sym, obj_lit, out),
+                    Expr::Fn(ref fn_expr) => handle_options_function(&sym, &fn_expr.function, out),
                     Expr::Arrow(ref arrow_expr) => {
-                        handle_options_arrow_function(sym, arrow_expr, out)
+                        handle_options_arrow_function(&sym, arrow_expr, out)
                     }
-                    Expr::Lit(ref lit) => handle_options_lit(sym, lit, out),
-                    Expr::Tpl(ref tpl) => handle_options_tpl(sym, tpl, out),
+                    Expr::Lit(ref lit) => handle_options_lit(&sym, lit, out),
+                    Expr::Tpl(ref tpl) => handle_options_tpl(&sym, tpl, out),
 
                     // These latter types technically can be analyzed as well,
                     // because they only need `.expr` unwrapping and re-matching.
@@ -71,12 +70,12 @@ pub fn analyze_default_export(default_export: &ObjectLit, out: &mut OptionsApiBi
             }
             Prop::Method(ref method) => {
                 let sym = match method.key {
-                    PropName::Ident(ref ident) => &ident.sym,
-                    PropName::Str(ref s) => &s.value,
+                    PropName::Ident(ref ident) => ident.sym.to_owned(),
+                    PropName::Str(ref s) => wtf8_atom_to_atom(&s.value),
                     _ => continue,
                 };
 
-                handle_options_function(sym, &method.function, out)
+                handle_options_function(&sym, &method.function, out)
             }
             _ => {}
         }
@@ -186,13 +185,13 @@ fn handle_options_array(
     array_lit: &ArrayLit,
     script_legacy_vars: &mut OptionsApiBindings,
 ) {
-    if *field == *PROPS {
+    if *field == fervid_atom!("props") {
         collect_prop_bindings_array(array_lit, script_legacy_vars)
-    } else if *field == *INJECT {
+    } else if *field == fervid_atom!("inject") {
         collect_inject_bindings_array(array_lit, script_legacy_vars)
-    } else if *field == *EMITS {
+    } else if *field == fervid_atom!("emits") {
         collect_emits_bindings_array(array_lit, script_legacy_vars)
-    } else if *field == *EXPOSE {
+    } else if *field == fervid_atom!("expose") {
         collect_expose_bindings_array(array_lit, script_legacy_vars)
     }
 }
@@ -206,13 +205,13 @@ fn handle_options_arrow_function(
     // Arrow functions may either have a body or an expression
     // `() => {}` is a body which returns nothing
     // `() => ({})` is an expression which returns an empty object
-    macro_rules! forward_block_stmt_or_expr {
-        ($forward_block_stmt: ident, $forward_expr: ident) => {
+    macro_rules! forward_function_body_or_expr {
+        ($forward_function_body: ident, $forward_expr: ident) => {
             match *arrow_expr.body {
-                BlockStmtOrExpr::BlockStmt(ref block_stmt) => {
-                    $forward_block_stmt(block_stmt, script_legacy_vars)
+                ArrowFunctionBody::FunctionBody(ref function_body) => {
+                    $forward_function_body(function_body, script_legacy_vars)
                 }
-                BlockStmtOrExpr::Expr(ref arrow_body_expr) => {
+                ArrowFunctionBody::Expr(ref arrow_body_expr) => {
                     $forward_expr(arrow_body_expr, script_legacy_vars)
                 }
             }
@@ -221,12 +220,15 @@ fn handle_options_arrow_function(
 
     // It reads a bit cryptic because of the macro calls,
     // but you should only care about the functions which are called,
-    // e.g. [`collect_data_bindings_block_stmt`]
-    if *field == *DATA {
-        forward_block_stmt_or_expr!(collect_data_bindings_block_stmt, collect_data_bindings_expr);
-    } else if *field == *SETUP {
-        forward_block_stmt_or_expr!(
-            collect_setup_bindings_block_stmt,
+    // e.g. [`collect_data_bindings_function_body`]
+    if *field == fervid_atom!("data") {
+        forward_function_body_or_expr!(
+            collect_data_bindings_function_body,
+            collect_data_bindings_expr
+        );
+    } else if *field == fervid_atom!("setup") {
+        forward_function_body_or_expr!(
+            collect_setup_bindings_function_body,
             collect_setup_bindings_expr
         )
     }
@@ -242,25 +244,25 @@ fn handle_options_function(
         return;
     };
 
-    if *field == *DATA {
-        collect_data_bindings_block_stmt(function_body, script_legacy_vars)
-    } else if *field == *SETUP {
-        collect_setup_bindings_block_stmt(function_body, script_legacy_vars)
+    if *field == fervid_atom!("data") {
+        collect_data_bindings_function_body(function_body, script_legacy_vars)
+    } else if *field == fervid_atom!("setup") {
+        collect_setup_bindings_function_body(function_body, script_legacy_vars)
     }
 }
 
 /// `name`
 fn handle_options_lit(field: &FervidAtom, lit: &Lit, script_legacy_vars: &mut OptionsApiBindings) {
-    if *field == *NAME
+    if *field == fervid_atom!("name")
         && let Lit::Str(name) = lit
     {
-        script_legacy_vars.name = Some(name.value.to_owned())
+        script_legacy_vars.name = Some(wtf8_atom_to_atom(&name.value))
     }
 }
 
 /// `name`
 fn handle_options_tpl(field: &FervidAtom, tpl: &Tpl, script_legacy_vars: &mut OptionsApiBindings) {
-    if *field == *NAME {
+    if *field == fervid_atom!("name") {
         script_legacy_vars.name = get_string_tpl(tpl);
     }
 }
@@ -271,19 +273,19 @@ fn handle_options_obj(
     obj_lit: &ObjectLit,
     script_legacy_vars: &mut OptionsApiBindings,
 ) {
-    if *field == *PROPS {
+    if *field == fervid_atom!("props") {
         collect_prop_bindings_object(obj_lit, script_legacy_vars)
-    } else if *field == *COMPUTED {
+    } else if *field == fervid_atom!("computed") {
         collect_computed_object(obj_lit, script_legacy_vars)
-    } else if *field == *INJECT {
+    } else if *field == fervid_atom!("inject") {
         collect_inject_bindings_object(obj_lit, script_legacy_vars)
-    } else if *field == *EMITS {
+    } else if *field == fervid_atom!("emits") {
         collect_emits_bindings_object(obj_lit, script_legacy_vars)
-    } else if *field == *COMPONENTS {
+    } else if *field == fervid_atom!("components") {
         collect_components_object(obj_lit, script_legacy_vars)
-    } else if *field == *METHODS {
+    } else if *field == fervid_atom!("methods") {
         collect_methods_object(obj_lit, script_legacy_vars)
-    } else if *field == *DIRECTIVES {
+    } else if *field == fervid_atom!("directives") {
         collect_directives_object(obj_lit, script_legacy_vars)
     }
 }

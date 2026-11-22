@@ -123,7 +123,7 @@ impl CodegenContext {
                         Some(ExprOrSpread {
                             expr: Box::new(Expr::Lit(Lit::Str(Str {
                                 span: DUMMY_SP,
-                                value: dynamic_prop_name.to_owned(),
+                                value: dynamic_prop_name.to_owned().into(),
                                 raw: None,
                             }))),
                             spread: None,
@@ -286,7 +286,7 @@ fn expression_prop_name_to_prop_name(value: &ExpressionPropNameNode) -> PropName
             } else {
                 PropName::Str(Str {
                     span: expr.ast.span,
-                    value: expr.ast.sym.to_owned(),
+                    value: expr.ast.sym.to_owned().into(),
                     raw: None,
                 })
             }

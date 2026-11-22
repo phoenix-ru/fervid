@@ -52,8 +52,6 @@
 //! let compiled_code = fervid_codegen::CodegenContext::stringify(input, &sfc_module, FileName::Custom("input.vue".into()), false, false);
 //! ```
 
-extern crate lazy_static;
-
 pub mod errors;
 #[deprecated]
 pub mod parser_old;

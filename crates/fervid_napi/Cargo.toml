@@ -26,8 +26,10 @@ fervid_transform = { path = "../fervid_transform", version = "0.2" }
 swc_core = { workspace = true }
 fxhash = { workspace = true }
 
-napi = "3"
-napi-derive = "3"
+# Keep the known-working WASI stack until newer NAPI/emnapi export contracts are migrated together
+napi = "=3.2.3"
+napi-derive = "=3.2.3"
+napi-sys = "=3.0.0"
 
 [build-dependencies]
-napi-build = "2"
+napi-build = "=2.2.3"

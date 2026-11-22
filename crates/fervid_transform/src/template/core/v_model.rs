@@ -184,7 +184,7 @@ pub fn transform_v_model_base(
 fn model_prop_key(argument: Option<&StrOrExpr>, span: Span) -> ExpressionPropNameNode {
     match argument {
         Some(StrOrExpr::Str(argument)) => {
-            create_simple_expression_propname(argument.value.to_owned(), true, span).into()
+            create_simple_expression_propname(argument.value.clone(), true, span).into()
         }
         Some(StrOrExpr::Expr(argument)) => dynamic_key(argument.to_owned(), span),
         None => create_simple_expression_propname(fervid_atom!("modelValue"), true, span).into(),
@@ -194,9 +194,10 @@ fn model_prop_key(argument: Option<&StrOrExpr>, span: Span) -> ExpressionPropNam
 fn update_event_key(argument: Option<&StrOrExpr>, span: Span) -> ExpressionPropNameNode {
     match argument {
         Some(StrOrExpr::Str(argument)) => {
-            let mut name = String::with_capacity("onUpdate:".len() + argument.value.len());
+            let raw = argument.value.as_str();
+            let mut name = String::with_capacity("onUpdate:".len() + raw.len());
             name.push_str("onUpdate:");
-            to_camel_case(&argument.value, &mut name);
+            to_camel_case(raw, &mut name);
 
             ExpressionPropNameNode::from(create_simple_expression_propname(
                 FervidAtom::from(name),
@@ -211,7 +212,7 @@ fn update_event_key(argument: Option<&StrOrExpr>, span: Span) -> ExpressionPropN
                 op: BinaryOp::Add,
                 left: Box::new(Expr::Lit(Lit::Str(Str {
                     span,
-                    value: fervid_atom!("onUpdate:"),
+                    value: fervid_atom!("onUpdate:").into(),
                     raw: None,
                 }))),
                 right: argument.to_owned(),
@@ -231,8 +232,9 @@ fn update_event_key(argument: Option<&StrOrExpr>, span: Span) -> ExpressionPropN
 fn modifiers_key(argument: Option<&StrOrExpr>, span: Span) -> ExpressionPropNameNode {
     match argument {
         Some(StrOrExpr::Str(argument)) => {
-            let mut name = String::with_capacity(argument.value.len() + "Modifiers".len());
-            name.push_str(&argument.value);
+            let raw = argument.value.as_str();
+            let mut name = String::with_capacity(raw.len() + "Modifiers".len());
+            name.push_str(raw);
             name.push_str("Modifiers");
 
             create_simple_expression_propname(FervidAtom::from(name), true, span).into()
@@ -245,7 +247,7 @@ fn modifiers_key(argument: Option<&StrOrExpr>, span: Span) -> ExpressionPropName
                 left: argument.to_owned(),
                 right: Box::new(Expr::Lit(Lit::Str(Str {
                     span,
-                    value: fervid_atom!("Modifiers"),
+                    value: fervid_atom!("Modifiers").into(),
                     raw: None,
                 }))),
             }));

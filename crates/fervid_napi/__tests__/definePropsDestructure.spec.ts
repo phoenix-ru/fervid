@@ -1,7 +1,6 @@
 import { describe, test, expect } from 'vitest'
-import { BindingTypes } from '..'
+import { BindingTypes, type FervidCompileOptions, type FervidJsCompilerOptions } from '..'
 import { assertCode, compile as compileSFCScript } from './utils'
-import { FervidCompileOptions, FervidJsCompilerOptions } from '..'
 
 describe('sfc reactive props destructure', () => {
     function compile(src: string, options?: Partial<FervidCompileOptions>, compilerOptions?: FervidJsCompilerOptions) {

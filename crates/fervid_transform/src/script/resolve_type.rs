@@ -6,7 +6,7 @@ use std::{
     rc::Rc,
 };
 
-use fervid_core::{FervidAtom, IntoIdent, SfcScriptBlock, fervid_atom};
+use fervid_core::{FervidAtom, IntoIdent, SfcScriptBlock, fervid_atom, wtf8_atom_to_atom};
 use flagset::FlagSet;
 use fxhash::{FxBuildHasher, FxHashMap as HashMap};
 use indexmap::IndexMap;
@@ -14,11 +14,12 @@ use itertools::Itertools;
 use phf::{Set, phf_set};
 use strum_macros::{AsRefStr, EnumString, IntoStaticStr};
 use swc_core::{
+    atoms::{Wtf8Atom, wtf8::Wtf8Buf},
     common::{DUMMY_SP, Span, Spanned, pass::Either},
     ecma::ast::{
         BinExpr, BinaryOp, Class, ClassDecl, Decl, DefaultDecl, ExportDecl, ExportSpecifier, Expr,
         FnDecl, FnExpr, Function, Ident, Lit, Module, ModuleDecl, ModuleExportName, ModuleItem,
-        Pat, Stmt, Tpl, TsCallSignatureDecl, TsEntityName, TsEnumDecl, TsExprWithTypeArgs,
+        Pat, Stmt, Str, Tpl, TsCallSignatureDecl, TsEntityName, TsEnumDecl, TsExprWithTypeArgs,
         TsFnOrConstructorType, TsFnParam, TsFnType, TsIndexedAccessType, TsInterfaceDecl,
         TsIntersectionType, TsKeywordType, TsKeywordTypeKind, TsLit, TsLitType, TsMappedType,
         TsMethodSignature, TsModuleDecl, TsModuleName, TsNamespaceBody, TsNamespaceDecl,
@@ -46,7 +47,7 @@ pub type FxIndexMap<K, V> = IndexMap<K, V, FxBuildHasher>;
 
 #[derive(Default, Debug)]
 pub struct ResolvedElements {
-    pub props: FxIndexMap<FervidAtom, ResolvedProp>,
+    pub props: FxIndexMap<Wtf8Atom, ResolvedProp>,
     pub calls: Vec<Either<TsFnType, TsCallSignatureDecl>>,
 }
 
@@ -700,8 +701,15 @@ fn resolve_mapped_type(
     };
 
     for key in keys {
+        // Note - we create literal strings as TS prop keys here.
+        // This is done to uniformly represent all types of keys,
+        // e.g. "foo", "foo-bar", "\uD800"
         let property = create_property(
-            Box::new(Expr::Ident(key.to_owned().into_ident())),
+            Box::new(Expr::Lit(Lit::Str(Str {
+                span: mapped_type.span,
+                value: key.to_owned(),
+                raw: None,
+            }))),
             type_ann.to_owned(),
             mapped_type.optional.is_some(),
             scope_id,
@@ -927,41 +935,46 @@ fn resolve_template_keys(
     ctx: &mut TypeResolveContext,
     tpl: &Tpl,
     scope: &TypeScope,
-) -> ResolutionResult<Vec<FervidAtom>> {
+) -> ResolutionResult<Vec<Wtf8Atom>> {
     struct StackItem {
         expr_idx: usize,
         quasi_idx: usize,
-        prefix: String,
+        prefix: Wtf8Buf,
     }
 
     let mut results = Vec::new();
     let mut stack = vec![StackItem {
         expr_idx: 0,
         quasi_idx: 0,
-        prefix: "".to_string(),
+        prefix: Wtf8Buf::new(),
     }];
 
     while let Some(StackItem {
         expr_idx,
         quasi_idx,
-        prefix,
+        mut prefix,
     }) = stack.pop()
     {
-        let q = tpl.quasis.get(quasi_idx);
-        let leading = q.map_or("", |v| &v.raw);
+        if let Some(leading) = tpl.quasis.get(quasi_idx) {
+            prefix.push_str(&leading.raw);
+        }
 
         if expr_idx >= tpl.exprs.len() {
-            results.push(FervidAtom::from(format!("{prefix}{leading}")));
+            results.push(Wtf8Atom::from(prefix));
             continue;
         }
 
         let resolved = resolve_string_type_expr(ctx, &tpl.exprs[expr_idx], scope)?;
 
         for r in resolved {
+            let mut next = Wtf8Buf::with_capacity(prefix.len() + r.len());
+            next.push_wtf8(&prefix);
+            next.push_wtf8(&r);
+
             stack.push(StackItem {
                 expr_idx: expr_idx + 1,
                 quasi_idx: quasi_idx + 1,
-                prefix: format!("{prefix}{leading}{r}"),
+                prefix: next,
             });
         }
     }
@@ -973,41 +986,46 @@ fn resolve_template_keys_ts(
     ctx: &mut TypeResolveContext,
     tpl: &TsTplLitType,
     scope: &TypeScope,
-) -> ResolutionResult<Vec<FervidAtom>> {
+) -> ResolutionResult<Vec<Wtf8Atom>> {
     struct StackItem {
         expr_idx: usize,
         quasi_idx: usize,
-        prefix: String,
+        prefix: Wtf8Buf,
     }
 
     let mut results = Vec::new();
     let mut stack = vec![StackItem {
         expr_idx: 0,
         quasi_idx: 0,
-        prefix: "".to_string(),
+        prefix: Wtf8Buf::new(),
     }];
 
     while let Some(StackItem {
         expr_idx,
         quasi_idx,
-        prefix,
+        mut prefix,
     }) = stack.pop()
     {
-        let q = tpl.quasis.get(quasi_idx);
-        let leading = q.map_or("", |v| &v.raw);
+        if let Some(leading) = tpl.quasis.get(quasi_idx) {
+            prefix.push_str(&leading.raw);
+        }
 
         if expr_idx >= tpl.types.len() {
-            results.push(FervidAtom::from(format!("{prefix}{leading}")));
+            results.push(Wtf8Atom::from(prefix));
             continue;
         }
 
         let resolved = resolve_string_type(ctx, &tpl.types[expr_idx], scope)?;
 
         for r in resolved {
+            let mut next = Wtf8Buf::with_capacity(prefix.len() + r.len());
+            next.push_wtf8(&prefix);
+            next.push_wtf8(&r);
+
             stack.push(StackItem {
                 expr_idx: expr_idx + 1,
                 quasi_idx: quasi_idx + 1,
-                prefix: format!("{prefix}{leading}{r}"),
+                prefix: next,
             });
         }
     }
@@ -1019,7 +1037,7 @@ fn resolve_string_type(
     ctx: &mut TypeResolveContext,
     ts_type: &TsType,
     scope: &TypeScope,
-) -> ResolutionResult<Vec<FervidAtom>> {
+) -> ResolutionResult<Vec<Wtf8Atom>> {
     match ts_type {
         TsType::TsLitType(lit_type) => match lit_type.lit {
             TsLit::Str(ref s) => Ok(vec![s.value.to_owned()]),
@@ -1091,14 +1109,14 @@ fn resolve_string_type(
                     let mut result = get_param(0)?;
                     result
                         .iter_mut()
-                        .for_each(|it| *it = FervidAtom::from(it.to_uppercase()));
+                        .for_each(|it| *it = Wtf8Atom::from(it.to_uppercase()));
                     Ok(result)
                 }
                 "Lowercase" => {
                     let mut result = get_param(0)?;
                     result
                         .iter_mut()
-                        .for_each(|it| *it = FervidAtom::from(it.to_lowercase()));
+                        .for_each(|it| *it = lowercase_wtf8_atom(it));
                     Ok(result)
                 }
                 "Capitalize" => {
@@ -1129,7 +1147,7 @@ fn resolve_string_type_expr(
     ctx: &mut TypeResolveContext,
     expr: &Expr,
     scope: &TypeScope,
-) -> ResolutionResult<Vec<FervidAtom>> {
+) -> ResolutionResult<Vec<Wtf8Atom>> {
     match expr {
         Expr::Lit(Lit::Str(s)) => Ok(vec![s.value.to_owned()]),
 
@@ -1577,7 +1595,7 @@ pub fn record_types(
                         fn get_id(n: &ModuleExportName) -> FervidAtom {
                             match n {
                                 ModuleExportName::Ident(i) => i.sym.to_owned(),
-                                ModuleExportName::Str(s) => s.value.to_owned(),
+                                ModuleExportName::Str(s) => wtf8_atom_to_atom(&s.value),
                             }
                         }
 
@@ -1600,7 +1618,7 @@ pub fn record_types(
                                 imports.insert(
                                     exported.to_owned(),
                                     ImportBinding {
-                                        source: source.value.to_owned(),
+                                        source: wtf8_atom_to_atom(&source.value),
                                         imported: local.to_owned(),
                                         local: local.to_owned(),
                                         is_from_setup,
@@ -1878,7 +1896,7 @@ fn record_type_module_decl(
 ) {
     let id = overwrite_id.unwrap_or_else(|| match &ts_module_decl.id {
         TsModuleName::Ident(id) => id.sym.to_owned(),
-        TsModuleName::Str(s) => s.value.to_owned(),
+        TsModuleName::Str(s) => wtf8_atom_to_atom(&s.value),
     });
 
     let Some(existing) = types.get_mut(&id) else {
@@ -1973,6 +1991,7 @@ fn record_type_fn(
             ident: ident.to_owned(),
             declare,
             function: Box::new(Function {
+                this_param: function.this_param.clone(),
                 params: function.params.clone(),
                 decorators: vec![],
                 span: function.span,
@@ -2673,9 +2692,9 @@ fn reverse_infer_type_impl(
     )
 }
 
-fn get_id(expr: &Expr) -> Option<FervidAtom> {
+fn get_id(expr: &Expr) -> Option<Wtf8Atom> {
     match expr {
-        Expr::Ident(ident) => Some(ident.sym.to_owned()),
+        Expr::Ident(ident) => Some(ident.sym.to_owned().into()),
         Expr::Lit(Lit::Str(s)) => Some(s.value.to_owned()),
         _ => None,
     }
@@ -2735,22 +2754,54 @@ fn ctor_to_type(ctor_type: &str) -> Box<TsType> {
     }
 }
 
-fn capitalize_or_uncapitalize_atoms(atoms: &mut [FervidAtom], capitalize: bool) {
-    for atom in atoms.iter_mut() {
-        let mut buf = String::with_capacity(atom.len());
-        if let Some(c) = atom.chars().next() {
-            let transformed = if capitalize {
-                itertools::Either::Left(c.to_uppercase())
-            } else {
-                itertools::Either::Right(c.to_lowercase())
-            };
-            for c_transformed in transformed {
-                buf.push(c_transformed);
+fn capitalize_or_uncapitalize_atoms(atoms: &mut [Wtf8Atom], capitalize: bool) {
+    for atom in atoms {
+        let mut points = atom.code_points();
+
+        // Only transform the first valid UTF-16 code point, similar to what JS does
+        let Some(first) = points.next() else {
+            continue;
+        };
+        let Some(first_char) = first.to_char().filter(|c| c.len_utf16() == 1) else {
+            continue;
+        };
+
+        let mut out = Wtf8Buf::with_capacity(atom.len());
+
+        // Do the transform. The char may transform into multiple chars
+        if capitalize {
+            for c in first_char.to_uppercase() {
+                out.push_char(c);
             }
-            buf.push_str(&atom[c.len_utf8()..]);
+        } else {
+            for c in first_char.to_lowercase() {
+                out.push_char(c);
+            }
         }
-        *atom = FervidAtom::from(buf);
+
+        out.extend(points);
+        *atom = Wtf8Atom::from(out)
     }
+}
+
+fn lowercase_wtf8_atom(it: &mut Wtf8Atom) -> Wtf8Atom {
+    let mut valid_utf8 = String::with_capacity(it.len());
+    let mut out = Wtf8Buf::new();
+
+    for code_point in it.code_points() {
+        if let Some(c) = code_point.to_char() {
+            valid_utf8.push(c);
+        } else {
+            out.push_str(&valid_utf8.to_lowercase());
+            valid_utf8.clear();
+            out.push(code_point);
+        }
+    }
+
+    // Push the remainder
+    out.push_str(&valid_utf8.to_lowercase());
+
+    out.into()
 }
 
 #[inline]
@@ -2769,7 +2820,7 @@ impl Spanned for ResolvedProp {
 
 #[cfg(test)]
 mod tests {
-    use fervid_core::SfcDescriptor;
+    use fervid_core::{SfcDescriptor, wtf8_atom};
     use fxhash::FxHashSet;
     use swc_core::ecma::ast::IdentName;
     use swc_ecma_parser::TsSyntax;
@@ -2864,15 +2915,15 @@ mod tests {
 
         let props = resolved.props;
         assert_eq!(
-            props.get(&fervid_atom!("foo")),
+            props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::Number))
         );
         assert_eq!(
-            props.get(&fervid_atom!("bar")),
+            props.get(&wtf8_atom!("bar")),
             Some(&FlagSet::from(Types::Function))
         );
         assert_eq!(
-            props.get(&fervid_atom!("baz")),
+            props.get(&wtf8_atom!("baz")),
             Some(&FlagSet::from(Types::String))
         );
 
@@ -2888,7 +2939,7 @@ mod tests {
         );
 
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::Number))
         );
     }
@@ -2902,7 +2953,7 @@ mod tests {
         );
 
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::Number))
         );
     }
@@ -2916,7 +2967,7 @@ mod tests {
         );
 
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::Number))
         );
     }
@@ -2930,7 +2981,7 @@ mod tests {
         );
 
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::Number))
         );
     }
@@ -2947,19 +2998,19 @@ mod tests {
         );
 
         assert_eq!(
-            resolved.props.get(&fervid_atom!("a")),
+            resolved.props.get(&wtf8_atom!("a")),
             Some(&FlagSet::from(Types::Function))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("b")),
+            resolved.props.get(&wtf8_atom!("b")),
             Some(&FlagSet::from(Types::Boolean))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("c")),
+            resolved.props.get(&wtf8_atom!("c")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::Number))
         );
     }
@@ -2973,7 +3024,7 @@ mod tests {
         );
 
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::Object))
         );
     }
@@ -3007,15 +3058,15 @@ mod tests {
         );
 
         assert_eq!(
-            resolved.props.get(&fervid_atom!("self")),
+            resolved.props.get(&wtf8_atom!("self")),
             Some(&FlagSet::from(Types::Unknown))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::Number))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("bar")),
+            resolved.props.get(&wtf8_atom!("bar")),
             Some(&(Types::String | Types::Boolean))
         );
     }
@@ -3030,13 +3081,13 @@ mod tests {
         );
 
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::Number))
         );
 
         // TODO Support @vue-ignore
         // assert_eq!(
-        //     resolved.props.get(&fervid_atom!("bar")),
+        //     resolved.props.get(&wtf8_atom!("bar")),
         //     None
         // );
     }
@@ -3064,19 +3115,19 @@ mod tests {
         );
 
         assert_eq!(
-            resolved.props.get(&fervid_atom!("size")),
+            resolved.props.get(&wtf8_atom!("size")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("color")),
+            resolved.props.get(&wtf8_atom!("color")),
             Some(&(Types::String | Types::Number))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("appearance")),
+            resolved.props.get(&wtf8_atom!("appearance")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("note")),
+            resolved.props.get(&wtf8_atom!("note")),
             Some(&FlagSet::from(Types::String))
         );
     }
@@ -3094,19 +3145,19 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 4);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("_foo_x_")),
+            resolved.props.get(&wtf8_atom!("_foo_x_")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("_foo_y_")),
+            resolved.props.get(&wtf8_atom!("_foo_y_")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("_bar_x_")),
+            resolved.props.get(&wtf8_atom!("_bar_x_")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("_bar_y_")),
+            resolved.props.get(&wtf8_atom!("_bar_y_")),
             Some(&FlagSet::from(Types::String))
         );
     }
@@ -3129,35 +3180,35 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 8);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&(Types::String | Types::Number))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("bar")),
+            resolved.props.get(&wtf8_atom!("bar")),
             Some(&(Types::String | Types::Number))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("Foo")),
+            resolved.props.get(&wtf8_atom!("Foo")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("Bar")),
+            resolved.props.get(&wtf8_atom!("Bar")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("FOO")),
+            resolved.props.get(&wtf8_atom!("FOO")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("xfoo")),
+            resolved.props.get(&wtf8_atom!("xfoo")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("xbar")),
+            resolved.props.get(&wtf8_atom!("xbar")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("optional")),
+            resolved.props.get(&wtf8_atom!("optional")),
             Some(&FlagSet::from(Types::Boolean))
         );
     }
@@ -3172,7 +3223,7 @@ mod tests {
 
         assert_eq!(resolved.raw_props.len(), 2);
         assert!(matches!(
-            resolved.raw_props.get(&fervid_atom!("foo")),
+            resolved.raw_props.get(&wtf8_atom!("foo")),
             Some(&ResolvedProp {
                 value: ResolvedPropValue::TsPropertySignature(TsPropertySignature {
                     optional: true,
@@ -3182,7 +3233,7 @@ mod tests {
             })
         ));
         assert!(matches!(
-            resolved.raw_props.get(&fervid_atom!("bar")),
+            resolved.raw_props.get(&wtf8_atom!("bar")),
             Some(&ResolvedProp {
                 value: ResolvedPropValue::TsPropertySignature(TsPropertySignature {
                     optional: true,
@@ -3203,7 +3254,7 @@ mod tests {
 
         assert_eq!(resolved.raw_props.len(), 2);
         assert!(matches!(
-            resolved.raw_props.get(&fervid_atom!("foo")),
+            resolved.raw_props.get(&wtf8_atom!("foo")),
             Some(&ResolvedProp {
                 value: ResolvedPropValue::TsPropertySignature(TsPropertySignature {
                     optional: false,
@@ -3213,7 +3264,7 @@ mod tests {
             })
         ));
         assert!(matches!(
-            resolved.raw_props.get(&fervid_atom!("bar")),
+            resolved.raw_props.get(&wtf8_atom!("bar")),
             Some(&ResolvedProp {
                 value: ResolvedPropValue::TsPropertySignature(TsPropertySignature {
                     optional: false,
@@ -3235,11 +3286,11 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 2);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::Number))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("bar")),
+            resolved.props.get(&wtf8_atom!("bar")),
             Some(&FlagSet::from(Types::String))
         );
     }
@@ -3255,7 +3306,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("baz")),
+            resolved.props.get(&wtf8_atom!("baz")),
             Some(&FlagSet::from(Types::Boolean))
         );
     }
@@ -3266,7 +3317,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::Array))
         );
     }
@@ -3279,11 +3330,11 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 2);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::Map))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("bar")),
+            resolved.props.get(&wtf8_atom!("bar")),
             Some(&FlagSet::from(Types::Set))
         );
     }
@@ -3299,7 +3350,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::Number))
         );
     }
@@ -3316,11 +3367,11 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 2);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&(Types::Number | Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("bar")),
+            resolved.props.get(&wtf8_atom!("bar")),
             Some(&FlagSet::from(Types::String))
         );
     }
@@ -3338,19 +3389,19 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 4);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&(Types::Number | Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("bar")),
+            resolved.props.get(&wtf8_atom!("bar")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("tuple")),
+            resolved.props.get(&wtf8_atom!("tuple")),
             Some(&(Types::Number | Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("namedTuple")),
+            resolved.props.get(&wtf8_atom!("namedTuple")),
             Some(&(Types::Number | Types::String))
         );
     }
@@ -3374,7 +3425,7 @@ mod tests {
 
     //     assert_eq!(resolved.props.len(), 1);
     //     assert_eq!(
-    //         resolved.props.get(&fervid_atom!("foo")),
+    //         resolved.props.get(&wtf8_atom!("foo")),
     //         Some(&FlagSet::from(Types::Number))
     //     );
     // }
@@ -3397,11 +3448,11 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 2);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("bar")),
+            resolved.props.get(&wtf8_atom!("bar")),
             Some(&FlagSet::from(Types::Number))
         );
     }
@@ -3424,11 +3475,11 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 2);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("bar")),
+            resolved.props.get(&wtf8_atom!("bar")),
             Some(&FlagSet::from(Types::Number))
         );
     }
@@ -3451,11 +3502,11 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 2);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("bar")),
+            resolved.props.get(&wtf8_atom!("bar")),
             Some(&FlagSet::from(Types::Number))
         );
     }
@@ -3477,7 +3528,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&(Types::String | Types::Number))
         );
     }
@@ -3492,7 +3543,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::String))
         );
     }
@@ -3503,7 +3554,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::Array))
         );
     }
@@ -3535,27 +3586,27 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 6);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("imp")),
+            resolved.props.get(&wtf8_atom!("imp")),
             Some(&FlagSet::from(Types::Number))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&(Types::String | Types::Number))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("bar")),
+            resolved.props.get(&wtf8_atom!("bar")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("obj")),
+            resolved.props.get(&wtf8_atom!("obj")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("set")),
+            resolved.props.get(&wtf8_atom!("set")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("arr")),
+            resolved.props.get(&wtf8_atom!("arr")),
             Some(&(Types::String | Types::Number))
         );
     }
@@ -3585,11 +3636,11 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 2);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&(Types::Symbol | Types::String | Types::Number))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("bar")),
+            resolved.props.get(&wtf8_atom!("bar")),
             Some(&FlagSet::from(Types::Unknown))
         );
     }
@@ -3607,7 +3658,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&(Types::String | Types::Number))
         );
     }
@@ -3625,7 +3676,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&(Types::String | Types::Number))
         );
     }
@@ -3652,31 +3703,31 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 7);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("record")),
+            resolved.props.get(&wtf8_atom!("record")),
             Some(&(Types::String | Types::Symbol))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("anyRecord")),
+            resolved.props.get(&wtf8_atom!("anyRecord")),
             Some(&(Types::String | Types::Number | Types::Symbol))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("partial")),
+            resolved.props.get(&wtf8_atom!("partial")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("required")),
+            resolved.props.get(&wtf8_atom!("required")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("readonly")),
+            resolved.props.get(&wtf8_atom!("readonly")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("pick")),
+            resolved.props.get(&wtf8_atom!("pick")),
             Some(&(Types::String | Types::Number))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("extract")),
+            resolved.props.get(&wtf8_atom!("extract")),
             Some(&(Types::String | Types::Number))
         );
     }
@@ -3693,7 +3744,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::Unknown))
         );
     }
@@ -3715,7 +3766,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("route")),
+            resolved.props.get(&wtf8_atom!("route")),
             Some(&FlagSet::from(Types::Number))
         );
     }
@@ -3737,7 +3788,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("route")),
+            resolved.props.get(&wtf8_atom!("route")),
             Some(&FlagSet::from(Types::String))
         );
     }
@@ -3761,7 +3812,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("route")),
+            resolved.props.get(&wtf8_atom!("route")),
             Some(&FlagSet::from(Types::String))
         );
     }
@@ -3784,11 +3835,11 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 2);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("bar")),
+            resolved.props.get(&wtf8_atom!("bar")),
             Some(&FlagSet::from(Types::Boolean))
         );
     }
@@ -3807,11 +3858,11 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 2);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("bar")),
+            resolved.props.get(&wtf8_atom!("bar")),
             Some(&FlagSet::from(Types::Boolean))
         );
     }
@@ -3836,7 +3887,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("fileList")),
+            resolved.props.get(&wtf8_atom!("fileList")),
             Some(&FlagSet::from(Types::Array))
         );
     }
@@ -3851,7 +3902,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::String))
         );
     }
@@ -3868,15 +3919,15 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 3);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("bar")),
+            resolved.props.get(&wtf8_atom!("bar")),
             Some(&FlagSet::from(Types::Number))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("baz")),
+            resolved.props.get(&wtf8_atom!("baz")),
             Some(&FlagSet::from(Types::Boolean))
         );
     }
@@ -3893,7 +3944,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::String))
         );
     }
@@ -3908,7 +3959,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::String))
         );
     }
@@ -3926,7 +3977,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::String))
         );
     }
@@ -3945,7 +3996,7 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 1);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("foo")),
+            resolved.props.get(&wtf8_atom!("foo")),
             Some(&FlagSet::from(Types::String))
         );
     }
@@ -4047,7 +4098,7 @@ mod tests {
 
     //     assert_eq!(res.props.len(), 1);
     //     assert_eq!(
-    //         res.props.get(&fervid_atom!("foo")),
+    //         res.props.get(&wtf8_atom!("foo")),
     //         Some(&FlagSet::from(Types::String))
     //     );
     // }
@@ -4062,11 +4113,11 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 2);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("a_foo")),
+            resolved.props.get(&wtf8_atom!("a_foo")),
             Some(&FlagSet::from(Types::String))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("b_foo")),
+            resolved.props.get(&wtf8_atom!("b_foo")),
             Some(&FlagSet::from(Types::String))
         );
     }
@@ -4085,26 +4136,26 @@ mod tests {
 
         assert_eq!(resolved.props.len(), 3);
         assert_eq!(
-            resolved.props.get(&fervid_atom!("colsSm")),
+            resolved.props.get(&wtf8_atom!("colsSm")),
             Some(&FlagSet::from(Types::Number))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("colsMd")),
+            resolved.props.get(&wtf8_atom!("colsMd")),
             Some(&FlagSet::from(Types::Number))
         );
         assert_eq!(
-            resolved.props.get(&fervid_atom!("colsLg")),
+            resolved.props.get(&wtf8_atom!("colsLg")),
             Some(&FlagSet::from(Types::Number))
         );
     }
 
     #[derive(Debug)]
     struct ResolveResult {
-        props: FxIndexMap<FervidAtom, TypesSet>,
+        props: FxIndexMap<Wtf8Atom, TypesSet>,
         calls: Vec<Either<TsFnType, TsCallSignatureDecl>>,
         #[allow(dead_code)]
         deps: FxHashSet<String>,
-        raw_props: FxIndexMap<FervidAtom, ResolvedProp>,
+        raw_props: FxIndexMap<Wtf8Atom, ResolvedProp>,
     }
 
     fn resolve(code: &str) -> ResolveResult {

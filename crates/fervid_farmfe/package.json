@@ -6,20 +6,21 @@
   "type": "module",
   "license": "MIT",
   "devDependencies": {
-    "@farmfe/plugin-tools": "latest"
+    "@farmfe/plugin-tools": "2.0.0"
   },
   "napi": {
-    "name": "farm_plugin_vue_fervid",
-    "triples": {
-      "additional": [
-        "aarch64-apple-darwin",
-        "aarch64-unknown-linux-gnu",
-        "aarch64-unknown-linux-musl",
-        "x86_64-unknown-linux-musl",
-        "i686-pc-windows-msvc",
-        "aarch64-pc-windows-msvc"
-      ]
-    }
+    "binaryName": "farm_plugin_vue_fervid",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "x86_64-pc-windows-msvc",
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-linux-musl",
+      "x86_64-unknown-linux-musl",
+      "i686-pc-windows-msvc",
+      "aarch64-pc-windows-msvc"
+    ]
   },
   "exports": {
     ".": {
@@ -30,7 +31,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "farm-plugin-tools build --platform --cargo-name farm_plugin_vue_fervid -p farm_plugin_vue_fervid --release",
+    "build": "farm-plugin-tools build --platform -p farm_plugin_vue_fervid --release",
     "prepublishOnly": "farm-plugin-tools prepublish"
   },
   "files": [

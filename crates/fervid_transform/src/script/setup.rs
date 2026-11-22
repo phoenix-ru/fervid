@@ -1,10 +1,10 @@
 use define_props_destructure::transform_destructured_props;
-use fervid_core::{BindingTypes, IntoIdent, SfcScriptBlock, TemplateGenerationMode};
+use fervid_core::{BindingTypes, IntoIdent, SfcScriptBlock, TemplateGenerationMode, fervid_atom};
 use macros::VarDeclHelper;
 use swc_core::{
     common::{DUMMY_SP, Span},
     ecma::ast::{
-        BindingIdent, BlockStmt, CallExpr, Callee, Decl, Expr, ExprStmt, Function, Ident,
+        BindingIdent, CallExpr, Callee, Decl, Expr, ExprStmt, Function, FunctionBody, Ident,
         IdentName, KeyValuePatProp, KeyValueProp, ModuleDecl, ModuleItem, ObjectPat, ObjectPatProp,
         Param, Pat, Prop, PropName, PropOrSpread, Stmt, VarDeclKind,
     },
@@ -12,7 +12,6 @@ use swc_core::{
 
 use crate::{
     SetupBinding, TransformSfcContext,
-    atoms::{EMIT, EMIT_HELPER, EMITS, EXPOSE, EXPOSE_HELPER, PROPS, PROPS_HELPER},
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::{
         common::{
@@ -172,7 +171,7 @@ pub fn transform_and_record_script_setup(
                     callee: Callee::Expr(Box::new(Expr::Ident(Ident {
                         span: DUMMY_SP,
                         ctxt: Default::default(),
-                        sym: EXPOSE_HELPER.to_owned(),
+                        sym: fervid_atom!("__expose"),
                         optional: false,
                     }))),
                     args: vec![],
@@ -184,13 +183,13 @@ pub fn transform_and_record_script_setup(
 
     // Should we check that this function was not assigned anywhere else?
     let setup_fn = Some(Box::new(Function {
+        this_param: None,
         params: get_setup_fn_params(&sfc_object_helper),
         decorators: vec![],
         span,
         ctxt: Default::default(),
-        body: Some(BlockStmt {
+        body: Some(FunctionBody {
             span,
-            ctxt: Default::default(),
             stmts: setup_body_stmts,
         }),
         is_generator: false,
@@ -355,8 +354,8 @@ pub fn merge_sfc_helper(sfc_helper: SfcExportedObjectHelper, dest: &mut Vec<Prop
         };
     }
 
-    merge!(emits, DUMMY_SP, EMITS.to_owned());
-    merge!(props, DUMMY_SP, PROPS.to_owned());
+    merge!(emits, DUMMY_SP, fervid_atom!("emits"));
+    merge!(props, DUMMY_SP, fervid_atom!("props"));
 
     dest.extend(sfc_helper.untyped_fields);
 }
@@ -400,7 +399,7 @@ fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param
             span: DUMMY_SP,
             decorators: vec![],
             pat: Pat::Ident(BindingIdent {
-                id: PROPS_HELPER.to_owned().into_ident(),
+                id: fervid_atom!("__props").into_ident(),
                 type_ann: None,
             }),
         });
@@ -425,10 +424,10 @@ fn get_setup_fn_params(sfc_object_helper: &SfcExportedObjectHelper) -> Vec<Param
         }
 
         if sfc_object_helper.is_setup_emit_referenced {
-            add_prop!(EMIT.to_owned(), EMIT_HELPER.to_owned());
+            add_prop!(fervid_atom!("emit"), fervid_atom!("__emit"));
         }
         if sfc_object_helper.is_setup_expose_referenced {
-            add_prop!(EXPOSE.to_owned(), EXPOSE_HELPER.to_owned());
+            add_prop!(fervid_atom!("expose"), fervid_atom!("__expose"));
         }
 
         result.push(Param {
@@ -540,8 +539,8 @@ mod tests {
                     span!(165, 168)
                 ),
             ] // vue_imports: VueResolvedImports {
-              //     ref_import: Some((FervidAtom::from("ref"), SyntaxContext::default())),
-              //     computed: Some((FervidAtom::from("computed"), SyntaxContext::default())),
+              //     ref_import: Some((fervid_atom!("ref"), SyntaxContext::default())),
+              //     computed: Some((fervid_atom!("computed"), SyntaxContext::default())),
               //     reactive: None
               // },
         );
@@ -680,9 +679,9 @@ mod tests {
                 varBaz = reactive({ qux: true })
             ",
             // vue_imports: VueResolvedImports {
-            //     ref_import: Some((FervidAtom::from("ref"), SyntaxContext::default())),
-            //     computed: Some((FervidAtom::from("computed"), SyntaxContext::default())),
-            //     reactive: Some((FervidAtom::from("reactive"), SyntaxContext::default()))
+            //     ref_import: Some((fervid_atom!("ref"), SyntaxContext::default())),
+            //     computed: Some((fervid_atom!("computed"), SyntaxContext::default())),
+            //     reactive: Some((fervid_atom!("reactive"), SyntaxContext::default()))
             // },
             vec![
                 SetupBinding::new_spanned(

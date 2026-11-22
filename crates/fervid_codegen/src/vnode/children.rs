@@ -6,7 +6,7 @@ use fervid_core::{
 use swc_core::{
     common::DUMMY_SP,
     ecma::ast::{
-        ArrayLit, ArrowExpr, BlockStmtOrExpr, CallExpr, Callee, CondExpr, Expr, IdentName,
+        ArrayLit, ArrowExpr, ArrowFunctionBody, CallExpr, Callee, CondExpr, Expr, IdentName,
         KeyValueProp, Lit, Number, ObjectLit, ParenExpr, Pat, Prop, PropName, PropOrSpread,
     },
 };
@@ -187,7 +187,7 @@ impl CodegenContext {
             span: DUMMY_SP,
             ctxt: Default::default(),
             params: props.cloned().into_iter().collect(),
-            body: Box::new(BlockStmtOrExpr::Expr(Box::new(body))),
+            body: Box::new(ArrowFunctionBody::Expr(Box::new(body))),
             is_async: false,
             is_generator: false,
             type_params: None,
@@ -264,7 +264,7 @@ impl CodegenContext {
                         &v_for.parse_result,
                         1,
                     ),
-                    body: Box::new(BlockStmtOrExpr::Expr(Box::new(Expr::Paren(ParenExpr {
+                    body: Box::new(ArrowFunctionBody::Expr(Box::new(Expr::Paren(ParenExpr {
                         span: DUMMY_SP,
                         expr: Box::new(
                             self.generate_dynamic_slot_object(element_node, &render_list.slot),
@@ -365,7 +365,7 @@ fn undefined_expr() -> Expr {
 
 fn str_or_expr_to_expr(value: &StrOrExpr) -> Expr {
     match value {
-        StrOrExpr::Str(value) => Expr::Lit(Lit::Str(value.clone())),
+        StrOrExpr::Str(value) => Expr::Lit(Lit::Str(value.clone().into())),
         StrOrExpr::Expr(value) => *value.clone(),
     }
 }

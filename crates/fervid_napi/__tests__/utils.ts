@@ -36,10 +36,7 @@ export function assertCode(code: string) {
   try {
     babelParse(code, {
       sourceType: 'module',
-      plugins: [
-        'typescript',
-        ['importAttributes', { deprecatedAssertSyntax: true }],
-      ],
+      plugins: ['typescript'],
     })
   } catch (e: any) {
     console.log(code)

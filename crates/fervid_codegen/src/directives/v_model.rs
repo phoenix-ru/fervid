@@ -1,5 +1,5 @@
 use fervid_core::{
-    FervidAtom, StrOrExpr, VModelDirective, str_or_expr_to_propname, str_to_propname,
+    FervidAtom, StrOrExpr, VModelDirective, fervid_atom, str_or_expr_to_propname, str_to_propname,
 };
 use swc_core::{
     common::Span,
@@ -87,7 +87,7 @@ impl CodegenContext {
                     left: expr.to_owned(),
                     right: Box::new(Expr::Lit(Lit::Str(Str {
                         span,
-                        value: FervidAtom::from("Modifiers"),
+                        value: fervid_atom!("Modifiers").into(),
                         raw: None,
                     }))),
                 });
@@ -123,9 +123,10 @@ fn generate_v_model_handler_propname(
 ) -> PropName {
     match bound_attribute {
         StrOrExpr::Str(s) => {
-            buf.reserve(9 + s.value.len());
+            let raw = s.value.as_str();
+            buf.reserve(9 + raw.len());
             buf.push_str("onUpdate:");
-            let _ = to_camelcase(&s.value, buf); // ignore fault
+            let _ = to_camelcase(raw, buf); // ignore fault
             str_to_propname(buf, span)
         }
 
@@ -135,7 +136,7 @@ fn generate_v_model_handler_propname(
                 op: BinaryOp::Add,
                 left: Box::new(Expr::Lit(Lit::Str(Str {
                     span,
-                    value: FervidAtom::from("onUpdate:"),
+                    value: fervid_atom!("onUpdate:").into(),
                     raw: None,
                 }))),
                 right: expr.to_owned(),

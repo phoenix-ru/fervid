@@ -44,7 +44,8 @@ pub fn transform_v_bind(
             let has_modifiers = v_bind.is_camel || needs_prop_or_attr_modifiers;
 
             let arg = if has_modifiers {
-                let mut out = String::with_capacity(str_arg.value.len() + 2);
+                let raw = str_arg.value.as_str();
+                let mut out = String::with_capacity(raw.len() + 2);
 
                 if v_bind.is_attr && !ssr {
                     out.push(ATTR_MARKER);
@@ -53,9 +54,9 @@ pub fn transform_v_bind(
                     out.push(PROP_MARKER);
                 }
                 if v_bind.is_camel {
-                    to_camel_case(&str_arg.value, &mut out);
+                    to_camel_case(raw, &mut out);
                 } else {
-                    out.push_str(&str_arg.value);
+                    out.push_str(raw);
                 }
 
                 FervidAtom::from(out)
@@ -124,7 +125,7 @@ fn create_dynamic_bind_key_expr(expr: &Expr) -> Box<Expr> {
         })),
         right: Box::new(Expr::Lit(Lit::Str(Str {
             span: DUMMY_SP,
-            value: fervid_atom!(""),
+            value: fervid_atom!("").into(),
             raw: None,
         }))),
     }))
@@ -160,7 +161,7 @@ fn inject_prefix_expr(expr: Box<Expr>, is_attr: bool, is_prop: bool) -> Box<Expr
         op: BinaryOp::Add,
         left: Box::new(Expr::Lit(Lit::Str(Str {
             span: DUMMY_SP,
-            value: FervidAtom::from(prefix),
+            value: FervidAtom::from(prefix).into(),
             raw: None,
         }))),
         right: Box::new(Expr::Paren(ParenExpr {

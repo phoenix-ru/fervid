@@ -1,13 +1,13 @@
-use fervid_core::{BindingTypes, FervidAtom, fervid_atom};
+use fervid_core::{
+    BindingTypes, FervidAtom, fervid_atom, wtf8_atom_ends_with_str, wtf8_atom_matches_atom,
+    wtf8_atom_to_atom,
+};
 use swc_core::ecma::ast::{
     Id, Ident, ImportSpecifier, Module, ModuleDecl, ModuleExportName, ModuleItem,
 };
 
 use crate::{
     BindingsHelper, ImportBinding, SetupBinding,
-    atoms::{
-        COMPUTED, DEFINE_EMITS, DEFINE_EXPOSE, DEFINE_PROPS, REACTIVE, REF, TO_REF, VUE, WATCH,
-    },
     error::{ScriptError, ScriptErrorKind, TransformError},
     structs::VueImportAliases,
 };
@@ -30,13 +30,14 @@ pub fn process_imports(
         }
 
         let source = &import_decl.src.value;
+        let source_atom = wtf8_atom_to_atom(source);
 
         // Checks if the import is of `.vue`, i.e. eligible to be a component
         // Should this handle complex queries?
-        let is_dot_vue_import = source.ends_with(".vue");
+        let is_dot_vue_import = wtf8_atom_ends_with_str(source, ".vue");
 
         // Check if this is a `from 'vue'`
-        let is_from_vue_import = *source == *VUE;
+        let is_from_vue_import = wtf8_atom_matches_atom(source, &fervid_atom!("vue"));
 
         let prev_len = import_decl.specifiers.len();
 
@@ -44,7 +45,7 @@ pub fn process_imports(
             register_import(
                 specifier,
                 bindings_helper,
-                source,
+                &source_atom,
                 is_from_setup,
                 is_dot_vue_import,
                 is_from_vue_import,
@@ -106,17 +107,17 @@ pub fn register_import(
             let imported_as: &Ident = &named_spec.local;
             let imported_word = match named_spec.imported.as_ref() {
                 // Renamed, e.g. `import { ref as r }` or `import { "ref" as r }`
-                Some(ModuleExportName::Ident(ident)) => &ident.sym,
-                Some(ModuleExportName::Str(s)) => &s.value,
+                Some(ModuleExportName::Ident(ident)) => ident.sym.to_owned(),
+                Some(ModuleExportName::Str(s)) => wtf8_atom_to_atom(&s.value),
                 // Not renamed, e.g. `import { ref }`
-                None => &imported_as.sym,
+                None => imported_as.sym.to_owned(),
             };
 
             if is_from_vue_import {
                 // Warn about compiler macros
-                if *imported_word == *DEFINE_PROPS
-                    || *imported_word == *DEFINE_EMITS
-                    || *imported_word == *DEFINE_EXPOSE
+                if imported_word == fervid_atom!("defineProps")
+                    || imported_word == fervid_atom!("defineEmits")
+                    || imported_word == fervid_atom!("defineExpose")
                 {
                     errors.push(TransformError::ScriptError(ScriptError {
                         span: named_spec.span,
@@ -126,7 +127,7 @@ pub fn register_import(
                 }
 
                 collect_vue_import(
-                    imported_word,
+                    &imported_word,
                     imported_as.to_id(),
                     &mut bindings_helper.vue_import_aliases,
                 );
@@ -141,7 +142,7 @@ pub fn register_import(
 
             (
                 imported_as.sym.to_owned(),
-                imported_word.to_owned(),
+                imported_word,
                 imported_as.span,
                 named_spec.span,
             )
@@ -199,15 +200,15 @@ fn collect_vue_import(
     used_as: Id,
     vue_import_aliases: &mut VueImportAliases,
 ) {
-    if *imported_word == *REF {
+    if *imported_word == fervid_atom!("ref") {
         vue_import_aliases.ref_import = Some(used_as)
-    } else if *imported_word == *COMPUTED {
+    } else if *imported_word == fervid_atom!("computed") {
         vue_import_aliases.computed = Some(used_as)
-    } else if *imported_word == *REACTIVE {
+    } else if *imported_word == fervid_atom!("reactive") {
         vue_import_aliases.reactive = Some(used_as)
-    } else if *imported_word == *TO_REF {
+    } else if *imported_word == fervid_atom!("toRef") {
         vue_import_aliases.to_ref = Some(used_as)
-    } else if *imported_word == *WATCH {
+    } else if *imported_word == fervid_atom!("watch") {
         vue_import_aliases.watch = Some(used_as)
     }
 }

@@ -34,7 +34,7 @@ impl CodegenContext {
 
         Expr::Lit(Lit::Str(Str {
             span,
-            value,
+            value: value.into(),
             raw: None,
         }))
     }

@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "oxc", "unicorn", "import"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "import/no-duplicates": "error",
+    "import/no-self-import": "error",
+    "typescript/await-thenable": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/no-implied-eval": "error",
+    "typescript/no-array-delete": "error"
+  },
+  "ignorePatterns": [
+    "node_modules/**",
+    "artifacts/**",
+    "npm/**",
+    "coverage/**",
+    "index.js",
+    "index.d.ts",
+    "browser.js",
+    "fervid.wasi.cjs",
+    "fervid.wasi-browser.js",
+    "wasi-worker.mjs",
+    "wasi-worker-browser.mjs"
+  ]
+}

@@ -9,21 +9,21 @@ default:
 
 # --- Rust Workspace ---
 
-# Build all Rust crates in dev mode
+# Build non-Farm Rust crates in dev mode
 build:
-    cargo build --workspace
+    cargo build --workspace --exclude farm_plugin_vue_fervid
 
-# Build all Rust crates in release mode
+# Build non-Farm Rust crates in release mode
 build-release:
-    cargo build --workspace --release
+    cargo build --workspace --exclude farm_plugin_vue_fervid --release
 
-# Run all tests across workspace and targets
+# Run non-Farm tests across workspace and targets
 test:
-    cargo test --workspace --all-targets
+    cargo test --workspace --all-targets --exclude farm_plugin_vue_fervid
 
 # Run Clippy on all targets and deny warnings
 lint:
-    cargo clippy --workspace --all-targets -- -D warnings
+    cargo clippy --workspace --all-targets --exclude farm_plugin_vue_fervid -- -D warnings
 
 # Format all Rust code
 fmt:

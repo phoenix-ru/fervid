@@ -1,11 +1,12 @@
 use fervid_core::{
     BuiltinType, ConditionalDynamicSlot, DynamicSlot, DynamicSlotBuild, DynamicSlotConditional,
-    DynamicSlotRenderList, ElementKind, ElementNode, FervidAtom, Node, SlotBuild, SlotFlag,
-    SlotSource, Slots, StrOrExpr, VSlotDirective, VueDirectives, VueImports, fervid_atom,
+    DynamicSlotRenderList, ElementKind, ElementNode, Node, SlotBuild, SlotFlag, SlotSource, Slots,
+    StrOrExpr, VSlotDirective, VueDirectives, VueImports, fervid_atom,
 };
 use fxhash::FxHashSet;
 use smallvec::SmallVec;
 use swc_core::{
+    atoms::Wtf8Atom,
     common::{Span, Spanned},
     ecma::ast::Pat,
 };
@@ -193,7 +194,7 @@ pub fn build_slots(node: &ElementNode, ctx: &mut TransformSfcContext) -> Slots {
     let mut has_template_slots = false;
     let mut has_named_default_slot = false;
     let mut implicit_default_children = SmallVec::<[usize; 1]>::new();
-    let mut seen_slot_names = FxHashSet::<FervidAtom>::default();
+    let mut seen_slot_names = FxHashSet::<Wtf8Atom>::default();
     let mut conditional_branch_index = 0;
 
     for (i, slot_element) in children.iter().enumerate() {
@@ -464,13 +465,13 @@ fn is_static_exp(arg: &StrOrExpr) -> bool {
         StrOrExpr::Expr(expr) => expr.is_lit(),
     }
 }
-fn get_static_exp(arg: &StrOrExpr) -> Option<FervidAtom> {
+fn get_static_exp(arg: &StrOrExpr) -> Option<Wtf8Atom> {
     match arg {
-        StrOrExpr::Str(s) => Some(s.value.to_owned()),
+        StrOrExpr::Str(s) => Some(s.value.clone().into()),
         StrOrExpr::Expr(expr) => expr
             .as_lit()
             .and_then(|v| v.as_str())
-            .map(|v| v.value.to_owned()),
+            .map(|v| v.value.clone()),
     }
 }
 

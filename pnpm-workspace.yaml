@@ -25,6 +25,13 @@ allowBuilds:
   core-js: false
   esbuild: false
 overrides:
-  ajv@<8.18.0: '>=8.18.0'
-  minimatch@<10.2.1: '>=10.2.1'
-  tmp@<=0.2.3: '>=0.2.4'
+  typescript: 5.9.3
+  '@types/node': ^24.19.2
+  '@emnapi/core': ^1.11.3
+  '@emnapi/runtime': ^1.11.3
+  ajv@>=6.0.0 <6.15.0: ^6.15.0
+  ajv@>=8.0.0 <8.18.0: ^8.18.0
+  minimatch@>=3.0.0 <3.1.5: ^3.1.5
+  minimatch@>=9.0.0 <9.0.9: ^9.0.9
+  minimatch@>=10.0.0 <10.2.6: ^10.2.6
+  tmp@<0.2.7: ^0.2.7

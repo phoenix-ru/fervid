@@ -11,13 +11,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Sync with rust-toolchain.toml
+          toolchain: 1.100.0
       - name: Cache rust artifacts
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-check
 
       - name: Run cargo check
-        run: cargo check --color always --all --all-targets
+        run: cargo check --color always --workspace --all-targets --exclude farm_plugin_vue_fervid
 
   cargo-test:
     name: Test - ${{ matrix.os }}
@@ -32,10 +37,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
           # Sync with rust-toolchain.toml
-          toolchain: nightly-2026-07-16
+          toolchain: 1.100.0
       - name: Cache rust artifacts
         uses: Swatinem/rust-cache@v2
         with:
@@ -43,4 +48,23 @@ jobs:
 
       - name: Run cargo test
         # Exclude NAPI crate due to build errors on macos and because it has separate test jobs
-        run: cargo test --workspace --all-targets --exclude fervid_napi
+        # Farm uses its host-matched nightly in a separate job
+        run: cargo test --workspace --all-targets --exclude fervid_napi --exclude farm_plugin_vue_fervid
+
+  farm-check:
+    name: Check Farm plugin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Farm Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          # Sync with crates/fervid_farmfe/rust-toolchain.toml
+          toolchain: nightly-2026-04-10
+      - name: Cache rust artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: farm-check
+      - name: Check Farm plugin
+        working-directory: crates/fervid_farmfe
+        run: cargo check -p farm_plugin_vue_fervid --all-targets

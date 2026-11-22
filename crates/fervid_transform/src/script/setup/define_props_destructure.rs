@@ -1,15 +1,15 @@
-use fervid_core::{BindingTypes, FervidAtom, IntoIdent, is_valid_propname};
+use fervid_core::{BindingTypes, FervidAtom, IntoIdent, fervid_atom, is_valid_propname};
 use fxhash::{FxHashMap, FxHashSet};
 use swc_core::{
     common::{BytePos, DUMMY_SP, Span, Spanned},
     ecma::{
         ast::{
-            ArrayPat, AssignTarget, AssignTargetPat, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
-            CatchClause, ClassDecl, ComputedPropName, Decl, Expr, ExprOrSpread, FnDecl, ForHead,
-            ForInStmt, ForOfStmt, Function, Ident, IdentName, KeyValuePatProp, KeyValueProp, Lit,
-            MemberExpr, MemberProp, ModuleDecl, ModuleItem, ObjectLit, ObjectPat, ObjectPatProp,
-            Pat, Prop, PropName, PropOrSpread, SimpleAssignTarget, Stmt, Str, VarDecl,
-            VarDeclOrExpr,
+            ArrayPat, ArrowFunctionBody, AssignTarget, AssignTargetPat, BlockStmt, CallExpr,
+            Callee, CatchClause, ClassDecl, ComputedPropName, Decl, Expr, ExprOrSpread, FnDecl,
+            ForHead, ForInStmt, ForOfStmt, Function, Ident, IdentName, KeyValuePatProp,
+            KeyValueProp, Lit, MemberExpr, MemberProp, ModuleDecl, ModuleItem, ObjectLit,
+            ObjectPat, ObjectPatProp, Pat, Prop, PropName, PropOrSpread, SimpleAssignTarget, Stmt,
+            Str, VarDecl, VarDeclOrExpr,
         },
         visit::{VisitMut, VisitMutWith},
     },
@@ -17,7 +17,6 @@ use swc_core::{
 
 use crate::{
     PropsDestructureBinding, PropsDestructureConfig, SetupBinding, VueImportAliases,
-    atoms::{DEFINE_PROPS, PROPS_HELPER, TO_REF, WATCH},
     error::{ScriptError, ScriptErrorKind, TransformError},
     script::{
         common::extract_variables_from_pat,
@@ -322,7 +321,7 @@ impl<'a> Walker<'a> {
         for decl in var_decl.decls.iter() {
             let is_define_props = is_root && {
                 if let Some(ref decl_init) = decl.init {
-                    is_call_of(unwrap_ts_node_expr(decl_init), &DEFINE_PROPS)
+                    is_call_of(unwrap_ts_node_expr(decl_init), &fervid_atom!("defineProps"))
                 } else {
                     false
                 }
@@ -389,19 +388,21 @@ impl<'a> Walker<'a> {
             return;
         };
 
+        let to_ref_default = fervid_atom!("toRef");
         let to_ref = self
             .vue_import_aliases
             .to_ref
             .as_ref()
             .map(|v| &v.0)
-            .unwrap_or(&TO_REF);
+            .unwrap_or(&to_ref_default);
 
+        let watch_default = fervid_atom!("watch");
         let watch = self
             .vue_import_aliases
             .watch
             .as_ref()
             .map(|v| &v.0)
-            .unwrap_or(&WATCH);
+            .unwrap_or(&watch_default);
 
         let is_to_ref = &callee_ident.sym == to_ref;
         let is_watch = &callee_ident.sym == watch;
@@ -476,7 +477,7 @@ impl<'a> Walker<'a> {
                 expr: Box::new(Expr::Lit(Lit::Str(Str {
                     raw: None,
                     span: DUMMY_SP,
-                    value: found.to_owned(),
+                    value: found.to_owned().into(),
                 }))),
             }))
         }
@@ -572,10 +573,10 @@ impl<'a> VisitMut for Walker<'a> {
                 }
 
                 match arrow_expr.body.as_mut() {
-                    BlockStmtOrExpr::BlockStmt(block_stmt) => {
-                        self.collect_then_transform_stmts(&mut block_stmt.stmts);
+                    ArrowFunctionBody::FunctionBody(function_body) => {
+                        self.collect_then_transform_stmts(&mut function_body.stmts);
                     }
-                    BlockStmtOrExpr::Expr(expr) => {
+                    ArrowFunctionBody::Expr(expr) => {
                         expr.visit_mut_with(self);
                     }
                 }
@@ -626,7 +627,7 @@ impl<'a> VisitMut for Walker<'a> {
             *expr = Expr::Member(MemberExpr {
                 span,
                 obj: Box::new(Expr::Ident(
-                    PROPS_HELPER.to_owned().into_ident_spanned(span),
+                    fervid_atom!("__props").into_ident_spanned(span),
                 )),
                 prop: should_rewrite_with,
             })
@@ -779,7 +780,7 @@ impl<'a> VisitMut for Walker<'a> {
                 if let Some(should_rewrite_with) = self.should_rewrite_with(ident) {
                     *n = Pat::Expr(Box::new(Expr::Member(MemberExpr {
                         span: DUMMY_SP,
-                        obj: Box::new(Expr::Ident(PROPS_HELPER.to_owned().into_ident())),
+                        obj: Box::new(Expr::Ident(fervid_atom!("__props").into_ident())),
                         prop: should_rewrite_with,
                     })));
                 }

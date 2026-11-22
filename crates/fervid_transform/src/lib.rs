@@ -8,10 +8,6 @@ use swc_core::ecma::ast::{ModuleDecl, ModuleItem};
 use template::transform_and_record_template;
 use utils::infer_name;
 
-#[macro_use]
-extern crate lazy_static;
-
-pub mod atoms;
 pub mod error;
 pub mod script;
 pub mod structs;

@@ -2,10 +2,6 @@
 //!
 //! The main structure of this crate is [CodegenContext].
 
-#[macro_use]
-extern crate lazy_static;
-
-mod atoms;
 mod attributes;
 mod comments;
 mod context;

@@ -1,8 +1,8 @@
 //! A collection of utils for working with SWC structs
 
-use fervid_core::{FervidAtom, fervid_atom};
+use fervid_core::{FervidAtom, fervid_atom, wtf8_atom_matches_atom, wtf8_atom_to_atom};
 use swc_core::ecma::ast::{
-    ArrayLit, BlockStmt, Callee, Expr, ExprOrSpread, Function, Lit, Module, ObjectLit, Prop,
+    ArrayLit, Callee, Expr, ExprOrSpread, Function, FunctionBody, Lit, Module, ObjectLit, Prop,
     PropName, PropOrSpread, ReturnStmt, Stmt, Tpl,
 };
 
@@ -49,7 +49,9 @@ pub fn find_function(object: &ObjectLit, name: FervidAtom) -> Option<&Function> 
             match method.key {
                 PropName::Ident(ref ident) if ident.sym == name => Some(&*method.function),
 
-                PropName::Str(ref s) if s.value == name => Some(&*method.function),
+                PropName::Str(ref s) if wtf8_atom_matches_atom(&s.value, &name) => {
+                    Some(&*method.function)
+                }
 
                 _ => None,
             }
@@ -58,18 +60,25 @@ pub fn find_function(object: &ObjectLit, name: FervidAtom) -> Option<&Function> 
     })
 }
 
-/// Finds the return statement in the [BlockStmt]. The search will occur from the statement end.
-pub fn find_return(block_stmt: &BlockStmt) -> Option<&ReturnStmt> {
-    block_stmt.stmts.iter().rev().find_map(|stmt| match stmt {
-        Stmt::Return(return_stmt) => Some(return_stmt),
+/// Finds the return statement in the [FunctionBody]. The search will occur from the statement end.
+pub fn find_return(function_body: &FunctionBody) -> Option<&ReturnStmt> {
+    function_body
+        .stmts
+        .iter()
+        .rev()
+        .find_map(|stmt| match stmt {
+            Stmt::Return(return_stmt) => Some(return_stmt),
 
-        _ => None,
-    })
+            _ => None,
+        })
 }
 
-/// Collects all the field keys in the return object of a [BlockStmt]
-pub fn collect_block_stmt_return_fields(block_stmt: &BlockStmt, out: &mut Vec<FervidAtom>) {
-    let Some(return_stmt) = find_return(block_stmt) else {
+/// Collects all the field keys in the return object of a [FunctionBody]
+pub fn collect_function_body_return_fields(
+    function_body: &FunctionBody,
+    out: &mut Vec<FervidAtom>,
+) {
+    let Some(return_stmt) = find_return(function_body) else {
         return;
     };
 
@@ -120,7 +129,7 @@ pub fn collect_obj_prop_or_spread(prop_or_spread: &PropOrSpread, out: &mut Vec<F
 pub fn collect_obj_propname(prop_name: &PropName, out: &mut Vec<FervidAtom>) {
     match prop_name {
         PropName::Ident(ident) => out.push(ident.sym.to_owned()),
-        PropName::Str(s) => out.push(s.value.to_owned()),
+        PropName::Str(s) => out.push(wtf8_atom_to_atom(&s.value)),
 
         // I am not really sure how computed keys (e.g. `foo` in `{ [foo]: bar }`)
         // should be recognized. I believe they should not.
@@ -153,7 +162,7 @@ pub fn collect_string_arr(arr: &ArrayLit, out: &mut Vec<FervidAtom>) {
 /// Gets a `string` value from expr, either `'literal'` or from <code>\`template string\`</code>
 pub fn get_string_expr(expr: &Expr) -> Option<FervidAtom> {
     match *expr {
-        Expr::Lit(Lit::Str(ref s)) => Some(s.value.to_owned()),
+        Expr::Lit(Lit::Str(ref s)) => Some(wtf8_atom_to_atom(&s.value)),
 
         // Js template string: `foo` (with backticks)
         Expr::Tpl(ref tpl) => get_string_tpl(tpl),
@@ -163,7 +172,7 @@ pub fn get_string_expr(expr: &Expr) -> Option<FervidAtom> {
 }
 
 /// Gets the template string if it is simple:
-/// - <code>\`something simple\`</code> is trivial and returns `Some(FervidAtom::from("something simple"))`;
+/// - <code>\`something simple\`</code> is trivial and returns `Some(fervid_atom!("something simple"))`;
 /// - <code>\`something ${notSoSimple}\`</code> is not trivial and will return `None`.
 pub fn get_string_tpl(tpl: &Tpl) -> Option<FervidAtom> {
     // This is not a js runtime, only simple template strings are supported
@@ -175,7 +184,7 @@ pub fn get_string_tpl(tpl: &Tpl) -> Option<FervidAtom> {
 
     let template_string = template_elem.cooked.as_ref()?;
 
-    Some(template_string.to_owned())
+    Some(wtf8_atom_to_atom(template_string))
 }
 
 /// Checks if the expression only contains literals
@@ -204,7 +213,7 @@ pub fn is_static(expr: &Expr) -> bool {
 pub fn resolve_object_key(key: &PropName) -> Option<FervidAtom> {
     match key {
         PropName::Ident(ident_name) => Some(ident_name.sym.to_owned()),
-        PropName::Str(s) => Some(s.value.to_owned()),
+        PropName::Str(s) => Some(wtf8_atom_to_atom(&s.value)),
         PropName::Num(number) => Some(number.value.to_string().into()),
         PropName::Computed(computed_prop_name) => {
             match computed_prop_name.expr.as_ref() {
@@ -212,7 +221,7 @@ pub fn resolve_object_key(key: &PropName) -> Option<FervidAtom> {
                 // meaning that `const { ['foo']: foo }` and `const { 'foo': foo }` are the same in Babel,
                 // but not in SWC
                 Expr::Lit(lit) => match lit {
-                    Lit::Str(s) => Some(s.value.to_owned()),
+                    Lit::Str(s) => Some(wtf8_atom_to_atom(&s.value)),
                     Lit::Num(number) => number
                         .raw
                         .to_owned()
@@ -258,18 +267,18 @@ pub fn is_call_of(expr: &Expr, test: &FervidAtom) -> bool {
 /// #     ecma::ast::{Ident, Expr, Lit, Number, ParenExpr, SeqExpr, Str},
 /// # };
 /// # use fervid_transform::script::utils::unroll_paren_seq;
-/// # use fervid_core::FervidAtom;
+/// # use fervid_core::fervid_atom;
 ///
 /// let expr = Expr::Paren(ParenExpr {
 ///     span: DUMMY_SP,
 ///     expr: Expr::Seq(SeqExpr {
 ///         exprs: vec![
-///             Expr::Ident(Ident::new(FervidAtom::from("a"), DUMMY_SP, Default::default())).into(),
+///             Expr::Ident(Ident::new(fervid_atom!("a"), DUMMY_SP, Default::default())).into(),
 ///             Expr::Paren(ParenExpr {
 ///                 expr: Expr::Seq(SeqExpr {
 ///                     span: DUMMY_SP,
 ///                     exprs: vec![
-///                         Expr::Lit(Lit::Str(Str::from(FervidAtom::from("b")))).into(),
+///                         Expr::Lit(Lit::Str(Str::from(fervid_atom!("b")))).into(),
 ///                         Expr::Lit(Lit::Num(Number {
 ///                             span: DUMMY_SP,
 ///                             value: 42.0,

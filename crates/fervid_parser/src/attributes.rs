@@ -1,13 +1,10 @@
 use std::borrow::Cow;
 
 use fervid_core::{
-    AttributeOrBinding, FervidAtom, StrOrExpr, VBindDirective, VCustomDirective, VForDirective,
-    VModelDirective, VOnDirective, VSlotDirective, VueDirectives,
+    AttributeOrBinding, FervidAtom, StaticStr, StrOrExpr, VBindDirective, VCustomDirective,
+    VForDirective, VModelDirective, VOnDirective, VSlotDirective, VueDirectives,
 };
-use swc_core::{
-    common::{BytePos, Span},
-    ecma::ast::Str,
-};
+use swc_core::common::{BytePos, Span};
 use swc_ecma_parser::Syntax;
 use swc_html_ast::Attribute;
 
@@ -308,10 +305,9 @@ impl SfcParser<'_, '_, '_> {
                     hi: BytePos(span_lo + static_name.len() as u32),
                 };
 
-                Some(StrOrExpr::Str(Str {
+                Some(StrOrExpr::Str(StaticStr {
                     span,
                     value: static_name.into(),
-                    raw: None,
                 }))
             }
 
@@ -609,6 +605,7 @@ fn to_camel_case(raw: &str, out: &mut String) {
 
 #[cfg(test)]
 mod tests {
+    use fervid_core::fervid_atom;
     use swc_core::ecma::ast::Pat;
 
     use super::*;
@@ -930,9 +927,9 @@ mod tests {
                 },
                 namespace: None,
                 prefix: None,
-                name: FervidAtom::from("v-bind:argument"),
+                name: fervid_atom!("v-bind:argument"),
                 raw_name: None,
-                value: Some(FervidAtom::from("value")),
+                value: Some(fervid_atom!("value")),
                 raw_value: None,
             },
             &mut attrs_or_bindings,

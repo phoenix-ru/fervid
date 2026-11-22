@@ -1,54 +1,62 @@
 import b from 'benny'
-import format from 'benny/lib/internal/format'
-import type { CaseResultWithDiff, Summary } from 'benny/lib/internal/common-types'
+import type { CaseResultWithDiff, Summary } from 'benny/lib/internal/common-types.js'
 import kleur from 'kleur'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cpus } from 'node:os'
+import { createRequire } from 'node:module'
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc'
 
-import { Compiler, FervidCompileOptions } from '../index'
+import { Compiler } from '../index.js'
+import type { FervidCompileOptions } from '../index.js'
+
+const require = createRequire(import.meta.url)
+const { default: format } = require('benny/lib/internal/format.js') as typeof import('benny/lib/internal/format.js')
 
 // Increase libuv thread pool for a better async result.
 // 4 threads is a default thread pool size.
 const CPUS = cpus().length - 1
 process.env.UV_THREADPOOL_SIZE = CPUS.toString()
 
-const input = readFileSync(join(__dirname, '../../fervid/benches/fixtures/input.vue'), {
+const input = readFileSync(join(import.meta.dirname, '../../fervid/benches/fixtures/input.vue'), {
   encoding: 'utf-8',
 })
 
 const options: FervidCompileOptions = {
   filename: 'input.vue',
-  id: ''
+  id: '',
 }
 
 async function run() {
   const compiler = new Compiler()
 
-  await b.suite(
-    'compile sfc',
+  const cases: [string, () => void | Promise<PromiseSettledResult<unknown>[]>][] = [
+    [
+      '@vue/compiler-sfc',
+      () => {
+        const descriptor = parse(input, { filename: 'input.vue' })
+        if (descriptor.descriptor.script || descriptor.descriptor.scriptSetup) {
+          compileScript(descriptor.descriptor, {
+            id: 'abc',
+            isProd: true,
+            inlineTemplate: true,
+          })
+        } else {
+          compileTemplate({
+            source: descriptor.descriptor.source,
+            filename: 'input.vue',
+            id: 'abc',
+          })
+        }
+      },
+    ],
 
-    b.add('@vue/compiler-sfc', () => {
-      const descriptor = parse(input, { filename: 'input.vue' })
-      if (descriptor.descriptor.script || descriptor.descriptor.scriptSetup) {
-        compileScript(descriptor.descriptor, {
-          id: 'abc',
-          isProd: true,
-          inlineTemplate: true,
-        })
-      } else {
-        compileTemplate({
-          source: descriptor.descriptor.source,
-          filename: 'input.vue',
-          id: 'abc',
-        })
-      }
-    }),
-
-    b.add('@fervid/napi sync', () => {
-      compiler.compileSync(input, options)
-    }),
+    [
+      '@fervid/napi sync',
+      () => {
+        compiler.compileSync(input, options)
+      },
+    ],
 
     // The code below makes sure that async framework is not flawed.
     // On my PC `sync promise` benches produce results close to a `sync` bench,
@@ -56,27 +64,61 @@ async function run() {
     // The `async` benches are properly multithreaded, thus they achieve much higher ops/sec.
     // BEGIN
 
-    b.add('@fervid/napi sync promise (4 threads)', () => {
-      return Promise.allSettled(
-        Array.from({ length: 4 }, (_) => new Promise<void>((resolve) => (compiler.compileSync(input, options), resolve()))),
-      )
-    }),
+    [
+      '@fervid/napi sync promise (4 threads)',
+      () => {
+        return Promise.allSettled(
+          Array.from(
+            { length: 4 },
+            () => new Promise<void>((resolve) => (compiler.compileSync(input, options), resolve())),
+          ),
+        )
+      },
+    ],
 
-    b.add(`@fervid/napi sync promise (${CPUS} threads)`, () => {
-      return Promise.allSettled(
-        Array.from({ length: CPUS }, (_) => new Promise<void>((resolve) => (compiler.compileSync(input, options), resolve()))),
-      )
-    }),
+    [
+      `@fervid/napi sync promise (${CPUS} threads)`,
+      () => {
+        return Promise.allSettled(
+          Array.from(
+            { length: CPUS },
+            () => new Promise<void>((resolve) => (compiler.compileSync(input, options), resolve())),
+          ),
+        )
+      },
+    ],
 
     // END
 
-    b.add('@fervid/napi async (4 threads)', () => {
-      return Promise.allSettled(Array.from({ length: 4 }, (_) => compiler.compileAsync(input, options)))
-    }),
+    [
+      '@fervid/napi async (4 threads)',
+      () => {
+        return Promise.allSettled(Array.from({ length: 4 }, () => compiler.compileAsync(input, options)))
+      },
+    ],
 
-    b.add(`@fervid/napi async CPUS (${CPUS} threads)`, () => {
-      return Promise.allSettled(Array.from({ length: CPUS }, (_) => compiler.compileAsync(input, options)))
-    }),
+    [
+      `@fervid/napi async CPUS (${CPUS} threads)`,
+      () => {
+        return Promise.allSettled(Array.from({ length: CPUS }, () => compiler.compileAsync(input, options)))
+      },
+    ],
+  ]
+
+  if (process.argv.includes('--smoke')) {
+    for (const [name, compile] of cases) {
+      const results = await compile()
+      for (const result of results ?? []) {
+        if (result.status === 'rejected') throw result.reason
+      }
+      console.log(`Smoke OK: ${name}`)
+    }
+    return
+  }
+
+  await b.suite(
+    'compile sfc',
+    ...cases.map(([name, compile]) => b.add(name, compile)),
 
     // Custom cycle function to account for the async nature
     // Copied from `benny` and adjusted
@@ -140,6 +182,7 @@ async function run() {
 
 run().catch((e) => {
   console.error(e)
+  process.exitCode = 1
 })
 
 function getStatus(item: CaseResultWithDiff, index: number, summary: Summary, ops: string, fastestOps: string) {

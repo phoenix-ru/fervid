@@ -14,7 +14,7 @@ impl CodegenContext {
             spread: None,
             expr: Box::new(Expr::Lit(Lit::Str(Str {
                 span,
-                value: FervidAtom::from(comment),
+                value: FervidAtom::from(comment).into(),
                 raw: None,
             }))),
         };

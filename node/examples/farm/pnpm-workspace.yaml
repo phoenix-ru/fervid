@@ -1,3 +1,7 @@
 # Farm needs this file for building
 allowBuilds:
   core-js: false
+  esbuild: false
+overrides:
+  "@types/node": ^24.19.2
+  tmp@<0.2.7: ^0.2.7

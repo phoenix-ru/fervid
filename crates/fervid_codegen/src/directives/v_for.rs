@@ -6,10 +6,11 @@ use fervid_transform::template::utils::maybe_parenthesize;
 use swc_core::{
     common::{DUMMY_SP, Span},
     ecma::ast::{
-        ArrowExpr, AssignExpr, AssignOp, AssignTarget, BinExpr, BinaryOp, BindingIdent, BlockStmt,
-        BlockStmtOrExpr, CallExpr, Callee, Decl, Expr, ExprOrSpread, ExprStmt, Ident, IdentName,
-        IfStmt, Lit, MemberExpr, MemberProp, Null, Number, ObjectLit, Pat, Prop, PropName,
-        PropOrSpread, ReturnStmt, SimpleAssignTarget, Stmt, VarDecl, VarDeclKind, VarDeclarator,
+        ArrowExpr, ArrowFunctionBody, AssignExpr, AssignOp, AssignTarget, BinExpr, BinaryOp,
+        BindingIdent, CallExpr, Callee, Decl, Expr, ExprOrSpread, ExprStmt, FunctionBody, Ident,
+        IdentName, IfStmt, Lit, MemberExpr, MemberProp, Null, Number, ObjectLit, Pat, Prop,
+        PropName, PropOrSpread, ReturnStmt, SimpleAssignTarget, Stmt, VarDecl, VarDeclKind,
+        VarDeclarator,
     },
 };
 
@@ -127,7 +128,7 @@ impl CodegenContext {
                     span,
                     ctxt: Default::default(),
                     params: create_for_loop_params(&for_node.parse_result, 1),
-                    body: Box::new(BlockStmtOrExpr::Expr(item_render_expr)),
+                    body: Box::new(ArrowFunctionBody::Expr(item_render_expr)),
                     is_async: false,
                     is_generator: false,
                     type_params: None,
@@ -438,9 +439,8 @@ impl CodegenContext {
             span: DUMMY_SP,
             ctxt: Default::default(),
             params: render_list_params,
-            body: Box::new(BlockStmtOrExpr::BlockStmt(BlockStmt {
+            body: Box::new(ArrowFunctionBody::FunctionBody(FunctionBody {
                 span: DUMMY_SP,
-                ctxt: Default::default(),
                 stmts: arrow_body_stmts,
             })),
             is_async: false,
@@ -1633,7 +1633,7 @@ mod tests {
             span: DUMMY_SP,
             ctxt: Default::default(),
             params: create_for_loop_params(parse_result, 1),
-            body: Box::new(BlockStmtOrExpr::Expr(js("value"))),
+            body: Box::new(ArrowFunctionBody::Expr(js("value"))),
             is_async: false,
             is_generator: false,
             type_params: None,

@@ -9,8 +9,9 @@ use fervid_core::{
 use swc_core::{
     common::{DUMMY_SP, Span},
     ecma::ast::{
-        ArrowExpr, BinExpr, BinaryOp, BindingIdent, BlockStmt, BlockStmtOrExpr, CallExpr, Callee,
-        ComputedPropName, Expr, ExprOrSpread, IdentName, OptChainBase, Pat, PropName, RestPat,
+        ArrowExpr, ArrowFunctionBody, BinExpr, BinaryOp, BindingIdent, CallExpr, Callee,
+        ComputedPropName, Expr, ExprOrSpread, FunctionBody, IdentName, OptChainBase, Pat, PropName,
+        RestPat,
     },
 };
 
@@ -321,9 +322,8 @@ fn empty_handler() -> Box<Expr> {
         span: DUMMY_SP,
         ctxt: Default::default(),
         params: vec![],
-        body: Box::new(BlockStmtOrExpr::BlockStmt(BlockStmt {
+        body: Box::new(ArrowFunctionBody::FunctionBody(FunctionBody {
             span: DUMMY_SP,
-            ctxt: Default::default(),
             stmts: vec![],
         })),
         is_async: false,
@@ -383,7 +383,7 @@ fn wrap_in_args_arrow(mut expr: Box<Expr>, needs_check: bool) -> Box<Expr> {
         span: DUMMY_SP,
         ctxt: Default::default(),
         params: vec![args_pat],
-        body: Box::new(BlockStmtOrExpr::Expr(expr)),
+        body: Box::new(ArrowFunctionBody::Expr(expr)),
         is_async: false,
         is_generator: false,
         type_params: None,

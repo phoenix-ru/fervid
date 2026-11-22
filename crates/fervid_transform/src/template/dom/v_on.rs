@@ -278,7 +278,7 @@ fn add_key_with_modifiers(key: Box<Expr>, modifiers: &str) -> Box<Expr> {
         left: maybe_parenthesize(key),
         right: Box::new(Expr::Lit(Lit::Str(Str {
             span: DUMMY_SP,
-            value: FervidAtom::from(modifiers),
+            value: FervidAtom::from(modifiers).into(),
             raw: None,
         }))),
     }))
