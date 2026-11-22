@@ -15,7 +15,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           # Sync with rust-toolchain.toml
-          toolchain: 1.100.0
+          toolchain: 1.99.0
       - name: Cache rust artifacts
         uses: Swatinem/rust-cache@v2
         with:
@@ -40,7 +40,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           # Sync with rust-toolchain.toml
-          toolchain: 1.100.0
+          toolchain: 1.99.0
       - name: Cache rust artifacts
         uses: Swatinem/rust-cache@v2
         with:
