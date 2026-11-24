@@ -41,12 +41,12 @@ clean:
 run input *args:
     @cargo run --quiet -p fervid -- {{quote(input)}} {{args}}
 
-# Run fmt-check, lint, spell, and tests together
+# Run formatting, lint, tests and spell checks together
 check-all: fmt-check lint test spell
 
-# --- WASM (crates/fervid_wasm) ---
+# --- WASM Playground ---
 
-# Build for WebAssembly target
+# Build WebAssembly bindings and the playground
 wasm-build:
     cd {{justfile_directory()}}/crates/fervid_napi && \
     pnpm build:wasm && \
@@ -54,10 +54,15 @@ wasm-build:
     mkdir -p artifacts && \
     cp *.wasm artifacts/ && \
     pnpm artifacts
+    pnpm --dir {{justfile_directory()}}/node/playground build
 
-# Run the WASM playground preview server using node
+# Run the WASM playground with Farm's dev server
 wasm-serve:
     pnpm --prefix node/playground dev
+
+# Preview the built WASM playground
+wasm-start:
+    pnpm --prefix node/playground start
 
 # --- NAPI (crates/fervid_napi) ---
 

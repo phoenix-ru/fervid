@@ -15,7 +15,7 @@
     "@farmfe/cli": "2.0.0",
     "@farmfe/core": "2.0.1",
     "@farmfe/plugin-worker": "2.0.0",
-    "@types/fervid__napi-wasm32-wasi": "file:../../crates/fervid_napi",
+    "@types/fervid__napi-wasm32-wasi": "link:../../crates/fervid_napi",
     "core-js": "^3.51.0"
   },
   "packageManager": "pnpm@12.21.0"

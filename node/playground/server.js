@@ -1,11 +1,12 @@
 // Adapted from https://gist.github.com/aolde/8104861
 
 const http = require('http')
-const url = require('url')
 const path = require('path')
 const fs = require('fs/promises')
 
 const port = process.argv[2] || 8888
+const dist = path.join(__dirname, 'dist')
+const base = (process.env.PUBLIC_PATH || '/').replace(/\/?$/, '/')
 
 const mimeTypes = {
     html: 'text/html',
@@ -26,16 +27,31 @@ const highResCors = {
 }
 
 http.createServer(async function (request, response) {
-    if (path.normalize(decodeURI(request.url)) !== decodeURI(request.url)) {
-        response.statusCode = 403;
-        response.end();
-        return;
+    let uri
+    try {
+        uri = decodeURIComponent(new URL(request.url, `http://localhost:${port}`).pathname)
+    } catch {
+        response.writeHead(400)
+        response.end()
+        return
     }
-    
-    const uri = new URL(`http://localhost:${port}${request.url}`).pathname
 
-    // const uri = url.parse(request.url).pathname
-    let filename = path.join(process.cwd(), 'dist', uri)
+    if ((uri === '/' && base !== '/') || uri === base.slice(0, -1)) {
+        response.writeHead(302, { Location: base })
+        response.end()
+        return
+    }
+    if (!uri.startsWith(base)) {
+        fail404(response)
+        return
+    }
+
+    let filename = path.resolve(dist, './' + uri.slice(base.length))
+    if (filename !== dist && !filename.startsWith(dist + path.sep)) {
+        response.writeHead(403)
+        response.end()
+        return
+    }
 
     try {
         const stats = await fs.stat(filename)
@@ -49,7 +65,7 @@ http.createServer(async function (request, response) {
 
     let file
     try {
-        file = await fs.readFile(filename, 'binary')
+        file = await fs.readFile(filename)
     } catch (err) {
         response.writeHead(500, { 'Content-Type': 'text/plain' })
         response.write(err.toString() + '\n')
@@ -63,8 +79,7 @@ http.createServer(async function (request, response) {
     }
 
     response.writeHead(200, { 'Content-Type': mimeType, ...highResCors })
-    response.write(file, 'binary')
-    response.end()
+    response.end(file)
 }).listen(parseInt(port, 10))
 
 function fail404(response) {
@@ -73,4 +88,4 @@ function fail404(response) {
     response.end()
 }
 
-console.log('Static file server running at http://localhost:' + port + '/\nCTRL + C to shutdown');
+console.log('Static file server running at http://localhost:' + port + base + '\nCTRL + C to shutdown');

@@ -1,4 +1,8 @@
 # This file is required since Farm cannot correctly resolve its dependencies from PNPM store otherwise
+supportedArchitectures:
+  cpu:
+    - current
+    - wasm32
 allowBuilds:
   core-js: false
   esbuild: false

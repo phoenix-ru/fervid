@@ -196,8 +196,8 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       '@types/fervid__napi-wasm32-wasi':
-        specifier: file:../../crates/fervid_napi
-        version: '@fervid/napi@file:../../crates/fervid_napi'
+        specifier: link:../../crates/fervid_napi
+        version: link:../../crates/fervid_napi
       core-js:
         specifier: ^3.51.0
         version: 3.51.0
@@ -557,10 +557,6 @@ packages:
     resolution: {directory: ../../crates/fervid_napi/npm/wasm32-wasi, type: directory}
     engines: {node: '>=14.0.0'}
     cpu: [wasm32]
-
-  '@fervid/napi@file:../../crates/fervid_napi':
-    resolution: {directory: ../../crates/fervid_napi, type: directory}
-    engines: {node: '>= 10'}
 
   '@napi-rs/wasm-runtime@1.2.7':
     resolution: {integrity: sha512-zJccwplOAbgfZju95IUHazLnx9RAPtPN2YGJXI6UbrgeaR9QfPjGrQL6ERkSAtnVCA4Q+83ApGyaX5zdpCaKkQ==}
@@ -1479,8 +1475,6 @@ snapshots:
     transitivePeerDependencies:
       - '@emnapi/core'
       - '@emnapi/runtime'
-
-  '@fervid/napi@file:../../crates/fervid_napi': {}
 
   '@napi-rs/wasm-runtime@1.2.7(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)':
     dependencies:

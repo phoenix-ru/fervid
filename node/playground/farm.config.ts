@@ -2,12 +2,20 @@ import { defineConfig } from '@farmfe/core'
 import farmPluginWorker from '@farmfe/plugin-worker'
 import { builtinModules, createRequire } from 'node:module'
 
-const PUBLIC_PATH = process.env.PUBLIC_PATH || '/'
+const PUBLIC_PATH = (process.env.PUBLIC_PATH || '/').replace(/\/?$/, '/')
 const require = createRequire(import.meta.url)
 const browserFs = require.resolve('./src/browser-fs.ts')
 
 export default defineConfig({
+    server: {
+        headers: {
+            'Cross-Origin-Opener-Policy': 'same-origin',
+            'Cross-Origin-Embedder-Policy': 'require-corp'
+        }
+    },
     compilation: {
+        // Farm's worker plugin hangs with development source maps enabled
+        sourcemap: false,
         presetEnv: true,
         // Keep fs in the browser graph so its shim has script metadata, not external metadata
         externalNodeBuiltins: builtinModules.filter(name => name !== 'fs'),
@@ -40,6 +48,22 @@ export default defineConfig({
         persistentCache: false
     },
     plugins: [
+        {
+            name: 'fervid-wasm-url',
+            transform: {
+                filters: { resolvedPaths: ['fervid\\.wasi-browser\\.js$'] },
+                executor({ content }) {
+                    // Farm handles asset imports, but not this generated import.meta.url reference
+                    return {
+                        content: `import fervidWasmUrl from './fervid.wasm32-wasi.wasm?url';\n${content}`.replace(
+                            "new URL('./fervid.wasm32-wasi.wasm', import.meta.url).href",
+                            'fervidWasmUrl'
+                        ),
+                        moduleType: 'js'
+                    }
+                }
+            }
+        },
         farmPluginWorker({
             compilerConfig: {
                 // Plugin options use native Config's alias array, not the JS config alias map
